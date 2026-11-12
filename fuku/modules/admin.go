@@ -2,6 +2,7 @@ package modules
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"strings"
 
@@ -580,6 +581,77 @@ func (m moduleStruct) setTitle(c *helpers.CommandContext) error {
 	return ext.EndGroups
 }
 
+// anonAdminWrites holds the repository write applyAnonAdmin calls. It is a variable only so a test
+// can make the write fail.
+var anonAdminWrites = struct {
+	SetMode func(chatID int64, on bool) error
+}{SetMode: admin.SetAnonAdminMode}
+
+// anonAdminApplyOutcome is the result of applyAnonAdmin. The zero value is a stored write.
+type anonAdminApplyOutcome int
+
+const (
+	anonAdminApplied anonAdminApplyOutcome = iota
+	anonAdminAlready
+	anonAdminSaveFailed
+)
+
+// anonAdminApplyResult is what applyAnonAdmin returns: the outcome, the locale key
+// /anonadmin replies with, the mode to draw (the stored
+// one read back, the requested one when the read-back failed because the write succeeded, the
+// current one for "already" and for a failed save) and the repository error.
+type anonAdminApplyResult struct {
+	Outcome anonAdminApplyOutcome
+	Key     string
+	On      bool
+	Err     error
+}
+
+// applyAnonAdmin switches anonymous-admin mode to want for a chat whose mode was current when the
+// caller read it. A value equal to the current one writes nothing and is anonAdminAlready; a
+// changed one is written through admin.SetAnonAdminMode (the admin table is not cached, so there
+// is no key to drop) and read back. It judges no person's rights: /anonadmin has checked the
+// owner and the menu its press before the call. It is the one write path of /anonadmin on|off and
+// the Anonymous admins page.
+func applyAnonAdmin(ctx context.Context, chatID int64, current, want bool) anonAdminApplyResult {
+	already := "admin_anon_admin_already_disabled"
+	now := "admin_anon_admin_disabled_now"
+	if want {
+		already = "admin_anon_admin_already_enabled"
+		now = "admin_anon_admin_enabled_now"
+	}
+	if current == want {
+		return anonAdminApplyResult{Outcome: anonAdminAlready, Key: already, On: current}
+	}
+	if err := anonAdminWrites.SetMode(chatID, want); err != nil {
+		log.Errorf("[Admin] Failed to set anon admin mode for chat %d: %v", chatID, err)
+		return anonAdminApplyResult{Outcome: anonAdminSaveFailed, Key: "admin_anon_admin_db_error", On: current, Err: err}
+	}
+	readCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), greetingApplyTimeout)
+	defer cancel()
+	stored, err := admin.LoadAnonAdminContext(readCtx, chatID)
+	if err != nil {
+		log.Warnf("[Admin] read back the anon admin mode of chat %d: %v", chatID, err)
+		stored = want
+	}
+	return anonAdminApplyResult{Outcome: anonAdminApplied, Key: now, On: stored}
+}
+
+// anonAdminChange applies the mode an owner asked for through applyAnonAdmin and returns the text
+// /anonadmin replies with. A failed save is answered here, as the command always did, with the
+// plain error text, and reported as failed so the caller sends nothing more.
+func anonAdminChange(c *helpers.CommandContext, current, want bool) (string, bool) {
+	ctx, cancel := greetingApplyContext()
+	defer cancel()
+	result := applyAnonAdmin(ctx, c.Chat.Id, current, want)
+	text, _ := c.Tr.GetString(result.Key)
+	if result.Outcome == anonAdminSaveFailed {
+		_, _ = c.Msg.Reply(c.Bot, text, formatting.Shtml())
+		return "", true
+	}
+	return fmt.Sprintf(text, formatting.HtmlEscape(c.Chat.Title)), false
+}
+
 func (m moduleStruct) anonAdmin(c *helpers.CommandContext) error {
 	chat := c.Chat
 	msg := c.Msg
@@ -606,32 +678,14 @@ func (m moduleStruct) anonAdmin(c *helpers.CommandContext) error {
 		}
 		switch args[1] {
 		case "on", "true", "yes":
-			if adminSettings.AnonAdmin {
-				temp, _ := tr.GetString(strings.ToLower(m.moduleName) + "_anon_admin_already_enabled")
-				text = fmt.Sprintf(temp, formatting.HtmlEscape(chat.Title))
-			} else {
-				if err := admin.SetAnonAdminMode(chat.Id, true); err != nil {
-					log.Errorf("[Admin] Failed to set anon admin mode for chat %d: %v", chat.Id, err)
-					errorText, _ := tr.GetString(strings.ToLower(m.moduleName) + "_anon_admin_db_error")
-					_, _ = msg.Reply(c.Bot, errorText, formatting.Shtml())
-					return ext.EndGroups
-				}
-				temp, _ := tr.GetString(strings.ToLower(m.moduleName) + "_anon_admin_enabled_now")
-				text = fmt.Sprintf(temp, formatting.HtmlEscape(chat.Title))
+			var failed bool
+			if text, failed = anonAdminChange(c, adminSettings.AnonAdmin, true); failed {
+				return ext.EndGroups
 			}
 		case "off", "no", "false":
-			if !adminSettings.AnonAdmin {
-				temp, _ := tr.GetString(strings.ToLower(m.moduleName) + "_anon_admin_already_disabled")
-				text = fmt.Sprintf(temp, formatting.HtmlEscape(chat.Title))
-			} else {
-				if err := admin.SetAnonAdminMode(chat.Id, false); err != nil {
-					log.Errorf("[Admin] Failed to set anon admin mode for chat %d: %v", chat.Id, err)
-					errorText, _ := tr.GetString(strings.ToLower(m.moduleName) + "_anon_admin_db_error")
-					_, _ = msg.Reply(c.Bot, errorText, formatting.Shtml())
-					return ext.EndGroups
-				}
-				temp, _ := tr.GetString(strings.ToLower(m.moduleName) + "_anon_admin_disabled_now")
-				text = fmt.Sprintf(temp, formatting.HtmlEscape(chat.Title))
+			var failed bool
+			if text, failed = anonAdminChange(c, adminSettings.AnonAdmin, false); failed {
+				return ext.EndGroups
 			}
 		default:
 			text, _ = tr.GetString(strings.ToLower(m.moduleName) + "_anon_admin_invalid_arg")

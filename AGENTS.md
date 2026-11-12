@@ -3191,6 +3191,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `log_channel:<chat>` key and loader `GetContext` uses (they share one function), which returns `(nil, nil)` for a chat with
   no linked channel, returns a failed read as an error, creates nothing and caches nothing for a miss. `log_channel` is not in
   `skipLocal`: another replica can show an old category state for up to `CACHE_LOCAL_TTL`, exactly as the commands can.
+  Anonymous-admin mode (Phase 18) is written by `applyAnonAdmin(ctx, chatID, current, want)` in `admin.go`, through the
+  `anonAdminWrites` seam (default `admin.SetAnonAdminMode`): a `want` equal to the `current` the caller read is
+  `anonAdminAlready` with no write (a Go `false` is still written when it differs: the write is column-targeted), a failed
+  write is `anonAdminSaveFailed` (logged once there), otherwise `anonAdminApplied` (the zero value) with the stored mode read
+  back through `admin.LoadAnonAdminContext`, and the result carries the locale key `/anonadmin` replies with. It judges no
+  person's rights. `/anonadmin` (`anonAdmin`) keeps its own read through `admin.GetAdminSettings`, which creates the `admin`
+  row even for a non-owner it then refuses (Pitfall 3: the row exists after a refused `/anonadmin on`), its live owner check
+  and its replies, and maps its two write branches onto the function (`TestLegacyAnonAdminRequests` pins every request and
+  stored row, never to be re-recorded). The `admin` table is not cached, so no write drops a key and no replica can lag. The
+  reader `admin.LoadAnonAdminContext` is one plain `SELECT`, returns its error, creates no row and reads a missing row as off.
 - Rules message (`rules.go`): `/rules` (in the group and in a private chat connected to it), the private rules message the
   `/start rules_<chat id>` deep link opens and the Rules page's Full preview are built by
   `buildRulesMessage` and sent by `sendRulesMessage`. The builder has two forms, the group form (`rulesFormGroup`: heading
