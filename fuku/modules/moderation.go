@@ -41,6 +41,14 @@ func (c *moderationCtx) replySuccess(text string, opts *gotgbot.SendMessageOpts)
 	return nil
 }
 
+// replyHint sends a usage hint (a "reply to a message" answer) as a reply to the command. Unlike
+// replySuccess it never queues the message for deletion: validation and error replies are not
+// covered by the manual punishment kind (D-13, IN-01). The error is exactly what Msg.Reply returned.
+func (c *moderationCtx) replyHint(text string, opts *gotgbot.SendMessageOpts) error {
+	_, err := c.Msg.Reply(c.Bot, text, opts)
+	return err
+}
+
 // gateFn is a permission gate. Returns true if the gate passes.
 // On failure, it should already have sent any required error messages.
 type gateFn func(c *moderationCtx) bool

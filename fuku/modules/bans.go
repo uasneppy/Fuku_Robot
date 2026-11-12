@@ -223,6 +223,7 @@ func moderationBan(m *moduleStruct) *moderationCommand {
 					text = fmt.Sprintf(temp, formatting.MentionHtml(t.userID, c.Msg.ReplyToMessage.GetSender().Name()))
 				} else {
 					text, _ = c.Tr.GetString("bans_anonymous_ban_reply_only")
+					return logReplyError(c.replyHint(text, formatting.Shtml()))
 				}
 				sendMsgOptns = formatting.Shtml()
 			} else {
@@ -407,6 +408,7 @@ func moderationUnban(m *moduleStruct) *moderationCommand {
 					text = fmt.Sprintf(temp, formatting.MentionHtml(t.userID, c.Msg.ReplyToMessage.GetSender().Name()))
 				} else {
 					text, _ = c.Tr.GetString("bans_anonymous_unban_reply_only")
+					return logReplyError(c.replyHint(text, formatting.Shtml()))
 				}
 			} else {
 				banUser, err := c.Bot.GetChat(t.userID, nil)
@@ -1148,4 +1150,12 @@ func init() {
 	RegisterAnonymousAdminHandler("skick", anonPipelineHandler(skickDesc, bansModule.sKick))
 	RegisterAnonymousAdminHandler("restrict", anonPipelineHandler(restrictDesc, bansModule.restrict))
 	RegisterAnonymousAdminHandler("unrestrict", anonPipelineHandler(unrestrictDesc, bansModule.unrestrict))
+}
+
+// logReplyError logs a reply's error as the reply funcs always have and returns it unchanged.
+func logReplyError(err error) error {
+	if err != nil {
+		log.Error(err)
+	}
+	return err
 }

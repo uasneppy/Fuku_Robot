@@ -2114,8 +2114,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   stored delay says) and `scheduleBotMessageFromNow` (the stored delay counted from this moment, for a message the bot has
   just edited). `sendRulesMessage` returns the sent message (its requests are unchanged, the Phase 12 goldens pass unedited);
   only `/rules` schedules it, the deep link and the settings preview discard it. The manual kind covers success replies
-  only: validation and error replies, warn lists, `/resetwarns`, `/rmwarn`, the `/restrict` and `/unrestrict` question cards,
-  `/kickme`, `/banme` and the silent variants (which send no reply) are never scheduled
+  only: validation and error replies (the "reply to a message" hint of `/ban` and `/unban` for a channel target goes through
+  `moderationCtx.replyHint`, which never schedules), warn lists, `/resetwarns`, `/rmwarn`, the `/restrict` and `/unrestrict`
+  question cards, `/kickme`, `/banme` and the silent variants (which send no reply) are never scheduled
   (`TestBotManualRepliesNotCovered`). Anonymous-admin re-entry runs the same command, so the hooks need no special case.
   The automatic kind (`bot:punish_auto`, plan 16-06) has these named sites and no other: every member requirement notice
   (the warn, kick, ban and mute notices of Phases 13 to 15 and the per-chat cap's pause notice) through
