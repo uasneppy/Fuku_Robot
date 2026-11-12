@@ -3044,6 +3044,18 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   command's toggle (`autoApproveToggleConfig.setPref`) calls it. The first write on a chat with no greetings row creates the
   whole greetings row with its defaults (`upsertGreetingSettings`: welcome on, goodbye on), as `/autoapprove on` always did,
   and `TestLegacyAutoApproveRequests` pins that whole row. The page reads through `greetings.LoadSettingsContext`.
+  The AI spam switch (Phase 18) is `applyAISpamEnabled` in `aispam.go` (`aispamWrites.SetEnabled`, default
+  `aispam.SetAISpamEnabled`), returning an `aispamApplyResult` (outcome `aispamApplied`, `aispamNoKey`,
+  `aispamGloballyDisabled` or `aispamSaveFailed`, the command's reply key, the switch read back, the error). Turning it On
+  is refused before any write exactly as `/aispam on` refuses; Off is never refused; a failed write is logged once there and
+  returned, and `/aispam` replies and then returns the error as before (`TestLegacyAISpamRequests` pins every byte).
+  Availability is `aispamConfigured()`, built on `aispamRefusalKey()`: the TypeSafe value set and `ENABLE_AISPAM` on, in
+  that order, read from `config.AppConfig` with no network call. It is not the Anthropic key, which belongs to the
+  member-requirement AI rule (`memberReqAIConfigured`), so the two are separate facts and neither page line names a cause.
+  The page reads through `aispam.LoadEnabledContext`, the command's own cached getter and `ai_spam_settings:<chat>` key
+  with its error returned and no row created (a chat with no row is off); `/aispam` itself still reads
+  `aispam.IsAISpamEnabled`, which hides a read error as off. `ai_spam_settings` is not in `skipLocal`: another replica can
+  show an old value for up to `CACHE_LOCAL_TTL`, exactly as the command can.
 - Rules message (`rules.go`): `/rules` (in the group and in a private chat connected to it), the private rules message the
   `/start rules_<chat id>` deep link opens and the Rules page's Full preview are built by
   `buildRulesMessage` and sent by `sendRulesMessage`. The builder has two forms, the group form (`rulesFormGroup`: heading

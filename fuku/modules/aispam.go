@@ -800,6 +800,84 @@ func aispamTruncate(s string, limit int) string {
 	return string(runes[:limit])
 }
 
+// aispamWrites holds the AI spam repository write the apply function calls. It is a variable
+// only so a test can make the write fail.
+var aispamWrites = struct {
+	SetEnabled func(chatID int64, enabled bool) error
+}{SetEnabled: aispam.SetAISpamEnabled}
+
+// aispamApplyOutcome is the result of applyAISpamEnabled. The zero value is a stored write.
+type aispamApplyOutcome int
+
+const (
+	aispamApplied aispamApplyOutcome = iota
+	aispamNoKey
+	aispamGloballyDisabled
+	aispamSaveFailed
+)
+
+// aispamApplyResult is what applyAISpamEnabled returns: the outcome, the locale key the command
+// replies with, the stored switch read back (the requested value when the read-back failed,
+// because the write succeeded) and the repository error.
+type aispamApplyResult struct {
+	Outcome aispamApplyOutcome
+	Key     string
+	Enabled bool
+	Err     error
+}
+
+// aispamRefusalKey is the one definition of whether the AI spam filter can run on this bot: the
+// locale key of the reason it cannot (no provider value, then the global switch off, in that
+// order), or "" when it can. It reads config.AppConfig only and makes no network call. The
+// Anthropic key of the member-requirement AI rule is not part of it.
+func aispamRefusalKey() string {
+	if config.AppConfig.TypeSafeAPIKey == "" {
+		return "aispam_no_key"
+	}
+	if !config.AppConfig.EnableAISpam {
+		return "aispam_globally_disabled"
+	}
+	return ""
+}
+
+// aispamConfigured reports whether the AI spam filter can run on this bot: the provider value is
+// set and the global switch is on. It is the test /aispam on refuses on, shared with the menu.
+func aispamConfigured() bool {
+	return aispamRefusalKey() == ""
+}
+
+// applyAISpamEnabled turns the AI spam filter on or off for a chat. Turning it on is refused
+// before any write while the bot has no provider value or the global switch is off, exactly as
+// /aispam on refuses; turning it off is never refused. The write stores the value and drops the
+// ai_spam_settings key (the repository does), and the value is absolute, so a repeated call
+// stores the same row. It is the one write path of /aispam on|off and the menu.
+func applyAISpamEnabled(ctx context.Context, chatID int64, on bool) aispamApplyResult {
+	if on {
+		switch aispamRefusalKey() {
+		case "aispam_no_key":
+			return aispamApplyResult{Outcome: aispamNoKey, Key: "aispam_no_key"}
+		case "aispam_globally_disabled":
+			return aispamApplyResult{Outcome: aispamGloballyDisabled, Key: "aispam_globally_disabled"}
+		}
+	}
+	if err := aispamWrites.SetEnabled(chatID, on); err != nil {
+		log.WithFields(log.Fields{"chat_id": chatID, "error": err}).Error("[AISpam] failed to save the setting")
+		return aispamApplyResult{Outcome: aispamSaveFailed, Key: "common_settings_save_failed", Err: err}
+	}
+	key := "aispam_disabled_success"
+	if on {
+		key = "aispam_enabled_success"
+	}
+	readCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), greetingApplyTimeout)
+	defer cancel()
+	enabled, err := aispam.LoadEnabledContext(readCtx, chatID)
+	if err != nil {
+		log.Warnf("[AISpam] read back the switch of chat %d: %v", chatID, err)
+		enabled = on
+	}
+	return aispamApplyResult{Outcome: aispamApplied, Key: key, Enabled: enabled}
+}
+
 // aispam is the /aispam command: a bare call reports status and what the model
 // is sent, an argument turns the filter on or off. Enabling refuses when the
 // operator has not configured a key or has pulled the global kill switch,
@@ -818,27 +896,14 @@ func (m moduleStruct) aispam(c *helpers.CommandContext) error {
 		return aispamReply(c, text)
 	}
 
-	if want {
-		if refusal, refused := aispamEnableRefusal(c.Tr); refused {
-			return aispamReply(c, refusal)
-		}
+	applyCtx, cancel := greetingApplyContext()
+	defer cancel()
+	result := applyAISpamEnabled(applyCtx, c.Chat.Id, want)
+	text, _ := c.Tr.GetString(result.Key)
+	if replyErr := aispamReply(c, text); replyErr != nil {
+		return replyErr
 	}
-
-	if err := aispam.SetAISpamEnabled(c.Chat.Id, want); err != nil {
-		log.WithFields(log.Fields{"chat_id": c.Chat.Id, "error": err}).Error("[AISpam] failed to save the setting")
-		text, _ := c.Tr.GetString("common_settings_save_failed")
-		if replyErr := aispamReply(c, text); replyErr != nil {
-			return replyErr
-		}
-		return err
-	}
-
-	key := "aispam_disabled_success"
-	if want {
-		key = "aispam_enabled_success"
-	}
-	text, _ := c.Tr.GetString(key)
-	return aispamReply(c, text)
+	return result.Err
 }
 
 func aispamStatusText(tr *i18n.Translator, enabled bool) string {
@@ -860,18 +925,6 @@ func aispamStatusText(tr *i18n.Translator, enabled bool) string {
 	parts = append(parts, notice)
 
 	return strings.Join(parts, "\n\n")
-}
-
-func aispamEnableRefusal(tr *i18n.Translator) (string, bool) {
-	if config.AppConfig.TypeSafeAPIKey == "" {
-		text, _ := tr.GetString("aispam_no_key")
-		return text, true
-	}
-	if !config.AppConfig.EnableAISpam {
-		text, _ := tr.GetString("aispam_globally_disabled")
-		return text, true
-	}
-	return "", false
 }
 
 func aispamReply(c *helpers.CommandContext, text string) error {

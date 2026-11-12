@@ -28,6 +28,17 @@ func IsAISpamEnabledContext(ctx context.Context, chatID int64) bool {
 	return settings.Enabled
 }
 
+// LoadEnabledContext reads whether the AI spam filter is on for the chat through the same cached
+// getter, and the same ai_spam_settings:<chat> key, as IsAISpamEnabledContext, but returns the
+// read error instead of hiding it as off. A chat with no row reads as off and no row is created.
+func LoadEnabledContext(ctx context.Context, chatID int64) (bool, error) {
+	settings, err := getAISpamSettingsCachedContext(ctx, chatID)
+	if err != nil {
+		return false, err
+	}
+	return settings.Enabled, nil
+}
+
 // SetAISpamEnabled turns the filter on or off for the chat.
 func SetAISpamEnabled(chatID int64, enabled bool) error {
 	err := db.DB.Clauses(clause.OnConflict{
