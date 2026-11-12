@@ -2336,7 +2336,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   message sits in this replica's buffer is not seen here (the in-process pin set below closes the buffer window on the replica
   that handles the pin only); a pin by another bot is never seen; exemptions are judged at send time, so a member approved or
   promoted later still loses messages already queued; a command message deleted by command deletion leaves a self-destruct row
-  whose later delete is refused quietly. A busy group keeps pace: the burst is offered with no write, the worker claims
+  whose later delete is refused quietly. Rolling-deploy caveat (accepted, like the others here; SEC-17-04): until every replica
+  runs the new code, an old-code worker claims `member:*` rows without the self-destruct Off screen and with a service-only
+  latch (so it can still delete a self-destruct row after Off, and keeps trying in a chat where the bot cannot delete); the
+  window ends when the old replica is replaced and costs at most the rows queued meanwhile. A busy group keeps pace: the burst is offered with no write, the worker claims
   `deletionBatch` (1000) rows a cycle and makes at most one `deleteMessages` call per 100 rows of a chat, so 3000 messages are 30
   paced calls on the `fuku:delete:pace:*` keys that no reply ever touches (`TestSelfDestructBusyGroup`: the burst, a command
   answered under a blocked pacer, a 429 that leaves rows pending with no attempt counted, and the ceiling).
