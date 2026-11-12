@@ -466,14 +466,35 @@ func memberPinnedRecently(chatID, messageID int64, now time.Time) bool {
 // make it fail.
 var memberDeleteDropPinned = deletion.DropPendingMessage
 
+// memberSelfDestructRuleStored reports whether the chat may have self-destruct rows: true when the
+// cached rules hold a member:selfdestruct entry, and also when they cannot be read, so an unreadable
+// rule keeps the old behaviour (attempt the drop, IN-03). A chat with no such entry has nothing to
+// drop and nothing buffered that the flush would not drop as off.
+func memberSelfDestructRuleStored(chatID int64) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), deletionRecordTimeout)
+	defer cancel()
+	rules, err := deletionRulesLookup(ctx, chatID)
+	if err != nil || rules == nil {
+		return true
+	}
+	_, present := rules.Delays[deletion.KindMemberSelfDestruct]
+	return present
+}
+
 // memberDeletePinned keeps a pinned message out of the self-destruct queue (D-11). It first
 // remembers the pin in process, so a flush that holds the message in its buffer, or is already
 // screening it, drops it instead of writing it (WR-03: this closes that window on this replica only;
 // a pin handled by another replica stays the accepted limit AR-5), and then drops the message's
 // pending row, retrying the database drop once because the pin event is never delivered again. Each
 // attempt runs on a fresh bounded context and a failure is logged by chat ID only; the only cost of
-// a drop that fails twice is that the pinned message is still deleted when its time comes.
+// a drop that fails twice is that the pinned message is still deleted when its time comes. A chat
+// with no member:selfdestruct rule is skipped after one cached rules read, with no note and no
+// database call (IN-03): pins are rare, but the drop was a synchronous write in the dispatcher
+// goroutine for every chat, Staff Groups and chats that never used the rule included.
 func memberDeletePinned(chatID, messageID int64) {
+	if !memberSelfDestructRuleStored(chatID) {
+		return
+	}
 	memberPinnedNote(chatID, messageID, deletionNow())
 	var err error
 	for range 2 {

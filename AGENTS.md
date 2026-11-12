@@ -2322,7 +2322,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   pin) which the flush consults right before its write (`memberDeleteDropPinnedEntries`, counted in `memberDeletePinnedDropped`,
   correct and not a shed), so a message pinned while it sat in the buffer or in the flush's screening is dropped instead of
   written; it then drops the pending row through the `memberDeleteDropPinned` seam, retried once on a fresh context because the
-  pin event is never delivered again (`TestMemberSelfDestructPinRace`); unpinning queues nothing, and `/permapin` pins a message the bot sent, which is never queued. Switching Self-destruct
+  pin event is never delivered again (`TestMemberSelfDestructPinRace`). A pin in a chat whose cached rules hold no
+  `member:selfdestruct` entry (`memberSelfDestructRuleStored`, one cached read; an unreadable rule counts as stored, the old
+  behaviour) notes nothing and makes no database call, so a Staff Group or a chat that never used the rule pays no synchronous
+  write in group `-8` (`TestMemberDeletePinnedNeedsRule`); unpinning queues nothing, and `/permapin` pins a message the bot sent, which is never queued. Switching Self-destruct
   Off drops the chat's pending self-destruct rows in the same write (`RemoveRule`), and turning it on or changing the delay
   drops nothing: rows queued under the old delay keep their time (D-12). Accepted limits, stated and not tested as wanted
   behaviour: a pin that lands after the worker claimed its row still deletes it, and a pin handled by another replica while the
