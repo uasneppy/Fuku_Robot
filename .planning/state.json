@@ -41,7 +41,7 @@
     {
       "number": "17",
       "name": "Command, Edit and Self-Destruct Deletion",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "18",
@@ -57,7 +57,7 @@
   "next": {
     "command": "/gsd-progress --next",
     "label": "Advance to the next step",
-    "reason": "Phase 7 of 10 · 0% · executing"
+    "reason": "Phase 8 of 10 · 0% · executing"
   },
-  "updated_at": "2026-11-12T04:09:38.059Z"
+  "updated_at": "2026-11-12T08:27:26.703Z"
 }
