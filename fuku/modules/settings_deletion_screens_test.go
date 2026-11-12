@@ -5,6 +5,7 @@ package modules
 import (
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"unicode/utf16"
@@ -179,6 +180,42 @@ func TestSettingsDeletionNoCard(t *testing.T) {
 			}
 		}
 	}
+
+	// The one card is Self-destruct's (a row with a ConfirmKey): pressing every choice of every row
+	// draws a card, with an expiry, a Yes and a No, only for that row and only for a delay.
+	t.Run("only a Self-destruct delay draws a card", func(t *testing.T) {
+		env := newSettingsDelEnv(t)
+		m := env.groupMenu()
+		for _, row := range settingsDelAllRows() {
+			values := append([]string{settingsDelNone}, settingsDelRowValues(row)...)
+			for _, value := range values {
+				m.choose(row.Code, value)
+				text, keyboard := m.last()
+				cards := 0
+				for _, button := range settingsAllButtons(keyboard) {
+					if fields := settingsButtonFields(t, button); fields["a"] == "dy" || fields["a"] == "no" || fields["e"] != "" {
+						cards++
+					}
+				}
+				wantCard := row.ConfirmKey != "" && value != settingsDelNone
+				switch {
+				case wantCard && (cards != 2 || !containsMarker(text, row.ConfirmKey)):
+					t.Errorf("%s=%s: %d card buttons in %q, want the card", row.Code, value, cards, text)
+				case !wantCard && (cards != 0 || (row.ConfirmKey != "" && containsMarker(text, row.ConfirmKey))):
+					t.Errorf("%s=%s: %d card buttons in %q, want no card", row.Code, value, cards, text)
+				}
+			}
+		}
+	})
+}
+
+// settingsDelRowValues are the v values of a row's presets in canonical digits.
+func settingsDelRowValues(row deletionRow) []string {
+	values := make([]string, 0, len(row.Presets))
+	for _, preset := range row.Presets {
+		values = append(values, strconv.Itoa(preset))
+	}
+	return values
 }
 
 // settingsDelWantState is what the contract says a stored rule draws: the icon and the words (marker
