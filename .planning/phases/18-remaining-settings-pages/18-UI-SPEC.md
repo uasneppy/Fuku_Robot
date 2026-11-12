@@ -1,7 +1,8 @@
 ---
 phase: "18"
 slug: "remaining-settings-pages"
-status: draft
+status: approved
+reviewed_at: "2026-11-12"
 shadcn_initialized: false
 preset: none
 created: "2026-11-12"
@@ -319,7 +320,7 @@ row (none needs typed input) and no row opens a URL.
 
 | Screen | Content rows | Nav | Private (content-page limit 8) | Group menu (limit 9) |
 |--------|--------------|-----|--------------------------------|----------------------|
-| **Main, owner** | 8 grid + 1 Access | 1 | **10** (M34: over by 2) | **10** (over by 1) |
+| **Main, owner** | 8 grid + 1 Access | 1 | **10** (M34: over the private budget of 8 by 2) | **10** (over the group budget of 9 by 1) |
 | **Main, admin** | 8 grid | 1 | **9** (over by 1) | **9** (at the limit) |
 | Warnings | 2 | 1 | **3** | **3** |
 | Switches | 3 | 1 | **4** | **4** |
@@ -1241,12 +1242,12 @@ planner-level or live checks.
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: pending
-- [ ] Dimension 2 Visuals: pending
-- [ ] Dimension 3 Color: pending (no colour exists; status icons substitute)
-- [ ] Dimension 4 Typography: pending (HTML tags substitute)
-- [ ] Dimension 5 Spacing: pending (message layout and row budget substitute)
-- [ ] Dimension 6 Registry Safety: pending
-- [ ] Dimension 7 Inventory Provenance: pending (no design system; Component Inventory omitted by `Tool: none`)
+- [x] Dimension 1 Copywriting: FLAG (non-blocking: the reused `greetings_auto_approve_disabled` double period, A18-A13; the long `aispam_data_notice`, C18-4)
+- [x] Dimension 2 Visuals: PASS
+- [x] Dimension 3 Color: PASS (no colour exists; status icons substitute)
+- [x] Dimension 4 Typography: PASS (HTML tags substitute)
+- [x] Dimension 5 Spacing: FLAG (non-blocking: Main is 10 rows for the owner and 9 for an admin, over the 8/9 content-page budget; M34 and A18-A1 carry a specified fallback hub)
+- [x] Dimension 6 Registry Safety: PASS
+- [x] Dimension 7 Inventory Provenance: PASS (no design system; Component Inventory omitted by `Tool: none`)
 
-**Approval:** pending (status draft; the checker upgrades it)
+**Approval:** approved 2026-11-12 by the UI checker (7 dimensions, no BLOCK, three non-blocking FLAGs). The checker did not re-measure the callback bytes or re-check the code collisions: the researcher measured them with a script and the plan check and the executors' worst-case callback tests re-prove them.
