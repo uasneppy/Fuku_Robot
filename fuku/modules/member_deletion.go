@@ -50,8 +50,9 @@ var (
 	memberDeletionAdminSlots = make(chan struct{}, 8)
 )
 
-// memberDeletionAdminTimeout bounds one live administrator read.
-const memberDeletionAdminTimeout = 3 * time.Second
+// memberDeletionAdminTimeout bounds one live administrator read. It is a variable only so a test
+// can shorten it.
+var memberDeletionAdminTimeout = 3 * time.Second
 
 // memberDeletionAdmin is the answer of an administrator check. Its zero value is unknown.
 type memberDeletionAdmin int
