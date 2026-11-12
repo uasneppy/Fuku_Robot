@@ -10,6 +10,7 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/uasneppy/fuku_robot/fuku/db/deletion"
 	"github.com/uasneppy/fuku_robot/fuku/db/memberreq"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
@@ -191,6 +192,7 @@ func memberReqPostNotice(ctx context.Context, b *gotgbot.Bot, chatID int64, text
 			return sendErr
 		})
 		if err == nil {
+			memberReqScheduleNotice(sent, withButton)
 			return sent.MessageId, nil
 		}
 		switch {
@@ -204,6 +206,20 @@ func memberReqPostNotice(ctx context.Context, b *gotgbot.Bot, chatID int64, text
 			retried = true
 		}
 	}
+}
+
+// memberReqScheduleNotice queues a notice that was just sent for deletion by the automatic
+// punishments timer (MREQ-15, D-11), after the send succeeded and from the sent message's own
+// date. A notice with the "I fixed it" button is queued at the 24 hour cap whatever the timer says
+// (D-14), because the button is the member's only self-service way out of the mute; every other
+// notice follows the timer directly. With the kind Off nothing is written, and a failure of the
+// queue never reaches the caller.
+func memberReqScheduleNotice(sent *gotgbot.Message, withButton bool) {
+	if withButton {
+		scheduleBotMessageCapped(sent, deletion.KindBotAuto)
+		return
+	}
+	scheduleBotMessage(sent, deletion.KindBotAuto)
 }
 
 // memberReqSleep waits d and reports true, or returns false as soon as the context ends.
