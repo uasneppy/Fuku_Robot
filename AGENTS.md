@@ -545,7 +545,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   outcome, and a log line carries chat, user and hold IDs only.
 - The `settings|v1` namespace is the settings menu (`settings_menu.go`, `settings_pages.go`). Fields: `a` action, `c` the
   group's chat ID (a menu opened in private), `u` the opener's user ID (a menu opened in the group), `p` page (`s` staff,
-  `l` lockdown, `c` captcha, `f` antiflood, `w` welcome, `g` goodbye, `r` rules, `m` member requirements, `d` deletion, `n` warnings, `a` access), `t` control, `v` the absolute target value; `e` (confirm expiry), `r`
+  `l` lockdown, `c` captcha, `f` antiflood, `w` welcome, `g` goodbye, `r` rules, `m` member requirements, `d` deletion, `n` warnings, `t` switches, `a` access), `t` control, `v` the absolute target value; `e` (confirm expiry), `r`
   (the lockdown row ID of a Lift card), `l` (the link row ID of an Unlink card) and `s` (Staff Group row ID) arrive with
   the confirm cards and the Link pick. Core action codes: `oh` open here (the choice
   message becomes the Main page), `op` open page `p` (also Refresh and a stepper's value button), `bk` Back to Main, `cl`
@@ -919,6 +919,21 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `TestSettingsWarnsForged`, `TestSettingsDriftWarns`, `TestSettingsAuthorityParityWarns`, `TestSettingsWarnsCallbackBytes`,
   `TestSettingsWarnsPageFitsEveryLocale` and `TestSettingsWarnsReadsCreateNothing` hold it (`settings_warns_test.go`,
   `settings_warns_screens_test.go`).
+- The Switches page (`settings_switches.go`, page `t`, `Order` 86, icon 🔘, `settings_page_switches`, between Deletion and Access,
+  Phase 18, plan 18-06) registers from its own file through `registerSettingsPage`, with no `Hidden`, so a Staff Group's own
+  menu shows it too. It has three full-width toggles, each `tg` only (`Actions`, so an `st` is an invalid request before any
+  I/O) with `Validate` exactly `0` or `1` (`settingsEditSwitchValue`), pressed through `settingsToggleSet` and sending the
+  absolute target: `r` Reports through `applyReportsEnabled` (the function the group branch of `/reports` calls; right
+  `settingsRightAdminFloodBot`, because `/reports`' `IsUserConnected(true, true)` asks for an admin and for the bot as an
+  administrator), `a` the AI spam filter and `j` Auto-approve of join requests (see below). The page reads all three on every
+  draw through the error-returning readers that create nothing, `settingsSwReportsRead` (`reports.LoadChatStatusContext`: no row
+  reads on), `settingsSwAIRead` (`aispam.LoadEnabledContext`: no row reads off) and `settingsSwApproveRead`
+  (`greetings.LoadSettingsContext`: no row reads off, and a chat the bot has not met is read without a row being made); a failed
+  read of any of them is the cannot-open edit and the unknown mark on Main. Main's state is `{n} on` (`settings_state_sw_on`, `n`
+  the number of the three that are on) or `settings_state_off_plain` when none is. The body is the commands' own state sentences,
+  `reports_status_enabled_group` or `reports_status_disabled_group`, a blank line, the AI block, a blank line and the Auto-approve
+  sentence; a refusal or a failed save (`common_settings_save_failed`) redraws the stored state with the warn notice, and a
+  stored value draws no notice.
 - The message editor's pages (`settings_edit.go`, pages `w` Welcome, `g` Goodbye and `r` Rules, orders 50, 60 and 70, each
   registered from that file's `init` through `registerSettingsPage` so `settings_pages.go` is never edited) show which
   parts of a message are set, one line per part from one parts table (`settingsEditPageDef.Parts`): Welcome and Goodbye
@@ -958,7 +973,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   write redraws the freshly loaded page with `common_settings_save_failed` and the old state. A menu opened in the group has an Open in private URL row (the
   existing `/start settings_<chat id>` deep link, left out and logged when the bot has no username) above the navigation
   row, a private menu has none; a private page has at most 8 rows and a group-menu page at most 9, and every page ends
-  with Back and Close. Main lists the pages after Antiflood (`s|l / c|f / n|w / g|r / m|d`, then Access for the owner, so seven rows in a private and in a group menu; `n` is the Warnings page, `m` the Member requirements page and `d` the Deletion page; later Phase 18 plans add the rest of the grid) with
+  with Back and Close. Main lists the pages after Antiflood (`s|l / c|f / n|w / g|r / m|d / t`, then Access for the owner, so eight rows in a private and in a group menu; `n` is the Warnings page, `m` the Member requirements page, `d` the Deletion page and `t` the Switches page; later Phase 18 plans add the rest of the grid) with
   `common_status_on` or `common_status_off` for Welcome and Goodbye and `settings_state_set` or `settings_state_not_set`
   for Rules. The Deletion line reads `Off` or `{n} on`, and `n` counts the three member rules too (at most 20 rules).
   Each part has its row right after the body (`settingsEditPartRows`): `[Set]` while the part is not set and
@@ -3007,7 +3022,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   command (`applyCaptchaTimeout` in `captcha.go` first), which holds the validation, the refusals, the repository write
   and its `cache.DeleteCache`, and returns a typed result (`captchaApplyResult`: outcome, the locale key the command
   replies with, the stored row read back, the repository error). The command maps the result to its unchanged reply and
-  the menu to a notice or a redraw, so a new setting adds one apply function and never a second write path. Pages read
+  the menu to a notice or a redraw, so a new setting adds one apply function and never a second write path. A boolean control presses through the one generic helper `settingsToggleSet` (`settings_toggle.go`: read the page before, call the control's apply step with the absolute target, redraw from the read-back, or from the stored state with the warn notice of a refusal or a failed save), which knows no page. Pages read
   through the getter their command reads, and a read error is the cannot-open edit, so a getter that hides read errors is
   never used by a page (`settingsCaptchaRead` is the seam). The menu keeps no state: no Redis key, no migration, no model,
   no shutdown drain, so a press works on any replica with Redis down. Accepted skew: the `captcha_settings` and
