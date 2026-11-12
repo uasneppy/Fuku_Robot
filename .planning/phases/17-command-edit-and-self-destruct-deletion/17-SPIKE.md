@@ -237,8 +237,11 @@ Each was recommended at planning and is in the code. Confirm or change:
 - **A17-2 (D-02, D-34)** An anonymous admin's command is deleted only after the proof tap ran it; in a group whose AnonAdmin
   setting is on there is no tap and that command stays (checks 3 and 4). _____
 - **A17-3 (D-04)** An edit that changes nothing counts like any edit past the grace (check 1). _____
-- **A17-4 (D-05)** Grace presets 30 s, 1 min, 5 min, 15 min and 1 h; the 1-minute default exists only in the apply function,
-  the page preselects nothing (A17-A12). _____
+- **A17-4 (D-05, D-30)** Grace presets 30 s, 1 min, 5 min, 15 min and 1 h. There is NO stored or preselected default: Edited
+  messages starts Off and the owner taps a preset, so the roadmap's "1 minute by default" holds only as 1 min being the second
+  preset on the screen (the code that would have stored 60 s on switch-on was removed, D-30, because the page offers presets and
+  has no switch-on-without-a-value caller). Decide: keep it (the owner always picks a value) or ask for a one-tap On that stores
+  1 min (a small change in `settings_deletion.go`, no migration). _____
 - **A17-5 (D-07, D-08)** Self-destruct rows in PostgreSQL with a bounded batcher that sheds toward keeping the message. _____
 - **A17-6 (D-09, C-13)** Self-destruct presets 1 min to 24 h and a 20,000 row per-chat ceiling, with the rate table in the
   opening of this file (1 min 333/s, 5 min 66/s, 10 min 33/s, 1 h 5.5/s, 6 h 0.9/s, 24 h 0.23/s). Confirm the ceiling and the
