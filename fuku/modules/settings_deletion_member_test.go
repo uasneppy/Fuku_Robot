@@ -360,3 +360,88 @@ func TestSettingsDeletionMemberCard(t *testing.T) {
 		}
 	})
 }
+
+// TestSettingsDeletionMemberCodesUnique holds the codes of the new section, its rows and its action
+// apart from every other section code, row code and action code (registerSettingsPage already panics
+// at init on a duplicate action code; the section and row tables have no such guard).
+func TestSettingsDeletionMemberCodesUnique(t *testing.T) {
+	seen := map[string]string{}
+	add := func(code, what string) {
+		t.Helper()
+		if code == "" {
+			t.Errorf("%s has an empty code", what)
+			return
+		}
+		if other, dup := seen[code]; dup {
+			t.Errorf("the code %q is both %s and %s", code, other, what)
+		}
+		seen[code] = what
+	}
+	for _, section := range settingsDelSections {
+		add(section.Code, "section "+section.Code)
+		for _, row := range section.Rows {
+			add(row.Code, "row "+row.Code)
+			if row.Code[0] != section.Code[0] {
+				t.Errorf("row %s does not start with its section code %s", row.Code, section.Code)
+			}
+		}
+	}
+	for _, core := range settingsCoreActions {
+		add(core, "core action "+core)
+	}
+	for code := range settingsActions {
+		add(code, "action "+code)
+	}
+	for _, code := range []string{"m", "mc", "me", "ms", "dy"} {
+		if _, ok := seen[code]; !ok {
+			t.Errorf("the code %q is not registered", code)
+		}
+	}
+	if seen["dy"] != "action dy" || seen["m"] != "section m" {
+		t.Errorf("dy is %q and m is %q, want the action and the section", seen["dy"], seen["m"])
+	}
+}
+
+// TestSettingsDeletionMemberNavigation walks the section's Back buttons and the card's exits.
+func TestSettingsDeletionMemberNavigation(t *testing.T) {
+	settingsDelMenus(t, func(t *testing.T, m *settingsDelMenu) {
+		// The hub's Back is the core Back to Main, the list's is the hub, a row screen's is the list.
+		_, keyboard := m.openHub()
+		if fields := settingsButtonFields(t, keyboard[len(keyboard)-1][0]); fields["a"] != "bk" {
+			t.Errorf("the hub's Back = %v, want the core Back", fields)
+		}
+		_, keyboard = m.open("dl", "m")
+		settingsDelWantBack(t, keyboard, map[string]string{"a": "op", "p": "d"})
+		for _, code := range []string{"mc", "me", "ms"} {
+			_, keyboard = m.open("dr", code)
+			settingsDelWantBack(t, keyboard, map[string]string{"a": "dl", "t": "m"})
+			m.pressButton(keyboard[len(keyboard)-1][0])
+			if text, _ := m.last(); !containsMarker(text, "settings_del_list_mem") {
+				t.Errorf("Back from the %s screen drew %q, want the Member list", code, text)
+			}
+		}
+		_, keyboard = m.last()
+		m.pressButton(keyboard[len(keyboard)-1][0])
+		if text, _ := m.last(); !containsMarker(text, "settings_del_intro") {
+			t.Errorf("Back from the list drew %q, want the hub", text)
+		}
+
+		// Every cell of the list opens its row.
+		_, keyboard = m.open("dl", "m")
+		for i, code := range []string{"mc", "me", "ms"} {
+			settingsDelWantRowFields(t, settingsAllButtons(keyboard[:2])[i], "dr", code)
+		}
+
+		// The card: No is the hub, Back is Main, Close is the core Close.
+		m.choose("ms", "600")
+		_, no := settingsDelCardOf(t, m)
+		if fields := settingsButtonFields(t, no); fields["a"] != "no" || fields["p"] != "d" {
+			t.Errorf("the card's No = %v, want a=no and p=d", fields)
+		}
+		_, keyboard = m.last()
+		settingsDelWantBack(t, keyboard, map[string]string{"a": "bk"})
+		if fields := settingsButtonFields(t, keyboard[len(keyboard)-1][1]); fields["a"] != "cl" {
+			t.Errorf("the card's Close = %v, want the core Close", fields)
+		}
+	})
+}

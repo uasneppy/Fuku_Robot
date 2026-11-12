@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
@@ -45,6 +46,12 @@ var settingsDelBotCases = []settingsDelCase{
 	{"br", "settings_del_bot_rules", "settings_del_desc_rules", deletion.KindBotRules},
 	{"ba", "settings_del_bot_auto", "settings_del_desc_auto", deletion.KindBotAuto},
 	{"bm", "settings_del_bot_manual", "settings_del_desc_manual", deletion.KindBotManual},
+}
+
+var settingsDelMemberCases = []settingsDelCase{
+	{"mc", "settings_del_mem_commands", "settings_del_desc_commands", deletion.KindMemberCommands},
+	{"me", "settings_del_mem_edited", "settings_del_desc_edited", deletion.KindMemberEdited},
+	{"ms", "settings_del_mem_self", "settings_del_desc_self", deletion.KindMemberSelfDestruct},
 }
 
 var (
@@ -286,6 +293,20 @@ func TestSettingsDeletionMainState(t *testing.T) {
 	}
 	wantOn(3)
 
+	// The member rules count too, and the hub's Member line carries its own count.
+	env.setRule(deletion.KindMemberCommands, 0)
+	wantOn(4)
+	env.setRule(deletion.KindMemberEdited, 60)
+	wantOn(5)
+	env.setRule(deletion.KindMemberSelfDestruct, 600)
+	wantOn(6)
+	hubBefore := env.botReads(env.chat.Id)
+	hub, _ := m.openHub()
+	hubReads := env.botReads(env.chat.Id) - hubBefore
+	for key, want := range map[string]int{"settings_del_sec_service": 2, "settings_del_sec_bot": 1, "settings_del_sec_member": 3} {
+		settingsDelWantLine(t, hub, key, "", staffMarker("settings_state_del_on")+" "+fmt.Sprint(want))
+	}
+
 	for name, swap := range map[string]func(){
 		"rules": func() {
 			mreqSwap(t, &deletionRulesLookup, func(context.Context, int64) (*deletion.Rules, error) {
@@ -303,7 +324,7 @@ func TestSettingsDeletionMainState(t *testing.T) {
 			t.Errorf("a failed %s read: line = %q, want the unknown mark", name, line)
 		}
 	}
-	if reads := env.botReads(env.chat.Id) - readsBefore; reads != 0 {
+	if reads := env.botReads(env.chat.Id) - readsBefore - hubReads; reads != 0 {
 		t.Errorf("Main made %d getChatMember calls about the bot, want none", reads)
 	}
 }
@@ -482,6 +503,10 @@ var settingsDelForged = [][]string{
 	{"a", "st", "p", "d", "t", "sn", "v", "600"},
 	{"a", "st", "p", "d", "t", "sj", "v", "0"},
 	{"a", "st", "p", "d", "t", "bw", "v", "n"},
+	{"a", "dl", "t", "m"},
+	{"a", "dr", "t", "me"},
+	{"a", "st", "p", "d", "t", "mc", "v", "0"},
+	{"a", "st", "p", "d", "t", "ms", "v", "600"},
 }
 
 func TestSettingsDeletionStaffGroup(t *testing.T) {
@@ -680,6 +705,7 @@ func TestSettingsDeletionValidation(t *testing.T) {
 		{"tg naming a row", row("a", "tg", "p", "d", "t", "sn", "v", "1")},
 		{"tg with no rule", row("a", "tg", "p", "d", "t", "sn", "v", "n")},
 	}
+	forged = append(forged, settingsDelMemberForged(m)...)
 	for _, tc := range forged {
 		lookups, bots, edits, answers := env.memberLookupsOf(env.chat.Id, env.owner.Id), env.botReads(env.chat.Id), m.editCount(), env.answerCount()
 		data := encodeCallbackData(settingsCallbackNamespace, tc.fields)
@@ -717,6 +743,83 @@ func TestSettingsDeletionValidation(t *testing.T) {
 	m.choose("sn", "n")
 	if _, ok := env.stored(deletion.KindPinned); ok {
 		t.Error("n did not remove the row")
+	}
+
+	// The valid member shapes pass too, the Yes of a card included.
+	m.open("dl", "m")
+	m.choose("mc", "0")
+	m.choose("me", "900")
+	for kind, want := range map[string]int{deletion.KindMemberCommands: 0, deletion.KindMemberEdited: 900} {
+		if delay, ok := env.stored(kind); !ok || delay != want {
+			t.Errorf("a valid member choice stored %s = %d (%v), want %d", kind, delay, ok, want)
+		}
+	}
+	yes := row("a", "dy", "t", "ms", "v", "3600", "e", settingsCardExpiry(time.Now()))
+	env.pressRaw(m.chat, env.owner, m.msgID, encodeCallbackData(settingsCallbackNamespace, yes))
+	if delay, ok := env.stored(deletion.KindMemberSelfDestruct); !ok || delay != 3600 {
+		t.Errorf("a valid Yes stored %d (%v), want 3600", delay, ok)
+	}
+}
+
+// settingsDelMemberForged are the forged presses of the Member messages section (C17-3): each is
+// refused in step 1, before any getChatMember, with the invalid-request alert.
+func settingsDelMemberForged(m *settingsDelMenu) []struct {
+	name   string
+	fields map[string]string
+} {
+	row := func(kv ...string) map[string]string { return m.fields(kv...) }
+	yes := func(kv ...string) map[string]string {
+		return row(append([]string{"a", "dy", "t", "ms", "v", "600", "e", "29900000"}, kv...)...)
+	}
+	without := func(key string) map[string]string {
+		fields := yes()
+		delete(fields, key)
+		return fields
+	}
+	with := func(key, value string) map[string]string {
+		fields := yes()
+		fields[key] = value
+		return fields
+	}
+	// Small IDs keep the forged data inside the 64-byte cap, so it still encodes.
+	both := map[string]string{"a": "dy", "c": "-1", "u": "1", "t": "ms", "v": "600", "e": "29900000"}
+	neither := yes()
+	delete(neither, "u")
+	return []struct {
+		name   string
+		fields map[string]string
+	}{
+		{"dl with the member section and an extra key", row("a", "dl", "t", "m", "v", "1")},
+		{"dr with the member section code", row("a", "dr", "t", "m")},
+		{"Commands with v=60", row("a", "st", "p", "d", "t", "mc", "v", "60")},
+		{"Commands with v=1", row("a", "st", "p", "d", "t", "mc", "v", "1")},
+		{"Edited with v=0", row("a", "st", "p", "d", "t", "me", "v", "0")},
+		{"Edited with v=600", row("a", "st", "p", "d", "t", "me", "v", "600")},
+		{"Self-destruct with v=30", row("a", "st", "p", "d", "t", "ms", "v", "30")},
+		{"Self-destruct with v=0", row("a", "st", "p", "d", "t", "ms", "v", "0")},
+		{"Self-destruct with v=05", row("a", "st", "p", "d", "t", "ms", "v", "05")},
+		{"Self-destruct with v=86401", row("a", "st", "p", "d", "t", "ms", "v", "86401")},
+		{"tg naming Commands", row("a", "tg", "p", "d", "t", "mc", "v", "1")},
+		{"tg naming Edited", row("a", "tg", "p", "d", "t", "me", "v", "1")},
+		{"tg naming Self-destruct", row("a", "tg", "p", "d", "t", "ms", "v", "1")},
+		{"dy for Commands", with("t", "mc")},
+		{"dy for Edited", with("t", "me")},
+		{"dy for a Phase 16 row", with("t", "sn")},
+		{"dy for the section", with("t", "m")},
+		{"dy with v=n", with("v", "n")},
+		{"dy with v=30", with("v", "30")},
+		{"dy with v=0", with("v", "0")},
+		{"dy with v=05", with("v", "05")},
+		{"dy with no v", without("v")},
+		{"dy with no t", without("t")},
+		{"dy with no e", without("e")},
+		{"dy with e=x", with("e", "x")},
+		{"dy with e=0", with("e", "0")},
+		{"dy with e=-5", with("e", "-5")},
+		{"dy with e over 63 bits", with("e", "9223372036854775808")},
+		{"dy with an extra key", yes("p", "d")},
+		{"dy with both c and u", both},
+		{"dy with neither c nor u", neither},
 	}
 }
 
@@ -896,7 +999,7 @@ func TestSettingsDriftDeletion(t *testing.T) {
 			}
 			text, _ := m.open("dl", list)
 			section, row, _ := settingsDelRowByCode(tc.code)
-			icon, words, _ := settingsDelWantState(section.NoneKey, row.Presets, delay, on)
+			icon, words, _ := settingsDelWantState(settingsDelWantWordsFor(tc.code, section.NoneKey), row.Presets, delay, on)
 			settingsDelWantLine(t, text, tc.nameKey, icon, words...)
 		}
 	}

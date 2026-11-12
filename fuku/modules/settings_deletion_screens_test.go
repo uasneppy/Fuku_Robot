@@ -22,7 +22,8 @@ import (
 
 // settingsDelDelayKeysOf is the label key of each preset, written out by the tests.
 var settingsDelDelayKeysOf = map[int]string{
-	10: "settings_del_delay_10s", 60: "settings_del_delay_1m", 600: "settings_del_delay_10m",
+	10: "settings_del_delay_10s", 30: "settings_del_delay_30s", 60: "settings_del_delay_1m", 300: "settings_del_delay_5m",
+	600: "settings_del_delay_10m", 900: "settings_del_delay_15m",
 	3600: "settings_del_delay_1h", 21600: "settings_del_delay_6h", 86400: "settings_del_delay_24h",
 }
 
@@ -39,9 +40,12 @@ func settingsDelPureView(tr *i18n.Translator, private bool, title string) settin
 }
 
 // settingsDelEveryRuleSet is the data of a group with every rule on: the service rows cycle through
-// their presets (Delete now included), the bot rows through theirs, and the shared flag is on.
+// their presets (Delete now included), the bot rows through theirs, the three member rules are on
+// (Commands, a 1 min grace, Self-destruct at 10 min) and the shared flag is on.
 func settingsDelEveryRuleSet() settingsDelData {
-	delays := map[string]int{}
+	delays := map[string]int{
+		deletion.KindMemberCommands: 0, deletion.KindMemberEdited: 60, deletion.KindMemberSelfDestruct: 600,
+	}
 	presets := []int{0, 10, 60, 600, 3600, 21600, 86400}
 	for i, tc := range settingsDelServiceCases {
 		delays[tc.kind] = presets[i%len(presets)]
@@ -58,13 +62,18 @@ type settingsDelNamedScreen struct {
 	screen settingsScreen
 }
 
-// settingsDelEveryScreen renders the hub, both lists and the screen of every row.
+// settingsDelEveryScreen renders the hub, every list, the screen of every row and the confirm card of
+// every row that has one (for its longest preset, the widest callback data).
 func settingsDelEveryScreen(prep settingsDelPrepared, notice string) []settingsDelNamedScreen {
 	screens := []settingsDelNamedScreen{{"hub", renderSettingsDelHub(prep, settingsDelSections, notice)}}
 	for _, section := range settingsDelSections {
 		screens = append(screens, settingsDelNamedScreen{"list " + section.Code, renderSettingsDelList(prep, section, notice)})
 		for _, row := range section.Rows {
 			screens = append(screens, settingsDelNamedScreen{"row " + row.Code, renderSettingsDelRow(prep, section, row, notice)})
+			if row.ConfirmKey != "" {
+				longest := strconv.Itoa(row.Presets[len(row.Presets)-1])
+				screens = append(screens, settingsDelNamedScreen{"card " + row.Code, renderSettingsDelCard(prep, row, longest, notice)})
+			}
 		}
 	}
 	return screens
@@ -75,24 +84,29 @@ func TestSettingsDeletionRowBudget(t *testing.T) {
 	tr := i18n.MustNewTranslator("en")
 	wantWidths := map[string]string{
 		"hub": "[2 1 2]", "list s": "[2 2 2 2 2 2 2]", "list b": "[2 2 1 2]",
-		"list m": "[2 1 2]", "row mc": "[2 2]", "row me": "[3 3 2]", "row ms": "[1 3 3 2]",
+		"list m": "[2 1 2]", "row mc": "[2 2]", "row me": "[3 3 2]", "row ms": "[1 3 3 2]", "card ms": "[2 2]",
 	}
 	for _, private := range []bool{false, true} {
-		prep := settingsDelPrepared{View: settingsDelPureView(tr, private, "G"), Data: settingsDelEveryRuleSet()}
-		for _, named := range settingsDelEveryScreen(prep, "") {
-			want, ok := wantWidths[named.name]
-			if !ok {
-				want = "[3 3 2]"
-				if strings.HasPrefix(named.name, "row s") {
-					want = "[2 3 3 2]"
+		for name, data := range map[string]settingsDelData{
+			"every rule set": settingsDelEveryRuleSet(),
+			"no rule":        {Rules: &deletion.Rules{ChatID: 1, Delays: map[string]int{}}},
+		} {
+			prep := settingsDelPrepared{View: settingsDelPureView(tr, private, "G"), Data: data}
+			for _, named := range settingsDelEveryScreen(prep, "") {
+				want, ok := wantWidths[named.name]
+				if !ok {
+					want = "[3 3 2]"
+					if strings.HasPrefix(named.name, "row s") {
+						want = "[2 3 3 2]"
+					}
 				}
-			}
-			if got := fmt.Sprint(settingsDelWidths(named.screen.Keyboard.InlineKeyboard)); got != want {
-				t.Errorf("private=%v %s: row widths = %s, want %s", private, named.name, got, want)
-			}
-			for _, button := range settingsAllButtons(named.screen.Keyboard.InlineKeyboard) {
-				if button.Url != "" {
-					t.Errorf("private=%v %s: a URL button %q", private, named.name, button.Text)
+				if got := fmt.Sprint(settingsDelWidths(named.screen.Keyboard.InlineKeyboard)); got != want {
+					t.Errorf("private=%v %s %s: row widths = %s, want %s", private, name, named.name, got, want)
+				}
+				for _, button := range settingsAllButtons(named.screen.Keyboard.InlineKeyboard) {
+					if button.Url != "" {
+						t.Errorf("private=%v %s %s: a URL button %q", private, name, named.name, button.Text)
+					}
 				}
 			}
 		}
@@ -136,25 +150,31 @@ func TestSettingsDeletionCallbackBytes(t *testing.T) {
 	tr := i18n.MustNewTranslator("en")
 	for _, private := range []bool{false, true} {
 		prep := settingsDelPrepared{View: settingsDelPureView(tr, private, "G"), Data: settingsDelEveryRuleSet()}
-		longest := 0
+		longestChoice, longestYes := 0, 0
 		for _, named := range settingsDelEveryScreen(prep, "") {
 			if named.screen.Omitted != 0 {
 				t.Errorf("private=%v %s omitted %d buttons", private, named.name, named.screen.Omitted)
 			}
 			for _, button := range settingsAllButtons(named.screen.Keyboard.InlineKeyboard) {
-				if size := len(button.CallbackData); size > 64 {
+				size := len(button.CallbackData)
+				switch {
+				case size > 64:
 					t.Errorf("private=%v %s: %q is %d bytes", private, named.name, button.CallbackData, size)
-				} else {
-					longest = max(longest, size)
+				case strings.Contains(button.CallbackData, "a=dy&"):
+					longestYes = max(longestYes, size)
+				default:
+					longestChoice = max(longestChoice, size)
 				}
 			}
 		}
-		want := 46
+		// The card's Yes is the widest button of the section (the choices stay at their Phase 16 width).
+		wantChoice, wantYes := 46, 53
 		if private {
-			want = 50
+			wantChoice, wantYes = 50, 57
 		}
-		if longest != want {
-			t.Errorf("private=%v: the longest button is %d bytes, want %d", private, longest, want)
+		if longestChoice != wantChoice || longestYes != wantYes {
+			t.Errorf("private=%v: the longest choice is %d bytes and the card's Yes %d, want %d and %d",
+				private, longestChoice, longestYes, wantChoice, wantYes)
 		}
 	}
 }
@@ -166,6 +186,9 @@ func TestSettingsDeletionNoCard(t *testing.T) {
 	for _, private := range []bool{false, true} {
 		prep := settingsDelPrepared{View: settingsDelPureView(tr, private, "G"), Data: settingsDelEveryRuleSet()}
 		for _, named := range settingsDelEveryScreen(prep, "") {
+			if strings.HasPrefix(named.name, "card ") {
+				continue // the card is the one screen with an expiry, a Yes and a No (the subtest below)
+			}
 			for _, button := range settingsAllButtons(named.screen.Keyboard.InlineKeyboard) {
 				if strings.HasPrefix(button.CallbackData, settingsHubNamespace+"|") {
 					continue
@@ -218,28 +241,50 @@ func settingsDelRowValues(row deletionRow) []string {
 	return values
 }
 
+// settingsDelWantWords are the locale keys of the words a row's states are drawn with, written out by the
+// tests: the "no rule" word, the word of a stored 0 and the template of a stored delay.
+type settingsDelWantWords struct {
+	none, zero, after string
+}
+
+// settingsDelMemberWords are the words of the three member rows (UI-SPEC "Status Icons").
+var settingsDelMemberWords = map[string]settingsDelWantWords{
+	"mc": {"settings_state_off_plain", "settings_del_state_on", "settings_del_state_after"},
+	"me": {"settings_state_off_plain", "settings_del_state_now", "settings_del_state_grace"},
+	"ms": {"settings_state_off_plain", "settings_del_state_now", "settings_del_state_after"},
+}
+
+// settingsDelWantWordsFor is the words of the row with the code: its own for a member row, else the
+// Phase 16 words with the section's "no rule" word.
+func settingsDelWantWordsFor(code, noneKey string) settingsDelWantWords {
+	if words, ok := settingsDelMemberWords[code]; ok {
+		return words
+	}
+	return settingsDelWantWords{none: noneKey, zero: "settings_del_state_now", after: "settings_del_state_after"}
+}
+
 // settingsDelWantState is what the contract says a stored rule draws: the icon and the words (marker
 // strings) of the state, and the value of the choice that is marked ("" for none).
-func settingsDelWantState(noneKey string, presets []int, delay int, on bool) (icon string, words []string, marked string) {
+func settingsDelWantState(words settingsDelWantWords, presets []int, delay int, on bool) (icon string, want []string, marked string) {
 	switch {
 	case !on:
-		return "➖", []string{staffMarker(noneKey)}, "n"
+		return "➖", []string{staffMarker(words.none)}, "n"
 	case delay == 0:
 		marked = ""
 		if len(presets) > 0 && presets[0] == 0 {
 			marked = "0"
 		}
-		return "🗑", []string{staffMarker("settings_del_state_now")}, marked
+		return "🗑", []string{staffMarker(words.zero)}, marked
 	}
 	key, preset := settingsDelDelayKeysOf[delay]
 	if !preset {
-		return "⏳", []string{staffMarker("settings_del_state_after"), staffMarker("settings_del_delay_custom") + " " + fmt.Sprint(delay)}, ""
+		return "⏳", []string{staffMarker(words.after), staffMarker("settings_del_delay_custom") + " " + fmt.Sprint(delay)}, ""
 	}
 	// A preset that this row does not offer (10 s on a bot row) is drawn but marks nothing.
 	if !slices.Contains(presets, delay) {
-		return "⏳", []string{staffMarker("settings_del_state_after"), staffMarker(key)}, ""
+		return "⏳", []string{staffMarker(words.after), staffMarker(key)}, ""
 	}
-	return "⏳", []string{staffMarker("settings_del_state_after"), staffMarker(key)}, fmt.Sprint(delay)
+	return "⏳", []string{staffMarker(words.after), staffMarker(key)}, fmt.Sprint(delay)
 }
 
 // settingsDelCheckState renders the list and the row screen of a row for the data and fails the test
@@ -251,7 +296,7 @@ func settingsDelCheckState(t *testing.T, tr *i18n.Translator, tc settingsDelCase
 		t.Fatalf("no row %s", tc.code)
 	}
 	prep := settingsDelPrepared{View: settingsDelPureView(tr, true, "G"), Data: data}
-	icon, words, marked := settingsDelWantState(section.NoneKey, row.Presets, delay, on)
+	icon, words, marked := settingsDelWantState(settingsDelWantWordsFor(tc.code, section.NoneKey), row.Presets, delay, on)
 
 	list := renderSettingsDelList(prep, section, "")
 	settingsDelWantLine(t, list.Text, tc.nameKey, icon, words...)
@@ -297,13 +342,14 @@ func settingsDelCheckState(t *testing.T, tr *i18n.Translator, tc settingsDelCase
 func TestSettingsDeletionStates(t *testing.T) {
 	withStaffLocale(t)
 	tr := i18n.MustNewTranslator("en")
-	cases := append(append([]settingsDelCase{}, settingsDelServiceCases...), settingsDelBotCases...)
+	cases := append(append(append([]settingsDelCase{}, settingsDelServiceCases...), settingsDelBotCases...), settingsDelMemberCases...)
 	stored := []struct {
 		name  string
 		delay int
 		on    bool
 	}{
-		{"none", 0, false}, {"zero", 0, true}, {"10 s", 10, true}, {"1 min", 60, true}, {"10 min", 600, true},
+		{"none", 0, false}, {"zero", 0, true}, {"10 s", 10, true}, {"30 s", 30, true}, {"1 min", 60, true},
+		{"5 min", 300, true}, {"10 min", 600, true}, {"15 min", 900, true},
 		{"1 h", 3600, true}, {"6 h", 21600, true}, {"24 h", 86400, true}, {"37 s", 37, true},
 	}
 	for _, tc := range cases {

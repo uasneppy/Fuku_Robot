@@ -3,6 +3,7 @@
 package modules
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -22,6 +23,8 @@ func TestDeletionKindKeysExist(t *testing.T) {
 		"settings_del_sec_service", "settings_del_sec_bot", "settings_del_delay_10s", "settings_del_delay_1m",
 		"settings_del_delay_10m", "settings_del_delay_1h", "settings_del_delay_6h", "settings_del_delay_24h",
 		"settings_del_state_keep", "settings_del_state_now",
+		"settings_del_sec_member", "settings_del_list_mem", "settings_del_delay_30s", "settings_del_delay_5m",
+		"settings_del_delay_15m", "settings_del_state_on", "settings_del_hint_grace", "settings_state_off_plain",
 	}
 
 	for _, code := range memberReqScreenLanguages {
@@ -41,12 +44,30 @@ func TestDeletionKindKeysExist(t *testing.T) {
 		for _, table := range []struct {
 			name string
 			rows []deletionRow
-		}{{"service", deletionServiceRows}, {"bot", deletionBotRows}} {
+		}{{"service", deletionServiceRows}, {"bot", deletionBotRows}, {"member", deletionMemberRows}} {
 			for _, row := range table.rows {
-				translates(table.name+" row "+row.Code+" NameKey", row.NameKey, nil)
-				translates(table.name+" row "+row.Code+" DescKey", row.DescKey, nil)
-				if row.HintKey != "" {
-					translates(table.name+" row "+row.Code+" HintKey", row.HintKey, nil)
+				who := table.name + " row " + row.Code
+				translates(who+" NameKey", row.NameKey, nil)
+				translates(who+" DescKey", row.DescKey, nil)
+				for field, key := range map[string]string{
+					"HintKey": row.HintKey, "ZeroKey": row.ZeroKey, "TimeKey": row.TimeKey,
+				} {
+					if key != "" {
+						translates(who+" "+field, key, nil)
+					}
+				}
+				for preset, key := range row.LabelKeys {
+					translates(fmt.Sprintf("%s LabelKeys[%d]", who, preset), key, nil)
+				}
+				// The two templates a row can name take {delay}: both must splice it in.
+				for field, key := range map[string]string{"AfterKey": row.AfterKey, "ConfirmKey": row.ConfirmKey} {
+					if key == "" {
+						continue
+					}
+					text := translates(who+" "+field, key, i18n.TranslationParams{"delay": "DELAYMARK"})
+					if !strings.Contains(text, "DELAYMARK") {
+						t.Errorf("%s: %s %q does not carry {delay}: %q", code, field, key, text)
+					}
 				}
 			}
 		}

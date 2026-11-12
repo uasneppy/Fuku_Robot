@@ -817,18 +817,21 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   the page is not drawn or opened in a Staff Group (D-18). `Hidden` is a fresh Staff Group read (`deletionStaffLookup`,
   true only for a definite row; an error hides nothing), `MainState` makes the same read and answers the unknown mark on an
   error, and `Open` is the cannot-open edit for an unreadable row. Three levels, all built from two tables (the sections
-  `settingsDelSections`, `s` Service messages and `b` Bot messages, and the row tables of `deletion_kinds.go`; nothing
-  branches on a row's code or kind): the hub (`a=op&p=d`, Back is Main), a section's list (`a=dl&t=<section>`, Back is
+  `settingsDelSections`, `s` Service messages, `b` Bot messages and, since Phase 17, `m` Member messages, icon 💬, and the
+  row tables of `deletion_kinds.go`; nothing branches on a row's code or kind): the hub (`a=op&p=d`, Back is Main), a section's list (`a=dl&t=<section>`, Back is
   `a=op&p=d`) and a row's screen (`a=dr&t=<row>`, Back is `a=dl&t=<its section>`). The row codes are `sj sl sp sh sn sv sf
-  sb sa sk sg so` (service) and `bw bg br ba bm` (bot). `dl` and `dr` take exactly `t` (a section or a row code, checked in
+  sb sa sk sg so` (service), `bw bg br ba bm` (bot) and `mc me ms` (member: Commands, Edited messages, Self-destruct).
+  `dl` and `dr` take exactly `t` (a section or a row code, checked in
   step 1) and `settingsRightAdmin`; the controls are one per row code, `st` only (a `tg` naming one is refused in step 1),
   `p=d`, with `v` exactly `n` (Keep on a service row, Off on a bot row) or the canonical decimal seconds of one of that
-  row's own presets (service 0, 10, 60, 600, 3600, 21600, 86400; bot 60, 600, 3600, 21600, 86400: no sign, space,
-  non-ASCII digit or leading zero), right `settingsRightChangeInfo`, judged on the press's fresh member record. Every choice
-  writes at once, with no card and no `e` field (M28, `settingsActCancel` is never produced): a press of the stored state
-  writes nothing, a failed write redraws the stored state with `common_settings_save_failed`. A row writes through
+  row's own presets (service 0, 10, 60, 600, 3600, 21600, 86400; bot 60, 600, 3600, 21600, 86400; Commands 0, Edited
+  messages 30, 60, 300, 900, 3600, Self-destruct 60, 300, 600, 3600, 21600, 86400: no sign, space, non-ASCII digit or
+  leading zero), right `settingsRightChangeInfo`, judged on the press's fresh member record. Every choice of a Phase 16
+  row, Commands and Edited messages writes at once, with no card and no `e` field (M28, `settingsActCancel` is never
+  produced by them; the one card is Self-destruct's, below): a press of the stored state writes nothing, a failed write redraws the stored state with `common_settings_save_failed`. A row writes through
   `applyDeleteRule`; joined and left write the shared flag through `applyCleanServiceRule` (Keep, Delete now, After N), as
-  `/cleanservice` does, and are drawn by their effective state. One function (`settingsDelStateOf`) maps a stored delay to
+  `/cleanservice` does, and are drawn by their effective state. One function (`settingsDelStateOf`, fed one
+  `settingsDelWords` struct: the none, zero and after keys of the row) maps a stored delay to
   the icon (➖ none, 🗑 delete now, ⏳ a delay), the word and the marked choice; a stored 0 on a bot row reads Delete now and
   marks nothing, a delay that is no preset reads `{n} s` and marks nothing. Every deletion screen (hub, both lists, every
   row) carries one status line about the bot's right to delete, from one live `getChatMember` of the bot per draw through
@@ -839,9 +842,31 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   cannot-open edit, and no button is ever disabled (a rule can be set with the line showing). Main makes no Telegram call.
   `dl`, `dr` and every control run `settingsDelStaffGate` first, after the press pipeline and before any read or write
   (a Staff Group answers the generic invalid-request alert and writes nothing, an unreadable row is the cannot-open edit).
-  The largest button of the page is 50 bytes. `TestSettingsDeletion*`, `TestSettingsAuthorityDeletion`,
-  `TestSettingsDriftDeletion` and `TestSettingsParityCleanService` hold it (`settings_deletion_test.go`,
-  `settings_deletion_right_test.go`, `settings_deletion_screens_test.go`, toolkit `settings_deletion_env_test.go`).
+  The Member messages section (`m`, Phase 17, 17-09) is table entries only (`settings_pages.go`, `settings_menu.go` and
+  `settings_card.go` are not edited). Its hub cell is the odd last one alone on its row, so the hub is three state lines and
+  rows of widths `[2 1 2]` (the grid, then Back and Close, which opens Main), and its list (`a=dl&t=m`, no list hint) is
+  `[2 1 2]` too. The member rows set optional presentation fields on `deletionRow` (M31), empty for every Phase 16 row, which
+  renders byte-identically (`TestSettingsDeletionPhase16ScreensUnchanged`, digests recorded before the renderer changed and
+  never re-recorded): `ChoiceRows` (the row's own choice layout over the none choice and the presets: Commands `{2}` over
+  `[Off, On]`, Edited messages `{3,3}`, Self-destruct `{1,3,3}`), `LabelKeys` (the 0 of Commands is labelled On), `ZeroKey`
+  (a stored 0 reads `🗑 On` on Commands, else Delete now), `AfterKey` (Edited messages reads `⏳ Grace {delay}`, else After
+  {delay}), `TimeKey` and `NoTime` (the time line of a row screen: Edited messages has its own, Commands none because it has
+  no delay, Self-destruct the shared one) and `ConfirmKey` (a row that draws a card). The delay labels gain 30 s, 5 min and
+  15 min. Nothing in the renderer, the validators or the gates names `mc`, `me` or `ms`; they read the fields. The one card
+  is the Self-destruct card, drawn by the control's `Set` only for a row with a `ConfirmKey` and a delay (never Off): a delay
+  equal to the stored one writes nothing and draws no card, any other writes nothing and draws the shared card
+  (`settingsCardRows`: `[Yes | No]`, then Back to Main and Close; `renderSettingsDelCard`, with the right line like every
+  deletion screen). Its Yes is the page action `dy` (`settingsActDelYes`, fields exactly `t` a row with a `ConfirmKey`, `v`
+  one of its presets and never `n`, and `e` digits-only positive; right `settingsRightChangeInfo`, so the whole press pipeline
+  judges the presser again on a fresh record and a demoted one is refused with `settings_no_change_info`, nothing written).
+  `settingsDelRunYes` runs the Staff Group gate, then `settingsCardExpired` (an expired Yes redraws the row with
+  `settings_card_expired` and writes nothing), then the write through `applyDeleteRule` (a Yes of the stored value writes
+  nothing) and the redraw from the read-back. No is `a=no&p=d` (the hub). Self-destruct Off is one tap with no card: it removes
+  the row and `deletion.RemoveRule` drops the chat's waiting `member:selfdestruct` rows in the same transaction. The largest
+  button of the page is 57 bytes (the card's Yes, 53 in a group menu), every choice at most 50 (46 in a group).
+  `TestSettingsDeletion*`, `TestSettingsAuthorityDeletion`, `TestSettingsDriftDeletion` and `TestSettingsParityCleanService`
+  hold it (`settings_deletion_test.go`, `settings_deletion_right_test.go`, `settings_deletion_screens_test.go`,
+  `settings_deletion_golden_test.go`, `settings_deletion_member_test.go`, toolkit `settings_deletion_env_test.go`).
 - The message editor's pages (`settings_edit.go`, pages `w` Welcome, `g` Goodbye and `r` Rules, orders 50, 60 and 70, each
   registered from that file's `init` through `registerSettingsPage` so `settings_pages.go` is never edited) show which
   parts of a message are set, one line per part from one parts table (`settingsEditPageDef.Parts`): Welcome and Goodbye
@@ -883,7 +908,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   row, a private menu has none; a private page has at most 8 rows and a group-menu page at most 9, and every page ends
   with Back and Close. Main lists the pages after Antiflood (`s|l / c|f / w|g / r|m / d`, then Access for the owner, so seven rows in a private and in a group menu; `m` is the Member requirements page and `d` the Deletion page below) with
   `common_status_on` or `common_status_off` for Welcome and Goodbye and `settings_state_set` or `settings_state_not_set`
-  for Rules.
+  for Rules. The Deletion line reads `Off` or `{n} on`, and `n` counts the three member rules too (at most 20 rules).
   Each part has its row right after the body (`settingsEditPartRows`): `[Set]` while the part is not set and
   `[Set | Remove]` while it is (a Welcome or Goodbye text counts as set only while it differs from the default), in the
   order of the state lines, and a group menu draws them too. The actions are Welcome `ws` `wr` `wc` (Set, Remove,
