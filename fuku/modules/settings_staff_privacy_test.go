@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -18,6 +19,7 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/db/adminindex"
 	dbcache "github.com/uasneppy/fuku_robot/fuku/db/cache"
 	"github.com/uasneppy/fuku_robot/fuku/db/deletion"
+	"github.com/uasneppy/fuku_robot/fuku/db/logchannels"
 	"github.com/uasneppy/fuku_robot/fuku/db/memberreq"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/db/staff"
@@ -119,6 +121,7 @@ func settingsPrivacyMreqStatusScreens(views map[string]settingsView, notices []s
 func TestSettingsStaffPrivacy(t *testing.T) {
 	t.Run("pure renders in every language", func(t *testing.T) {
 		withRealLocales(t)
+		settingsLangWithCodes(t, settingsLangDefaultCodes)
 
 		staffGroup := models.StaffGroup{ID: 7, ChatID: settingsStaffPrivacyChatID, OwnerUserID: 55, Title: settingsStaffPrivacyTitle}
 		link := models.StaffGroupLink{
@@ -330,6 +333,14 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 					screens["not linked, "+name] = renderSettingsStaffNotLinked(groupView, notice)
 					screens["private admin linked, "+name] = renderSettingsStaffLinked(privateAdminView, settingsStaffViewFor(privateAdminView, false, &staffGroup, &row), notice)
 					screens["picker, "+name] = renderSettingsStaffPicker(groupView, pickable, notice)
+				}
+
+				// Phase 18: every screen of the six pages the renderers can draw, once per language with
+				// the worst case of each kind (a notice adds only its own length, so one plain draw and one
+				// with the longest refusal of the page stand for all), in a group menu and in the private
+				// menu of an administrator who is not the creator.
+				for name, screen := range settingsPrivacyPhase18Screens(tr, map[string]settingsView{"group": groupView, "private admin": privateAdminView}) {
+					screens[name] = screen
 				}
 
 				for name, screen := range screens {
@@ -616,6 +627,16 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 	})
 	t.Run("a group menu Phase 17 run by an admin who is not the creator never names the Staff Group", func(t *testing.T) {
 		settingsPrivacyPhase17Run(t, false)
+	})
+
+	// Phase 18: the same administrator drives the six pages (Warnings, Switches, Language, Log channel,
+	// Anonymous admins and both Locks pages), with permitted and refused presses, over a group linked to a
+	// Staff Group and a log channel whose title and ID the fake knows.
+	t.Run("a private Phase 18 run by an admin who is not the creator names neither the Staff Group, the log channel nor a member", func(t *testing.T) {
+		settingsPrivacyPhase18Run(t, true)
+	})
+	t.Run("a group menu Phase 18 run by an admin who is not the creator names neither the Staff Group, the log channel nor a member", func(t *testing.T) {
+		settingsPrivacyPhase18Run(t, false)
 	})
 
 	t.Run("a group menu run never names a Staff Group", func(t *testing.T) {
@@ -1170,6 +1191,230 @@ func settingsPrivacyPhase17Run(t *testing.T, private bool) {
 	} {
 		if strings.Contains(everything, leak) {
 			t.Errorf("a Phase 17 run of an admin who is not the creator received %q: %q", leak, everything)
+		}
+	}
+}
+
+// settingsPrivacyPhase18Screens renders the screens of the six Phase 18 pages through their pure
+// renderers for one language, in every view given: Warnings with a stored action, an action the bot
+// does not act on and an empty one; Switches in six combinations of its three switches and the AI
+// filter's availability; Language with each stored language and an unknown one; the Log channel page
+// linked, mixed and not linked; Anonymous admins on and off; both Locks pages with each right line
+// and the longest failure notice; and the alerts and notices the six pages can answer with.
+func settingsPrivacyPhase18Screens(tr *i18n.Translator, views map[string]settingsView) map[string]settingsScreen {
+	screens := make(map[string]settingsScreen)
+	press := &settingsPress{tr: tr}
+	notices := map[string]string{"plain": "", "save failed": settingsNoticeWarn(settingsText(tr, "common_settings_save_failed"))}
+	rights := map[string]string{
+		"can":     "",
+		"cannot":  "🚫 " + settingsText(tr, "settings_del_no_right"),
+		"unknown": settingsUnknownState + " " + settingsText(tr, "settings_del_right_unknown"),
+	}
+	lockNotice := settingsLocksFailureNotice(press, "locks_lock_failed", settingsLockRows[0])
+	mixed := settingsLogState{Linked: true}
+	for i := range mixed.On {
+		mixed.On[i] = i%2 == 0
+	}
+	allOn := settingsLogState{Linked: true}
+	for i := range allOn.On {
+		allOn.On[i] = true
+	}
+	switchStates := []settingsSwState{
+		{AIAvailable: true, Reports: true},
+		{AIAvailable: true, AI: true, Approve: true},
+		{AIAvailable: true, Reports: true, AI: true, Approve: true},
+		{AIAvailable: false},
+		{AIAvailable: false, AI: true, Reports: true},
+		{AIAvailable: false, Approve: true},
+	}
+	lockStates := settingsLocksStates()
+
+	for viewName, view := range views {
+		for noticeName, notice := range notices {
+			at := func(page string) string { return fmt.Sprintf("phase 18 %s %s %s", page, viewName, noticeName) }
+			for _, mode := range []string{"ban", "tban", ""} {
+				screens[fmt.Sprintf("%s mode %q", at("warnings"), mode)] = renderSettingsWarns(
+					view, &models.WarnSettings{WarnLimit: settingsWarnsMaxLimit, WarnMode: mode}, notice)
+			}
+			for i, state := range switchStates {
+				screens[fmt.Sprintf("%s state %d", at("switches"), i)] = renderSettingsSwitches(view, state, notice)
+			}
+			for _, stored := range append(slices.Clone(settingsLangDefaultCodes), "xx") {
+				screens[fmt.Sprintf("%s stored %s", at("language"), stored)] = renderSettingsLanguage(view, stored, notice)
+			}
+			for name, state := range map[string]settingsLogState{"mixed": mixed, "all on": allOn, "not linked": {}} {
+				screens[fmt.Sprintf("%s %s", at("log channel"), name)] = renderSettingsLogChannel(view, state, notice)
+			}
+			for _, on := range []bool{false, true} {
+				screens[fmt.Sprintf("%s on=%v", at("anonymous admins"), on)] = renderSettingsAnonAdmin(view, on, notice)
+			}
+		}
+		// Locks: both pages, the two stored states that change the lines most, each right line, and the
+		// longest failure notice with the worst right line.
+		for stateName, state := range lockStates {
+			if stateName == "none" {
+				continue
+			}
+			for page := 1; page <= settingsLocksPages; page++ {
+				for rightName, right := range rights {
+					screens[fmt.Sprintf("phase 18 locks %s %s page %d right %s", viewName, stateName, page, rightName)] = renderSettingsLocks(view, state, page, right, "")
+				}
+				screens[fmt.Sprintf("phase 18 locks %s %s page %d failure", viewName, stateName, page)] = renderSettingsLocks(view, state, page, rights["unknown"], lockNotice)
+			}
+		}
+	}
+	for _, key := range []string{
+		"settings_sw_ai_unavailable", "settings_no_change_info", "chat_status_owner_button_error", "chat_status_bot_not_admin",
+		"connections_is_user_connected_bot_not_admin", "logs_not_set", "logs_unknown_category", "language_invalid_selection",
+		"admin_anon_admin_db_error", "settings_min_value", "settings_max_value", "common_settings_save_failed",
+		"settings_gate_owner_only", "settings_not_admin", "common_callback_invalid_request",
+	} {
+		screens["phase 18 alert "+key] = settingsScreen{Text: settingsText(tr, key)}
+	}
+	return screens
+}
+
+// settingsPrivacyPhase18Run is the Phase 18 run of an administrator who is not the creator, in the
+// private menu or in a menu opened in the group, over a group linked to a Staff Group, a log channel
+// whose title and ID the fake knows and a member whose name the fake knows. It opens each of the six
+// pages, makes a permitted press on each (the warn limit and action, Reports, the language, a log
+// category on and off and a lock on both Locks pages) and a refused one where the administrator lacks
+// the right (Auto-approve for want of can_change_info, the AI filter that cannot run, the Anonymous
+// admins toggle that needs the creator, a warn action the bot does not act on), and nothing the bot
+// produced names the Staff Group, the log channel or the member.
+func settingsPrivacyPhase18Run(t *testing.T, private bool) {
+	t.Helper()
+	const channelID = int64(-1002468013579)
+	withAISpamNotConfigured(t, aispamProviderValueEmpty)
+	settingsLangWithCodes(t, settingsLangDefaultCodes)
+	env := newSettingsDelEnv(t)
+	editCleanup(t, env.chat.Id)
+	settingsWarnsCleanup(t, env.chat.Id)
+	settingsSwCleanup(t, env.chat.Id)
+	settingsAnonCleanup(t, env.chat.Id)
+	lockGoldenCleanup(t, env.chat.Id)
+	staffChat := settingsStaffTestOwnedStaffGroup(env.settingsEnv, settingsStaffPrivacyTitle)
+	linkLockdownGroupTo(env.lockdownEnv, staffChat)
+	settingsLogLinkTo(t, env.chat, channelID, settingsPrivacyChannelTitle)
+
+	moderator := gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: "Moderator"}
+	member := gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: settingsPrivacyMemberName, Username: "zzmarkeruser"}
+	memberReqCleanup(t, []int64{env.chat.Id}, []int64{moderator.Id, member.Id})
+	settingsLangCleanup(t, []int64{env.chat.Id}, []int64{moderator.Id})
+	env.fake.setProfile(member.Id, member.FirstName, "", member.Username)
+	env.fake.setMemberRaw(env.chat.Id, moderator.Id, settingsHooksChangeInfoJSON(moderator.Id, false))
+	settingsLocksWarmBotRight(env)
+	env.setBot(settingsDelBotJSON("administrator", true))
+	// A stored action the bot does not act on, so the page draws its inert line before a press replaces it.
+	settingsWarnsSeed(t, env.chat.Id, 3, "tban")
+
+	var (
+		msgID  int64
+		press  func(kv ...string)
+		chatID = env.chat.Id
+	)
+	if private {
+		msgID, chatID = 4749, moderator.Id
+		press = func(kv ...string) { env.pressPrivate(moderator, msgID, env.privateFields(env.chat.Id, kv...)) }
+	} else {
+		msgID = env.openMenu(moderator)
+		press = func(kv ...string) { env.press(moderator, msgID, env.groupFields(moderator, kv...)) }
+	}
+	set := func(page, control, value string) { press("a", "st", "p", page, "t", control, "v", value) }
+	toggle := func(page, control, value string) { press("a", "tg", "p", page, "t", control, "v", value) }
+	open := func(page string) { press("a", "op", "p", page) }
+	lockCode := func(kind string) string { return settingsLocksCode(t, kind) }
+
+	open("n")
+	set("n", settingsWarnsLimitKey, "5")
+	set("n", settingsWarnsLimitKey, "100")
+	set("n", settingsWarnsLimitKey, "100")
+	set("n", settingsWarnsModeKey, "ban")
+	set("n", settingsWarnsModeKey, "tban")
+
+	open("t")
+	toggle("t", settingsSwReportsKey, "0")
+	toggle("t", settingsSwReportsKey, "1")
+	toggle("t", settingsSwAIKey, "1")
+	toggle("t", settingsSwApproveKey, "1")
+
+	open("u")
+	set("u", settingsLangControlKey, "en")
+	set("u", settingsLangControlKey, "uk")
+	set("u", settingsLangControlKey, "xx")
+
+	open("o")
+	toggle("o", "a", "0")
+	toggle("o", "a", "1")
+	toggle("o", "s", "0")
+
+	open("y")
+	toggle("y", settingsAnonControl, "1")
+
+	open("k")
+	toggle("k", lockCode("gif"), "1")
+	press("a", settingsActLocksPage, "v", "2")
+	toggle("k", settingsLockRows[len(settingsLockRows)-1].Code, "1")
+	press("a", settingsActLocksPage, "v", "1")
+	toggle("k", lockCode("gif"), "0")
+	press("a", "bk")
+
+	var seen []string
+	for _, edit := range env.edits(chatID, msgID) {
+		seen = append(seen, fmt.Sprint(edit.Params["text"]))
+		for _, button := range settingsAllButtons(staffKeyboardOf(edit.Params["reply_markup"])) {
+			seen = append(seen, button.Text, button.CallbackData, button.Url)
+		}
+	}
+	for _, sent := range env.fake.sentTo(chatID) {
+		seen = append(seen, fmt.Sprint(sent.Params["text"]))
+	}
+	for _, answer := range env.fake.callsFor("answerCallbackQuery") {
+		seen = append(seen, fmt.Sprint(answer.Params["text"]))
+	}
+	everything := strings.Join(seen, "\n")
+
+	if n := len(env.edits(chatID, msgID)); n < 20 {
+		t.Fatalf("the run edited the menu only %d times", n)
+	}
+	for _, want := range []string{
+		"settings_warns_limit", "settings_warns_action_inert", "warns_mode_unknown", "settings_sw_ai_unavailable",
+		"settings_no_change_info", "settings_lang_current", "language_invalid_selection", "settings_log_status",
+		"chat_status_owner_button_error", "settings_locks_state_on", "settings_header_main",
+	} {
+		if !containsMarker(everything, want) {
+			t.Errorf("the run never produced %s: %q", want, everything)
+		}
+	}
+	// The permitted presses took effect and the refused ones did not.
+	if row, ok := settingsWarnsRow(t, env.chat.Id); !ok || row.WarnLimit != 100 || row.WarnMode != "ban" {
+		t.Errorf("warn settings = %+v (stored %v), want limit 100 and ban", row, ok)
+	}
+	if got := settingsLocksStored(t, env.chat.Id); !strings.Contains(got, settingsLockRows[len(settingsLockRows)-1].Kind+"=true") {
+		t.Errorf("locks stored %q, want the lock of page 2 on", got)
+	}
+	if on, err := settingsAnonRead(context.Background(), env.chat.Id); err != nil || on {
+		t.Errorf("anonymous admins = %v (%v), want off after the refused press", on, err)
+	}
+	if row, ok := settingsEditStored(t, env.chat.Id); ok && row.ShouldAutoApprove {
+		t.Error("the refused Auto-approve press was stored")
+	}
+	if row := logchannels.GetContext(context.Background(), env.chat.Id); row == nil || row.CatSettings {
+		t.Errorf("log channel row = %+v, want the settings category off", row)
+	}
+	// The search is only worth something if the run reached the channel: the audit posts went there,
+	// and they are the one thing the search leaves out.
+	if posts := settingsLogPosts(env.settingsEnv, channelID); len(posts) < 2 {
+		t.Errorf("the run posted %d audit messages to the log channel, want at least 2", len(posts))
+	}
+	for _, leak := range []string{
+		"ZZ Staff", settingsStaffPrivacyTitle, html.EscapeString(settingsStaffPrivacyTitle),
+		strings.TrimPrefix(strconv.FormatInt(staffChat.Id, 10), "-"), settingsStaffPrivacyDigits,
+		settingsPrivacyChannelTitle, settingsPrivacyChannelDigits, strconv.FormatInt(channelID, 10),
+		settingsPrivacyMemberName, "zzmarkeruser", strconv.FormatInt(member.Id, 10),
+	} {
+		if strings.Contains(everything, leak) {
+			t.Errorf("a Phase 18 run of an admin who is not the creator received %q: %q", leak, everything)
 		}
 	}
 }
