@@ -1,6 +1,7 @@
 package modules
 
 import (
+	"cmp"
 	"context"
 	"html"
 	"slices"
@@ -196,10 +197,28 @@ func settingsListCompare(a, b settingsListEntry) int {
 }
 
 // settingsListSort returns the entries in the order a list draws them. The same entries give the
-// same order on every redraw and on every replica.
+// same order on every redraw and on every replica. The lower-cased key of each entry is computed once, not
+// twice per comparison, so a very long list costs one allocation per entry and not one per comparison
+// (SEC-19-01); the order is exactly settingsListCompare's.
 func settingsListSort(entries []settingsListEntry) []settingsListEntry {
-	sorted := slices.Clone(entries)
-	slices.SortStableFunc(sorted, settingsListCompare)
+	type keyed struct {
+		key   string
+		entry settingsListEntry
+	}
+	pairs := make([]keyed, len(entries))
+	for i, e := range entries {
+		pairs[i] = keyed{key: settingsListSortKey(e), entry: e}
+	}
+	slices.SortStableFunc(pairs, func(a, b keyed) int {
+		if c := strings.Compare(a.key, b.key); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.entry.ID, b.entry.ID)
+	})
+	sorted := make([]settingsListEntry, len(pairs))
+	for i, p := range pairs {
+		sorted[i] = p.entry
+	}
 	return sorted
 }
 

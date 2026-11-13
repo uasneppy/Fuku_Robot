@@ -4,6 +4,7 @@ package modules
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -52,6 +53,23 @@ func TestSettingsListRender(t *testing.T) {
 		}
 		if want := []int64{2, 3, 5, 1, 9, 7}; fmt.Sprint(ids) != fmt.Sprint(want) {
 			t.Errorf("order = %v, want %v", ids, want)
+		}
+	})
+
+	t.Run("the keyed sort gives exactly the order of settingsListCompare, and leaves its input alone (SEC-19-01)", func(t *testing.T) {
+		texts := []string{"Ёж", "ёж", "ÄB", "äb", "Zed", "zed", "a", "A", "", "я", "Я", "İ", "i", "🔤", "ß", "SS"}
+		var entries []settingsListEntry
+		for i := 0; i < 200; i++ {
+			entries = append(entries, settingsListEntry{ID: int64(1000 - i), Text: texts[i%len(texts)]})
+		}
+		before := slices.Clone(entries)
+		want := slices.Clone(entries)
+		slices.SortStableFunc(want, settingsListCompare)
+		if got := settingsListSort(entries); !slices.Equal(got, want) {
+			t.Errorf("the keyed sort differs from the comparison sort:\n got %v\nwant %v", got, want)
+		}
+		if !slices.Equal(entries, before) {
+			t.Error("settingsListSort changed its input")
 		}
 	})
 
