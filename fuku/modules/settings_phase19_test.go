@@ -25,6 +25,11 @@ import (
 // settingsPhase19Pages are the three list pages Phase 19 registered, in grid order.
 var settingsPhase19Pages = []string{settingsPageBlacklist, settingsPageFilters, settingsPageNotes}
 
+// settingsPhase19ListPages are the four tables of the list engine: the three Phase 19 pages and the Blocked sources page
+// of a Staff Group's forward blocklist, which is hidden outside a Staff Group. The code, key and part tests below range
+// over all four; the Main, cost and privacy tests keep the three, because the fourth is not on a non-Staff-Group Main.
+var settingsPhase19ListPages = append(slices.Clone(settingsPhase19Pages), settingsPageFwdBlock)
+
 // settingsPhase19Code is one action code of a list page with the fields of a valid press of a private menu (the owner
 // field c is added by the test).
 type settingsPhase19Code struct {
@@ -54,6 +59,13 @@ func settingsPhase19Codes(minute string) []settingsPhase19Code {
 		{"ey", settingsPageNotes, map[string]string{"r": "5", "e": minute}},
 		{"ea", settingsPageNotes, map[string]string{}},
 		{"ec", settingsPageNotes, map[string]string{"t": "n"}},
+		{"vg", settingsPageFwdBlock, map[string]string{"v": "1"}},
+		{"vx", settingsPageFwdBlock, map[string]string{"r": "5", "v": "1"}},
+		{"vy", settingsPageFwdBlock, map[string]string{"r": "5", "e": minute}},
+		{"va", settingsPageFwdBlock, map[string]string{}},
+		{"vc", settingsPageFwdBlock, map[string]string{"t": "s"}},
+		{"ve", settingsPageFwdBlock, map[string]string{}},
+		{"vs", settingsPageFwdBlock, map[string]string{"v": "warn"}},
 	}
 }
 
@@ -68,11 +80,11 @@ func TestSettingsPhase19Codes(t *testing.T) {
 			}
 			seen[pg.Key] = true
 		}
-		want := []string{"s", "l", "c", "f", "n", "k", "b", "i", "w", "g", "r", "e", "m", "d", "t", "u", "o", "y", "a"}
+		want := []string{"s", "v", "l", "c", "f", "n", "k", "b", "i", "w", "g", "r", "e", "m", "d", "t", "u", "o", "y", "a"}
 		if got := slices.Sorted(maps.Keys(seen)); !slices.Equal(got, slices.Sorted(slices.Values(want))) {
 			t.Errorf("registered pages = %v, want %v", got, slices.Sorted(slices.Values(want)))
 		}
-		for _, key := range settingsPhase19Pages {
+		for _, key := range settingsPhase19ListPages {
 			pg, ok := settingsPageByKey(key)
 			if !ok || !pg.PrivateOnly {
 				t.Errorf("list page %q registered %v, private-only %v, want both", key, ok, pg.PrivateOnly)
@@ -85,14 +97,14 @@ func TestSettingsPhase19Codes(t *testing.T) {
 
 	t.Run("every list action code belongs to one page and is never a core code, and the table here is the registry's", func(t *testing.T) {
 		registered := make(map[string]string)
-		for _, key := range settingsPhase19Pages {
+		for _, key := range settingsPhase19ListPages {
 			pg, _ := settingsPageByKey(key)
 			for code := range pg.Actions {
 				registered[code] = key
 			}
 		}
 		if len(registered) != len(codes) {
-			t.Errorf("the three pages register %d action codes, this test lists %d", len(registered), len(codes))
+			t.Errorf("the four list pages register %d action codes, this test lists %d", len(registered), len(codes))
 		}
 		for _, row := range codes {
 			if registered[row.code] != row.page {
@@ -149,7 +161,7 @@ func TestSettingsPhase19Codes(t *testing.T) {
 		}
 	})
 
-	t.Run("the part table is exactly the five parts, and tg and st name no control of a list page", func(t *testing.T) {
+	t.Run("the part table is exactly the six parts, and tg and st name no control of a list page", func(t *testing.T) {
 		type part struct {
 			page, code string
 			step       int
@@ -158,11 +170,11 @@ func TestSettingsPhase19Codes(t *testing.T) {
 		for _, p := range settingsListParts {
 			got = append(got, part{p.Page, p.Code, p.Step})
 		}
-		want := []part{{"b", "w", 1}, {"i", "k", 1}, {"i", "y", 2}, {"e", "n", 1}, {"e", "c", 2}}
+		want := []part{{"b", "w", 1}, {"i", "k", 1}, {"i", "y", 2}, {"e", "n", 1}, {"e", "c", 2}, {"v", "s", 1}}
 		if !slices.Equal(got, want) {
 			t.Errorf("settingsListParts = %v, want %v", got, want)
 		}
-		for _, page := range settingsPhase19Pages {
+		for _, page := range settingsPhase19ListPages {
 			for _, action := range []string{settingsActToggle, settingsActSet} {
 				fields := map[string]string{"p": page, "t": "x", "v": "1"}
 				if settingsControlFieldsValid(action, fields) {
@@ -245,7 +257,8 @@ func TestSettingsMainPhase19(t *testing.T) {
 		}
 		// Every earlier page's line is what its own MainState returns.
 		for _, pg := range settingsPagesInOrder() {
-			if pg.MainState == nil || slices.Contains(settingsPhase19Pages, pg.Key) {
+			// The Blocked sources page is hidden in this chat, which is not a Staff Group.
+			if pg.MainState == nil || slices.Contains(settingsPhase19Pages, pg.Key) || (pg.Hidden != nil && pg.Hidden(&env.chat)) {
 				continue
 			}
 			state, known := pg.MainState(env.bot, trOf(), &env.chat)

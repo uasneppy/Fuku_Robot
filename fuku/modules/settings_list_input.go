@@ -33,7 +33,7 @@ type settingsListPart struct {
 }
 
 // settingsListParts is the static part table of the list pages (UI-SPEC section 1): the blacklist's words, the
-// filter's keyword and reply and the note's name and content. It is static so the wait store can validate a part
+// filter's keyword and reply, the note's name and content and the Blocked sources page's source. It is static so the wait store can validate a part
 // without a registered page.
 var settingsListParts = []settingsListPart{
 	{Page: settingsPageBlacklist, Code: "w", Step: 1, WordKey: "settings_entries_part_words"},
@@ -41,6 +41,7 @@ var settingsListParts = []settingsListPart{
 	{Page: "i", Code: "y", Step: 2, WordKey: "settings_entries_part_reply"},
 	{Page: "e", Code: "n", Step: 1, Next: "c", WordKey: "settings_entries_part_name"},
 	{Page: "e", Code: "c", Step: 2, WordKey: "settings_entries_part_content"},
+	{Page: settingsPageFwdBlock, Code: "s", Step: 1, WordKey: "settings_entries_part_source"},
 }
 
 // settingsListPartByCode finds a part of a list page by its t value, nil when the page has no such part.

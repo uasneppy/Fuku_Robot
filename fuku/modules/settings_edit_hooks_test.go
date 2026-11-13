@@ -136,7 +136,7 @@ func settingsHooksCreatorJSON(userID int64) string {
 
 // TestSettingsRightRefusalForParity pins the member-record part of every right: the three
 // rights that existed before answer exactly what they answered, the two bot rights have no
-// member part, the ninth right (Phase 19) judges the member as settingsRightRestrict does, and settingsRightRefusal agrees with the pure function wherever it needs no bot.
+// member part, the ninth right (Phase 19) judges the member as settingsRightRestrict does, the tenth allows the creator only, and settingsRightRefusal agrees with the pure function wherever it needs no bot.
 func TestSettingsRightRefusalForParity(t *testing.T) {
 	const (
 		notAdmin   = "settings_not_admin"
@@ -144,6 +144,8 @@ func TestSettingsRightRefusalForParity(t *testing.T) {
 		ownerOnly  = "settings_access_owner_only"
 		noInfo     = "settings_no_change_info"
 		ownerBtn   = "chat_status_owner_button_error"
+		// The tenth right (the Blocked sources page): the Staff Group creator only, with the command's own text.
+		staffOwnerOnly = "staff_fwdblock_owner_only"
 	)
 	type verdict struct {
 		key   string
@@ -197,6 +199,13 @@ func TestSettingsRightRefusalForParity(t *testing.T) {
 		{"restrict and bot: restricted", settingsRightRestrictBotRestrict, restricted, verdict{notAdmin, true}},
 		{"restrict and bot: left", settingsRightRestrictBotRestrict, left, verdict{notAdmin, true}},
 		{"restrict and bot: kicked", settingsRightRestrictBotRestrict, kicked, verdict{notAdmin, true}},
+		{"staff owner: creator", settingsRightStaffOwner, creator, verdict{}},
+		{"staff owner: administrator with every right", settingsRightStaffOwner, adminInfo, verdict{staffOwnerOnly, true}},
+		{"staff owner: administrator", settingsRightStaffOwner, adminRestrict, verdict{staffOwnerOnly, true}},
+		{"staff owner: member", settingsRightStaffOwner, plainMember, verdict{staffOwnerOnly, true}},
+		{"staff owner: restricted", settingsRightStaffOwner, restricted, verdict{staffOwnerOnly, true}},
+		{"staff owner: left", settingsRightStaffOwner, left, verdict{staffOwnerOnly, true}},
+		{"staff owner: kicked", settingsRightStaffOwner, kicked, verdict{staffOwnerOnly, true}},
 		{"bot admin right has no member part", settingsRightAdminBotAdmin, plainMember, verdict{}},
 		{"flood bot right has no member part", settingsRightAdminFloodBot, plainMember, verdict{}},
 		{"an unknown right fails closed", settingsRight(99), creator, verdict{notAdmin, true}},

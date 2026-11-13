@@ -448,7 +448,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   commands' cached predicate refuses is classified by `botCheck`, one live `getChatMember` of the bot: a definite answer that the bot
   lacks the right (not an administrator, or without `can_restrict_members` for the blacklist), or a Telegram client error, ends the wait
   with the refusal; a 429, a 5xx, a timeout or a live record that shows the bot can keeps it with `settings_check_failed`. The list
-  parts are the static table `settingsListParts` (`(b,w) (i,k) (i,y) (e,n) (e,c)`), which `settingsInputValidPart` accepts besides
+  parts are the static table `settingsListParts` (`(b,w) (i,k) (i,y) (e,n) (e,c) (v,s)`, the last the Blocked sources page's source), which `settingsInputValidPart` accepts besides
   the editor's, so a marker or wait of a list part parses whether or not its page is registered. A message after the wait ended
   answers `settings_entries_wait_ended_note` naming the part (`settings_entries_part_*`) for a list part and the editor's note
   for an editor part. A list refusal draws its Cancel with the table's `CancelCode` (`renderSettingsInputRefusalCode`).
@@ -685,6 +685,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   a wide margin. Neither fallback hub the UI-SPECs kept is built, because nothing forced one: the Phase 18 "More" hub (A18-A1,
   D-23) and the Phase 19 `📚 Lists` hub that would put the three list pages under one cell (A19-A1); the owner's phone check of
   Main at 11 rows is a live check in `19-SPIKE.md`.
+  The Blocked sources page (key `v`, `Order` 11, quick task 261113-tjj) is the one page that exists for a Staff Group only (its `Hidden`
+  hook, below), so every other chat's Main keeps the eighteen cells, the constants `settingsMainShapeGroup`, `settingsMainShapePrivate`
+  and `settingsMainOwnerRows` and the nineteen state lines above. A Staff Group's Main hides Deletion (`d`) and shows Blocked sources, so
+  it has eighteen grid cells too, `s|v / l|c / f|n / k|b / i|w / g|r / e|m / t|u / o|y` (nine full rows, Blocked sources paired with
+  Staff), then Access for the live owner and the navigation row: the same eleven rows for the owner and ten for an administrator the owner
+  gate admits, in a private and in a group menu, and nineteen state lines (`TestSettingsFwdBlockMainShape` holds the four shapes).
   The Main states of the six Phase 18 pages are database reads only, a failed read is the unknown mark on that page's line
   alone, and drawing Main makes no Telegram call of its own (`TestSettingsMainPhase18`); `settingsMainWorstState` holds
   the length test to the longest of them in every language (the Warnings line at limit 100 with the longest action word,
@@ -1345,6 +1351,41 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   pager 40, ask 60, Add 33, Cancel 37), `TestSettingsListNotesPageFitsEveryLocale` (3800 UTF-16 units in 8 languages, rows `{4,4,2,1,2}` for a
   full middle page with every entry admin-only) and `TestSettingsNotesReadsCreateNothing` (no `notes`, `notes_settings` or `chats` row and no
   `notes_list` key from opening Main, the page or a forged ask); the forged presses of the page's codes are held by `TestSettingsListForged`.
+- The Blocked sources page (`settings_fwdblock.go`, page `v`, `Order` 11, icon 🚷, `settings_page_fwdblock`, between Staff Group and Lockdown, quick
+  task 261113-tjj) is the fourth table of the list engine and the one page of the menu that exists only for a Staff Group: the forward
+  blocklist of the `/addfwdblock` family (see Subsystem traps). It registers from its own file through `registerSettingsList`, is
+  `PrivateOnly` (a group menu, the Staff Group's own included, shows the framework's note and reads nothing) and gives the list table's new
+  optional `Hidden func(*gotgbot.Chat) bool` (`settingsFwdBlockHidden`: true unless the cached gate `staff.GetStaffGroup` answers a Staff
+  Group, an error or a missing row hides the page, and the gate is the variable `settingsFwdBlockStaffGate`). `settingsListPage` passes `Hidden`
+  to the page, so Main leaves the page out and `openPage` refuses a forged `op` with `common_callback_invalid_request`, and
+  `settingsListGuardHidden` wraps the `Run` of every action of a table that has the hook, so a forged press of any of the page's seven codes in
+  a chat that is not a Staff Group (or whose gate says no) is the same invalid-request alert, writes nothing and reads nothing. The
+  codes are `vg` (pager), `vx` (delete ask), `vy` (delete Yes), `va` (Add), `vc` (Cancel, `t` = `s`), `ve` (the action screen, view only) and
+  `vs` (the action set, `v` one of `blacklistActionValues`), each with the owner field `c`, and the static part table gains `(v,s)`. Writes
+  (the delete ask and Yes, Add and `vs`, and so the typed reply) declare the tenth right `settingsRightStaffOwner`, the live creator of the
+  Staff Group; viewing, paging, the action screen and Cancel need only `settingsRightAdmin`, so an administrator the owner gate admits can read
+  the list but every write press is the alert `staff_fwdblock_owner_only` (the command's own text) with nothing written. The reads are the
+  variables `settingsFwdBlockRead`, `settingsFwdBlockEntry`, `settingsFwdBlockCount` and `settingsFwdBlockActionRead`, built over the fresh,
+  chat-scoped, non-creating `staff.ListForwardBlocksFresh`, `GetForwardBlockFresh`, `CountForwardBlocksFresh` and `GetForwardBlockRulesFresh`,
+  never the cached rules the watcher reads; the Read stamps the list's one action on every entry so the engine's `BodyExtra`
+  (`settingsBlacklistActionLine`) draws the one action line. An entry's text is `forwardBlockEntryText` (the source's chat ID, then its title),
+  sorted by that text, so the numbering follows the ID's text and `/fwdblocklist`'s order (by row ID) can differ. Main reads `n/200` (`CountMax`
+  `staff.ForwardBlockMax`). The typed add is one step (`settingsFwdBlockTyped`): the text must be exactly one token (more is
+  `settings_fwd_refuse_one`, none `settings_edit_refuse_need_text`), the wait is claimed and `applyForwardBlockAdd` stores it (the function
+  `/addfwdblock` stores through, with the wait's Staff Group and the sender), and any other outcome gives the claim back: a lookup Telegram could
+  not answer keeps the wait with the door's plain `settings_check_failed`, a Staff Group unset meanwhile ends it with `staff_unset_not_staff`, and
+  every other refusal (invalid ref, not found, not a source, already listed, full, save failed) is the shared `forwardBlockAddText` with the wait
+  kept and the Cancel button; an added source finishes the wait, sends the list at its page with `settings_fwd_saved` and closes the prompt. The
+  delete is the engine's two-tap card over `applyForwardBlockRemoveByID` (one conditional `DELETE ... WHERE id = ? AND staff_chat_id = ?`, so another
+  Staff Group's row or a gone one answers `settings_entries_already_removed` alike). The Action screen (`ve`, `renderSettingsFwdBlockAction`,
+  `settingsFwdBlockChoiceRow`) reuses `settings_bl_action_intro`, `settings_bl_action_line` and `settings_btn_bl_action` with the page's own hint,
+  has the choice rows `[Warn | Mute | Kick]` and `[Ban | Delete only]` with the stored action marked, and, unlike the Blacklist's, is drawn for an
+  empty list too because the action is list-wide; `vs` calls `applyForwardBlockAction`. Callback sizes equal the Blacklist page's codes (pager 40, ask
+  60, Yes 64 at a 17-digit ID, `ve` 33). `TestSettingsFwdBlockOpens`, `TestSettingsFwdBlockMainShape`, `TestSettingsFwdBlockAdd`,
+  `TestSettingsFwdBlockDelete`, `TestSettingsFwdBlockAction`, `TestSettingsAuthorityParityFwdBlock`, `TestSettingsParityFwdBlock`,
+  `TestSettingsDriftFwdBlock`, `TestSettingsListFwdBlockCallbackBytes`, `TestSettingsListFwdBlockPageFitsEveryLocale`,
+  `TestSettingsFwdBlockReadsCreateNothing` and `TestSettingsFwdBlockPageKeys` hold it (`settings_fwdblock_test.go`,
+  `settings_fwdblock_screens_test.go`, toolkit `newSettingsFwdEnv`).
 - The message editor's pages (`settings_edit.go`, pages `w` Welcome, `g` Goodbye and `r` Rules, orders 50, 60 and 70, each
   registered from that file's `init` through `registerSettingsPage` so `settings_pages.go` is never edited) show which
   parts of a message are set, one line per part from one parts table (`settingsEditPageDef.Parts`): Welcome and Goodbye
@@ -1563,6 +1604,17 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `settingsRightChangeInfoBotAdmin` (`/save` and `/clear` ask for the bot as an administrator, then `can_change_info`); on all three pages
   viewing, paging and Cancel need only `settingsRightAdmin`. `TestSettingsRights` "mirrors /addblacklist",
   `TestSettingsRightRefusalForParity` and `TestSettingsRightBotHalves` hold it.
+  The tenth right (quick task 261113-tjj), `settingsRightStaffOwner`, is appended after `settingsRightRestrictBotRestrict` (ten rights in all) and
+  is the right of the Blocked sources page's writes: the live creator of the Staff Group from the press's own member record (and, for the typed
+  reply, `settingsRightRefusalFor` on the door's live record), with no bot half, so `settingsRightBotFirst` and `settingsRightBotAfter` are
+  unchanged. Anyone else is the alert `staff_fwdblock_owner_only`, the key of the commands' own refusal, which is why `settingsRightOwner`'s
+  `settings_access_owner_only` (about the Access switch) was not reused. The rule behind it: the forward blocklist changes what the bot does to
+  members in every linked group, an administrator of the Staff Group is not known to be an administrator of each linked group, and no one may
+  act in a group where they are not an admin; the Staff Group's creator is the one person the code proves is the creator of every linked group,
+  because a link is deleted when its maker stops being the live creator of either side. So writes are the creator's, by command
+  (`requireStaffGroupCreator`, a live `getChatMember` list) and by menu alike, and every other live administrator of the Staff Group who passes the
+  owner gate can view and page. `TestSettingsRights`-style tables hold the member part (`TestSettingsRightRefusalForParity`: creator allowed,
+  administrator, member, restricted, left and kicked refused) and `TestSettingsAuthorityParityFwdBlock` the doors.
   The Switches page declares three rights: Reports `settingsRightAdminFloodBot` (`/reports`), the AI spam filter `settingsRightAdmin`
   (`/aispam`, no bot check) and Auto-approve `settingsRightChangeInfoBotAdmin` (`/autoapprove`), each judged on every press
   (`TestSettingsAuthorityParitySwitches`).
@@ -3454,7 +3506,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   stored as typed: a resolvable one is type-checked and gets its title, a definite client error (a channel the bot cannot
   see) is stored unverified with an empty title, and an unknown error stores nothing. The commands answer only inside the
   Staff Group and no notice names a source or the Staff Group outside it; the list shows the ID in code and the escaped
-  title (at most 40, then a more-line). `rmfwdblock` takes the source chat ID the list shows. `TestForwardBlockCommands`,
+  title (at most 40, then a more-line). `rmfwdblock` takes the source chat ID the list shows. The private-only Blocked sources page
+  (page `v`, see Callbacks) is the same door for the same writes: it calls `applyForwardBlockAdd`, `applyForwardBlockRemoveByID` and
+  `applyForwardBlockAction` under the tenth settings right, so there is no second write path. `TestForwardBlockCommands`,
   `TestForwardBlockCommandRefusals`, `TestApplyForwardBlockAdd`, `TestApplyForwardBlockRemove` and
   `TestApplyForwardBlockAction` hold it.
 - The forward blocklist watcher's failures (`forwardBlockWarnGates`, one `memberDeleteWarnGate` per kind: cannot act, list
@@ -4423,7 +4477,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `settings_list_env_test.go` (`newSettingsListEnv`, `settingsListCleanup`, the three seed helpers, `settingsListSentinel`).
   Plan 19-10 adds the cross-page sweeps. `settings_phase19_test.go`: `TestSettingsPhase19Codes` (the 19 page keys, the 17 list
   action codes written out beside the registry in both directions, each owned by one page and never a core code, every one refused
-  in step 1 with `u` instead of `c`, with both and with an extra key, and the five-part table `(b,w) (i,k) (i,y) (e,n) (e,c)`),
+  in step 1 with `u` instead of `c`, with both and with an extra key, and the six-part table `(b,w) (i,k) (i,y) (e,n) (e,c) (v,s)`, the fourth table `v` joining in, quick task 261113-tjj),
   `TestSettingsMainPhase19` (the three lines `12`, `12/150`, `3` and `0`, `0/150`, `0`, the unknown mark on one failing count with
   every other line unchanged, `In private` in a group menu with no seam called, 11 owner rows and 10 for an administrator),
   `TestSettingsListReadsCreateNothing` (no row in `blacklists`, `filters`, `notes`, `notes_settings` or `chats` and no command cache
@@ -4463,6 +4517,15 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `mreqSwap`; a subtest that fails must use its own `t` for the check helpers (`wantUntouched(t, ...)`), because the
   environment's `t` is the parent's. The families are `TestForwardBlockWatcher*`, `TestForwardBlockSourceOf`; keep a new case
   light, because `fuku/modules` is near its CI time limit.
+- The Blocked sources page's tests (quick task 261113-tjj, plan 3) run on `newSettingsFwdEnv` (`settings_fwdblock_test.go`): the list settings
+  environment whose chat is a Staff Group made by a live creator (`env.owner`, `env.admin` a plain administrator the owner gate admits), the
+  Staff commands loaded on its dispatcher so parity and drift tests run `/addfwdblock` and the others, the live resolver scripted through
+  `fwdResolver`, and helpers `seed`, `stored`, `idOf`, `action`, `open`, `begin` (open and press Add), `command`, `otherStaffGroup` and
+  `wantAlert`. A test that swaps the page's reads or its Staff Group gate uses `mreqSwap`; the page's tests never call `t.Skip`. The existing
+  expected-set tests took only set edits: `TestSettingsPhase19Codes` ranges over four list pages (`settingsPhase19ListPages`) with seven more
+  codes and the sixth part, the rights tables of `TestSettingsRightBotHalves` and `TestSettingsRightRefusalForParity` gain the tenth right,
+  `TestSettingsMainGrid`'s end-to-end subtest leaves out a page whose `Hidden` says so for its chat, and `TestSettingsPhase18InStaffGroup` counts
+  nineteen state lines for a Staff Group (Deletion hidden, Blocked sources shown).
 
 ## Commits
 

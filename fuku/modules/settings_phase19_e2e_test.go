@@ -277,9 +277,11 @@ func TestSettingsPhase19EndToEnd(t *testing.T) {
 			t.Fatalf("CreateStaffGroup error = %v", err)
 		}
 
-		// The three pages open for a Staff Group's own private menu and name no Staff Group.
+		// The three pages, and the Blocked sources page that exists only here, open for a Staff Group's own private menu and
+		// name no Staff Group.
 		for _, page := range []struct{ key, name string }{
 			{settingsPageBlacklist, "settings_page_blacklist"}, {settingsPageFilters, "settings_page_filters"}, {settingsPageNotes, "settings_page_notes"},
+			{settingsPageFwdBlock, "settings_page_fwdblock"},
 		} {
 			text, _ := e.openList(page.key).last()
 			if !strings.Contains(text, staffMarker(page.name)) {

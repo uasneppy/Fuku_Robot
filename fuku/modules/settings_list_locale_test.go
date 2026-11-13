@@ -30,6 +30,9 @@ func settingsListExtraKeys() []string {
 		"settings_flt_refuse_exists", "settings_flt_refuse_cap",
 		// The Notes page's two prompts (Phase 19, plan 19-09).
 		"settings_notes_wait_name", "settings_notes_wait_name_rules", "settings_notes_wait_content", "settings_notes_refuse_exists",
+		// The Blocked sources page's prompt lines, the action screen's intro and hint, the saved notice and its refusal.
+		"settings_fwd_wait", "settings_fwd_wait_rules", "settings_fwd_action_hint", "settings_fwd_saved", "settings_fwd_refuse_one",
+		"settings_bl_action_intro", "settings_btn_bl_action",
 	}
 	for _, part := range settingsListParts {
 		keys = append(keys, part.WordKey)

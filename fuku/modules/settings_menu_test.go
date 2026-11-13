@@ -665,6 +665,10 @@ func TestSettingsNavigation(t *testing.T) {
 			t.Fatalf("a group Main ends with %q, want Close alone", lastRow(t, keyboard))
 		}
 		for _, pg := range settingsPagesInOrder() {
+			// The Blocked sources page is hidden in this chat, which is not a Staff Group, and refuses to open.
+			if pg.Hidden != nil && pg.Hidden(&env.chat) {
+				continue
+			}
 			env.press(owner, msgID, env.groupFields(owner, "a", settingsActOpen, "p", pg.Key))
 			_, keyboard := env.lastEdit(env.chat.Id, msgID)
 			if got, want := lastRow(t, keyboard), settingsActBack+"|"+settingsActClose; got != want {
@@ -688,6 +692,10 @@ func TestSettingsNavigation(t *testing.T) {
 			t.Fatalf("a private Main ends with %q, want %q", got, want)
 		}
 		for _, pg := range settingsPagesInOrder() {
+			// The Blocked sources page is hidden in this chat, which is not a Staff Group, and refuses to open.
+			if pg.Hidden != nil && pg.Hidden(&env.chat) {
+				continue
+			}
 			env.pressPrivate(owner, sent.MessageID, env.privateFields(env.chat.Id, "a", settingsActOpen, "p", pg.Key))
 			_, keyboard := env.lastEdit(owner.Id, sent.MessageID)
 			if got, want := lastRow(t, keyboard), settingsActBack+"|"+settingsActClose; got != want {

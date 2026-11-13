@@ -165,7 +165,8 @@ func TestSettingsTracer(t *testing.T) {
 		// The administrator is not the creator, so the owner-only Access page is not drawn.
 		var pages []settingsPage
 		for _, page := range settingsPagesInOrder() {
-			if !page.OwnerOnly {
+			// The Blocked sources page is hidden in this chat, which is not a Staff Group.
+			if !page.OwnerOnly && (page.Hidden == nil || !page.Hidden(&env.chat)) {
 				pages = append(pages, page)
 			}
 		}

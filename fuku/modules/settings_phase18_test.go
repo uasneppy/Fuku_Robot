@@ -88,8 +88,10 @@ func TestSettingsPhase18InStaffGroup(t *testing.T) {
 	if _, ok := settingsPageButton(t, m.mainKeyboard, settingsPageDeletion); ok {
 		t.Error("the chat is not a Staff Group: its Main still has the Deletion cell")
 	}
-	if got := len(settingsMainLines(m.mainText)); got != len(settingsMainTitleKeys)-1 {
-		t.Errorf("a Staff Group's Main has %d state lines, want %d (every page but Deletion)", got, len(settingsMainTitleKeys)-1)
+	// Every page but Deletion, and the Blocked sources page, which exists only in a Staff Group: the same count as any
+	// other chat's Main has.
+	if got := len(settingsMainLines(m.mainText)); got != len(settingsMainTitleKeys) {
+		t.Errorf("a Staff Group's Main has %d state lines, want %d (every page but Deletion, plus Blocked sources)", got, len(settingsMainTitleKeys))
 	}
 	for _, key := range []string{
 		"settings_page_warns", "settings_page_locks", "settings_page_switches",
@@ -163,8 +165,9 @@ func TestSettingsPhase18Codes(t *testing.T) {
 				t.Errorf("Phase 18 page %q is not registered", key)
 			}
 		}
-		// The sixteen pages of Phase 18 and the Blacklist, Filters and Notes pages of Phase 19, and no other.
-		want := []string{"s", "l", "c", "f", "n", "k", "b", "i", "w", "g", "r", "e", "m", "d", "t", "u", "o", "y", "a"}
+		// The sixteen pages of Phase 18, the Blacklist, Filters and Notes pages of Phase 19 and the Blocked sources page of a
+		// Staff Group's forward blocklist ("v"), and no other.
+		want := []string{"s", "v", "l", "c", "f", "n", "k", "b", "i", "w", "g", "r", "e", "m", "d", "t", "u", "o", "y", "a"}
 		if got := slices.Sorted(maps.Keys(seen)); !slices.Equal(got, slices.Sorted(slices.Values(want))) {
 			t.Errorf("registered pages = %v, want %v", got, slices.Sorted(slices.Values(want)))
 		}

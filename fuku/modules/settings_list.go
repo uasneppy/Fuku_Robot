@@ -118,6 +118,10 @@ type settingsListDef struct {
 	AddGate func(p *settingsPress) *settingsScreen
 	// Actions are the page's own action codes besides the engine's (the blacklist's action screen).
 	Actions map[string]settingsPageAction
+	// Hidden, when set, is true for a group in which the page does not exist (the Blocked sources page outside a Staff
+	// Group): it is passed to the page, so Main leaves the page out and opening it is refused, and it also guards every
+	// action of the table, so a forged press of a code of the page in such a group is an invalid request.
+	Hidden func(group *gotgbot.Chat) bool
 	// Redraw maps an action code of the page to the screen a notice refusal of that action redraws, which
 	// is page 1 unless the action says otherwise.
 	Redraw map[string]func(p *settingsPress, notice string) (settingsScreen, error)
@@ -589,6 +593,27 @@ func settingsListActions(def settingsListDef) map[string]settingsPageAction {
 	for code, action := range def.Actions {
 		actions[code] = action
 	}
+	return settingsListGuardHidden(def, actions)
+}
+
+// settingsListGuardHidden wraps the Run of every action of a table that has a Hidden hook, so a press of one of its
+// codes in a group where the page is hidden answers the invalid-request alert and does nothing. A table without a hook
+// is returned as it is.
+func settingsListGuardHidden(def settingsListDef, actions map[string]settingsPageAction) map[string]settingsPageAction {
+	if def.Hidden == nil {
+		return actions
+	}
+	for code, action := range actions {
+		run := action.Run
+		action.Run = func(p *settingsPress) *settingsScreen {
+			if def.Hidden(p.group) {
+				p.answer(settingsText(p.tr, "common_callback_invalid_request"), true)
+				return nil
+			}
+			return run(p)
+		}
+		actions[code] = action
+	}
 	return actions
 }
 
@@ -601,6 +626,7 @@ func settingsListPage(def settingsListDef) settingsPage {
 		Icon:        def.Icon,
 		TitleKey:    def.TitleKey,
 		PrivateOnly: true,
+		Hidden:      def.Hidden,
 		MainState:   settingsListMainState(def),
 		Open:        settingsListOpen(def),
 		Actions:     settingsListActions(def),

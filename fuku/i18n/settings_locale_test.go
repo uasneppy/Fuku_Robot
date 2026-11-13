@@ -552,6 +552,22 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_notes_refuse_exists": {120, 180},
 	"settings_notes_delete_ask":    {100, 160},
 	"settings_notes_removed":       {56, 90},
+
+	// The Blocked sources page of a Staff Group's forward blocklist (quick task 261113-tjj, plan 3): its name, list page,
+	// count, Add button, prompt, delete card, notices and the part word of the typed add.
+	"settings_page_fwdblock":       {18, 18},
+	"settings_fwd_intro":           {230, 330},
+	"settings_fwd_count":           {28, 38},
+	"settings_fwd_empty":           {90, 140},
+	"settings_fwd_delete_ask":      {120, 180},
+	"settings_fwd_removed":         {64, 100},
+	"settings_btn_fwd_add":         {20, 20},
+	"settings_fwd_wait":            {150, 220},
+	"settings_fwd_wait_rules":      {160, 240},
+	"settings_fwd_action_hint":     {150, 220},
+	"settings_fwd_saved":           {90, 140},
+	"settings_fwd_refuse_one":      {80, 120},
+	"settings_entries_part_source": {16, 24},
 }
 
 // settingsAlertKeys are shown as answerCallbackQuery alerts: plain text, no tag, at most
@@ -579,6 +595,8 @@ var settingsAlertKeys = []string{
 	"settings_no_change_info",
 	"settings_mreq_here_nolink",
 	"settings_mreq_here_ai",
+	// The Staff Group creator's refusal of the Blocked sources page's writes, the command's own text (plain, at most 200).
+	"staff_fwdblock_owner_only",
 }
 
 // settingsAlertMaxRunes is the length Telegram allows an alert.
@@ -775,6 +793,7 @@ func TestSettingsLabelLengths(t *testing.T) {
 		{"🔤", "settings_page_blacklist"},
 		{"🔁", "settings_page_filters"},
 		{"📝", "settings_page_notes"},
+		{"🚷", "settings_page_fwdblock"},
 	}
 	options := []string{
 		"settings_opt_math", "settings_opt_text", "settings_opt_turnstile",

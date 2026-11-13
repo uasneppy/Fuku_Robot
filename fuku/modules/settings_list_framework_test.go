@@ -261,9 +261,10 @@ func TestSettingsRightBotHalves(t *testing.T) {
 		settingsRightChangeInfoBotAdmin:  {{connected, "", ""}, none, none},
 		settingsRightOwnerBotAdmin:       {{botNotAdm, "", ""}, none, none},
 		settingsRightRestrictBotRestrict: {{connected, restrict, restrictGr}, {"", restrict, restrictGr}, none},
+		settingsRightStaffOwner:          {none, none, none},
 	}
-	if len(want) != 9 {
-		t.Fatalf("the table covers %d rights, want all nine", len(want))
+	if len(want) != 10 {
+		t.Fatalf("the table covers %d rights, want all ten", len(want))
 	}
 	for right, rows := range want {
 		for i, state := range states {

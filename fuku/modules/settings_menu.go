@@ -91,6 +91,12 @@ const (
 	// press, chat_status_bot_restrict_group_error for a typed reply). It is appended after settingsRightOwnerBotAdmin
 	// so the zero value stays settingsRightAdmin.
 	settingsRightRestrictBotRestrict
+	// settingsRightStaffOwner is the right of the Blocked sources page's writes (the forward blocklist of a Staff Group):
+	// the live creator of the Staff Group, from the press's own member record, with no bot half. Any other administrator
+	// can view and page the list but never change it, exactly as /addfwdblock, /rmfwdblock and /fwdblockaction refuse
+	// them; the refusal is the alert staff_fwdblock_owner_only, the command's own text. It is appended after
+	// settingsRightRestrictBotRestrict so the zero value stays settingsRightAdmin.
+	settingsRightStaffOwner
 )
 
 // settingsRightRefusalFor judges the member-record part of a right: the one pure decision a
@@ -121,6 +127,11 @@ func settingsRightRefusalFor(member gotgbot.MergedChatMember, right settingsRigh
 			return "", false
 		}
 		return "chat_status_owner_button_error", true
+	case settingsRightStaffOwner:
+		if member.Status == gotgbot.ChatMemberStatusCreator {
+			return "", false
+		}
+		return "staff_fwdblock_owner_only", true
 	case settingsRightChangeInfo, settingsRightChangeInfoBotAdmin:
 		switch member.Status {
 		case gotgbot.ChatMemberStatusCreator:

@@ -305,6 +305,10 @@ func TestSettingsMainGrid(t *testing.T) {
 		env := newSettingsEnv(t)
 		var visible, ordinary []string
 		for _, pg := range settingsPagesInOrder() {
+			// The Blocked sources page is hidden in every chat but a Staff Group, and this chat is not one.
+			if pg.Hidden != nil && pg.Hidden(&env.chat) {
+				continue
+			}
 			visible = append(visible, pg.Key)
 			if !pg.OwnerOnly {
 				ordinary = append(ordinary, pg.Key)
