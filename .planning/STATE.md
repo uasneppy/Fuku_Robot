@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 19
 current_phase_name: Blacklist, Filter and Note Pages
 status: executing
-stopped_at: Completed 19-03-PLAN.md
-last_updated: "2026-11-13T09:57:16.714Z"
+stopped_at: Completed 19-04-PLAN.md
+last_updated: "2026-11-13T11:22:19.612Z"
 last_activity: 2026-11-13
 last_activity_desc: Planned Phase 19 (12 plans), UI-SPEC approved
-state_head: 8b38c7008490ccb0ee78def77c81737e9aacdbf3
+state_head: b9286cc384d51536d13f58158340542725267650
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 126
-  completed_plans: 116
+  completed_plans: 117
   percent: 0
 ---
 
@@ -29,10 +29,10 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 
 ## Current Position
 
-Phase: 19 (Blacklist, Filter and Note Pages) — plans 1 to 3 of 12 executed, ready to execute plan 4. Phase 18 (Remaining Settings Pages) is closed to `human_needed`: all 15 plans executed, the phase gate passed, `18-SECURITY.md` (51 of 51 closed, two small findings fixed), `18-VERIFICATION.md` (14 of 14 after the language callback was wired onto `applyGroupLanguage`, `99f796e`), `18-SPIKE.md` holds the 25 live checks
-Plan: 4 of 12 (19-01 to 19-03 complete; 19-04 next; the Blacklist pager code is bp, not bg, and 19-04's Add must not be ba; CONTEXT defaults A19-2 and A19-3 are provisional owner confirmations, one commit each)
-Status: Phase 18 closed to `human_needed` (live checks deferred, see Deferred Items); Phase 19 is executing (19-03 done: the list engine and the Blacklist page). Phases 10 to 18 are not marked Complete in ROADMAP
-Last activity: 2026-11-13 — Completed 19-03 (list engine and Blacklist page: list, delete card, action screen, Main at 16 cells)
+Phase: 19 (Blacklist, Filter and Note Pages) — plans 1 to 4 of 12 executed, ready to execute plan 5. Phase 18 (Remaining Settings Pages) is closed to `human_needed`: all 15 plans executed, the phase gate passed, `18-SECURITY.md` (51 of 51 closed, two small findings fixed), `18-VERIFICATION.md` (14 of 14 after the language callback was wired onto `applyGroupLanguage`, `99f796e`), `18-SPIKE.md` holds the 25 live checks
+Plan: 5 of 12 (19-01 to 19-04 complete; 19-05 next; the Blacklist pager is bp and Add is bn; settingsInputAdvance and settingsInputSetPrompt exist and 19-06 is their first production caller; CONTEXT defaults A19-2, A19-3 and A19-6 are provisional owner confirmations)
+Status: Phase 18 closed to `human_needed` (live checks deferred, see Deferred Items); Phase 19 is executing (19-04 done: the typed-reply door's list branch and the Blacklist typed add, wait store ready for two-step adds). Phases 10 to 18 are not marked Complete in ROADMAP
+Last activity: 2026-11-13 — Completed 19-04 (door list branch, Blacklist typed add, wait store w/q advance and set-prompt)
 
 Progress: [░░░░░░░░░░] 0% (v1.1)
 
@@ -187,6 +187,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 19 P01 | 2h | 4 tasks | 19 files |
 | Phase 19 P02 | 1h35m | 3 tasks | 19 files |
 | Phase 19 P03 | n/a | 4 tasks | 18 files |
+| Phase 19 P04 | n/a (resumed after restart) | 4 tasks | 20 files |
 
 ## Accumulated Context
 
@@ -374,8 +375,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-13T09:57:13.151Z
-Stopped at: Completed 19-03-PLAN.md
+Last session: 2026-11-13T11:22:16.282Z
+Stopped at: Completed 19-04-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
