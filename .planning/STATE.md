@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 19
 current_phase_name: Blacklist, Filter and Note Pages
 status: executing
-stopped_at: Completed 19-05-PLAN.md
-last_updated: "2026-11-13T12:14:38.594Z"
+stopped_at: Completed 19-06-PLAN.md
+last_updated: "2026-11-13T13:14:41.031Z"
 last_activity: 2026-11-13
 last_activity_desc: Planned Phase 19 (12 plans), UI-SPEC approved
-state_head: 9b247534248bcc7e119ecbf40a4961a47633d690
+state_head: c923b1a14b4c56f6863c7c3c632e6ff9168a6814
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 126
-  completed_plans: 118
+  completed_plans: 119
   percent: 0
 ---
 
@@ -30,8 +30,8 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 ## Current Position
 
 Phase: 19 (Blacklist, Filter and Note Pages) — plans 1 to 5 of 12 executed, ready to execute plan 6. Phase 18 (Remaining Settings Pages) is closed to `human_needed`: all 15 plans executed, the phase gate passed, `18-SECURITY.md` (51 of 51 closed, two small findings fixed), `18-VERIFICATION.md` (14 of 14 after the language callback was wired onto `applyGroupLanguage`, `99f796e`), `18-SPIKE.md` holds the 25 live checks
-Plan: 6 of 12 (19-01 to 19-05 complete; 19-06 next; the Blacklist pager is bp and Add is bn; settingsInputAdvance and settingsInputSetPrompt exist and 19-06 is their first production caller; applyFilterAdd, applyFilterRemove, applyFilterRemoveByID, the fresh filter readers and content.ExtractTypedNoteOrFilter exist and 19-07 is their first page caller; CONTEXT defaults A19-2, A19-3 and A19-6 and the fail-closed /filter lookup are provisional owner confirmations)
-Status: Phase 18 closed to `human_needed` (live checks deferred, see Deferred Items); Phase 19 is executing (19-05 done: the filter commands behind apply functions and a golden, the typed-content extraction, the A19-2 refusal and the fail-closed lookups of /filter in their own commits, the fresh filter readers). Phases 10 to 18 are not marked Complete in ROADMAP
+Plan: 7 of 12 (19-01 to 19-06 complete; 19-07 next; the Blacklist pager is bp and Add is bn; the generic two-step add engine (settingsListTwoStep, AddGate, the q guard, withTestSettingsList) exists and is proved on a test-only page, so 19-07 (Filters) and 19-09 (Notes) give hooks only; applyFilterAdd, applyFilterRemove, applyFilterRemoveByID, the fresh filter readers and content.ExtractTypedNoteOrFilter exist and 19-07 is their first page caller; CONTEXT defaults A19-2, A19-3 and A19-6 and the fail-closed /filter lookup are provisional owner confirmations)
+Status: Phase 18 closed to `human_needed` (live checks deferred, see Deferred Items); Phase 19 is executing (19-06 done: the generic two-step add engine of the door's list branch, four strings (424 settings_ keys), a swap-and-restore test page; 19-05 done: the filter commands behind apply functions and a golden, the typed-content extraction, the A19-2 refusal and the fail-closed lookups of /filter in their own commits, the fresh filter readers). Phases 10 to 18 are not marked Complete in ROADMAP
 Last activity: 2026-11-13 — Completed 19-05 (filter apply functions behind a golden, ExtractTypedNoteOrFilter, A19-2 for filters, fail-closed /filter lookups, fresh filter readers)
 
 Progress: [░░░░░░░░░░] 0% (v1.1)
@@ -189,6 +189,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 19 P03 | n/a | 4 tasks | 18 files |
 | Phase 19 P04 | n/a (resumed after restart) | 4 tasks | 20 files |
 | Phase 19 P05 | 2h | 3 tasks | 18 files |
+| Phase 19 P06 | approx 1h | 3 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -378,8 +379,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-13T12:14:34.936Z
-Stopped at: Completed 19-05-PLAN.md
+Last session: 2026-11-13T13:14:37.750Z
+Stopped at: Completed 19-06-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
