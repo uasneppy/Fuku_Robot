@@ -189,13 +189,16 @@ func (moduleStruct) langBtnHandler(b *gotgbot.Bot, ctx *ext.Context) error {
 		}
 		replyString, _ = tr.GetString("language_changed_user", i18n.TranslationParams{"s": keyboard.GetLangFormat(language)})
 	} else {
-		if err := lang.ChangeGroupLanguage(chat.Id, language); err != nil {
-			log.Errorf("[Language] ChangeGroupLanguage failed for chat %d: %v", chat.Id, err)
-			errText, _ := tr.GetString("common_settings_save_failed")
+		// The one write path of a group's language, shared with the settings menu's Language page.
+		// The code was checked above, so the outcomes left are a stored language and a failed save,
+		// whose key (common_settings_save_failed) is the answer this branch has always given.
+		result := applyGroupLanguage(context.Background(), chat.Id, language)
+		if result.Outcome != langApplied {
+			errText, _ := tr.GetString(result.Key)
 			_, _ = query.Answer(b, &gotgbot.AnswerCallbackQueryOpts{Text: errText})
 			return ext.EndGroups
 		}
-		replyString, _ = tr.GetString("language_changed_group", i18n.TranslationParams{"s": keyboard.GetLangFormat(language)})
+		replyString, _ = tr.GetString(result.Key, result.Params)
 	}
 
 	if query.Message == nil {

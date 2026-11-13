@@ -185,15 +185,20 @@ func settingsLogControl(cat settingsLogCategory) func(*settingsPress, string) *s
 			func(state settingsLogState, notice string) settingsScreen {
 				return renderSettingsLogChannel(p.view(), state, notice)
 			})
-		if screen == nil || auditKey == "" {
+		if auditKey == "" {
 			return screen
 		}
 		// The change is stored: answer and redraw before the audit post, so a slow send never keeps
-		// the menu waiting. Destination gates the post on the categories exactly as for the commands
-		// (a change that switched the settings category off posts nothing), and a failed post is only
-		// logged by the action log.
-		p.answer("", false)
-		p.edit(*screen)
+		// the menu waiting. A stored change always leaves its audit entry, as the commands leave it:
+		// when the page could not be drawn (the read-back and the helper's second read both failed,
+		// and the helper already answered with the cannot-open edit) the entry is posted all the
+		// same. Destination gates the post on the categories exactly as for the commands (a change
+		// that switched the settings category off posts nothing), and a failed post is only logged
+		// by the action log.
+		if screen != nil {
+			p.answer("", false)
+			p.edit(*screen)
+		}
 		actionlog.Settings(p.b, p.group, &p.query.From, auditKey+" "+cat.Name)
 		return nil
 	}

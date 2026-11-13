@@ -1008,7 +1008,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   repository name (`settingsLogControl`; the commands inline the call, there is no shared poster). `actionlog.Destination` gates
   it exactly as for the commands, so a change that turns the settings category off posts nothing, and a press of the stored value
   (only a stale screen sends one, because a cell always targets the opposite of what it shows) writes the same row again and posts
-  again, as `/log admin` on an already-on category does. The page reads through `logchannels.LoadContext` (the `settingsLogRead`
+  again, as `/log admin` on an already-on category does. A stored change always leaves its entry: when the read-back and the
+  helper's second read both fail, so the page cannot be drawn (the helper has already answered with the cannot-open edit), the
+  entry is posted all the same (`TestSettingsLogChannelAuditSurvivesFailedReadBack`, `settings_logchannel_audit_test.go`: a
+  short database fault right after the write). The page reads through `logchannels.LoadContext` (the `settingsLogRead`
   seam: the `log_channel:<chat>` key the commands read, its error returned, a chat with no channel read as `nil`, nothing created)
   and a failed read is the cannot-open edit and the unknown mark on Main. Privacy (D-07): the page is read by every member of
   a group menu while the log channel is private to the administrators, so the renderer (`renderSettingsLogChannel`, pure) receives
@@ -3268,7 +3271,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `change_language` callback (the buttons of `/lang`), not in `/lang` itself, which only shows the keyboard; the callback keeps
   its order (the code check against `groupLanguageCodes`, then the admin check, then the apply function) and its answers, and
   its private branch writes the user's own language through `lang.ChangeUserLanguage` and is never reached from the apply
-  function (`TestLegacyLanguageRequests` pins every byte of both branches and of `/lang`'s display). A code outside the eight
+  function (`TestLegacyLanguageRequests` pins every byte of both branches and of `/lang`'s display, and
+  `TestLanguageCallbackWritesThroughApplyGroupLanguage`, `language_callback_wiring_test.go`, proves what a golden cannot see:
+  a real press of the button reaches the write through the `languageWrites` seam that `applyGroupLanguage` owns, so the page and
+  the buttons can never accept or refuse different things). A code outside the eight
   (`uk en es fr hi ru pt id`) is refused before any write; `lang.ChangeGroupLanguage` drops `chat_lang`, `chat_settings` and
   `chat` after a write and returns early, with no write and no drop, for the code that is already stored. The page reads
   through `lang.LoadGroupLanguageContext`, the `chat_lang` key and loader the bot's own group updates read, with its error
