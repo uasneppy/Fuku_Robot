@@ -971,6 +971,68 @@ func TestSettingsDriftBlacklist(t *testing.T) {
 	}
 }
 
+// settingsBlacklistRowsOf returns the chat's stored rows as word -> action/reason, in one comparable map.
+func settingsBlacklistRowsOf(t *testing.T, chatID int64) map[string]string {
+	t.Helper()
+	rows, err := blacklists.ListBlacklistEntriesFresh(context.Background(), chatID)
+	if err != nil {
+		t.Fatalf("list the blacklist: %v", err)
+	}
+	stored := make(map[string]string, len(rows))
+	for _, row := range rows {
+		stored[row.Word] = row.Action + "/" + row.Reason
+	}
+	return stored
+}
+
+func TestSettingsParityBlacklistAdd(t *testing.T) {
+	env := newSettingsListEnv(t)
+	cases := []struct {
+		name   string
+		seeded []string
+		typed  string
+		want   map[string]string
+	}{
+		{name: "two words on a chat whose words are on ban take the shared action", seeded: []string{"alpha"}, typed: "Spam scam",
+			want: map[string]string{"alpha": "ban", "spam": "ban", "scam": "ban"}},
+		{name: "a one-character word is refused by both and the other word is stored", seeded: []string{"alpha"}, typed: "a spam",
+			want: map[string]string{"alpha": "ban", "spam": "ban"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			pageChat := settingsBlacklistWithBot(env, staffRoleAdmin)
+			commandChat := settingsBlacklistWithBot(env, staffRoleAdmin)
+			for _, chat := range []gotgbot.Chat{pageChat, commandChat} {
+				for _, word := range tc.seeded {
+					settingsListSeedBlacklistAction(t, chat.Id, word, "ban")
+				}
+				blacklists.GetBlacklistSettingsContext(context.Background(), chat.Id)
+				if !env.redis.Exists(dbcache.CacheKey("blacklist", chat.Id)) {
+					t.Fatalf("the cache key of chat %d was not primed", chat.Id)
+				}
+			}
+
+			settingsListDoorWait(env, pageChat, env.admin)
+			settingsListDoorSay(env, env.admin, tc.typed)
+			env.sendIn(commandChat, env.admin, "/addblacklist "+tc.typed)
+
+			pageRows, commandRows := settingsBlacklistRowsOf(t, pageChat.Id), settingsBlacklistRowsOf(t, commandChat.Id)
+			if !maps.Equal(pageRows, commandRows) {
+				t.Errorf("the typed reply left %v and the command %v, want the same rows", pageRows, commandRows)
+			}
+			stored := settingsBlacklistStored(t, pageChat.Id)
+			if !maps.Equal(stored, tc.want) {
+				t.Errorf("the typed reply left %v, want %v", stored, tc.want)
+			}
+			for _, chat := range []gotgbot.Chat{pageChat, commandChat} {
+				if env.redis.Exists(dbcache.CacheKey("blacklist", chat.Id)) {
+					t.Errorf("the cache key of chat %d survived the write", chat.Id)
+				}
+			}
+		})
+	}
+}
+
 func TestSettingsAuthorityParityBlacklist(t *testing.T) {
 	type scenario struct {
 		name string
@@ -981,17 +1043,24 @@ func TestSettingsAuthorityParityBlacklist(t *testing.T) {
 		// wantKey is the refusal the menu answers, alert or notice; empty means the menu writes.
 		wantKey   string
 		wantAlert bool
+		// typedKey is the key a typed reply is answered with when the same records refuse it; empty means it writes.
+		typedKey string
 		// ownerGate puts a live owner in the group with the switch off, so the gate refuses the administrator.
 		ownerGate bool
 	}
 	scenarios := []scenario{
-		{name: "the bot is a member", botRole: staffRoleMember, wantKey: "connections_is_user_connected_bot_not_admin"},
-		{name: "the bot is an administrator without can_restrict_members", botRole: staffRoleAdminNoRestrict, wantKey: "chat_status_bot_restrict_error"},
+		{name: "the bot is a member", botRole: staffRoleMember, wantKey: "connections_is_user_connected_bot_not_admin",
+			typedKey: "connections_is_user_connected_bot_not_admin"},
+		{name: "the bot is an administrator without can_restrict_members", botRole: staffRoleAdminNoRestrict, wantKey: "chat_status_bot_restrict_error",
+			typedKey: "chat_status_bot_restrict_group_error"},
 		{name: "an administrator without can_restrict_members", botRole: staffRoleAdmin,
-			member: &staffFakeMember{Status: gotgbot.ChatMemberStatusAdministrator}, wantKey: "settings_no_restrict", wantAlert: true},
+			member: &staffFakeMember{Status: gotgbot.ChatMemberStatusAdministrator}, wantKey: "settings_no_restrict", wantAlert: true,
+			typedKey: "settings_no_restrict"},
 		{name: "a plain member", botRole: staffRoleAdmin,
-			member: &staffFakeMember{Status: gotgbot.ChatMemberStatusMember}, wantKey: "settings_not_admin", wantAlert: true},
-		{name: "the owner gate refuses a non-owner administrator", botRole: staffRoleAdmin, wantKey: "settings_gate_owner_only", wantAlert: true, ownerGate: true},
+			member: &staffFakeMember{Status: gotgbot.ChatMemberStatusMember}, wantKey: "settings_not_admin", wantAlert: true,
+			typedKey: "settings_edit_refuse_access_lost"},
+		{name: "the owner gate refuses a non-owner administrator", botRole: staffRoleAdmin, wantKey: "settings_gate_owner_only", wantAlert: true, ownerGate: true,
+			typedKey: "settings_gate_owner_only"},
 		{name: "every check held", botRole: staffRoleAdmin},
 	}
 
@@ -1017,6 +1086,33 @@ func TestSettingsAuthorityParityBlacklist(t *testing.T) {
 			stored := settingsBlacklistStored(t, chat.Id)
 			if commandWrites != (stored["gamma"] != "" && stored["alpha"] == "mute") {
 				t.Errorf("the commands' writes = %v, want %v (stored %v)", !commandWrites, commandWrites, stored)
+			}
+			// The typed reply is judged like a press. A wait is written directly, because the Add press itself is refused
+			// when the records refuse; the door then reads the same records live. Where it writes, the command wrote too
+			// (the commands ran above); the owner gate is the documented carve-out, which gates the menu and not the command.
+			if _, err := settingsInputSet(context.Background(), user.Id, settingsInputWait{
+				GroupID: chat.Id, Page: settingsPageBlacklist, Part: "w", PromptMsgID: 1, Nonce: "0123456789abcdef",
+			}); err != nil {
+				t.Fatalf("write the wait: %v", err)
+			}
+			typedBefore := len(env.fake.sentTo(user.Id))
+			settingsListDoorSay(env, user, "typedword")
+			typedStored := settingsBlacklistStored(t, chat.Id)
+			if sc.typedKey != "" {
+				if got := fmt.Sprint(env.fake.sentTo(user.Id)[typedBefore].Params["text"]); !strings.Contains(got, staffMarker(sc.typedKey)) {
+					t.Errorf("the typed reply was answered %q, want %s", got, sc.typedKey)
+				}
+				if typedStored["typedword"] != "" {
+					t.Errorf("a refused typed reply wrote: %v", typedStored)
+				}
+				if env.redis.Exists(settingsInputKey(user.Id)) {
+					t.Errorf("the refused typed reply left the wait")
+				}
+			} else if typedStored["typedword"] == "" {
+				t.Errorf("the typed reply was not stored where the commands write: %v", typedStored)
+			}
+			if sc.typedKey != "" && sc.typedKey != "settings_gate_owner_only" && commandWrites {
+				t.Errorf("a typed reply was refused where the commands write (%s), and that is not the owner-gate carve-out", sc.typedKey)
 			}
 			before := settingsBlacklistStored(t, chat.Id)
 
