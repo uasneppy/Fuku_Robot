@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 19
 current_phase_name: Blacklist, Filter and Note Pages
 status: executing
-stopped_at: Completed 19-04-PLAN.md
-last_updated: "2026-11-13T11:22:19.612Z"
+stopped_at: Completed 19-05-PLAN.md
+last_updated: "2026-11-13T12:14:38.594Z"
 last_activity: 2026-11-13
 last_activity_desc: Planned Phase 19 (12 plans), UI-SPEC approved
-state_head: b9286cc384d51536d13f58158340542725267650
+state_head: 9b247534248bcc7e119ecbf40a4961a47633d690
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 126
-  completed_plans: 117
+  completed_plans: 118
   percent: 0
 ---
 
@@ -29,10 +29,10 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 
 ## Current Position
 
-Phase: 19 (Blacklist, Filter and Note Pages) — plans 1 to 4 of 12 executed, ready to execute plan 5. Phase 18 (Remaining Settings Pages) is closed to `human_needed`: all 15 plans executed, the phase gate passed, `18-SECURITY.md` (51 of 51 closed, two small findings fixed), `18-VERIFICATION.md` (14 of 14 after the language callback was wired onto `applyGroupLanguage`, `99f796e`), `18-SPIKE.md` holds the 25 live checks
-Plan: 5 of 12 (19-01 to 19-04 complete; 19-05 next; the Blacklist pager is bp and Add is bn; settingsInputAdvance and settingsInputSetPrompt exist and 19-06 is their first production caller; CONTEXT defaults A19-2, A19-3 and A19-6 are provisional owner confirmations)
-Status: Phase 18 closed to `human_needed` (live checks deferred, see Deferred Items); Phase 19 is executing (19-04 done: the typed-reply door's list branch and the Blacklist typed add, wait store ready for two-step adds). Phases 10 to 18 are not marked Complete in ROADMAP
-Last activity: 2026-11-13 — Completed 19-04 (door list branch, Blacklist typed add, wait store w/q advance and set-prompt)
+Phase: 19 (Blacklist, Filter and Note Pages) — plans 1 to 5 of 12 executed, ready to execute plan 6. Phase 18 (Remaining Settings Pages) is closed to `human_needed`: all 15 plans executed, the phase gate passed, `18-SECURITY.md` (51 of 51 closed, two small findings fixed), `18-VERIFICATION.md` (14 of 14 after the language callback was wired onto `applyGroupLanguage`, `99f796e`), `18-SPIKE.md` holds the 25 live checks
+Plan: 6 of 12 (19-01 to 19-05 complete; 19-06 next; the Blacklist pager is bp and Add is bn; settingsInputAdvance and settingsInputSetPrompt exist and 19-06 is their first production caller; applyFilterAdd, applyFilterRemove, applyFilterRemoveByID, the fresh filter readers and content.ExtractTypedNoteOrFilter exist and 19-07 is their first page caller; CONTEXT defaults A19-2, A19-3 and A19-6 and the fail-closed /filter lookup are provisional owner confirmations)
+Status: Phase 18 closed to `human_needed` (live checks deferred, see Deferred Items); Phase 19 is executing (19-05 done: the filter commands behind apply functions and a golden, the typed-content extraction, the A19-2 refusal and the fail-closed lookups of /filter in their own commits, the fresh filter readers). Phases 10 to 18 are not marked Complete in ROADMAP
+Last activity: 2026-11-13 — Completed 19-05 (filter apply functions behind a golden, ExtractTypedNoteOrFilter, A19-2 for filters, fail-closed /filter lookups, fresh filter readers)
 
 Progress: [░░░░░░░░░░] 0% (v1.1)
 
@@ -188,6 +188,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 19 P02 | 1h35m | 3 tasks | 19 files |
 | Phase 19 P03 | n/a | 4 tasks | 18 files |
 | Phase 19 P04 | n/a (resumed after restart) | 4 tasks | 20 files |
+| Phase 19 P05 | 2h | 3 tasks | 18 files |
 
 ## Accumulated Context
 
@@ -292,6 +293,8 @@ Recent decisions affecting current work:
 - [Phase 18]: 18-12: the Locks page (k, Order 44) writes each of 22 locks through applyLock under settingsRightAdminFloodBot, redraws the page the lock is on, pages with kg (v clamped 1..2) and states the bot's delete right with one live read per draw after the press is answered; Main is now the final 15-cell grid
 - [Phase 18]: 18-13: Main with fifteen pages is proved over the content-page row budget on purpose (navigation only, Telegram limits met, no second hub); on a chat with no rows the Switches line reads {n} on with 1 (Reports defaults on), and opening Main or any of the six pages creates no row in the nine tables the readers touch
 - [Phase 19]: 19-03: the Blacklist pager code is bp, not the UI-SPEC's bg, because bg is the Deletion page's Bot goodbye row code; 19-04's Add must not use ba (Bot auto)
+- [Phase 19]: 19-05: /filter refuses a one-code-point keyword (A19-2, filters_keyword_too_broad) and refuses when its existence or count lookup fails (common_settings_save_failed); each is a provisional owner confirmation in its own commit (f0dd7f7, 4f794f1)
+- [Phase 19]: 19-05: ExtractTypedNoteOrFilter shares extractReplyContent with ExtractNoteAndFilter so a typed filter or note reply is stored exactly as the command stores it; the two-word-keyword reply quirk is not copied
 
 ### Pending Todos
 
@@ -375,8 +378,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-13T11:22:16.282Z
-Stopped at: Completed 19-04-PLAN.md
+Last session: 2026-11-13T12:14:34.936Z
+Stopped at: Completed 19-05-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
