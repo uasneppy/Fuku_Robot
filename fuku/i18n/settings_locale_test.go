@@ -476,6 +476,15 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_entries_already_removed": {70, 110},
 	"settings_bl_delete_ask":           {120, 180},
 	"settings_bl_removed":              {64, 100},
+
+	// Phase 19 (plan 19-03, task 3), the Blacklist action screen (UI-SPEC rows 21 to 26 and 29).
+	"settings_bl_action_count":      {14, 16},
+	"settings_bl_action_intro":      {70, 110},
+	"settings_bl_action_mixed_hint": {90, 140},
+	"settings_bl_action_hint":       {140, 200},
+	"settings_bl_action_inert":      {56, 90},
+	"settings_bl_action_no_words":   {90, 140},
+	"settings_btn_bl_action":        {20, 20},
 }
 
 // settingsAlertKeys are shown as answerCallbackQuery alerts: plain text, no tag, at most
@@ -763,6 +772,8 @@ func TestSettingsLabelLengths(t *testing.T) {
 		"settings_btn_edit_remove_text", "settings_btn_edit_remove_media", "settings_btn_edit_remove_buttons",
 		"settings_btn_edit_preview_text", "settings_btn_edit_preview_media", "settings_btn_edit_preview_buttons",
 		"settings_btn_edit_full_preview", "settings_btn_edit_cancel",
+		// The Blacklist list page's Action button (Phase 19, UI-SPEC check C19-2).
+		"settings_btn_bl_action",
 	}
 	// The editor's half-width switch cells (Phase 12, UI-SPEC check 2): the template with
 	// {state} replaced by the icon alone is at most 20 code points, so a name is at most 18.

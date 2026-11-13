@@ -3,6 +3,10 @@ package modules
 import (
 	"context"
 	"html"
+	"slices"
+
+	"github.com/PaulSonOfLars/gotgbot/v2"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/uasneppy/fuku_robot/fuku/db/blacklists"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
@@ -19,6 +23,10 @@ import (
 const (
 	// settingsPageBlacklist is the p value of the Blacklist page.
 	settingsPageBlacklist = "b"
+	// settingsActBlacklistOpen opens the action screen (no field besides the owner), settingsActBlacklistSet sets the
+	// action of every word (the field v, one of blacklistActionValues).
+	settingsActBlacklistOpen = "bo"
+	settingsActBlacklistSet  = "bs"
 	// settingsBlacklistActionMaxRunes caps a stored action value that has no option word when it is shown.
 	settingsBlacklistActionMaxRunes = 16
 )
@@ -108,6 +116,177 @@ func settingsBlacklistActionLine(v settingsView, entries []settingsListEntry) []
 	return []string{settingsText(v.Tr, "settings_bl_action_line", i18n.TranslationParams{"action": word})}
 }
 
+// settingsBlacklistActionCounts counts the words by stored action.
+func settingsBlacklistActionCounts(entries []settingsListEntry) map[string]int {
+	counts := make(map[string]int)
+	for _, e := range entries {
+		counts[e.Action]++
+	}
+	return counts
+}
+
+// settingsBlacklistActionsSorted lists the stored actions of the words, most words first, ties by value.
+func settingsBlacklistActionsSorted(counts map[string]int) []string {
+	actions := make([]string, 0, len(counts))
+	for action := range counts {
+		actions = append(actions, action)
+	}
+	slices.SortFunc(actions, func(a, b string) int {
+		if counts[a] != counts[b] {
+			return counts[b] - counts[a]
+		}
+		switch {
+		case a < b:
+			return -1
+		case a > b:
+			return 1
+		}
+		return 0
+	})
+	return actions
+}
+
+// settingsBlacklistActionBody is the action screen's body: the intro, the action line, one count line per stored
+// value (most words first) and the mixed hint when the words differ, the inert line for a uniform stored value the
+// command never writes, a blank line and the hint. An empty list has the intro and the no-words line only (U-10).
+func settingsBlacklistActionBody(v settingsView, entries []settingsListEntry) []string {
+	body := []string{settingsText(v.Tr, "settings_bl_action_intro")}
+	if len(entries) == 0 {
+		return append(body, "", settingsText(v.Tr, "settings_bl_action_no_words"))
+	}
+	body = append(body, settingsBlacklistActionLine(v, entries)...)
+	counts := settingsBlacklistActionCounts(entries)
+	if len(counts) > 1 {
+		for _, action := range settingsBlacklistActionsSorted(counts) {
+			body = append(body, settingsText(v.Tr, "settings_bl_action_count", i18n.TranslationParams{
+				"action": settingsBlacklistActionWord(v.Tr, action), "n": counts[action],
+			}))
+		}
+		body = append(body, settingsText(v.Tr, "settings_bl_action_mixed_hint"))
+	} else if action, _ := settingsBlacklistUniformAction(entries); !slices.Contains(blacklistActionValues, action) {
+		body = append(body, settingsText(v.Tr, "settings_bl_action_inert"))
+	}
+	return append(body, "", settingsText(v.Tr, "settings_bl_action_hint"))
+}
+
+// settingsBlacklistChoiceRow builds one row of the action choices: each button sets its own value for every word, the
+// one every word already has is marked, and the labels are the option words.
+func settingsBlacklistChoiceRow(k *settingsKeyboard, selected string, values ...string) []gotgbot.InlineKeyboardButton {
+	row := make([]gotgbot.InlineKeyboardButton, 0, len(values))
+	for _, value := range values {
+		label := settingsBlacklistActionWord(k.view.Tr, value)
+		if value == selected {
+			label = settingsSelectedPrefix + label
+		}
+		if button, ok := k.button(label, map[string]string{"a": settingsActBlacklistSet, "v": value}); ok {
+			row = append(row, button)
+		}
+	}
+	return row
+}
+
+// renderSettingsBlacklistAction draws the action screen (Screen 3): the body, the two choice rows with a check
+// mark only on the action every word has, and Back to the list (page 1) and Close. An empty list has no choices. It
+// is pure.
+func renderSettingsBlacklistAction(v settingsView, entries []settingsListEntry, notice string) settingsScreen {
+	k := newSettingsKeyboard(v)
+	if len(entries) > 0 {
+		selected, _ := settingsBlacklistUniformAction(entries)
+		k.row(settingsBlacklistChoiceRow(k, selected, "warn", "mute", "kick")...)
+		k.row(settingsBlacklistChoiceRow(k, selected, "ban", "none")...)
+	}
+	var nav []gotgbot.InlineKeyboardButton
+	if back, ok := k.button(settingsText(v.Tr, "settings_btn_back"), map[string]string{"a": settingsActOpen, "p": settingsPageBlacklist}); ok {
+		nav = append(nav, back)
+	}
+	if closeButton, ok := k.button(settingsText(v.Tr, "settings_btn_close"), map[string]string{"a": settingsActClose}); ok {
+		nav = append(nav, closeButton)
+	}
+	k.row(nav...)
+	return k.screen(settingsCompose(v, "settings_page_blacklist", settingsBlacklistActionBody(v, entries), notice, false))
+}
+
+// settingsBlacklistDrawAction reads the list fresh and draws the action screen with the notice.
+func settingsBlacklistDrawAction(p *settingsPress, notice string) (settingsScreen, error) {
+	def, _ := settingsListByPage(settingsPageBlacklist)
+	entries, err := settingsListLoad(p, def)
+	if err != nil {
+		return settingsScreen{}, err
+	}
+	return renderSettingsBlacklistAction(p.view(), entries, notice), nil
+}
+
+// settingsBlacklistRunOpen handles bo: a fresh read and the action screen.
+func settingsBlacklistRunOpen(p *settingsPress) *settingsScreen {
+	screen, err := settingsBlacklistDrawAction(p, "")
+	if err != nil {
+		log.Warnf("[Settings] the blacklist action screen of chat %d could not be read: %v", p.group.Id, err)
+		p.cannotOpen()
+		return nil
+	}
+	return &screen
+}
+
+// settingsBlacklistRunSet handles bs: the action of every word through applyBlacklistAction, the function
+// /blacklistaction uses, then the action screen from a fresh read. A press of the action every word has writes the
+// same rows again and shows no notice; an empty list answers the no-words notice; a failed save redraws the stored
+// state with the save-failed notice.
+func settingsBlacklistRunSet(p *settingsPress) *settingsScreen {
+	ctx, cancel := context.WithTimeout(context.Background(), settingsReadTimeout)
+	defer cancel()
+	notice := ""
+	switch applyBlacklistAction(ctx, p.group.Id, p.fields["v"]).Outcome {
+	case blacklistActionNoWords:
+		notice = settingsNoticeWarn(settingsText(p.tr, "settings_bl_action_no_words"))
+	case blacklistActionSaveFailed:
+		notice = settingsNoticeWarn(settingsText(p.tr, "common_settings_save_failed"))
+	case blacklistActionUnknown:
+		// Unreachable: step 1 only lets the command's own values through.
+		p.answer(settingsText(p.tr, "common_callback_invalid_request"), true)
+		return nil
+	}
+	p.answer("", false)
+	screen, err := settingsBlacklistDrawAction(p, notice)
+	if err != nil {
+		log.Warnf("[Settings] the blacklist action screen of chat %d could not be read: %v", p.group.Id, err)
+		p.cannotOpen()
+		return nil
+	}
+	return &screen
+}
+
+// settingsBlacklistAddRow is the row after the pager: the Action button on a list with words, nothing on an empty
+// one (U-10). The Add button joins it in plan 19-04.
+func settingsBlacklistAddRow(k *settingsKeyboard, entries []settingsListEntry) []gotgbot.InlineKeyboardButton {
+	if len(entries) == 0 {
+		return nil
+	}
+	button, ok := k.button(settingsText(k.view.Tr, "settings_btn_bl_action"), map[string]string{"a": settingsActBlacklistOpen})
+	if !ok {
+		return nil
+	}
+	return []gotgbot.InlineKeyboardButton{button}
+}
+
+// settingsBlacklistActions are the page's own actions: the action screen and the action set.
+func settingsBlacklistActions() map[string]settingsPageAction {
+	return map[string]settingsPageAction{
+		settingsActBlacklistOpen: {
+			Right:    settingsRightAdmin,
+			Validate: settingsListPrivateField,
+			Run:      settingsBlacklistRunOpen,
+		},
+		settingsActBlacklistSet: {
+			Fields: []string{"v"},
+			Right:  settingsRightRestrictBotRestrict,
+			Validate: func(fields map[string]string) bool {
+				return settingsListPrivateField(fields) && slices.Contains(blacklistActionValues, fields["v"])
+			},
+			Run: settingsBlacklistRunSet,
+		},
+	}
+}
+
 // settingsBlacklistRemove deletes one word by its row ID through applyBlacklistRemoveByID, the function the
 // delete of the command's rows shares with the page: one conditional DELETE by (id, chat) and the cache drop.
 func settingsBlacklistRemove(ctx context.Context, chatID, id int64) settingsListRemoval {
@@ -128,7 +307,7 @@ func settingsBlacklistDef() settingsListDef {
 		Order:     46,
 		Icon:      "🔤",
 		TitleKey:  "settings_page_blacklist",
-		PagerCode: "bg",
+		PagerCode: "bp",
 		AskCode:   "bx",
 		YesCode:   "by",
 		// Every blacklist write declares the right /addblacklist asks for (D-03, M42).
@@ -143,11 +322,15 @@ func settingsBlacklistDef() settingsListDef {
 		Entry: func(ctx context.Context, chatID, id int64) (*settingsListEntry, error) {
 			return settingsBlacklistEntry(ctx, chatID, id)
 		},
-		Count:     func(ctx context.Context, chatID int64) (int, error) { return settingsBlacklistCount(ctx, chatID) },
-		IntroKey:  "settings_bl_intro",
-		CountKey:  "settings_bl_count",
-		EmptyKey:  "settings_bl_empty",
-		BodyExtra: settingsBlacklistActionLine,
+		Count:       func(ctx context.Context, chatID int64) (int, error) { return settingsBlacklistCount(ctx, chatID) },
+		IntroKey:    "settings_bl_intro",
+		CountKey:    "settings_bl_count",
+		EmptyKey:    "settings_bl_empty",
+		BodyExtra:   settingsBlacklistActionLine,
+		AddRowExtra: settingsBlacklistAddRow,
+		Actions:     settingsBlacklistActions(),
+		// A notice refusal of the action set (the bot cannot restrict) redraws the action screen it came from.
+		Redraw: map[string]func(*settingsPress, string) (settingsScreen, error){settingsActBlacklistSet: settingsBlacklistDrawAction},
 	}
 }
 

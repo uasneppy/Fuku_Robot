@@ -74,8 +74,8 @@ func TestSettingsBlacklistOpens(t *testing.T) {
 			}
 			last = at
 		}
-		if got := settingsListRowWidths(keyboard); fmt.Sprint(got) != fmt.Sprint([]int{2}) {
-			t.Errorf("row widths = %v, want the navigation row alone", got)
+		if got := settingsListRowWidths(keyboard); fmt.Sprint(got) != fmt.Sprint([]int{3, 1, 2}) {
+			t.Errorf("row widths = %v, want the delete row, the Action row and the navigation row", got)
 		}
 		if back := keyboard[len(keyboard)-1]; len(back) != 2 || !strings.Contains(back[0].Text, staffMarker("settings_btn_back")) {
 			t.Errorf("the page does not end with Back and Close: %+v", back)
@@ -161,7 +161,7 @@ func TestSettingsListPager(t *testing.T) {
 	msgID := env.updateID()
 	page := func(v string) (string, [][]gotgbot.InlineKeyboardButton) {
 		t.Helper()
-		env.pressPrivate(env.admin, msgID, env.privateFields(env.chat.Id, "a", "bg", "v", v))
+		env.pressPrivate(env.admin, msgID, env.privateFields(env.chat.Id, "a", "bp", "v", v))
 		return env.lastEdit(env.admin.Id, msgID)
 	}
 
@@ -247,15 +247,15 @@ func TestSettingsListGroupNote(t *testing.T) {
 
 	// The pager of a group menu is an invalid request in step 1: no getChatMember, no edit.
 	lookups, edits := env.memberLookupsOf(env.chat.Id, env.admin.Id), len(env.edits(env.chat.Id, msgID))
-	env.press(env.admin, msgID, env.groupFields(env.admin, "a", "bg", "v", "1"))
+	env.press(env.admin, msgID, env.groupFields(env.admin, "a", "bp", "v", "1"))
 	if got, alert := env.lastAnswer(); !strings.Contains(got, staffMarker("common_callback_invalid_request")) || !alert {
-		t.Errorf("bg from a group menu answered %q (alert %v), want the invalid request alert", got, alert)
+		t.Errorf("bp from a group menu answered %q (alert %v), want the invalid request alert", got, alert)
 	}
 	if got := env.memberLookupsOf(env.chat.Id, env.admin.Id); got != lookups {
-		t.Errorf("bg from a group menu made %d getChatMember calls, want none", got-lookups)
+		t.Errorf("bp from a group menu made %d getChatMember calls, want none", got-lookups)
 	}
 	if got := len(env.edits(env.chat.Id, msgID)); got != edits {
-		t.Errorf("bg from a group menu edited the message")
+		t.Errorf("bp from a group menu edited the message")
 	}
 	if reads.Load() != 0 {
 		t.Errorf("a forged pager press read the list")
@@ -271,13 +271,20 @@ func TestSettingsListGroupNote(t *testing.T) {
 type settingsBlacklistMenu struct {
 	env   *settingsListEnv
 	chat  gotgbot.Chat
+	user  gotgbot.User
 	msgID int64
 }
 
 // settingsBlacklistOpenMenu opens the Blacklist page of chat in a fresh private message of the env's administrator.
 func settingsBlacklistOpenMenu(env *settingsListEnv, chat gotgbot.Chat) *settingsBlacklistMenu {
 	env.t.Helper()
-	m := &settingsBlacklistMenu{env: env, chat: chat, msgID: env.updateID()}
+	return settingsBlacklistOpenMenuAs(env, chat, env.admin)
+}
+
+// settingsBlacklistOpenMenuAs is settingsBlacklistOpenMenu pressed by another user.
+func settingsBlacklistOpenMenuAs(env *settingsListEnv, chat gotgbot.Chat, user gotgbot.User) *settingsBlacklistMenu {
+	env.t.Helper()
+	m := &settingsBlacklistMenu{env: env, chat: chat, user: user, msgID: env.updateID()}
 	m.press("a", settingsActOpen, "p", settingsPageBlacklist)
 	return m
 }
@@ -285,19 +292,19 @@ func settingsBlacklistOpenMenu(env *settingsListEnv, chat gotgbot.Chat) *setting
 // press presses a button of the menu with the given fields (the owner field c is added).
 func (m *settingsBlacklistMenu) press(kv ...string) {
 	m.env.t.Helper()
-	m.env.pressPrivate(m.env.admin, m.msgID, m.env.privateFields(m.chat.Id, kv...))
+	m.env.pressPrivate(m.user, m.msgID, m.env.privateFields(m.chat.Id, kv...))
 }
 
 // last is the text and keyboard the menu message was last edited to.
 func (m *settingsBlacklistMenu) last() (string, [][]gotgbot.InlineKeyboardButton) {
 	m.env.t.Helper()
-	return m.env.lastEdit(m.env.admin.Id, m.msgID)
+	return m.env.lastEdit(m.user.Id, m.msgID)
 }
 
 // tap presses a button as drawn, through its own callback data.
 func (m *settingsBlacklistMenu) tap(button gotgbot.InlineKeyboardButton) {
 	m.env.t.Helper()
-	m.env.pressRaw(gotgbot.Chat{Id: m.env.admin.Id, Type: "private"}, m.env.admin, m.msgID, button.CallbackData)
+	m.env.pressRaw(gotgbot.Chat{Id: m.user.Id, Type: "private"}, m.user, m.msgID, button.CallbackData)
 }
 
 // button finds the drawn button with the exact label.
@@ -386,8 +393,8 @@ func TestSettingsBlacklistDelete(t *testing.T) {
 			t.Errorf("Yes carries %v, want a=by, the row ID, an expiry and c", yesFields)
 		}
 		no, _ := m.markedButton("settings_btn_no")
-		if f := settingsButtonFields(t, no); f["a"] != "bg" || f["v"] != "1" || len(f) != 3 {
-			t.Errorf("No carries %v, want a=bg, v=1 and c", f)
+		if f := settingsButtonFields(t, no); f["a"] != "bp" || f["v"] != "1" || len(f) != 3 {
+			t.Errorf("No carries %v, want a=bp, v=1 and c", f)
 		}
 		if got := settingsBlacklistStored(t, env.chat.Id); len(got) != 4 {
 			t.Errorf("the ask changed the list: %v", got)
@@ -422,7 +429,7 @@ func TestSettingsBlacklistDelete(t *testing.T) {
 		env := newSettingsListEnv(t)
 		settingsListSeedBlacklist(t, env.chat.Id, settingsListWords(20)...)
 		m := settingsBlacklistOpenMenu(env, env.chat)
-		m.press("a", "bg", "v", "2")
+		m.press("a", "bp", "v", "2")
 		m.tap(m.button("🗑 10"))
 		no, _ := m.markedButton("settings_btn_no")
 		m.tap(no)
@@ -623,12 +630,12 @@ func TestSettingsListForged(t *testing.T) {
 		"by with an 18-digit r":   {"a", "by", "r", "123456789012345678", "e", valid},
 		"by with a v":             {"a", "by", "r", "5", "e", valid, "v", "1"},
 		"by with u as well":       {"a", "by", "r", "5", "e", valid, "u", "5"},
-		"bg with both v and r":    {"a", "bg", "v", "1", "r", "5"},
-		"bg without v":            {"a", "bg"},
-		"bg with a letter v":      {"a", "bg", "v", "x"},
+		"bp with both v and r":    {"a", "bp", "v", "1", "r", "5"},
+		"bg without v":            {"a", "bp"},
+		"bp with a letter v":      {"a", "bp", "v", "x"},
 		"st naming page b":        {"a", "st", "p", "b", "t", "x", "v", "1"},
 		"tg naming page b":        {"a", "tg", "p", "b", "t", "x", "v", "1"},
-		"bg with a 5-digit v":     {"a", "bg", "v", "12345"},
+		"bp with a 5-digit v":     {"a", "bp", "v", "12345"},
 		"bx with a 6-digit v":     {"a", "bx", "r", "12345678901234567", "v", "123456"},
 	} {
 		if !tooLong(t, name, kv) {
@@ -638,7 +645,7 @@ func TestSettingsListForged(t *testing.T) {
 
 	// The same press of a group menu (u instead of c) is refused for every list code.
 	for _, kv := range [][]string{
-		{"a", "bg", "v", "1"},
+		{"a", "bp", "v", "1"},
 		{"a", "bx", "r", "5", "v", "1"},
 		{"a", "by", "r", "5", "e", valid},
 	} {
@@ -682,5 +689,372 @@ func TestSettingsParityBlacklistRemove(t *testing.T) {
 	}
 	if env.redis.Exists(pageKey) != env.redis.Exists(commandKey) || env.redis.Exists(pageKey) {
 		t.Errorf("cache state differs: page key present %v, command key present %v, want both dropped", env.redis.Exists(pageKey), env.redis.Exists(commandKey))
+	}
+}
+
+// settingsBlacklistSeedActions stores one word per action of actions, in the order given, w1, w2, ...
+func settingsBlacklistSeedActions(t *testing.T, chatID int64, actions ...string) {
+	t.Helper()
+	for i, action := range actions {
+		settingsListSeedBlacklistAction(t, chatID, fmt.Sprintf("w%02d", i+1), action)
+	}
+}
+
+func TestSettingsBlacklistAction(t *testing.T) {
+	actionLine := func(action string) string {
+		return staffMarker("settings_bl_action_line") + " " + action
+	}
+	countLine := func(action string, n int) string {
+		return staffMarker("settings_bl_action_count") + " " + action + " " + strconv.Itoa(n)
+	}
+	checked := func(keyboard [][]gotgbot.InlineKeyboardButton) []string {
+		var marked []string
+		for _, button := range settingsAllButtons(keyboard) {
+			if strings.HasPrefix(button.Text, settingsSelectedPrefix) {
+				marked = append(marked, button.Text)
+			}
+		}
+		return marked
+	}
+
+	t.Run("a uniform list shows the action alone and marks that choice", func(t *testing.T) {
+		env := newSettingsListEnv(t)
+		settingsBlacklistSeedActions(t, env.chat.Id, "ban", "ban", "ban")
+		m := settingsBlacklistOpenMenu(env, env.chat)
+		text, keyboard := m.last()
+		if !strings.Contains(text, actionLine(staffMarker("settings_opt_ban"))) {
+			t.Errorf("the list page does not say Action: Ban:\n%s", text)
+		}
+		if _, ok := settingsButtonByMarker(keyboard, "settings_btn_bl_action"); !ok {
+			t.Fatalf("the list page has no Action button: %v", settingsListRowWidths(keyboard))
+		}
+		m.tap(m.button(staffMarker("settings_btn_bl_action")))
+		text, keyboard = m.last()
+		if !strings.Contains(text, actionLine(staffMarker("settings_opt_ban"))) || strings.Contains(text, staffMarker("settings_bl_action_count")) || strings.Contains(text, staffMarker("settings_bl_action_mixed_hint")) {
+			t.Errorf("the uniform action screen drew:\n%s", text)
+		}
+		if got := settingsListRowWidths(keyboard); fmt.Sprint(got) != fmt.Sprint([]int{3, 2, 2}) {
+			t.Errorf("action screen rows = %v, want {3,2,2}", got)
+		}
+		if got, want := checked(keyboard), []string{settingsSelectedPrefix + staffMarker("settings_opt_ban")}; !slices.Equal(got, want) {
+			t.Errorf("marked choices = %v, want %v", got, want)
+		}
+		back := settingsAllButtons(keyboard)[5]
+		if f := settingsButtonFields(t, back); f["a"] != settingsActOpen || f["p"] != settingsPageBlacklist {
+			t.Errorf("Back carries %v, want a=op p=b", f)
+		}
+	})
+
+	t.Run("words on different actions show Mixed with a count line each, most words first, and no mark", func(t *testing.T) {
+		env := newSettingsListEnv(t)
+		actions := append(slices.Repeat([]string{"ban"}, 17), "warn", "warn", "warn")
+		settingsBlacklistSeedActions(t, env.chat.Id, actions...)
+		m := settingsBlacklistOpenMenu(env, env.chat)
+		if text, _ := m.last(); !strings.Contains(text, actionLine(staffMarker("settings_bl_action_mixed"))) {
+			t.Errorf("the list page does not say Mixed:\n%s", text)
+		}
+		m.tap(m.button(staffMarker("settings_btn_bl_action")))
+		text, keyboard := m.last()
+		ban, warn := strings.Index(text, countLine(staffMarker("settings_opt_ban"), 17)), strings.Index(text, countLine(staffMarker("settings_opt_warn"), 3))
+		if ban < 0 || warn < 0 || ban > warn {
+			t.Errorf("the count lines are missing or out of order (ban at %d, warn at %d):\n%s", ban, warn, text)
+		}
+		if !strings.Contains(text, actionLine(staffMarker("settings_bl_action_mixed"))) || !strings.Contains(text, staffMarker("settings_bl_action_mixed_hint")) {
+			t.Errorf("the mixed screen lacks Mixed or its hint:\n%s", text)
+		}
+		if marked := checked(keyboard); len(marked) != 0 {
+			t.Errorf("a mixed screen marks %v", marked)
+		}
+	})
+
+	t.Run("a uniform stored value the command never writes is shown as stored with the inert line and no mark", func(t *testing.T) {
+		env := newSettingsListEnv(t)
+		settingsBlacklistSeedActions(t, env.chat.Id, "tban", "tban")
+		m := settingsBlacklistOpenMenu(env, env.chat)
+		m.tap(m.button(staffMarker("settings_btn_bl_action")))
+		text, keyboard := m.last()
+		if !strings.Contains(text, actionLine("tban")) || !strings.Contains(text, staffMarker("settings_bl_action_inert")) {
+			t.Errorf("the inert screen drew:\n%s", text)
+		}
+		if marked := checked(keyboard); len(marked) != 0 {
+			t.Errorf("an inert screen marks %v", marked)
+		}
+	})
+
+	t.Run("all eight stored values draw eight count lines and none is worded Delete only", func(t *testing.T) {
+		env := newSettingsListEnv(t)
+		settingsBlacklistSeedActions(t, env.chat.Id, "warn", "mute", "kick", "ban", "none", "tban", "tmute", "delete")
+		m := settingsBlacklistOpenMenu(env, env.chat)
+		m.tap(m.button(staffMarker("settings_btn_bl_action")))
+		text, _ := m.last()
+		if got := strings.Count(text, staffMarker("settings_bl_action_count")); got != 8 {
+			t.Errorf("the screen has %d count lines, want 8:\n%s", got, text)
+		}
+		for _, word := range []string{staffMarker("settings_bl_opt_none"), "tban", "tmute", "delete"} {
+			if !strings.Contains(text, countLine(word, 1)) {
+				t.Errorf("the screen lacks the count line for %q:\n%s", word, text)
+			}
+		}
+	})
+
+	t.Run("a choice writes the action on every word, Delete only stores none, and the same choice again shows no notice", func(t *testing.T) {
+		env := newSettingsListEnv(t)
+		settingsBlacklistSeedActions(t, env.chat.Id, "ban", "warn", "mute")
+		cacheKey := dbcache.CacheKey("blacklist", env.chat.Id)
+		blacklists.GetBlacklistSettingsContext(context.Background(), env.chat.Id)
+		m := settingsBlacklistOpenMenu(env, env.chat)
+		m.tap(m.button(staffMarker("settings_btn_bl_action")))
+
+		answers := env.answerCount()
+		m.tap(m.button(staffMarker("settings_bl_opt_none")))
+		if got := env.answerCount() - answers; got != 1 {
+			t.Errorf("the press was answered %d times, want once", got)
+		}
+		for word, action := range settingsBlacklistStored(t, env.chat.Id) {
+			if action != "none" {
+				t.Errorf("word %q has action %q, want none", word, action)
+			}
+		}
+		text, keyboard := m.last()
+		if !strings.Contains(text, actionLine(staffMarker("settings_bl_opt_none"))) || strings.Contains(text, settingsNoticeOKIcon) || strings.Contains(text, settingsNoticeWarnIcon) {
+			t.Errorf("the redraw after Delete only drew:\n%s", text)
+		}
+		if got, want := checked(keyboard), []string{settingsSelectedPrefix + staffMarker("settings_bl_opt_none")}; !slices.Equal(got, want) {
+			t.Errorf("marked choices = %v, want %v", got, want)
+		}
+		if env.redis.Exists(cacheKey) {
+			t.Errorf("the write did not drop %s", cacheKey)
+		}
+
+		// The value every word already has: the same rows, no notice.
+		m.tap(m.button(settingsSelectedPrefix + staffMarker("settings_bl_opt_none")))
+		if text, _ = m.last(); strings.Contains(text, settingsNoticeOKIcon) || strings.Contains(text, settingsNoticeWarnIcon) {
+			t.Errorf("a press of the stored value showed a notice:\n%s", text)
+		}
+	})
+
+	t.Run("an empty list has no Action button, a stale bo draws the no-words line and a stale bs answers the notice", func(t *testing.T) {
+		env := newSettingsListEnv(t)
+		m := settingsBlacklistOpenMenu(env, env.chat)
+		if _, keyboard := m.last(); len(settingsAllButtons(keyboard)) != 2 {
+			t.Errorf("an empty list draws %d buttons, want Back and Close only", len(settingsAllButtons(keyboard)))
+		}
+		m.press("a", settingsActBlacklistOpen)
+		text, keyboard := m.last()
+		if !strings.Contains(text, staffMarker("settings_bl_action_no_words")) || strings.Contains(text, staffMarker("settings_bl_action_hint")) {
+			t.Errorf("a stale bo drew:\n%s", text)
+		}
+		if got := settingsListRowWidths(keyboard); fmt.Sprint(got) != fmt.Sprint([]int{2}) {
+			t.Errorf("a stale bo has rows %v, want the navigation row alone", got)
+		}
+		m.press("a", settingsActBlacklistSet, "v", "ban")
+		text, _ = m.last()
+		if !strings.Contains(text, settingsNoticeWarnIcon+staffMarker("settings_bl_action_no_words")) {
+			t.Errorf("a stale bs drew:\n%s", text)
+		}
+		if got := settingsBlacklistStored(t, env.chat.Id); len(got) != 0 {
+			t.Errorf("a stale bs created words: %v", got)
+		}
+	})
+
+	t.Run("a failed save redraws the stored state with the save-failed notice", func(t *testing.T) {
+		env := newSettingsListEnv(t)
+		settingsBlacklistSeedActions(t, env.chat.Id, "warn", "warn")
+		m := settingsBlacklistOpenMenu(env, env.chat)
+		setAction := blacklistWrites.SetAction
+		blacklistWrites.SetAction = func(context.Context, int64, string) (int64, error) { return 0, errors.New("update failed") }
+		t.Cleanup(func() { blacklistWrites.SetAction = setAction })
+		m.press("a", settingsActBlacklistSet, "v", "ban")
+		text, _ := m.last()
+		if !strings.Contains(text, settingsNoticeWarnIcon+staffMarker("common_settings_save_failed")) || !strings.Contains(text, actionLine(staffMarker("settings_opt_warn"))) {
+			t.Errorf("a failed save drew:\n%s", text)
+		}
+	})
+
+	t.Run("bs and bo with an invalid value or from a group menu are invalid requests before any lookup", func(t *testing.T) {
+		env := newSettingsListEnv(t)
+		settingsBlacklistSeedActions(t, env.chat.Id, "warn")
+		m := settingsBlacklistOpenMenu(env, env.chat)
+		groupMsg := env.openMenu(env.admin)
+		check := func(name string, press func()) {
+			t.Helper()
+			members := len(env.fake.callsFor("getChatMember"))
+			press()
+			if text, alert := env.lastAnswer(); !strings.Contains(text, staffMarker("common_callback_invalid_request")) || !alert {
+				t.Errorf("%s answered %q (alert %v), want the invalid request alert", name, text, alert)
+			}
+			if got := len(env.fake.callsFor("getChatMember")) - members; got != 0 {
+				t.Errorf("%s made %d getChatMember calls, want none", name, got)
+			}
+		}
+		for _, value := range []string{"Ban", "tban", "delete", "tmute", "WARN", "", "ban "} {
+			kv := []string{"a", settingsActBlacklistSet, "v", value}
+			if value == "" {
+				kv = kv[:2]
+			}
+			check("bs v="+value, func() { m.press(kv...) })
+		}
+		check("bo with a v", func() { m.press("a", settingsActBlacklistOpen, "v", "ban") })
+		check("bo from a group menu", func() { env.press(env.admin, groupMsg, env.groupFields(env.admin, "a", settingsActBlacklistOpen)) })
+		check("bs from a group menu", func() {
+			env.press(env.admin, groupMsg, env.groupFields(env.admin, "a", settingsActBlacklistSet, "v", "ban"))
+		})
+		if got := settingsBlacklistStored(t, env.chat.Id); got["w01"] != "warn" {
+			t.Errorf("a forged bs changed the action: %v", got)
+		}
+	})
+}
+
+func TestSettingsParityBlacklistAction(t *testing.T) {
+	env := newSettingsListEnv(t)
+	pageChat := settingsBlacklistWithBot(env, staffRoleAdmin)
+	commandChat := settingsBlacklistWithBot(env, staffRoleAdmin)
+	for _, chat := range []gotgbot.Chat{pageChat, commandChat} {
+		settingsBlacklistSeedActions(t, chat.Id, "warn", "mute", "kick")
+		blacklists.GetBlacklistSettingsContext(context.Background(), chat.Id)
+	}
+	m := settingsBlacklistOpenMenu(env, pageChat)
+	m.tap(m.button(staffMarker("settings_btn_bl_action")))
+	m.tap(m.button(staffMarker("settings_opt_ban")))
+	env.sendIn(commandChat, env.admin, "/blacklistaction ban")
+
+	pageRows, commandRows := settingsBlacklistStored(t, pageChat.Id), settingsBlacklistStored(t, commandChat.Id)
+	if !maps.Equal(pageRows, commandRows) || pageRows["w01"] != "ban" || pageRows["w03"] != "ban" {
+		t.Errorf("the page left %v and the command %v, want the same rows, all on ban", pageRows, commandRows)
+	}
+	pageKey, commandKey := dbcache.CacheKey("blacklist", pageChat.Id), dbcache.CacheKey("blacklist", commandChat.Id)
+	if env.redis.Exists(pageKey) || env.redis.Exists(commandKey) {
+		t.Errorf("cache state differs from dropped: page key present %v, command key present %v", env.redis.Exists(pageKey), env.redis.Exists(commandKey))
+	}
+}
+
+func TestSettingsDriftBlacklist(t *testing.T) {
+	env := newSettingsListEnv(t)
+	m := settingsBlacklistOpenMenu(env, env.chat)
+	draw := func() string {
+		t.Helper()
+		m.press("a", settingsActOpen, "p", settingsPageBlacklist)
+		text, _ := m.last()
+		return text
+	}
+
+	env.send(env.admin, "/addblacklist spam scam")
+	text := draw()
+	for _, want := range []string{"1. <code>scam</code>", "2. <code>spam</code>", staffMarker("settings_bl_count") + " 2"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("a word added by /addblacklist is not drawn (%q):\n%s", want, text)
+		}
+	}
+	env.send(env.admin, "/blacklistaction mute")
+	if text = draw(); !strings.Contains(text, staffMarker("settings_bl_action_line")+" "+staffMarker("settings_opt_mute")) {
+		t.Errorf("an action set by /blacklistaction is not drawn:\n%s", text)
+	}
+	// A word added now takes the action every word shares (A19-3), so the list stays uniform.
+	env.send(env.admin, "/addblacklist fraud")
+	if text = draw(); !strings.Contains(text, staffMarker("settings_bl_action_line")+" "+staffMarker("settings_opt_mute")) {
+		t.Errorf("a word added after the action is not on the shared action:\n%s", text)
+	}
+	// A mixed list and an inert stored value written by hand are drawn as they are.
+	settingsListSeedBlacklistAction(t, env.chat.Id, "manual", "tban")
+	if text = draw(); !strings.Contains(text, staffMarker("settings_bl_action_line")+" "+staffMarker("settings_bl_action_mixed")) {
+		t.Errorf("a hand-written mixed list is not drawn as Mixed:\n%s", text)
+	}
+	env.send(env.admin, "/rmblacklist spam")
+	if text = draw(); strings.Contains(text, "<code>spam</code>") {
+		t.Errorf("a word removed by /rmblacklist is still drawn:\n%s", text)
+	}
+}
+
+func TestSettingsAuthorityParityBlacklist(t *testing.T) {
+	type scenario struct {
+		name string
+		// botRole is the bot's role in the chat; member is the presser's member record (nil is the env's administrator, who
+		// can restrict, as the creator of the cached list).
+		botRole string
+		member  *staffFakeMember
+		// wantKey is the refusal the menu answers, alert or notice; empty means the menu writes.
+		wantKey   string
+		wantAlert bool
+		// ownerGate puts a live owner in the group with the switch off, so the gate refuses the administrator.
+		ownerGate bool
+	}
+	scenarios := []scenario{
+		{name: "the bot is a member", botRole: staffRoleMember, wantKey: "connections_is_user_connected_bot_not_admin"},
+		{name: "the bot is an administrator without can_restrict_members", botRole: staffRoleAdminNoRestrict, wantKey: "chat_status_bot_restrict_error"},
+		{name: "an administrator without can_restrict_members", botRole: staffRoleAdmin,
+			member: &staffFakeMember{Status: gotgbot.ChatMemberStatusAdministrator}, wantKey: "settings_no_restrict", wantAlert: true},
+		{name: "a plain member", botRole: staffRoleAdmin,
+			member: &staffFakeMember{Status: gotgbot.ChatMemberStatusMember}, wantKey: "settings_not_admin", wantAlert: true},
+		{name: "the owner gate refuses a non-owner administrator", botRole: staffRoleAdmin, wantKey: "settings_gate_owner_only", wantAlert: true, ownerGate: true},
+		{name: "every check held", botRole: staffRoleAdmin},
+	}
+
+	env := newSettingsListEnv(t)
+	for _, sc := range scenarios {
+		t.Run(sc.name, func(t *testing.T) {
+			chat := settingsBlacklistWithBot(env, sc.botRole, "alpha", "beta")
+			user := env.admin
+			if sc.member != nil {
+				user = gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: "Presser"}
+				env.fake.setMember(chat.Id, user.Id, *sc.member)
+			}
+			if sc.ownerGate {
+				env.newOwner(chat)
+				env.setAdminsAllowed(chat.Id, false)
+			}
+			alphaID := settingsBlacklistIDOf(t, chat.Id, "alpha")
+
+			// The commands first: they refuse for the same member and bot records, or write.
+			commandWrites := sc.wantKey == "" || sc.ownerGate
+			env.sendIn(chat, user, "/blacklistaction mute")
+			env.sendIn(chat, user, "/addblacklist gamma")
+			stored := settingsBlacklistStored(t, chat.Id)
+			if commandWrites != (stored["gamma"] != "" && stored["alpha"] == "mute") {
+				t.Errorf("the commands' writes = %v, want %v (stored %v)", !commandWrites, commandWrites, stored)
+			}
+			before := settingsBlacklistStored(t, chat.Id)
+
+			m := settingsBlacklistOpenMenuAs(env, chat, user)
+			presses := map[string][]string{
+				"the delete ask": {"a", "bx", "r", strconv.FormatInt(alphaID, 10), "v", "1"},
+				"the delete Yes": {"a", "by", "r", strconv.FormatInt(alphaID, 10), "e", settingsCardExpiry(time.Now())},
+				"the action set": {"a", settingsActBlacklistSet, "v", "ban"},
+			}
+			for _, name := range []string{"the delete ask", "the delete Yes", "the action set"} {
+				answers, edits := env.answerCount(), len(env.edits(user.Id, m.msgID))
+				m.press(presses[name]...)
+				if got := env.answerCount() - answers; got != 1 {
+					t.Errorf("%s: answered %d times, want once", name, got)
+				}
+				switch {
+				case sc.wantKey == "":
+					continue
+				case sc.wantAlert:
+					if text, alert := env.lastAnswer(); !strings.Contains(text, staffMarker(sc.wantKey)) || !alert {
+						t.Errorf("%s: answered %q (alert %v), want the alert %s", name, text, alert, sc.wantKey)
+					}
+					if got := len(env.edits(user.Id, m.msgID)); got != edits {
+						t.Errorf("%s: an alert refusal edited the menu", name)
+					}
+				default:
+					if text, alert := env.lastAnswer(); text != "" || alert {
+						t.Errorf("%s: a notice refusal answered %q (alert %v), want an empty answer", name, text, alert)
+					}
+					if text, _ := m.last(); !strings.Contains(text, settingsNoticeWarnIcon+staffMarker(sc.wantKey)) {
+						t.Errorf("%s: the redraw lacks the notice %s:\n%s", name, sc.wantKey, text)
+					}
+				}
+			}
+			after := settingsBlacklistStored(t, chat.Id)
+			if sc.wantKey != "" {
+				if !maps.Equal(before, after) {
+					t.Errorf("a refused press wrote: %v -> %v", before, after)
+				}
+				return
+			}
+			if after["alpha"] != "" || after["beta"] != "ban" {
+				t.Errorf("the permitted presses left %v, want alpha deleted and the rest on ban", after)
+			}
+		})
 	}
 }
