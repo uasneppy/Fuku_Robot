@@ -410,7 +410,7 @@ Plans:
   2. A Filters page lists the filters (paged), deletes one, and adds one by typing the keyword and then the reply.
   3. A Notes page lists the notes (paged), deletes one, and adds one by typing the name and then the content.
   4. Each add, delete and action change is stored, cached and refused exactly as the matching command does it, and works in the group at once: the blacklisted word is acted on, the filter answers and the note can be fetched.
-**Plans:** 8/12 plans executed
+**Plans:** 9/12 plans executed
 - [x] 19-01-PLAN.md — the blacklist commands' golden, applyBlacklistAdd, Remove, RemoveByID and Action, the fresh chat-scoped readers, the too-broad refusal and inherited action (A19-2, A19-3), and the PostgreSQL proof of the action CHECK with its conditional migration (wave 1)
 - [x] 19-02-PLAN.md — the framework edits alone: PrivateOnly with the private argument of settingsMainEntries, settingsCardRowsTo and the ninth right with its bot halves, each with a caller or a test of its own, 2 strings, Main still at 15 cells (wave 2)
 - [x] 19-03-PLAN.md — the tracer page: the list engine and the Blacklist page's list, delete card and action screen, 17 strings and Main at 16 cells (wave 3)
@@ -419,7 +419,7 @@ Plans:
 - [x] 19-06-PLAN.md — the generic two-step add engine of the door's list branch, proved on a test-only list page, 4 strings (wave 6)
 - [x] 19-07-PLAN.md — the Filters page: list, delete card, keyword then reply, the cap, 14 strings and Main at 17 cells (wave 7)
 - [x] 19-08-PLAN.md — the note commands' golden, applyNoteAdd and Remove, the note-name rule (A19-4) and the fail-closed lookup of /save in their own commits, and the note readers (wave 8)
-- [ ] 19-09-PLAN.md — the Notes page: list with the admin-only tag, delete card, name then content, 14 strings and Main at its final 18 cells (wave 9)
+- [x] 19-09-PLAN.md — the Notes page: list with the admin-only tag, delete card, name then content, 14 strings and Main at its final 18 cells (wave 9)
 - [ ] 19-10-PLAN.md — the cross-page sweeps: codes, Main, privacy in 8 languages and in group menus, logs, the owner gate at the list doors, reads and cost (wave 10)
 - [ ] 19-11-PLAN.md — the end-to-end proof that each page changes what the bot does in the group, also for a Staff Group, without Redis and across replicas (wave 11)
 - [ ] 19-12-PLAN.md — the rulebook read whole, README and docs, 19-SPIKE.md with every owner-visible command change and its revert commit, the phase gate and the PAGE-07 to PAGE-09 ticks (wave 12)
@@ -441,4 +441,4 @@ Phases run in numeric order, 10 → 19, which is the owner's priority. Phase 18 
 | 16. Scheduled Deletion of Service and Bot Messages | 9/9 | In Progress | - |
 | 17. Command, Edit and Self-Destruct Deletion | 12/12 | In Progress | - |
 | 18. Remaining Settings Pages | 15/15 | In Progress | - |
-| 19. Blacklist, Filter and Note Pages | 8/12 | In Progress | - |
+| 19. Blacklist, Filter and Note Pages | 9/12 | In Progress | - |
