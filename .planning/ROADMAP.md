@@ -410,10 +410,10 @@ Plans:
   2. A Filters page lists the filters (paged), deletes one, and adds one by typing the keyword and then the reply.
   3. A Notes page lists the notes (paged), deletes one, and adds one by typing the name and then the content.
   4. Each add, delete and action change is stored, cached and refused exactly as the matching command does it, and works in the group at once: the blacklisted word is acted on, the filter answers and the note can be fetched.
-**Plans:** 2/12 plans executed
+**Plans:** 3/12 plans executed
 - [x] 19-01-PLAN.md — the blacklist commands' golden, applyBlacklistAdd, Remove, RemoveByID and Action, the fresh chat-scoped readers, the too-broad refusal and inherited action (A19-2, A19-3), and the PostgreSQL proof of the action CHECK with its conditional migration (wave 1)
 - [x] 19-02-PLAN.md — the framework edits alone: PrivateOnly with the private argument of settingsMainEntries, settingsCardRowsTo and the ninth right with its bot halves, each with a caller or a test of its own, 2 strings, Main still at 15 cells (wave 2)
-- [ ] 19-03-PLAN.md — the tracer page: the list engine and the Blacklist page's list, delete card and action screen, 17 strings and Main at 16 cells (wave 3)
+- [x] 19-03-PLAN.md — the tracer page: the list engine and the Blacklist page's list, delete card and action screen, 17 strings and Main at 16 cells (wave 3)
 - [ ] 19-04-PLAN.md — the typed-reply door's list branch and adding blacklisted words by one typed message, 16 strings, then in its last task the wait's bounded w and q fields and the advance and prompt scripts (wave 4)
 - [ ] 19-05-PLAN.md — the filter commands' golden, applyFilterAdd and Remove, ExtractTypedNoteOrFilter behind a characterization of the extraction, the too-broad refusal and the fail-closed lookups of /filter in their own commits, and the filter readers (wave 5)
 - [ ] 19-06-PLAN.md — the generic two-step add engine of the door's list branch, proved on a test-only list page, 4 strings (wave 6)
@@ -441,4 +441,4 @@ Phases run in numeric order, 10 → 19, which is the owner's priority. Phase 18 
 | 16. Scheduled Deletion of Service and Bot Messages | 9/9 | In Progress | - |
 | 17. Command, Edit and Self-Destruct Deletion | 12/12 | In Progress | - |
 | 18. Remaining Settings Pages | 15/15 | In Progress | - |
-| 19. Blacklist, Filter and Note Pages | 2/12 | In Progress | - |
+| 19. Blacklist, Filter and Note Pages | 3/12 | In Progress | - |

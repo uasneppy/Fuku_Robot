@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 19
 current_phase_name: Blacklist, Filter and Note Pages
 status: executing
-stopped_at: Completed 19-02-PLAN.md
-last_updated: "2026-11-13T08:32:55.331Z"
+stopped_at: Completed 19-03-PLAN.md
+last_updated: "2026-11-13T09:57:16.714Z"
 last_activity: 2026-11-13
 last_activity_desc: Planned Phase 19 (12 plans), UI-SPEC approved
-state_head: 8d2b77ac866a580a4b88d2ab1cf17d58603b65dd
+state_head: 8b38c7008490ccb0ee78def77c81737e9aacdbf3
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 126
-  completed_plans: 115
+  completed_plans: 116
   percent: 0
 ---
 
@@ -29,10 +29,10 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 
 ## Current Position
 
-Phase: 19 (Blacklist, Filter and Note Pages) — plan 1 of 12 executed, ready to execute plan 2. Phase 18 (Remaining Settings Pages) is closed to `human_needed`: all 15 plans executed, the phase gate passed, `18-SECURITY.md` (51 of 51 closed, two small findings fixed), `18-VERIFICATION.md` (14 of 14 after the language callback was wired onto `applyGroupLanguage`, `99f796e`), `18-SPIKE.md` holds the 25 live checks
-Plan: 3 of 12 (19-01 and 19-02 complete; 19-03 next; CONTEXT defaults A19-2 and A19-3 are provisional owner confirmations, one commit each)
-Status: Phase 18 closed to `human_needed` (live checks deferred, see Deferred Items); Phase 19 is executing (19-01 done). Phases 10 to 18 are not marked Complete in ROADMAP
-Last activity: 2026-11-13 — Completed 19-01 (blacklist apply functions, fresh readers, action CHECK migration)
+Phase: 19 (Blacklist, Filter and Note Pages) — plans 1 to 3 of 12 executed, ready to execute plan 4. Phase 18 (Remaining Settings Pages) is closed to `human_needed`: all 15 plans executed, the phase gate passed, `18-SECURITY.md` (51 of 51 closed, two small findings fixed), `18-VERIFICATION.md` (14 of 14 after the language callback was wired onto `applyGroupLanguage`, `99f796e`), `18-SPIKE.md` holds the 25 live checks
+Plan: 4 of 12 (19-01 to 19-03 complete; 19-04 next; the Blacklist pager code is bp, not bg, and 19-04's Add must not be ba; CONTEXT defaults A19-2 and A19-3 are provisional owner confirmations, one commit each)
+Status: Phase 18 closed to `human_needed` (live checks deferred, see Deferred Items); Phase 19 is executing (19-03 done: the list engine and the Blacklist page). Phases 10 to 18 are not marked Complete in ROADMAP
+Last activity: 2026-11-13 — Completed 19-03 (list engine and Blacklist page: list, delete card, action screen, Main at 16 cells)
 
 Progress: [░░░░░░░░░░] 0% (v1.1)
 
@@ -186,6 +186,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 18 P15 | 70min | 2 tasks | 3 files |
 | Phase 19 P01 | 2h | 4 tasks | 19 files |
 | Phase 19 P02 | 1h35m | 3 tasks | 19 files |
+| Phase 19 P03 | n/a | 4 tasks | 18 files |
 
 ## Accumulated Context
 
@@ -289,6 +290,7 @@ Recent decisions affecting current work:
 - [Phase 18]: 18-06: a refused AI On press is the alert plus an Off-only redraw (C18-11 and the settingsMreqAIGate precedent); settingsToggleSet is the one generic boolean press of the phase
 - [Phase 18]: 18-12: the Locks page (k, Order 44) writes each of 22 locks through applyLock under settingsRightAdminFloodBot, redraws the page the lock is on, pages with kg (v clamped 1..2) and states the bot's delete right with one live read per draw after the press is answered; Main is now the final 15-cell grid
 - [Phase 18]: 18-13: Main with fifteen pages is proved over the content-page row budget on purpose (navigation only, Telegram limits met, no second hub); on a chat with no rows the Switches line reads {n} on with 1 (Reports defaults on), and opening Main or any of the six pages creates no row in the nine tables the readers touch
+- [Phase 19]: 19-03: the Blacklist pager code is bp, not the UI-SPEC's bg, because bg is the Deletion page's Bot goodbye row code; 19-04's Add must not use ba (Bot auto)
 
 ### Pending Todos
 
@@ -372,8 +374,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-13T08:32:51.819Z
-Stopped at: Completed 19-02-PLAN.md
+Last session: 2026-11-13T09:57:13.151Z
+Stopped at: Completed 19-03-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
