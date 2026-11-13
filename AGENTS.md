@@ -4271,6 +4271,38 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   approved once with the switch on and not with it off). The anonymous-admin subtest sets the bot's own record to one that can
   restrict, because a mode-on anonymous sender skips the cached admin list and the gates then read that record. The test adds
   about 4 seconds to the whole-package run.
+- Phase 19 test families (the three list pages Blacklist `b`, Filters `i`, Notes `e`, one engine and three tables). The goldens
+  `TestLegacyBlacklistRequests`, `TestLegacyFilterRequests` and `TestLegacyNoteRequests` were committed alone before each extraction
+  and are never re-recorded; the apply functions have `TestApplyBlacklist*`, `TestApplyFilter*` and `TestApplyNote*`; each page has
+  `TestSettings{Blacklist,Filters,Notes}*` and `TestSettingsList{Blacklist,Filters,Notes}*` (opens, delete, callback bytes, fit in 8
+  languages, reads create nothing) with a parity, a drift and an authority-parity test per write (`TestSettingsParity*`,
+  `TestSettingsDrift*`, `TestSettingsAuthorityParity*`); the engine is `TestSettingsList*` (`settings_list_test.go`,
+  `settings_list_framework_test.go`: `TestSettingsPrivateOnlyPage`, `TestSettingsCardRowsTo`, `TestSettingsRightBotHalves`), the
+  door's list branch `TestSettingsListDoor*` (`settings_list_door_test.go`) and the two-step add `TestSettingsListTwoStep*`
+  (`settings_list_twostep_test.go`, on a test-only page installed by `withTestSettingsList`). The toolkit is
+  `settings_list_env_test.go` (`newSettingsListEnv`, `settingsListCleanup`, the three seed helpers, `settingsListSentinel`).
+  Plan 19-10 adds the cross-page sweeps. `settings_phase19_test.go`: `TestSettingsPhase19Codes` (the 19 page keys, the 17 list
+  action codes written out beside the registry in both directions, each owned by one page and never a core code, every one refused
+  in step 1 with `u` instead of `c`, with both and with an extra key, and the five-part table `(b,w) (i,k) (i,y) (e,n) (e,c)`),
+  `TestSettingsMainPhase19` (the three lines `12`, `12/150`, `3` and `0`, `0/150`, `0`, the unknown mark on one failing count with
+  every other line unchanged, `In private` in a group menu with no seam called, 11 owner rows and 10 for an administrator),
+  `TestSettingsListReadsCreateNothing` (no row in `blacklists`, `filters`, `notes`, `notes_settings` or `chats` and no command cache
+  key after opening Main and every list screen in both menus, and a failed read is the cannot-open edit),
+  `TestSettingsListCost` (three counts in a private Main and none in a group Main, a list draw one list read and the pipeline's
+  `getChatMember` and `getChat`, a group note no read, a step-1 refusal only its answer, a typed step one lookup of the sender, one
+  `getChat` and at most one of the bot, and the same costs with Redis down with Add the alert) and `TestSettingsListSavedNoticeFits`
+  (the Blacklist saved page at five-digit counts, the Filters and Notes saved pages and each page's longest refusals in 8 languages).
+  `settings_list_privacy_test.go`: `TestSettingsListGroupMenuShowsNothing` (sentinels in all three lists, a group menu shows the
+  group note only, the six page seams are never called and every list action is an invalid request with no lookup) and
+  `TestSettingsListLogsCarryIDsOnly` (a debug-level logrus hook over every failing seam: each page read, the Filters Add count, each
+  delete, the action set, the typed words, both typed steps of Filters and Notes, the wait store with a failing Redis and all 13
+  failure paths of the ten apply functions `applyBlacklist{Add,Remove,RemoveByID,Action}`, `applyFilter{Add,Remove,RemoveByID}` and
+  `applyNote{Add,Remove,RemoveByID}`: every failure logs the chat and no line holds a sentinel word, keyword, name or content).
+  `TestSettingsStaffPrivacy` gains `settingsPrivacyPhase19Screens` (every screen of the three pages in 8 languages) and
+  `settingsPrivacyPhase19Run` (an administrator who is not the creator, in a private and in a group menu), and
+  `TestSettingsGateAllDoors` gains one column for the two list doors, the Blacklist delete Yes (`by`) and the Blacklist typed reply
+  (the list branch of the door), built in one world per fixture to keep the test light, so a list door decides like every other
+  door over the four owner worlds.
 
 ## Commits
 

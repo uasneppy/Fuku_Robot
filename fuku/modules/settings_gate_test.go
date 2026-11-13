@@ -1017,6 +1017,99 @@ func settingsGateDoorTypedReply(t *testing.T, c settingsGateCase) string {
 	return settingsGateClassify(settingsGateNewTexts(c.env, person.Id, before))
 }
 
+// settingsGateListSetup makes the world of a list door: the bot an administrator, a fresh list with one word, and, for the
+// person who is not the owner, a member record that holds can_restrict_members (the Blacklist's right), so the gate alone
+// decides. It returns the stored word's row ID.
+func settingsGateListSetup(t *testing.T, c settingsGateCase) int64 {
+	t.Helper()
+	c.env.fake.setBotRole(c.env.chat.Id, staffRoleAdmin)
+	settingsListCleanup(t, c.env.chat.Id)
+	settingsListSeedBlacklist(t, c.env.chat.Id, "alpha")
+	return settingsBlacklistIDOf(t, c.env.chat.Id, "alpha")
+}
+
+// settingsGateListPerson applies the world and returns the person with the Blacklist's right.
+func settingsGateListPerson(c settingsGateCase) gotgbot.User {
+	c.apply()
+	person := c.person()
+	if !c.ownerPerson {
+		c.env.fake.setMember(c.env.chat.Id, person.Id, staffFakeMember{
+			Status: gotgbot.ChatMemberStatusAdministrator, CanRestrictMembers: true,
+		})
+	}
+	return person
+}
+
+// settingsGateListYes presses the Blacklist delete card's Yes (the list action by, in the private menu) as the person. A press
+// that is refused answers an alert; one that is let in deletes the word and edits the menu.
+func settingsGateListYes(t *testing.T, c settingsGateCase, person gotgbot.User, id int64) string {
+	t.Helper()
+	const msgID = 6302
+	edits := len(c.env.edits(person.Id, msgID))
+	answers := c.env.answerCount()
+
+	c.env.pressPrivate(person, msgID, c.env.privateFields(c.env.chat.Id, "a", "by", "r", fmt.Sprint(id), "e", settingsCardExpiry(time.Now())))
+
+	if got := c.env.answerCount() - answers; got != 1 {
+		t.Fatalf("the list Yes was answered %d times, want once", got)
+	}
+	if answer, alert := c.env.lastAnswer(); alert {
+		if got := settingsGateClassify([]string{answer}); got != "none" {
+			return got
+		}
+		t.Fatalf("the list Yes was refused with %q, not by the gate", answer)
+	}
+	if len(c.env.edits(person.Id, msgID)) > edits {
+		return "in"
+	}
+	return "none"
+}
+
+// settingsGateListTypedReply is the typed-reply door of the Blacklist's list branch: the person has a wait for the words part
+// (written directly, because the world changes between the Add press and the reply) and sends a private word. A let-in reply
+// is saved and answered with the saved list; a refused one gets the gate's own words.
+func settingsGateListTypedReply(t *testing.T, c settingsGateCase, person gotgbot.User) string {
+	t.Helper()
+	nonce, err := newSettingsInputNonce()
+	if err != nil {
+		t.Fatalf("a nonce: %v", err)
+	}
+	if _, err := settingsInputSet(context.Background(), person.Id, settingsInputWait{
+		GroupID: c.env.chat.Id, Page: settingsPageBlacklist, Part: "w", PromptMsgID: 6303, Nonce: nonce, ExpiresAt: time.Now().Add(settingsInputTTL),
+	}); err != nil {
+		t.Fatalf("write the wait: %v", err)
+	}
+	before := len(c.env.fake.sentTo(person.Id))
+
+	sendPrivateMessage(c.env, person, gotgbot.Message{Text: "gamma"})
+
+	texts := settingsGateNewTexts(c.env, person.Id, before)
+	if decision := settingsGateClassify(texts); decision != "none" {
+		return decision
+	}
+	for _, text := range texts {
+		if strings.Contains(text, staffMarker("settings_bl_saved_added")) {
+			return "in"
+		}
+	}
+	return "none"
+}
+
+// settingsGateDoorListDoors is the two doors of the list pages in one world: the delete Yes (a press) and the typed reply
+// (the door's list branch). Both must decide as every other door does, so the world is built once and the door answers
+// with their common decision, or "yes/typed" when they differ. The two share one environment to keep the test light.
+func settingsGateDoorListDoors(t *testing.T, c settingsGateCase) string {
+	t.Helper()
+	id := settingsGateListSetup(t, c)
+	person := settingsGateListPerson(c)
+	yes := settingsGateListYes(t, c, person, id)
+	typed := settingsGateListTypedReply(t, c, person)
+	if yes != typed {
+		return yes + "/" + typed
+	}
+	return yes
+}
+
 func TestSettingsGateAllDoors(t *testing.T) {
 	fixtures := []settingsGateFixture{
 		{
@@ -1064,6 +1157,7 @@ func TestSettingsGateAllDoors(t *testing.T) {
 		{name: "deletion Yes", decide: settingsGateDoorDeletionYes},
 		{name: "pick", decide: settingsGateDoorPick},
 		{name: "typed reply", decide: settingsGateDoorTypedReply},
+		{name: "list Yes and list typed reply", decide: settingsGateDoorListDoors},
 	}
 
 	for _, fixture := range fixtures {
