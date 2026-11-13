@@ -373,6 +373,12 @@ type settingsPage struct {
 	// Hidden, when set, is true for a group in which the page does not exist: Main leaves it out
 	// without calling MainState and openPage refuses it. Nil keeps the page in every group.
 	Hidden func(group *gotgbot.Chat) bool
+	// PrivateOnly marks a page that exists only in the bot's private chat (the three list pages,
+	// D-01). In a menu opened in the group Main reads settings_state_private_only on its line without
+	// calling MainState, and opening the page draws the group note with the Open in private row
+	// without calling Open, so no page code and no database read runs there. A private menu calls
+	// MainState and Open as for every page.
+	PrivateOnly bool
 }
 
 // settingsControl is one toggle or setting of a page.
@@ -478,8 +484,10 @@ type settingsMainEntry struct {
 
 // settingsMainEntries asks every registered page for its Main state, in page order. It
 // makes the database reads of the pages; the renderer stays pure. An OwnerOnly page is skipped
-// entirely, without a MainState call, unless viewerIsOwner holds (D-08).
-func settingsMainEntries(b *gotgbot.Bot, tr *i18n.Translator, group *gotgbot.Chat, viewerIsOwner bool) []settingsMainEntry {
+// entirely, without a MainState call, unless viewerIsOwner holds (D-08). private says whether the menu
+// is the bot's private chat: a PrivateOnly page then reads its own state, and in a group menu it reads
+// the fixed word with no MainState call (D-01, M39).
+func settingsMainEntries(b *gotgbot.Bot, tr *i18n.Translator, group *gotgbot.Chat, viewerIsOwner, private bool) []settingsMainEntry {
 	pages := settingsPagesInOrder()
 	entries := make([]settingsMainEntry, 0, len(pages))
 	for _, pg := range pages {
@@ -490,7 +498,10 @@ func settingsMainEntries(b *gotgbot.Bot, tr *i18n.Translator, group *gotgbot.Cha
 			continue
 		}
 		entry := settingsMainEntry{Key: pg.Key, Icon: pg.Icon, Title: settingsText(tr, pg.TitleKey), OwnerOnly: pg.OwnerOnly}
-		if pg.MainState != nil {
+		switch {
+		case pg.PrivateOnly && !private:
+			entry.State, entry.Known = settingsText(tr, "settings_state_private_only"), true
+		case pg.MainState != nil:
 			entry.State, entry.Known = pg.MainState(b, tr, group)
 		}
 		entries = append(entries, entry)

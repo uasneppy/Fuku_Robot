@@ -458,6 +458,10 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_del_delay_5m":          {6, 10},
 	"settings_del_delay_15m":         {6, 10},
 	"settings_del_confirm_self":      {220, 310},
+
+	// Phase 19 (plan 19-02), the list pages' group-menu strings (UI-SPEC rows 1 and 2).
+	"settings_state_private_only": {16, 20},
+	"settings_entries_group_note": {140, 200},
 }
 
 // settingsAlertKeys are shown as answerCallbackQuery alerts: plain text, no tag, at most
@@ -883,6 +887,8 @@ func TestSettingsLabelLengths(t *testing.T) {
 			}{
 				{"settings_state_sw_on", "3", 15},
 				{"settings_state_locks_on", "22", 25},
+				// A list page's fixed Main state in a group menu (Phase 19): at most 20 in every language.
+				{"settings_state_private_only", "", 20},
 			} {
 				rendered := strings.ReplaceAll(settingsLocaleString(t, lang, data, state.key), "{n}", state.n)
 				if runes := utf8.RuneCountInString(rendered); runes > state.max {

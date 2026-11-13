@@ -266,7 +266,7 @@ func (p *settingsPress) isGroupCreator() bool {
 
 // settingsMainScreen draws the Main page for a press.
 func settingsMainScreen(p *settingsPress, notice string) settingsScreen {
-	return renderSettingsMain(p.view(), settingsMainEntries(p.b, p.tr, p.group, p.member.Status == gotgbot.ChatMemberStatusCreator), notice)
+	return renderSettingsMain(p.view(), settingsMainEntries(p.b, p.tr, p.group, p.member.Status == gotgbot.ChatMemberStatusCreator, p.private), notice)
 }
 
 // settingsCheckFields reports whether the fields of a callback are exactly those the action
@@ -554,6 +554,12 @@ func (p *settingsPress) openPage(pg settingsPage, notice string) {
 		p.answer(settingsText(p.tr, "common_callback_invalid_request"), true)
 		return
 	}
+	// A private-only page in a group menu is the framework's note, drawn before any page code runs
+	// (D-01, U-8): nothing of the page, not even a read, is reachable from a group.
+	if pg.PrivateOnly && !p.private {
+		p.edit(renderSettingsPrivateOnlyNote(p.view(), pg.TitleKey, getBotUsername(p.b)))
+		return
+	}
 	screen, err := pg.Open(p, notice)
 	if err != nil {
 		log.Warnf("[Settings] page %q of chat %d could not be read: %v", pg.Key, p.group.Id, err)
@@ -561,6 +567,17 @@ func (p *settingsPress) openPage(pg settingsPage, notice string) {
 		return
 	}
 	p.edit(screen)
+}
+
+// renderSettingsPrivateOnlyNote draws a private-only page in a menu opened in the group (Screen 7):
+// the page's header, the one note line, the Open in private row and Back and Close. It is pure and
+// carries no intro, count, entry or action, because a group menu is read by every member. Without a
+// bot username the URL row is left out and logged, as the editor does.
+func renderSettingsPrivateOnlyNote(v settingsView, titleKey, botUsername string) settingsScreen {
+	k := newSettingsKeyboard(v)
+	settingsEditOpenPrivateRow(k, settingsEditScreenOpts{BotUsername: botUsername})
+	k.navRow(false)
+	return k.screen(settingsCompose(v, titleKey, []string{settingsText(v.Tr, "settings_entries_group_note")}, "", false))
 }
 
 // closeMenu deletes the menu message and, when that fails (a private message older than 48

@@ -673,7 +673,7 @@ func TestSettingsMainPhase18(t *testing.T) {
 	t.Run("a page whose read fails shows the unknown mark and no other line changes", func(t *testing.T) {
 		env := newSettingsDelEnv(t)
 		draw := func() map[string]string {
-			entries := settingsMainEntries(env.bot, tr(), &env.chat, true)
+			entries := settingsMainEntries(env.bot, tr(), &env.chat, true, true)
 			if len(entries) != len(settingsMainTitleKeys) {
 				t.Fatalf("%d entries, want %d", len(entries), len(settingsMainTitleKeys))
 			}

@@ -216,7 +216,7 @@ func settingsStartDeepLink(b *gotgbot.Bot, ctx *ext.Context, user *gotgbot.User,
 		Now:        time.Now(),
 		Owner:      member.Status == gotgbot.ChatMemberStatusCreator,
 	}
-	screen := renderSettingsMain(view, settingsMainEntries(b, tr, &group, view.Owner), "")
+	screen := renderSettingsMain(view, settingsMainEntries(b, tr, &group, view.Owner, view.Private), "")
 	opts := formatting.Shtml()
 	opts.ReplyMarkup = screen.Keyboard
 	if _, err := b.SendMessage(ctx.EffectiveChat.Id, screen.Text, opts); err != nil {
