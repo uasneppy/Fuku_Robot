@@ -159,13 +159,34 @@ func blacklistSortWords(words []string) (valid, tooLong []string) {
 	return valid, tooLong
 }
 
-// applyBlacklistAdd stores the typed words for the chat, each lower-cased with the warn
-// action, and reports which were added, already listed, too long, too broad or failed. existing is the
-// caller's read of the chat's current words. It judges no person's rights and logs the chat
-// ID and the error only, never a word.
+// blacklistSharedAction is the action a new word takes: the one every word of the chat
+// already has when it is one of blacklistActionValues, else warn (a chat with no words, mixed
+// actions, or a stored value the commands never write).
+func blacklistSharedAction(existing models.BlacklistSettingsSlice) string {
+	shared := ""
+	for _, row := range existing {
+		if row == nil {
+			continue
+		}
+		if shared != "" && row.Action != shared {
+			return "warn"
+		}
+		shared = row.Action
+	}
+	if !slices.Contains(blacklistActionValues, shared) {
+		return "warn"
+	}
+	return shared
+}
+
+// applyBlacklistAdd stores the typed words for the chat, each lower-cased with the action the
+// chat's words share (blacklistSharedAction), and reports which were added, already listed,
+// too long, too broad or failed. existing is the caller's read of the chat's current words.
+// It judges no person's rights and logs the chat ID and the error only, never a word.
 func applyBlacklistAdd(ctx context.Context, chatID int64, words []string, existing models.BlacklistSettingsSlice) blacklistAddResult {
 	valid, tooLong := blacklistSortWords(words)
 	result := blacklistAddResult{TooLong: tooLong}
+	action := blacklistSharedAction(existing)
 	seen := make(map[string]struct{}, len(existing)+len(valid))
 	for _, word := range existing.Triggers() {
 		seen[word] = struct{}{}
@@ -180,7 +201,7 @@ func applyBlacklistAdd(ctx context.Context, chatID int64, words []string, existi
 			result.Already = append(result.Already, word)
 			continue
 		}
-		if err := blacklistWrites.Add(ctx, chatID, word, "warn"); err != nil {
+		if err := blacklistWrites.Add(ctx, chatID, word, action); err != nil {
 			log.WithFields(log.Fields{
 				"chatId": chatID,
 				"error":  err,

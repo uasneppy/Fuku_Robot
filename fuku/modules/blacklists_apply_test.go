@@ -297,3 +297,53 @@ func TestApplyBlacklistTooBroad(t *testing.T) {
 		}
 	})
 }
+
+func TestApplyBlacklistInheritsAction(t *testing.T) {
+	ctx := context.Background()
+	cases := []struct {
+		name   string
+		seeded map[string]string
+		want   string
+	}{
+		{"empty chat", nil, "warn"},
+		{"every word bans", map[string]string{"one": "ban", "two": "ban"}, "ban"},
+		{"every word is none", map[string]string{"one": "none"}, "none"},
+		{"mixed actions", map[string]string{"one": "ban", "two": "warn"}, "warn"},
+		{"a stored value the commands never write", map[string]string{"one": "tban"}, "warn"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			chatID := blacklistApplyChat(t)
+			for word, action := range tc.seeded {
+				blacklistApplySeed(t, chatID, action, word)
+			}
+			existing := blacklists.GetBlacklistSettingsContext(ctx, chatID)
+			result := applyBlacklistAdd(ctx, chatID, []string{"newword"}, existing)
+			if !slices.Equal(result.Added, []string{"newword"}) {
+				t.Fatalf("added = %q, want [newword]", result.Added)
+			}
+			var row models.BlacklistSettings
+			if err := db.DB.Where("chat_id = ? AND word = ?", chatID, "newword").Take(&row).Error; err != nil {
+				t.Fatalf("read the new row: %v", err)
+			}
+			if row.Action != tc.want {
+				t.Errorf("new word action = %q, want %q", row.Action, tc.want)
+			}
+		})
+	}
+
+	t.Run("the command inherits it too", func(t *testing.T) {
+		chatID := blacklistApplyChat(t)
+		blacklistApplySeed(t, chatID, "ban", "one")
+		client := newModuleBotClient()
+		bot := newModuleTestBot(client)
+		chat := gotgbot.Chat{Id: chatID, Type: "supergroup", Title: "Blacklist Apply"}
+		admin := gotgbot.User{Id: 777000, FirstName: "Telegram"}
+		if err := blacklistsModule.addBlacklist(bot, newModuleMessageContext(bot, chat, admin, "/addblacklist two")); err != ext.EndGroups {
+			t.Fatalf("addBlacklist error = %v, want EndGroups", err)
+		}
+		if got := blacklistApplyStoredWords(t, chatID); !slices.Equal(got, []string{"one=ban", "two=ban"}) {
+			t.Errorf("stored = %q, want both words banning", got)
+		}
+	})
+}

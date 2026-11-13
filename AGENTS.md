@@ -3338,6 +3338,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   alike (`keywordTooBroad` in `list_validation.go`, the separate reply `blacklists_blacklist_word_too_broad`, never stored): the
   matcher compares lower-cased literal substrings, so one common character would delete almost every message. This is the
   provisional owner confirmation A19-2 of `19-SPIKE.md`; declining it is a revert of its commit.
+  A new word takes the action every word of the chat already shares (one of `mute kick warn ban none`), else warn, so a
+  word added after `/blacklistaction ban` no longer acts with Warn (`blacklistSharedAction`, the command and the page alike):
+  the provisional owner confirmation A19-3 of `19-SPIKE.md`; declining it is a revert of its commit.
 - Rules message (`rules.go`): `/rules` (in the group and in a private chat connected to it), the private rules message the
   `/start rules_<chat id>` deep link opens and the Rules page's Full preview are built by
   `buildRulesMessage` and sent by `sendRulesMessage`. The builder has two forms, the group form (`rulesFormGroup`: heading
