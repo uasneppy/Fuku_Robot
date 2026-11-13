@@ -547,6 +547,11 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_notes_name_line":       {32, 44},
 	"settings_notes_wait_content":    {390, 540},
 	"settings_notes_saved":           {100, 160},
+
+	// Phase 19 (plan 19-09, task 2), the Notes page's refusal, delete card and removed notice (UI-SPEC rows 64 to 66).
+	"settings_notes_refuse_exists": {120, 180},
+	"settings_notes_delete_ask":    {100, 160},
+	"settings_notes_removed":       {56, 90},
 }
 
 // settingsAlertKeys are shown as answerCallbackQuery alerts: plain text, no tag, at most

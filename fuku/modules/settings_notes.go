@@ -60,6 +60,11 @@ func settingsNotesPrompt(v settingsView, part string) []string {
 	}
 }
 
+// settingsNotesExistsText is the refusal of a name the chat already has, naming it (escaped, cut at 100 code points).
+func settingsNotesExistsText(tr *i18n.Translator, name string) string {
+	return settingsListEntryText(tr, "settings_notes_refuse_exists", "name", name)
+}
+
 // settingsNotesCheck is the step-1 check of a name, and the check step 2 runs again against a fresh read:
 // checkNoteName, the check /save runs, so the command and the page refuse alike. It returns the finished refusal
 // and, for a read that failed, an error that keeps the wait (nothing is stored on a guess).
@@ -72,6 +77,8 @@ func settingsNotesCheck(ctx context.Context, chatID int64, norm string, tr *i18n
 		return settingsText(tr, "settings_entries_refuse_blank"), nil
 	case noteNameBadShape:
 		return settingsText(tr, "notes_name_invalid"), nil
+	case noteExists:
+		return settingsNotesExistsText(tr, norm), nil
 	}
 	if result.Err != nil {
 		return "", result.Err
@@ -84,7 +91,8 @@ var errSettingsNotesCheck = errors.New("the note name check gave no answer")
 
 // settingsNotesApply stores the typed content through applyNoteAdd, the function /save stores through, after the
 // same private-flag rule /save applies: a note with both {private} and {noprivate} keeps neither and the saved notice
-// says so with /save's own warning text.
+// says so with /save's own warning text. A name stored by another admin between the steps (noteExists, noteRaced) is
+// taken: the wait ends with the reason and nothing is overwritten.
 func settingsNotesApply(ctx context.Context, chatID int64, norm string, ex content.ExtractResult, tr *i18n.Translator) settingsListApplyResult {
 	pvtOnly, grpOnly, conflict := resolveNotePrivateConflict(ex.PvtOnly, ex.GrpOnly)
 	result := applyNoteAdd(ctx, chatID, noteAddInput{
@@ -100,7 +108,11 @@ func settingsNotesApply(ctx context.Context, chatID int64, norm string, ex conte
 		IsProtected: ex.IsProtected,
 		NoNotif:     ex.NoNotif,
 	})
-	if result.Outcome != noteAdded {
+	switch result.Outcome {
+	case noteAdded:
+	case noteExists, noteRaced:
+		return settingsListApplyResult{Outcome: settingsListApplyTaken, Text: settingsNotesExistsText(tr, norm)}
+	default:
 		return settingsListApplyResult{Outcome: settingsListApplyFailed}
 	}
 	if !conflict {
@@ -108,6 +120,19 @@ func settingsNotesApply(ctx context.Context, chatID int64, norm string, ex conte
 	}
 	// The warning is /save's own text, which starts with the blank lines that set it off in a reply.
 	return settingsListApplyResult{Notice: strings.TrimLeft(settingsText(tr, "notes_private_conflict_warning"), "\n")}
+}
+
+// settingsNotesRemove deletes one note by its row ID through applyNoteRemoveByID, the function the page's delete uses:
+// one conditional DELETE by (id, chat) and the drop of notes_list. /clear stores through the same write beside it.
+func settingsNotesRemove(ctx context.Context, chatID, id int64) settingsListRemoval {
+	result := applyNoteRemoveByID(ctx, chatID, id)
+	switch result.Outcome {
+	case noteRemovedByID:
+		return settingsListRemoval{Outcome: settingsListRemoved, Text: result.Name}
+	case noteRemoveByIDGone:
+		return settingsListRemoval{Outcome: settingsListRemoveGone}
+	}
+	return settingsListRemoval{Outcome: settingsListRemoveFailed}
 }
 
 // settingsNotesDef is the table of the Notes page.
@@ -118,9 +143,14 @@ func settingsNotesDef() settingsListDef {
 		Icon:      "📝",
 		TitleKey:  "settings_page_notes",
 		PagerCode: "eg",
+		AskCode:   "ex",
+		YesCode:   "ey",
 		// Every note write declares the right /save and /clear ask for (D-03): can_change_info and the bot an
 		// administrator.
-		Right: settingsRightChangeInfoBotAdmin,
+		Right:        settingsRightChangeInfoBotAdmin,
+		Remove:       settingsNotesRemove,
+		DeleteAskKey: "settings_notes_delete_ask",
+		RemovedKey:   "settings_notes_removed",
 		Read: func(ctx context.Context, chatID int64) ([]settingsListEntry, error) {
 			return settingsNotesRead(ctx, chatID)
 		},

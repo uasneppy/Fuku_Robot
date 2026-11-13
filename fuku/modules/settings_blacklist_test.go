@@ -650,6 +650,12 @@ func TestSettingsListForged(t *testing.T) {
 			refused(t, name, func() { m.press(kv...) })
 		}
 	}
+	// So are the Notes page's (plan 19-09).
+	for name, kv := range settingsNotesForgedPresses(valid) {
+		if !tooLong(t, name, kv) {
+			refused(t, name, func() { m.press(kv...) })
+		}
+	}
 
 	// The same press of a group menu (u instead of c) is refused for every list code.
 	for _, kv := range [][]string{
@@ -661,6 +667,11 @@ func TestSettingsListForged(t *testing.T) {
 		{"a", "iy", "r", "5", "e", valid},
 		{"a", "ia"},
 		{"a", "ic", "t", "k"},
+		{"a", "eg", "v", "1"},
+		{"a", "ex", "r", "5", "v", "1"},
+		{"a", "ey", "r", "5", "e", valid},
+		{"a", "ea"},
+		{"a", "ec", "t", "n"},
 	} {
 		members := len(env.fake.callsFor("getChatMember"))
 		env.press(env.admin, groupMsg, env.groupFields(env.admin, kv...))
