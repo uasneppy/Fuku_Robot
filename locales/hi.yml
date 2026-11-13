@@ -734,6 +734,7 @@ blacklists_blacklist_added_bl: "इन शब्दों को ब्लैक
 blacklists_blacklist_already_blacklisted: "ये शब्द पहले से ही ब्लैकलिस्ट किए गए हैं:"
 blacklists_blacklist_give_bl_word: कृपया मुझे ब्लैकलिस्ट में जोड़ने के लिए एक शब्द दें!
 blacklists_blacklist_word_too_long: "ये शब्द बहुत लंबे हैं (अधिकतम 100 अक्षर): %s"
+blacklists_blacklist_word_too_broad: "ये शब्द बहुत सामान्य हैं (एक अकेला अक्षर, अंक या विराम चिह्न लगभग हर संदेश से मेल खाएगा): %s"
 blacklists_ls_bl_list_bl: "इस चैट में ये शब्द ब्लैकलिस्ट किए गए हैं:"
 blacklists_ls_bl_no_blacklisted: इस चैट में कोई ब्लैकलिस्ट किए गए शब्द नहीं हैं।
 blacklists_rm_all_bl_ask: "क्या आप वाकई इस चैट से सभी ब्लैकलिस्ट किए गए शब्दों को हटाना चाहते हैं?"

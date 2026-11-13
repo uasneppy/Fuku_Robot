@@ -3334,6 +3334,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (research C-02, pinned, not fixed). `TestLegacyBlacklistRequests` pins every request and stored row of the four commands and is
   never re-recorded. `blacklist:<chat>` is not in `skipLocal`: another replica can serve the old list for up to `CACHE_LOCAL_TTL`,
   exactly as after the commands. The apply functions log the chat ID and the error only, never a word.
+  A word of exactly one code point outside Unicode category So, or a blank one, is refused by `/addblacklist` and by the page
+  alike (`keywordTooBroad` in `list_validation.go`, the separate reply `blacklists_blacklist_word_too_broad`, never stored): the
+  matcher compares lower-cased literal substrings, so one common character would delete almost every message. This is the
+  provisional owner confirmation A19-2 of `19-SPIKE.md`; declining it is a revert of its commit.
 - Rules message (`rules.go`): `/rules` (in the group and in a private chat connected to it), the private rules message the
   `/start rules_<chat id>` deep link opens and the Rules page's Full preview are built by
   `buildRulesMessage` and sent by `sendRulesMessage`. The builder has two forms, the group form (`rulesFormGroup`: heading

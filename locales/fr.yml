@@ -399,6 +399,7 @@ blacklists_blacklist_added_bl: "Ces mots ont été ajoutés à la liste noire :"
 blacklists_blacklist_already_blacklisted: "Ces mots sont déjà sur la liste noire :"
 blacklists_blacklist_give_bl_word: Veuillez me donner un mot à ajouter à la liste noire !
 blacklists_blacklist_word_too_long: "Ces mots sont trop longs (max 100 caractères) : %s"
+blacklists_blacklist_word_too_broad: "Ces mots sont trop généraux (une seule lettre, un seul chiffre ou signe de ponctuation correspondrait à presque tous les messages) : %s"
 blacklists_help_msg: "*Commandes Utilisateur :*
 
   × /blacklists : Vérifier tous les mots sur liste noire dans le chat.

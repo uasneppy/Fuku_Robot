@@ -239,6 +239,7 @@ blacklists_blacklist_added_bl: "Added these words as blacklists:"
 blacklists_blacklist_already_blacklisted: "These words are already blacklisted:"
 blacklists_blacklist_give_bl_word: Please give me a word to add to the blacklist!
 blacklists_blacklist_word_too_long: "These words are too long (max 100 characters): %s"
+blacklists_blacklist_word_too_broad: "These words are too broad (a single letter, digit or punctuation mark would match almost every message): %s"
 blacklists_help_msg: "*User Commands:*
 
   × /blacklists: Check all the blacklists in chat.

@@ -31,9 +31,6 @@ var blacklistsModule = moduleStruct{
 	handlerGroup: 7,
 }
 
-// blacklistWordMaxRunes is the longest blacklist word /addblacklist accepts, in code points.
-const blacklistWordMaxRunes = 100
-
 // blacklistWordPreviewRunes is how many code points of a too-long word its refusal shows.
 const blacklistWordPreviewRunes = 20
 
@@ -81,6 +78,9 @@ type blacklistAddResult struct {
 	Already []string
 	// TooLong are the previews of the words over the length limit, as the command shows them.
 	TooLong []string
+	// TooBroad are the words refused because one common character would match almost every
+	// message (keywordTooBroad), as typed.
+	TooBroad []string
 	// Failed counts the words whose write failed.
 	Failed int
 }
@@ -146,7 +146,7 @@ func blacklistSortWords(words []string) (valid, tooLong []string) {
 	valid = make([]string, 0, len(words))
 	for _, word := range words {
 		runes := []rune(word)
-		if len(runes) <= blacklistWordMaxRunes {
+		if len(runes) <= listKeywordMaxRunes {
 			valid = append(valid, word)
 			continue
 		}
@@ -160,7 +160,7 @@ func blacklistSortWords(words []string) (valid, tooLong []string) {
 }
 
 // applyBlacklistAdd stores the typed words for the chat, each lower-cased with the warn
-// action, and reports which were added, already listed, too long or failed. existing is the
+// action, and reports which were added, already listed, too long, too broad or failed. existing is the
 // caller's read of the chat's current words. It judges no person's rights and logs the chat
 // ID and the error only, never a word.
 func applyBlacklistAdd(ctx context.Context, chatID int64, words []string, existing models.BlacklistSettingsSlice) blacklistAddResult {
@@ -171,6 +171,10 @@ func applyBlacklistAdd(ctx context.Context, chatID int64, words []string, existi
 		seen[word] = struct{}{}
 	}
 	for _, word := range valid {
+		if keywordTooBroad(word) {
+			result.TooBroad = append(result.TooBroad, word)
+			continue
+		}
 		word = strings.ToLower(word)
 		if _, exists := seen[word]; exists {
 			result.Already = append(result.Already, word)
@@ -308,6 +312,17 @@ func (m moduleStruct) addBlacklist(b *gotgbot.Bot, ctx *ext.Context) error {
 		if len(result.TooLong) > 0 {
 			text, _ := tr.GetString(strings.ToLower(m.moduleName) + "_blacklist_word_too_long")
 			_, err := msg.Reply(b, fmt.Sprintf(text, strings.Join(result.TooLong, ", ")), formatting.Shtml())
+			if err != nil {
+				log.Error(err)
+			}
+		}
+		if len(result.TooBroad) > 0 {
+			escaped := make([]string, 0, len(result.TooBroad))
+			for _, word := range result.TooBroad {
+				escaped = append(escaped, html.EscapeString(word))
+			}
+			text, _ := tr.GetString(strings.ToLower(m.moduleName) + "_blacklist_word_too_broad")
+			_, err := msg.Reply(b, fmt.Sprintf(text, strings.Join(escaped, ", ")), formatting.Shtml())
 			if err != nil {
 				log.Error(err)
 			}

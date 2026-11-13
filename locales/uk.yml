@@ -109,6 +109,7 @@ blacklists_blacklist_added_bl: "Ці слова додано до чорного
 blacklists_blacklist_already_blacklisted: "Ці слова вже в чорному списку:"
 blacklists_blacklist_give_bl_word: "Вкажіть слово, яке потрібно додати до чорного списку!"
 blacklists_blacklist_word_too_long: "Ці слова задовгі (макс. 100 символів): %s"
+blacklists_blacklist_word_too_broad: "Ці слова надто загальні (одна літера, цифра чи розділовий знак збігалися б майже з кожним повідомленням): %s"
 blacklists_help_msg: "*Команди для користувачів:*\n\n× /blacklists: переглянути всі чорні списки в чаті.\n\n\n*Команди для адмінів:*\n\n× /addblacklist `<trigger>`: додає слово до чорного списку поточного чату.\n\n× /rmblacklist `<trigger>`: вилучає слово з чорного списку чату.\n\n× /blaction `<mute/kick/ban/warn/none>`: встановлює дію бота при виявленні слова з чорного списку.\n\n× /blacklistaction: те саме, що вище\n\n\n*Лише для власника:*\n\n× /remallbl: вилучає всі слова з чорного списку чату\n\n\n*Примітка:*\n\nРежим за замовчуванням для чорного списку — *none*, який просто видаляє повідомлення з чату."
 blacklists_ls_bl_list_bl: "Ці слова в чорному списку цього чату:"
 blacklists_ls_bl_no_blacklisted: "У цьому чаті немає слів у чорному списку."

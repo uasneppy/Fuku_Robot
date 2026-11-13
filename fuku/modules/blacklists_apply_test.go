@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/PaulSonOfLars/gotgbot/v2"
+	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 	logrustest "github.com/sirupsen/logrus/hooks/test"
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
@@ -235,5 +237,63 @@ func TestApplyBlacklist(t *testing.T) {
 			t.Errorf("failing seam: result = %+v, want save failed with the error", got)
 		}
 		assertNoWordLogged(t)
+	})
+}
+
+func TestApplyBlacklistTooBroad(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("apply refuses a one-character word", func(t *testing.T) {
+		chatID := blacklistApplyChat(t)
+		result := applyBlacklistAdd(ctx, chatID, []string{"a", "spam", "🙂"}, nil)
+		if !slices.Equal(result.TooBroad, []string{"a"}) {
+			t.Errorf("too broad = %q, want [a]", result.TooBroad)
+		}
+		if !slices.Equal(result.Added, []string{"spam", "🙂"}) {
+			t.Errorf("added = %q, want [spam 🙂]", result.Added)
+		}
+		if got := blacklistApplyStoredWords(t, chatID); !slices.Equal(got, []string{"spam=warn", "🙂=warn"}) {
+			t.Errorf("stored = %q", got)
+		}
+	})
+
+	t.Run("apply refuses a too broad word even when it is already listed", func(t *testing.T) {
+		chatID := blacklistApplyChat(t)
+		result := applyBlacklistAdd(ctx, chatID, []string{"a"}, models.BlacklistSettingsSlice{{Word: "a"}})
+		if !slices.Equal(result.TooBroad, []string{"a"}) || len(result.Already) != 0 || result.Outcome != blacklistNothingAdded {
+			t.Errorf("result = %+v, want only a too-broad word", result)
+		}
+	})
+
+	t.Run("the command replies the too-broad line then the usual one", func(t *testing.T) {
+		withRealLocales(t)
+		chatID := blacklistApplyChat(t)
+		client := newModuleBotClient()
+		bot := newModuleTestBot(client)
+		chat := gotgbot.Chat{Id: chatID, Type: "supergroup", Title: "Blacklist Apply"}
+		admin := gotgbot.User{Id: 777000, FirstName: "Telegram"}
+		run := func(text string) []string {
+			before := len(client.callsFor("sendMessage"))
+			if err := blacklistsModule.addBlacklist(bot, newModuleMessageContext(bot, chat, admin, text)); err != ext.EndGroups {
+				t.Fatalf("addBlacklist error = %v, want EndGroups", err)
+			}
+			var texts []string
+			for _, call := range client.callsFor("sendMessage")[before:] {
+				texts = append(texts, call.Params["text"].(string))
+			}
+			return texts
+		}
+
+		texts := run("/addblacklist a spam")
+		if len(texts) != 2 || !strings.Contains(texts[0], ": a") || !strings.Contains(texts[1], "spam") {
+			t.Fatalf("replies = %q, want the too-broad line naming a, then the added list", texts)
+		}
+		texts = run("/addblacklist <")
+		if len(texts) != 1 || !strings.Contains(texts[0], "&lt;") {
+			t.Fatalf("replies = %q, want one too-broad reply with the word escaped", texts)
+		}
+		if got := blacklistApplyStoredWords(t, chatID); !slices.Equal(got, []string{"spam=warn"}) {
+			t.Errorf("stored = %q, want [spam=warn]", got)
+		}
 	})
 }
