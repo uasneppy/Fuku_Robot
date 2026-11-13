@@ -190,6 +190,48 @@ func TestApplyNote(t *testing.T) {
 		}
 	})
 
+	t.Run("remove by ID is chat-scoped", func(t *testing.T) {
+		chatID, other := noteApplyChat(t), noteApplyChat(t)
+		noteApplySeed(t, chatID, "hello", "keep")
+		noteApplySeed(t, other, "foreign")
+		var own, foreign models.Notes
+		if err := db.DB.Where("chat_id = ? AND note_name = ?", chatID, "hello").Take(&own).Error; err != nil {
+			t.Fatalf("read own row: %v", err)
+		}
+		if err := db.DB.Where("chat_id = ?", other).Take(&foreign).Error; err != nil {
+			t.Fatalf("read foreign row: %v", err)
+		}
+		if got := applyNoteRemoveByID(ctx, chatID, int64(foreign.ID)); got.Outcome != noteRemoveByIDGone {
+			t.Errorf("another chat's ID = %+v, want gone", got)
+		}
+		if !notes.DoesNoteExists(other, "foreign") {
+			t.Error("another chat's note was deleted")
+		}
+		got := applyNoteRemoveByID(ctx, chatID, int64(own.ID))
+		if got.Outcome != noteRemovedByID || got.Name != "hello" || got.Err != nil {
+			t.Errorf("own ID = %+v, want removed with the name", got)
+		}
+		if got := applyNoteRemoveByID(ctx, chatID, int64(own.ID)); got.Outcome != noteRemoveByIDGone {
+			t.Errorf("second delete = %+v, want gone", got)
+		}
+		if list := notes.GetNotesList(chatID, true); len(list) != 1 || list[0] != "keep" {
+			t.Errorf("notes_list after the delete = %v", list)
+		}
+	})
+
+	t.Run("remove by ID save failed", func(t *testing.T) {
+		chatID := noteApplyChat(t)
+		boom := errors.New("database is down")
+		seams := noteWrites
+		seams.RemoveByID = func(context.Context, int64, int64) (string, bool, error) { return "", false, boom }
+		noteApplySeams(t, seams)
+		got := applyNoteRemoveByID(ctx, chatID, 7)
+		if got.Outcome != noteRemoveByIDSaveFailed || !errors.Is(got.Err, boom) {
+			t.Errorf("failing remove by ID = %+v", got)
+		}
+		assertNoNameLogged(t)
+	})
+
 	t.Run("remove save failed", func(t *testing.T) {
 		chatID := noteApplyChat(t)
 		boom := errors.New("database is down")

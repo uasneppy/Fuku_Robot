@@ -3566,6 +3566,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   before it hid the error (read as not found) and added the note. This is the provisional owner confirmation of `19-SPIKE.md` that
   follows AGENTS "never discard a DB error on a state-changing path", also in its own commit and reverted alone to restore the old
   behaviour. `/clear` keeps its cached list read for its existence check.
+  The Notes page (plan 19-09) reads through `notes.ListNoteEntriesFresh`, `GetNoteEntryFresh`, `CountNotesFresh` and `NoteExistsContext`
+  (fresh, chat-scoped, error-returning, creating nothing and filling no `notes_list` entry, with the same shapes as the filters'
+  readers) and deletes one note through `applyNoteRemoveByID` (`notes.RemoveNoteByID`: one `DELETE ... WHERE id = ? AND chat_id = ?
+  RETURNING`, `notes_list` dropped only when a row went, so an ID of another chat deletes nothing). `notes.GetNotes` and
+  `getNotesSettings` create a `notes_settings` row on read and are never called by a page.
 - Rules message (`rules.go`): `/rules` (in the group and in a private chat connected to it), the private rules message the
   `/start rules_<chat id>` deep link opens and the Rules page's Full preview are built by
   `buildRulesMessage` and sent by `sendRulesMessage`. The builder has two forms, the group form (`rulesFormGroup`: heading

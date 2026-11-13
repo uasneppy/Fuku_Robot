@@ -229,6 +229,63 @@ func RemoveNoteContext(ctx context.Context, chatID int64, noteName string) error
 	return nil
 }
 
+// ListNoteEntriesFresh reads the chat's note rows (ID, name and the admin-only flag) with one query, oldest
+// first. It is fresh, chat-scoped and uncached, returns its error, and never touches notes_settings: it
+// creates nothing and fills no notes_list entry.
+func ListNoteEntriesFresh(ctx context.Context, chatID int64) ([]models.Notes, error) {
+	var rows []models.Notes
+	err := db.DB.WithContext(ctx).Select("id", "note_name", "admin_only").Where("chat_id = ?", chatID).Order("id").Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+// GetNoteEntryFresh reads one note row by its ID, only when it belongs to the chat: a missing ID and the ID
+// of another chat's row both return nil and a nil error. It is fresh, chat-scoped and uncached, returns its
+// read error, and never touches notes_settings.
+func GetNoteEntryFresh(ctx context.Context, chatID, id int64) (*models.Notes, error) {
+	var row models.Notes
+	err := db.DB.WithContext(ctx).Where("id = ? AND chat_id = ?", id, chatID).Take(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+// CountNotesFresh returns how many notes the chat has and the database error instead of hiding it. It is
+// fresh and uncached, and never touches notes_settings.
+func CountNotesFresh(ctx context.Context, chatID int64) (int64, error) {
+	var n int64
+	err := db.DB.WithContext(ctx).Model(&models.Notes{}).Where("chat_id = ?", chatID).Count(&n).Error
+	if err != nil {
+		log.Errorf("[Database][CountNotesFresh]: %d - %v", chatID, err)
+		return 0, err
+	}
+	return n, nil
+}
+
+// RemoveNoteByID deletes one note by its ID, only when it belongs to the chat, in one conditional statement,
+// and returns the stored name of the row that went. A missing ID and the ID of another chat's row delete
+// nothing and return removed false. The chat's notes_list cache is dropped only when a row went, and
+// notes_settings is never touched.
+func RemoveNoteByID(ctx context.Context, chatID, id int64) (name string, removed bool, err error) {
+	var rows []models.Notes
+	result := db.DB.WithContext(ctx).Clauses(clause.Returning{}).Where("id = ? AND chat_id = ?", id, chatID).Delete(&rows)
+	if result.Error != nil {
+		log.Errorf("[Database][RemoveNoteByID]: %d - %v", chatID, result.Error)
+		return "", false, result.Error
+	}
+	if len(rows) != 1 {
+		return "", false, nil
+	}
+	invalidateNotesCache(chatID)
+	return rows[0].NoteName, true, nil
+}
+
 func RemoveAllNotes(chatID int64) error {
 	err := db.DB.Where("chat_id = ?", chatID).Delete(&models.Notes{}).Error
 	if err != nil {

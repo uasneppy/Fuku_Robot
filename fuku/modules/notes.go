@@ -54,14 +54,17 @@ type noteWriteSeams struct {
 	// Add stores one note and reports whether a row was inserted (false: the name was already there).
 	Add    func(ctx context.Context, chatID int64, noteName, replyText, fileID string, buttons models.ButtonArray, filtType int, pvtOnly, grpOnly, adminOnly, webPrev, isProtected, noNotif bool) (bool, error)
 	Remove func(ctx context.Context, chatID int64, noteName string) error
-	Exists func(ctx context.Context, chatID int64, noteName string) (bool, error)
+	// RemoveByID deletes one row by ID only when it belongs to the chat and returns its name.
+	RemoveByID func(ctx context.Context, chatID, id int64) (name string, removed bool, err error)
+	Exists     func(ctx context.Context, chatID int64, noteName string) (bool, error)
 }
 
 // noteWrites is the one place the note commands reach the repository through.
 var noteWrites = noteWriteSeams{
-	Add:    notes.AddNoteContext,
-	Remove: notes.RemoveNoteContext,
-	Exists: notes.NoteExistsContext,
+	Add:        notes.AddNoteContext,
+	Remove:     notes.RemoveNoteContext,
+	RemoveByID: notes.RemoveNoteByID,
+	Exists:     notes.NoteExistsContext,
 }
 
 // noteAddOutcome is what applyNoteAdd did; its zero value is a stored note.
@@ -170,6 +173,41 @@ func applyNoteRemove(ctx context.Context, chatID int64, name string) noteRemoveR
 		return noteRemoveResult{Outcome: noteRemoveSaveFailed, Err: err}
 	}
 	return noteRemoveResult{}
+}
+
+// noteRemoveByIDOutcome is what applyNoteRemoveByID did; its zero value is a removed note.
+type noteRemoveByIDOutcome int
+
+const (
+	// noteRemovedByID means the row went.
+	noteRemovedByID noteRemoveByIDOutcome = iota
+	// noteRemoveByIDGone means no row of this chat has that ID (already removed, or another chat's).
+	noteRemoveByIDGone
+	// noteRemoveByIDSaveFailed means the delete failed.
+	noteRemoveByIDSaveFailed
+)
+
+// noteRemoveByIDResult is what applyNoteRemoveByID returns.
+type noteRemoveByIDResult struct {
+	Outcome noteRemoveByIDOutcome
+	// Name is the stored name of the removed note.
+	Name string
+	Err  error
+}
+
+// applyNoteRemoveByID deletes one note by its row ID, only when the row belongs to the chat, so an ID of
+// another chat deletes nothing. It judges no person's rights and logs the chat ID and the error only, never
+// the name.
+func applyNoteRemoveByID(ctx context.Context, chatID, id int64) noteRemoveByIDResult {
+	name, removed, err := noteWrites.RemoveByID(ctx, chatID, id)
+	if err != nil {
+		log.Errorf("[Notes] RemoveNoteByID failed for chat %d: %v", chatID, err)
+		return noteRemoveByIDResult{Outcome: noteRemoveByIDSaveFailed, Err: err}
+	}
+	if !removed {
+		return noteRemoveByIDResult{Outcome: noteRemoveByIDGone}
+	}
+	return noteRemoveByIDResult{Outcome: noteRemovedByID, Name: name}
 }
 
 // offerNoteOverwrite answers /save for a name the chat already has with the overwrite card: the new content
