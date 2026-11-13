@@ -1425,6 +1425,7 @@ filters_limit_exceeded: |
   Esta limitación se debe a que el bot funciona gratis sin donaciones de usuarios.
 filters_keyword_required: "¡Por favor proporciona una palabra clave para responder!"
 filters_keyword_too_long: "¡La palabra clave del filtro es demasiado larga! Máximo 100 caracteres permitidos."
+filters_keyword_too_broad: "Esta palabra clave del filtro es demasiado general: una sola letra, dígito o signo de puntuación coincidiría con casi todos los mensajes."
 filters_overwrite_confirm: "¡El filtro ya existe!\n¿Quieres sobrescribirlo?"
 filters_overwrite_expired: "⏰ ¡Confirmación expirada! Inténtalo de nuevo."
 filters_added_success: "Añadida respuesta para palabra de filtro <code>%s</code>"

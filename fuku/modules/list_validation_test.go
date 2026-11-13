@@ -29,6 +29,7 @@ func TestKeywordTooBroad(t *testing.T) {
 		{"two punctuation marks", "**", false},
 		{"regex-like", ".*", false},
 		{"longest word", strings.Repeat("x", listKeywordMaxRunes), false},
+		{"filter keyword with an inner space", "free followers", false},
 	}
 	for _, tc := range cases {
 		if got := keywordTooBroad(tc.word); got != tc.want {

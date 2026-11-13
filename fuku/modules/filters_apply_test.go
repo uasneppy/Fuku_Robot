@@ -17,6 +17,7 @@ import (
 	dbcache "github.com/uasneppy/fuku_robot/fuku/db/cache"
 	"github.com/uasneppy/fuku_robot/fuku/db/filters"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
+	"github.com/uasneppy/fuku_robot/fuku/i18n"
 )
 
 // filterApplyChat returns a fresh chat ID whose filter rows and cache entries are deleted before the
@@ -240,5 +241,65 @@ func TestFilterCommandsWriteThroughApplyFunctions(t *testing.T) {
 	}
 	if filters.DoesFilterExists(chatID, "hello") {
 		t.Error("the filter is still stored after /stop")
+	}
+}
+
+// filterCommandReply runs /filter or /stop as the chat's creator, replying to a text message when
+// replyText is not empty, and returns the text of the one sendMessage the command answered with.
+func filterCommandReply(t *testing.T, chatID int64, text, replyText string) string {
+	t.Helper()
+	client := newModuleBotClient()
+	bot := newModuleTestBot(client)
+	chat := gotgbot.Chat{Id: chatID, Type: "supergroup", Title: "Filter Chat"}
+	admin := gotgbot.User{Id: 777000, FirstName: "Telegram"}
+	ctx := newModuleMessageContext(bot, chat, admin, text)
+	if replyText != "" {
+		ctx.EffectiveMessage.ReplyToMessage = &gotgbot.Message{MessageId: 55, Date: 1, Chat: chat, From: &gotgbot.User{Id: 42, FirstName: "Member"}, Text: replyText}
+	}
+	if err := filtersModule.addFilter(bot, ctx); err != ext.EndGroups {
+		t.Fatalf("addFilter error = %v", err)
+	}
+	calls := client.callsFor("sendMessage")
+	if len(calls) != 1 {
+		t.Fatalf("sendMessage calls = %d, want 1", len(calls))
+	}
+	reply, _ := calls[0].Params["text"].(string)
+	return reply
+}
+
+// TestApplyFilterTooBroad covers A19-2 for filters: a keyword of one code point that is not a symbol
+// is refused by the shared check and by /filter, and a one-symbol or two-character keyword is stored.
+func TestApplyFilterTooBroad(t *testing.T) {
+	withRealLocales(t)
+	ctx := context.Background()
+	chatID := filterApplyChat(t)
+	for _, keyword := range []string{"a", "?", "€", "7"} {
+		if got := checkFilterKeyword(ctx, chatID, keyword).Outcome; got != filterKeywordTooBroad {
+			t.Errorf("checkFilterKeyword(%q) = %v, want too broad", keyword, got)
+		}
+		if got := applyFilterAdd(ctx, chatID, filterApplyInput(keyword)).Outcome; got != filterKeywordTooBroad {
+			t.Errorf("applyFilterAdd(%q) = %v, want too broad", keyword, got)
+		}
+	}
+	if got := applyFilterAdd(ctx, chatID, filterApplyInput("🙂")).Outcome; got != filterAdded {
+		t.Errorf("applyFilterAdd(emoji) = %v, want added", got)
+	}
+
+	command := filterApplyChat(t)
+	want, err := i18n.MustNewTranslator("uk").GetString("filters_keyword_too_broad")
+	if err != nil || want == "" {
+		t.Fatalf("locale key filters_keyword_too_broad missing: %v", err)
+	}
+	if got := filterCommandReply(t, command, "/filter a", "reply body"); got != want {
+		t.Errorf("/filter a replied %q, want %q", got, want)
+	}
+	if filters.DoesFilterExists(command, "a") {
+		t.Error("the one-character keyword was stored")
+	}
+	if got := filterCommandReply(t, command, "/filter ab", "reply body"); got == want {
+		t.Error("/filter ab was refused as too broad")
+	}
+	if !filters.DoesFilterExists(command, "ab") {
+		t.Error("the two-character keyword was not stored")
 	}
 }

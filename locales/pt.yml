@@ -1388,6 +1388,7 @@ filters_limit_exceeded: |
   Esta limitação é devido ao bot rodar de graça sem nenhuma doação de usuários.
 filters_keyword_required: "Por favor dê uma palavra-chave para responder!"
 filters_keyword_too_long: "Palavra-chave do filtro é muito longa! Máximo de 100 caracteres permitidos."
+filters_keyword_too_broad: "Esta palavra-chave do filtro é ampla demais: uma única letra, dígito ou sinal de pontuação corresponderia a quase todas as mensagens."
 filters_overwrite_confirm: "Filtro já existe!\nVocê quer sobrescrevê-lo?"
 filters_added_success: "Adicionada resposta para palavra de filtro <code>%s</code>"
 filters_remove_keyword_required: "Por favor dê uma palavra de filtro para remover!"

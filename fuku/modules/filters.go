@@ -84,6 +84,9 @@ const (
 	filterKeywordBlank
 	// filterKeywordTooLong means the keyword is over listKeywordMaxRunes.
 	filterKeywordTooLong
+	// filterKeywordTooBroad means the keyword is one code point that would match almost every message
+	// (keywordTooBroad).
+	filterKeywordTooBroad
 	// filterExists means the chat already has a filter with this keyword; the command offers to overwrite it.
 	filterExists
 	// filterCapReached means the chat already holds filtersCapMax filters.
@@ -127,7 +130,8 @@ type filterRemoveResult struct {
 }
 
 // checkFilterKeyword runs the checks every filter add shares, in order: a blank keyword, one over
-// listKeywordMaxRunes, a keyword the chat already has, and the chat's cap. It returns a result whose
+// listKeywordMaxRunes, one that would match almost every message, a keyword the chat already has, and the
+// chat's cap. It returns a result whose
 // outcome is filterAdded when nothing refuses the keyword. It logs the chat ID and the error only,
 // never the keyword.
 func checkFilterKeyword(ctx context.Context, chatID int64, keyword string) filterAddResult {
@@ -136,6 +140,9 @@ func checkFilterKeyword(ctx context.Context, chatID int64, keyword string) filte
 	}
 	if utf8.RuneCountInString(keyword) > listKeywordMaxRunes {
 		return filterAddResult{Outcome: filterKeywordTooLong}
+	}
+	if keywordTooBroad(keyword) {
+		return filterAddResult{Outcome: filterKeywordTooBroad}
 	}
 	exists, err := filterWrites.Exists(ctx, chatID, keyword)
 	if err != nil {
@@ -181,6 +188,18 @@ func applyFilterRemove(ctx context.Context, chatID int64, keyword string) filter
 		return filterRemoveResult{Outcome: filterRemoveSaveFailed, Err: err}
 	}
 	return filterRemoveResult{}
+}
+
+// replyFilterKey answers a refused /filter with the translated text of one locale key.
+func replyFilterKey(b *gotgbot.Bot, ctx *ext.Context, key string) error {
+	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
+	text, _ := tr.GetString(key)
+	_, err := ctx.EffectiveMessage.Reply(b, text, formatting.Shtml())
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+	return ext.EndGroups
 }
 
 // replyFilterLimitExceeded answers that the chat holds the most filters it may.
@@ -329,23 +348,11 @@ func (m moduleStruct) addFilter(b *gotgbot.Bot, ctx *ext.Context) error {
 	})
 	switch added.Outcome {
 	case filterKeywordTooLong:
-		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-		text, _ := tr.GetString("filters_keyword_too_long")
-		_, err := msg.Reply(b, text, formatting.Shtml())
-		if err != nil {
-			log.Error(err)
-			return err
-		}
-		return ext.EndGroups
+		return replyFilterKey(b, ctx, "filters_keyword_too_long")
+	case filterKeywordTooBroad:
+		return replyFilterKey(b, ctx, "filters_keyword_too_broad")
 	case filterKeywordBlank:
-		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-		text, _ := tr.GetString("filters_keyword_required")
-		_, err := msg.Reply(b, text, formatting.Shtml())
-		if err != nil {
-			log.Error(err)
-			return err
-		}
-		return ext.EndGroups
+		return replyFilterKey(b, ctx, "filters_keyword_required")
 	case filterCapReached:
 		return replyFilterLimitExceeded(b, ctx)
 	case filterExists:

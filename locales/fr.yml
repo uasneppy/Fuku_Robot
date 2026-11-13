@@ -765,6 +765,7 @@ filters_limit_exceeded: |
   Cette limitation est due au fait que le bot fonctionne gratuitement sans aucun don des utilisateurs.
 filters_keyword_required: "Veuillez me donner un mot-clé auquel répondre !"
 filters_keyword_too_long: "Le mot-clé du filtre est trop long ! Maximum 100 caractères autorisés."
+filters_keyword_too_broad: "Ce mot-clé de filtre est trop général : une seule lettre, un seul chiffre ou signe de ponctuation correspondrait à presque tous les messages."
 filters_overwrite_confirm: "Le filtre existe déjà !\nVoulez-vous l'écraser ?"
 filters_added_success: "Réponse ajoutée pour le mot filtre <code>%s</code>"
 filters_remove_keyword_required: "Veuillez me donner un mot filtre à supprimer !"

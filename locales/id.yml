@@ -1417,6 +1417,7 @@ filters_limit_exceeded: |
   Pembatasan ini karena bot berjalan gratis tanpa donasi dari pengguna.
 filters_keyword_required: "Silakan berikan kata kunci untuk dibalas!"
 filters_keyword_too_long: "Kata kunci filter terlalu panjang! Maksimal 100 karakter diizinkan."
+filters_keyword_too_broad: "Kata kunci filter ini terlalu umum: satu huruf, angka, atau tanda baca saja akan cocok dengan hampir semua pesan."
 filters_overwrite_confirm: "Filter sudah ada!\nApakah Anda ingin menimpanya?"
 filters_added_success: "Balasan ditambahkan untuk kata filter <code>%s</code>"
 filters_remove_keyword_required: "Silakan berikan kata filter untuk dihapus!"
