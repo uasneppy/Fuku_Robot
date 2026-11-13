@@ -2,13 +2,13 @@
 gsd_state_version: "1.0"
 milestone: v1.1
 milestone_name: PM Settings Hub & Member Screening
-current_phase: 18
-current_phase_name: Remaining Settings Pages
+current_phase: 19
+current_phase_name: Blacklist, Filter and Note Pages
 status: executing
-stopped_at: Completed 18-15-PLAN.md
+stopped_at: Phase 19 planned (12 plans, checked twice); ready to execute 19-01-PLAN.md
 last_updated: "2026-11-13T03:53:42.930Z"
 last_activity: 2026-11-13
-last_activity_desc: Completed 18-15-PLAN.md
+last_activity_desc: Planned Phase 19 (12 plans), UI-SPEC approved
 state_head: 58aa6431ad0683e9fa77dd764a40105968e54226
 progress:
   total_phases: 10
@@ -25,14 +25,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-11-02)
 
 **Core value:** My trusted staff can protect every one of my communities from one place. We act on a bad actor across all groups at once, and the bot never lets anyone act in a group where they aren't an admin.
-**Current focus:** Phase 19 — Blacklist, Filter and Note Pages (not started; Phase 18 is closed to `human_needed`: 15 plans executed, security 51 of 51 threats closed, verification 14 of 14 after one gap was fixed in `99f796e`, live checks deferred; PAGE-01 to PAGE-06 and PAGE-10 complete)
+**Current focus:** Phase 19 — Blacklist, Filter and Note Pages (planned: 12 plans, UI-SPEC approved, plans checked twice, ready to execute 19-01; Phase 18 is closed to `human_needed`: 15 plans executed, security 51 of 51 threats closed, verification 14 of 14 after one gap was fixed in `99f796e`, live checks deferred; PAGE-01 to PAGE-06 and PAGE-10 complete)
 
 ## Current Position
 
-Phase: 19 (Blacklist, Filter and Note Pages) — not started. Phase 18 (Remaining Settings Pages) is closed to `human_needed`: all 15 plans executed, the phase gate passed, `18-SECURITY.md` (51 of 51 closed, two small findings fixed), `18-VERIFICATION.md` (14 of 14 after the language callback was wired onto `applyGroupLanguage`, `99f796e`), `18-SPIKE.md` holds the 25 live checks
-Plan: 0 of ? (Phase 19 not planned; skip-discuss is on, so it starts from the ROADMAP goals)
-Status: Phase 18 closed to `human_needed` (live checks deferred, see Deferred Items); Phase 19 is next. Phases 10 to 18 are not marked Complete in ROADMAP
-Last activity: 2026-11-13 — Completed 18-15-PLAN.md
+Phase: 19 (Blacklist, Filter and Note Pages) — planned, ready to execute plan 1. Phase 18 (Remaining Settings Pages) is closed to `human_needed`: all 15 plans executed, the phase gate passed, `18-SECURITY.md` (51 of 51 closed, two small findings fixed), `18-VERIFICATION.md` (14 of 14 after the language callback was wired onto `applyGroupLanguage`, `99f796e`), `18-SPIKE.md` holds the 25 live checks
+Plan: 1 of 12 (Phase 19 planned: CONTEXT with unconfirmed defaults, RESEARCH, UI-SPEC approved, 12 plans checked twice; skip-discuss is on)
+Status: Phase 18 closed to `human_needed` (live checks deferred, see Deferred Items); Phase 19 is planned and executes next. Phases 10 to 18 are not marked Complete in ROADMAP
+Last activity: 2026-11-13 — Planned Phase 19 (12 plans)
 
 Progress: [░░░░░░░░░░] 0% (v1.1)
 
