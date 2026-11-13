@@ -1,7 +1,7 @@
 ---
 phase: "19"
 slug: "blacklist-filter-and-note-pages"
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: "2026-11-13"
@@ -53,7 +53,7 @@ decision and the code meet; none reopens a decision.
 | # | Earlier rule | What this phase does to it |
 |---|--------------|----------------------------|
 | M38 | M34: Main is 15 cells, 10 rows (owner) / 9 (admin), over the content-page budget by 2 / 1, with a specified fallback hub (A18-A1) | **Main grows to 18 cells: 9 full grid rows (no odd cell) + the owner's Access row + the navigation row = 11 rows for the owner, 10 for an administrator**, in a private and in a group menu. 21 buttons in a private menu (18 cells, Access, Groups, Close), 20 in a group menu, against Telegram's 100. The flat grid stays (A19-A1, research A19-8); the A18-A1 hub stays the unbuilt fallback. Over the private content-page budget (8) by 3 / 2 and the group one (9) by 2 / 1: Main is navigation, not a content page (M34's reasoning, unchanged) |
-| M39 | Phase 16 D-28: `settingsPage.Hidden` is the one framework hook a page may set; Phase 18 D-03: `settings_pages.go` is not edited | **One more optional field, `PrivateOnly bool`, on `settingsPage`.** In a group menu a `PrivateOnly` page's Main line reads the fixed word `settings_state_private_only` **without calling `MainState`** (no read, no count), and `openPage` draws the shared group note (Screen 7) **without calling `Open`** (no read). `settingsMainEntries` gains a `private bool` argument (its three production call sites and two tests). A private menu calls `MainState` and `Open` as for every page. This is the only edit to `settings_pages.go` (research C-07) |
+| M39 | Phase 16 D-28: `settingsPage.Hidden` is the one framework hook a page may set; Phase 18 D-03: `settings_pages.go` is not edited | **One more optional field, `PrivateOnly bool`, on `settingsPage`.** In a group menu a `PrivateOnly` page's Main line reads the fixed word `settings_state_private_only` **without calling `MainState`** (no read, no count), and `openPage` draws the shared group note (Screen 7) **without calling `Open`** (no read). `settingsMainEntries` gains a `private bool` argument (its two production call sites, `settings.go` and `settings_menu.go`, and two tests). A private menu calls `MainState` and `Open` as for every page. This is the only edit to `settings_pages.go` (research C-07) |
 | M40 | Phase 10 card helper: `settingsCardRows`' No reopens page 1 of the card's page (`a=no&p=<page>`) | **A sibling helper `settingsCardRowsTo(k, yes, no map[string]string)`** in `settings_card.go`: the same `[Yes \| No]` row and navigation row, with the No fields given by the caller. The list pages pass `{a: <pager>, v: <page the ask came from>}`, so a cancelled delete returns to the page the owner was reading. `settingsCardRows` and its callers are unchanged (research C-08) |
 | M41 | AGENTS.md Data: the wait hash `fuku:settings:input:<user>` "holds IDs and codes only, never message text or a file ID" | **One bounded user-text field, `w`**, present only while a two-step add is at its second step: the filter keyword or note name typed at step 1, after normalisation and validation, at most 100 code points, never logged, never in callback data, deleted with the hash by every end of a wait (Set, Cancel, `/cancel`, finish, the 10-minute expiry). Also one ID field, `q` (the message ID of the step-1 message), so a redelivered step-1 message is never read as the step-2 content. Owner confirmation research A19-6 |
 | M42 | Phase 18 M35: eight rights, the two composites appended after `settingsRightChangeInfo` | **A ninth right, `settingsRightRestrictBotRestrict`, appended after `settingsRightOwnerBotAdmin`** (the zero value stays `settingsRightAdmin`), for every blacklist write. It judges in the blacklist commands' order: the bot an administrator (`chat_status.IsUserAdmin(b, group, b.Id)`, then `chat_status.IsBotAdmin`), the member's restrict right from the press's own record, then the bot's restrict right (`chat_status.CanBotRestrict`). No new refusal text (Interaction section 4) |
@@ -77,7 +77,7 @@ data"; a Yes with an 18-digit ID is 65 bytes, with 17 digits 64, matching resear
 | # | Research said | This contract | Why |
 |---|---------------|---------------|-----|
 | U-1 | `Order` Blacklist 46, Filters 72, Notes 74; Main rows `n\|k / b\|w / g\|r / i\|e` | **Blacklist 46, Filters 47, Notes 72**; Main rows `n\|k / b\|i / w\|g / r\|e / m\|d` | Welcome\|Goodbye keep their pair (they are one feature), the two keyword matchers pair up (Blacklist\|Filters), the two stored messages pair up (Rules\|Notes), and Requirements\|Deletion pair. Research's order splits Welcome from Goodbye |
-| U-2 | Filters icon `💬` | **`🔁`** | `💬` is already the Deletion page's Member messages section icon (`settings_deletion.go:82`); Phase 18's rule is that no page icon repeats a page or section icon |
+| U-2 | Filters icon `💬`; Blacklist icon `⛔` (this contract's first draft) | **`🔁`** for Filters, **`🔤`** for Blacklist | `💬` is already the Deletion page's Member messages section icon (`settings_deletion.go:82`); `⛔` is the Ban punishment icon of the Requirements rule cells (`settings_mreq.go:71-82`) and of the reports ban button. Phase 18's rule is that no page icon repeats a page, section or punishment icon |
 | U-3 | Blacklist action as control `a`, `st` only | **Page action `bs`** with exactly the field `v` | A control's `Validate` sees only `v`; a page action's `Validate` sees the whole field map, so "list actions need `c`" (no list write from a group menu) is enforced in step 1 for the action too, before any I/O, with no `Set`-time check. The action screen is its own page action `bo` (research's optional screen) |
 | U-4 | Pager cursor `v` **or** `r` ("the page holding entry r"), card No to the pager with `r` | **Pager takes only `v`** (absolute page). The delete ask carries `r` **and** `v`; the card's No returns to `v` (M40); a Yes redraws the page where the removed entry stood | One cursor shape, no lookup by ID for paging; the ask already knows its page. An offset cursor is not needed because a list page never shrinks (fixed 8 entries, each line capped), unlike the staff history whose page shrinks to the 3800-unit cap |
 | U-5 | Row IDs bounded at 17 digits in the renderer, parser keeps `settingsCardNumber` (19) | **The ask and the Yes accept `r` of 1 to 17 digits only** (no sign, no leading zero, positive); a longer `r` is `common_callback_invalid_request` in step 1 | A card for an 18- or 19-digit ID would carry a dead Yes (65 or 66 bytes); refusing at the ask means no card is drawn that cannot be confirmed. The renderer draws no delete button for such a row (counted in `settingsScreen.Omitted`, held at 0 by the bytes test at 17 digits) |
@@ -112,10 +112,10 @@ Telegram limits that bite this phase:
 | Buttons | 100 per message, 8 per row | Main sends 21 (private) / 20 (group); the fullest list page sends 14 (8 delete, Prev, Next, Add, Action, Back, Close on a middle Blacklist page) |
 | Keyboard rows | content-page budget 8 private, 9 group (M34) | the fullest list page is **5** rows; Main 11 / 10 (M38) |
 | Callback data | 64 bytes through `callbackcodec` | the delete Yes is **exactly 64** with a 17-digit row ID and a 14-character chat ID (section "Callback data"); this is the binding constraint of the phase |
-| Half-width grid cell | 20 code points rendered, icon included | the three Main cells, `[➕ Add words \| ⚡ Action]`, `[Ban \| ✅ Delete only]` |
+| Half-width grid cell | 20 code points rendered, icon included | the three Main cells, `[➕ Add words \| ⚡ Set action]`, `[Ban \| ✅ Delete only]` |
 | Message text | settings HTML capped at 3800 UTF-16 units | a list page of 8 worst entries plus the blacklist saved notice, about 2.6k projected (check C19-4) |
 | Text and caption | 4096 / 1024 characters (the commands' `TextLengthRefusal`) | the step-2 content of a filter or note |
-| `answerCallbackQuery` text | 200 characters, plain text | every alert reuses an existing key or the one new alert `settings_entries_add_unavailable` (70 EN) |
+| `answerCallbackQuery` text | 200 characters, plain text | every alert reuses an existing key or the one new alert `settings_entries_add_unavailable` (68 EN) |
 
 ---
 
@@ -140,7 +140,7 @@ Only Alex can use this menu.                  <- settings_main_owner, group menu
 🌊 Antiflood: Off
 🚩 Warnings: Limit 3, Mute
 🔐 Locks: 2 locked
-⛔ Blacklist: In private                      <- NEW (Order 46); a private menu shows the count: 12
+🔤 Blacklist: In private                      <- NEW (Order 46); a private menu shows the count: 12
 🔁 Filters: In private                        <- NEW (Order 47); a private menu: 12/150
 🎉 Welcome: On
 👋 Goodbye: On
@@ -157,7 +157,7 @@ Only Alex can use this menu.                  <- settings_main_owner, group menu
 [ 👥 Staff Group | 🔒 Lockdown ]
 [ 🧩 Captcha | 🌊 Antiflood ]
 [ 🚩 Warnings | 🔐 Locks ]
-[ ⛔ Blacklist | 🔁 Filters ]                 <- NEW row
+[ 🔤 Blacklist | 🔁 Filters ]                 <- NEW row
 [ 🎉 Welcome | 👋 Goodbye ]                   <- pair unchanged
 [ 📜 Rules | 📝 Notes ]                       <- Rules gains a partner
 [ 🛂 Requirements | 🧹 Deletion ]
@@ -200,7 +200,7 @@ Page 2/3                                      <- staff_panel_page, only when the
 [ 🗑 9 | 🗑 10 | 🗑 11 | 🗑 12 ]               <- delete asks, four per row, global numbers, no user text
 [ 🗑 13 | 🗑 14 | 🗑 15 | 🗑 16 ]
 [ ⬅️ Prev | Next ➡️ ]                         <- Prev only after page 1, Next only before the last page
-[ ➕ Add words | ⚡ Action ]                   <- Filters: [ ➕ Add filter ]; Notes: [ ➕ Add note ]
+[ ➕ Add words | ⚡ Set action ]                   <- Filters: [ ➕ Add filter ]; Notes: [ ➕ Add note ]
 [ ⬅️ Back | ✖️ Close ]                        <- Back opens Main
 ```
 
@@ -444,7 +444,7 @@ icons**. A `grep` of `Icon:` in `fuku/modules/settings_*.go` (2026-11-13) shows 
 
 | Surface | Icon | Why |
 |---------|------|-----|
-| Blacklist (Main, `Order` 46) | `⛔` | "no entry": a forbidden word; one code point with emoji presentation; `🚫` stays the status-slot icon |
+| Blacklist (Main, `Order` 46) | `🔤` | "words": the letters of a word; one code point with emoji presentation; not `⛔`, which is the Ban punishment icon of the Requirements rule cells (`memberReqActionIcon`) and of the reports ban button (checker F-3); `🚫` stays the status-slot icon |
 | Filters (Main, `Order` 47) | `🔁` | an automatic answer that comes back each time the keyword appears; `💬` is taken by a Deletion section (U-2) |
 | Notes (Main, `Order` 72) | `📝` | a written note |
 | Delete button of an entry | `🗑` | the Deletion page's "delete" icon, reused with the entry's number (`🗑 9`) |
@@ -466,7 +466,7 @@ words, and every delete button's number matches a numbered body line.
 |----------|-----------|---------|-------|
 | Page key `p` | **`b`** | **`i`** | **`e`** |
 | `Order` | 46 | 47 | 72 |
-| Icon | ⛔ | 🔁 | 📝 |
+| Icon | 🔤 | 🔁 | 📝 |
 | Title key | `settings_page_blacklist` | `settings_page_filters` | `settings_page_notes` |
 | `PrivateOnly` (M39) | yes | yes | yes |
 | `Hidden` | none | none | none |
@@ -497,7 +497,7 @@ codes `bg bx by ba bc bo bs ig ix iy ia ic eg ex ey ea ec` match none** (`ba` an
 
 | Action | Fields, exactly | Each value |
 |--------|-----------------|------------|
-| `bg ig eg` | `c`, `v` | `v`: 1 to 5 ASCII digits (`settingsParseNumber(v, 5)`), clamped to 1..pages when drawn |
+| `bg ig eg` | `c`, `v` | `v`: 1 to 4 ASCII digits (`settingsParseNumber(v, 4)`, so a global entry number is at most 79,992 = 5 digits), clamped to 1..pages when drawn |
 | `bx ix ex` | `c`, `r`, `v` | `r`: 1 to 17 ASCII digits, no leading zero, positive (U-5); `v` as above |
 | `by iy ey` | `c`, `r`, `e` | `r` as above; `e`: digits only, positive, 63-bit (`settingsCardExpired`'s parse) |
 | `ba ia ea bo` | `c` | none |
@@ -571,7 +571,10 @@ commands).
 - **What the page claims.** The action is stored on every word (a column), the watcher acts per word, and the command's
   "current mode" is whichever row the database returns first. The page therefore draws `Action: <value>` **only when every
   word has the same action**; otherwise `Action: Mixed` with one `settings_bl_action_count` line per stored value (most words
-  first, ties by value) and the mixed hint. It never draws a single action that is not true of every word.
+  first, ties by value) and the mixed hint. The column allows **eight** values (`warn mute kick ban none tban tmute delete`,
+  migration 20260412000000), so a mixed list can have up to eight count lines: the five the command writes are worded by their
+  option words (`none` as `Delete only`, `settings_bl_opt_none`) and the three inert ones (`tban`, `tmute`, `delete`) by their
+  stored word, escaped and capped at 16 code points, so no stored value is ever hidden or mislabelled (checker F-5). It never draws a single action that is not true of every word.
 - **The choices** are exactly the command's five, labelled for what they do: Warn, Mute, Kick, Ban, **Delete only** (value
   `none`: the watcher deletes the message and does nothing else, research C-15; research A19-11). A uniform stored `tban`,
   `tmute` or `delete` is drawn as stored with the inert line and marks nothing; a choice replaces it.
@@ -714,15 +717,15 @@ migration is added only if the research C-16 PostgreSQL check finds the old CHEC
 ## Callback data (64-byte cap)
 
 Built only with `encodeCallbackData`. Worst case: `c` = `-1001234567890` (14 characters), `u` = `1234567890`, `r` = a
-17-digit row ID, `v` = a 5-digit page, `e` = an 8-digit unix minute (8 digits until about the year 2160). Byte counts include
+17-digit row ID, `v` = a 4-digit page, `e` = an 8-digit unix minute (8 digits until about the year 2160). Byte counts include
 `settings|v1|` (12 bytes) and were **measured** with `callbackcodec.Encode` (keys sorted, URL-encoded) in a throwaway test on
 2026-11-13. The page shown is Blacklist; Filters and Notes have the same shapes with `i…` and `e…` codes and the same sizes.
 
 | Button | Data (private) | Bytes private | Bytes group |
 |--------|----------------|---------------|-------------|
 | Main cell of a list page | `settings\|v1\|a=op&c=-1001234567890&p=b` | 37 | 33 |
-| Pager (Prev, Next), card No | `settings\|v1\|a=bg&c=-1001234567890&v=99999` | 41 | private only |
-| Delete ask `🗑 n` | `settings\|v1\|a=bx&c=-1001234567890&r=12345678901234567&v=99999` | 61 | private only |
+| Pager (Prev, Next), card No | `settings\|v1\|a=bg&c=-1001234567890&v=9999` | 40 | private only |
+| Delete ask `🗑 n` | `settings\|v1\|a=bx&c=-1001234567890&r=12345678901234567&v=9999` | 60 | private only |
 | **Delete Yes** | `settings\|v1\|a=by&c=-1001234567890&e=29412345&r=12345678901234567` | **64** | private only |
 | Delete Yes with an 18-digit ID (never drawn, U-5) | `…&r=123456789012345678` | 65, **over the cap** | — |
 | Add | `settings\|v1\|a=ba&c=-1001234567890` | 33 | private only |
@@ -733,7 +736,7 @@ Built only with `encodeCallbackData`. Worst case: `c` = `-1001234567890` (14 cha
 | Open in private (group note) | a URL button, no callback data | — | — |
 
 The **largest new button is the delete Yes at exactly 64 bytes**, which is why row IDs are bounded at 17 digits (U-5, research
-C-04) and why the Yes carries no page (with `v` it would be 72). Every other new button has at least 3 bytes to spare. A
+C-04) and why the Yes carries no page (with `v` it would be 71). Every other new button has at least 4 bytes to spare. A
 row whose ID has more than 17 digits is drawn without its delete button and counted in `settingsScreen.Omitted`; the bytes test
 holds `Omitted` at 0 for 17-digit IDs on every screen and fails on any button over 64
 (`TestSettingsList{Blacklist,Filters,Notes}CallbackBytes`). No callback carries a word, keyword, name or any user text.
@@ -762,7 +765,7 @@ and the placeholder-equality test treats them as placeholders that must match En
 
 | Element | Copy |
 |---------|------|
-| Primary CTA | the Main cells `⛔ Blacklist`, `🔁 Filters`, `📝 Notes`; on a page `➕ Add words` / `➕ Add filter` / `➕ Add note`; the numbered `🗑 n`; `⚡ Action` and the five action choices |
+| Primary CTA | the Main cells `🔤 Blacklist`, `🔁 Filters`, `📝 Notes`; on a page `➕ Add words` / `➕ Add filter` / `➕ Add note`; the numbered `🗑 n`; `⚡ Set action` and the five action choices |
 | Empty state | `There are no blacklisted words yet. The action is chosen once there is at least one word.` / `There are no filters yet.` / `There are no notes yet.`, the Add button and navigation only; a read creates nothing |
 | Error state | an unreadable list: the cannot-open edit (`settings_cannot_open`, Main shows `❔`); a failed write: `⚠️ common_settings_save_failed`; a missing right: the right's alert or notice (section 4); an entry already gone: `⚠️ This entry was already removed. Nothing changed.`; no Redis on Add: the alert `Adding is not available right now. Nothing changed. Try again later.` |
 | Destructive confirmation | **delete an entry**: the shared two-tap card naming the entry, `Delete the filter for <code>price list</code>? I will stop replying to it, and its answer can't be restored from the menu.` `[✅ Yes \| ❌ No]`, expiring after 5 minutes (`settings_card_expired`), the right judged again at Yes. The blacklist action change rewrites every word's action and is undone by one more tap (no card); bulk removal stays a command (out of scope) |
@@ -829,7 +832,7 @@ field of the list engine's page table (`settingsListDef`), which `make check-tra
 | 26 | `settings_bl_action_no_words` | There are no words yet, so there is no action to set. Add a word first. | 71 | 90 | 140 | D | action screen of an empty list; notice of a stale `bs` |
 | 27 | `settings_bl_opt_none` | Delete only | 11 | 15 | 15 | D | choice cell (`✅ ` + 15 = 17 ≤ 20), action line |
 | 28 | `settings_btn_bl_add` | ➕ Add words | 11 | 20 | 20 | T | list page |
-| 29 | `settings_btn_bl_action` | ⚡ Action | 8 | 20 | 20 | D | list page |
+| 29 | `settings_btn_bl_action` | ⚡ Set action | 12 | 20 | 20 | D | list page |
 | 30 | `settings_bl_wait` | Send me the words to blacklist now, separated by spaces. A word matches anywhere inside a message, in any letter case: \<code>spam\</code> also matches \<code>Spammer\</code>. | 171 | 200 | 290 | T | prompt |
 | 31 | `settings_bl_wait_rules` | Up to {max} characters a word. A single letter, digit or punctuation mark is refused, because it would match almost every message. | 130 | 160 | 230 | T | prompt (`{max}` 100) |
 | 32 | `settings_bl_delete_ask` | Remove \<code>{word}\</code> from the blacklist? I will stop deleting messages that contain it. | 93 | 120 | 180 | T | delete card |
@@ -953,7 +956,7 @@ The executors translate all 67 keys (and C1 to C3) in es, fr, hi, id, pt, ru, uk
 - **Readable entries.** Each line is cut at 32 code points, so a long entry never wraps into several lines on a phone; bidi
   controls are stripped so a right-to-left word cannot reorder the line, the number or the next line (research Pitfall 1). A
   right-to-left word still renders right to left inside its `<code>`: checked on a phone (A19-A10).
-- **Widest rows.** The delete rows have four cells of at most 7 code points (`🗑 99999`); the action rows three and two cells of at
+- **Widest rows.** The delete rows have four cells of at most 7 code points (`🗑 79992`, the widest global number); the action rows three and two cells of at
   most 17 (`✅ Delete only`); Main's cells at most 20. The Add row is one full-width button (Filters, Notes) or two half cells.
 - **State is never icon alone**: counts are words (`Words: 20`), the action is a word, the marked choice has `✅` and the action
   line repeats it.
@@ -973,16 +976,16 @@ C19-1 **Row budget and widths.** Build Main (18 cells, owner and admin, private 
    never loosened, research C-13), list pages as the "Keyboard of each screen" table (fullest Blacklist `{4,4,2,2,2}`), action
    screen `{3,2,2}`, card `{2,2}`, prompt `{1}`, group note `{1,2}`; every content screen at most 8 rows private, 9 group.
 C19-2 **Cells and labels.** `TestSettingsLabelLengths` additions: the three page names with their icon at most 20; the three Add
-   buttons and `⚡ Action` at most 20; `settings_bl_opt_none` and the four reused action words with `✅ ` at most 20;
+   buttons and `⚡ Set action` at most 20; `settings_bl_opt_none` and the four reused action words with `✅ ` at most 20;
    `settings_state_private_only` at most 20 in every language.
 C19-3 **Codes and callback bytes.** Page keys `b i e` and the sixteen action codes are unique across the registries (the
    `registerSettingsPage` panic plus `TestSettingsPhase19Codes`, which extends `TestSettingsPhase18Codes`' page set to
-   `s l c f n k b i w g r e m d t u o y a`); every button at the worst-case IDs (14-character chat, 17-digit row ID, 5-digit page,
+   `s l c f n k b i w g r e m d t u o y a`); every button at the worst-case IDs (14-character chat, 17-digit row ID, 4-digit page,
    8-digit minute) is at most 64 bytes, the Yes **exactly 64**, measured equal to the "Callback data" table; `Omitted` is 0 at 17
    digits and 1 for a row with an 18-digit ID (no delete button drawn).
 C19-4 **Page fit.** In all 8 languages with a 64-rune multibyte group title: Main with the owner's 19 lines; each list page with 8
    worst entries (32 `&` characters each, 5 UTF-16 units per escaped `&`) and the longest notice (the Blacklist saved notice with
-   all five count lines at five-digit counts); the action screen mixed with five count lines; each card with a 100-code-point entry
+   all five count lines at five-digit counts); the action screen mixed with eight count lines (one per value the CHECK allows); each card with a 100-code-point entry
    of `&`; each prompt with the replaced note; every refusal; all at most 3800 UTF-16 units. Projected: list page about 2.6k
    (entries 1.5k, intro and frame 0.6k, notice 0.4k), the Notes step-2 prompt about 0.9k; the test is binding.
 C19-5 **Main.** The three cells appear in `Order` 46, 47, 72 with Welcome\|Goodbye still paired; a private menu shows the counts
@@ -1111,10 +1114,10 @@ the owner:** A19-A1, A19-A3, A19-A4, A19-A5, A19-A7, A19-A11; the rest are plann
 | # | Question | Default chosen here |
 |---|----------|---------------------|
 | A19-A1 | **Main with 18 cells** (research A19-8) | **The flat two-column grid: 9 rows + Access + navigation = 11 (owner) / 10 (admin)** (M38). 21 buttons of 100, about 1.2k units of 3800; every page one tap from Main. The A18-A1 "More" hub stays the specified fallback (a table change: Switches, Language, Log channel and Anonymous admins under one hub cell would bring Main to 15 cells, 8 grid rows, 10 / 9). A second fallback, if a phone check finds 11 rows too tall: put the three list pages under one `📚 Lists` hub cell (Main 16 cells, 8 rows + Access + nav = 10 / 9) |
-| A19-A2 | Page keys, `Order`, icons | `b i e`, 46, 47, 72, `⛔ 🔁 📝` (U-1, U-2). Planner-level; each a table entry |
+| A19-A2 | Page keys, `Order`, icons | `b i e`, 46, 47, 72, `🔤 🔁 📝` (U-1, U-2). Planner-level; each a table entry |
 | A19-A3 | **Private-only lists** (D-01, research A19-5, A19-10) | `PrivateOnly` on `settingsPage` (M39): Main reads `In private` without calling `MainState`, the page is the framework's note without calling `Open`, every list action needs `c` in step 1. Fallback with no framework edit: the fixed word in both menus (no count on Main anywhere) and each page's `Open` drawing the note when `!p.private` (page code then runs in a group menu, which is why it is not the default) |
 | A19-A4 | **The delete card** (D-06, research A19-9) | The shared two-tap card for all three pages, **naming the entry** (escaped, cut at 100) because a numbered button alone does not say what it deletes; private menus only, so no member sees it. No returns to the ask's page (M40, U-4). Alternative: no card for blacklist words (cheap to re-add), rejected for one rule across the three pages |
-| A19-A5 | **The blacklist action UX** (D-08, research C-02, C-15, A19-3, A19-11) | Its own screen (`bo`) behind `⚡ Action` on the list page, with the five choices as page action `bs` (U-3); `Action: X` only when every word agrees, else `Mixed` with counts; `Delete only` for `none`; inert stored values drawn as stored; no Action button on an empty list (U-10); words added later inherit a uniform action (A19-3 YES; the hint's text if declined is in section 5). Alternative: the five choices on the list page itself (two more rows, 7 in all, inside the budget), rejected because the per-word explanation and the mixed counts need the room |
+| A19-A5 | **The blacklist action UX** (D-08, research C-02, C-15, A19-3, A19-11) | Its own screen (`bo`) behind `⚡ Set action` on the list page, with the five choices as page action `bs` (U-3); `Action: X` only when every word agrees, else `Mixed` with counts; `Delete only` for `none`; inert stored values drawn as stored; no Action button on an empty list (U-10); words added later inherit a uniform action (A19-3 YES; the hint's text if declined is in section 5). Alternative: the five choices on the list page itself (two more rows, 7 in all, inside the budget), rejected because the per-word explanation and the mixed counts need the room |
 | A19-A6 | Viewing a list is looser than `/blacklists` and `/filters` | Opening and paging need only the live admin check (no bot-admin check), as the Phase 18 Anonymous admins page's view; viewing writes nothing |
 | A19-A7 | **An existing keyword or name** (research C-09, A19-7) | Refused at step 1 with the keyword or name and "delete it from the list first", and again at step 2 if another admin took it meanwhile (the wait then ends). The command keeps its overwrite card. Editing content from the menu stays out of scope |
 | A19-A8 | The step-2 state (research A19-6) | The bounded field `w` (at most 100 code points, never logged) and the ID field `q` in the existing wait hash (M41, U-11), moved by one atomic advance script. No second key, no token |
@@ -1189,7 +1192,7 @@ Not designed here and not to be built in this phase (19-CONTEXT "Phase Boundary"
   cross-page sweeps; the end-to-end test; the closing plan, which alone ticks PAGE-07 to PAGE-09 (D-14). Whole-package runs at
   each plan that registers a page or changes the door.
 - **Strings.** 67 `settings_` keys in all 8 files, each with a row in `settingsLocaleLimits` and (for the T keys) in
-  `TestSettingsListKeysExist`; label-length rows for the page names, the Add buttons, `⚡ Action`, `Delete only`; C1 to C3 only
+  `TestSettingsListKeysExist`; label-length rows for the page names, the Add buttons, `⚡ Set action`, `Delete only`; C1 to C3 only
   with their owner confirmation; `make check-translations`, `make generate-docs`.
 - **Tests to update, never loosen** (research C-13): `TestSettingsPhase18Codes`' page set, `settingsMainShapeGroup`,
   `settingsMainShapePrivate`, `settingsMainOwnerRows` (11), and the deletion tests that read them; every Phase 11 door test
@@ -1206,10 +1209,38 @@ Not designed here and not to be built in this phase (19-CONTEXT "Phase Boundary"
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: pending
-- [ ] Dimension 2 Visuals: pending
-- [ ] Dimension 3 Color: pending (no colour exists; status icons substitute)
-- [ ] Dimension 4 Typography: pending (HTML tags substitute)
-- [ ] Dimension 5 Spacing: pending (Main is 11 rows for the owner and 10 for an admin, over the 8/9 content-page budget; M38 and A19-A1 carry the fallbacks)
-- [ ] Dimension 6 Registry Safety: pending
-- [ ] Dimension 7 Inventory Provenance: pending (no design system; Component Inventory omitted by `Tool: none`)
+- [x] Dimension 1 Copywriting: FLAG (non-blocking: `⚡ Action` is a noun-only CTA, F-1; key 4 length stated as 70 EN at line 118 but 68 in the key table, F-2)
+- [x] Dimension 2 Visuals: PASS (focal point declared per screen; every list entry has a numbered line bound to its button)
+- [x] Dimension 3 Color: FLAG (non-blocking: Blacklist icon `⛔` is already the Ban punishment icon of the Requirements page, `settings_mreq.go:71-82`, F-3)
+- [x] Dimension 4 Typography: PASS (HTML tags substitute; `<code>` on all user text, escape after cut)
+- [x] Dimension 5 Spacing: FLAG (non-blocking: Main is 11 rows owner / 10 admin, over the 8/9 content-page budget; M38 and A19-A1 carry the fallback; callback bytes recomputed and exact)
+- [x] Dimension 6 Registry Safety: PASS (no registry)
+- [x] Dimension 7 Inventory Provenance: PASS (no design system; Component Inventory omitted by `Tool: none`)
+
+### Checker verdict
+
+**APPROVED, 0 BLOCK, 3 dimensions with FLAGs (all non-blocking).** Re-verified against the code: Yes 64 / ask 61 / pager 41 / op 37 / bs 40 bytes (recomputed
+with the codec rules); page keys `b i e` and the 16 action codes collide with nothing in `settings_*.go` or the core set; Main order gives
+`s|l c|f n|k b|i w|g r|e m|d t|u o|y` (18 cells, 11/10 rows); the 67 new keys sum to 14+25+14+14, 385 -> 452, EN lengths match the
+script count on every row, EN <= Max EN <= Max other; every reused key exists in `locales/en.yml`; blacklist check order matches `blacklists.go:34-61`; `none` is
+accepted by `/blacklistaction` (`blacklists.go:313`).
+
+Fixes wanted (all optional, researcher):
+- F-1 (D1): `⚡ Action` (key 29) is a bare noun. Prefer a verb-led label that fits 20 code points, e.g. `⚡ Set action` (13), same key.
+- F-2 (D1): line 118 says `settings_entries_add_unavailable` is "70 EN"; the key table (row 4) and a script count say 68. Make them equal.
+- F-3 (D3): `⛔` already means Ban on the Requirements rule cells and the reports ban button. Either pick another page icon (e.g. `🚷`/`🧱`, check against `Icon:` and `memberReqActionIcon`), or record in U-2 that the "no repeated icon" rule is scoped to page and section icons and that `⛔` is knowingly shared with a punishment icon.
+- F-4 (D5, factual): M39 says `settingsMainEntries` has "three production call sites"; the code has two (`settings.go:219`, `settings_menu.go:269`) plus two tests (`settings_main_test.go:676`, `settings_phase18_test.go:401`).
+- F-5 (D1/consistency): C19-4 sizes the action screen with "five count lines", but the table CHECK allows 8 stored values (`warn mute kick ban none tban tmute delete`, migration 20260412000000); size the worst case at 8 and say how `none`, `tban`, `tmute`, `delete` are worded in a count line (`settings_bl_opt_none` for `none`, escaped raw value for the inert three).
+- F-6 (D5, minor): global entry numbers reach 6 digits (`v` is allowed 5 digits, 8 entries a page), so the "`🗑 99999` is 7 code points" width claim is really 8 at the extreme; harmless, restate or cap `v` at 4 digits.
+
+No BLOCK: no generic CTA copy, empty and error states are specific with a solution path, accent/colour contract is the icon table, no inventory, no registry.
+
+### Resolution of the checker's FLAGs (applied by the orchestrator before the planner reads the contract)
+
+- F-1: key 29 is now `⚡ Set action` (12 code points; every mention in the body updated).
+- F-2: the Telegram limits table now says 68 EN, equal to the key table.
+- F-3: the Blacklist page icon is `🔤` (U-2 and every mention updated); `⛔` stays the Ban punishment icon only.
+- F-4: M39 names the two production call sites (`settings.go`, `settings_menu.go`) and the two tests.
+- F-5: the mixed action screen is sized and worded for the eight values the CHECK allows (Interaction section 5, C19-4).
+- F-6: the pager cursor `v` is capped at 4 digits (`settingsParseNumber(v, 4)`); the callback table is re-counted (pager 40, delete ask 60,
+  delete Yes still exactly 64) and the planner's bytes test asserts the new worst case.
