@@ -161,19 +161,26 @@ func TestApplyFilter(t *testing.T) {
 		assertNoKeywordLogged(t)
 	})
 
-	t.Run("a failed existence or count lookup reads as not found and 0", func(t *testing.T) {
-		chatID := filterApplyChat(t)
-		seams := filterWrites
-		seams.Exists = func(context.Context, int64, string) (bool, error) { return false, errors.New("lookup failed") }
-		seams.Count = func(context.Context, int64) (int64, error) { return 0, errors.New("lookup failed") }
-		filterApplySeams(t, seams)
-		if got := applyFilterAdd(ctx, chatID, filterApplyInput("price")).Outcome; got != filterAdded {
-			t.Errorf("failing lookups = %v, want the add to go through as before", got)
-		}
-		if !filters.DoesFilterExists(chatID, "price") {
-			t.Error("the filter was not stored")
-		}
-	})
+	for _, failing := range []string{"exists", "count"} {
+		t.Run("a failed "+failing+" lookup stores nothing", func(t *testing.T) {
+			chatID := filterApplyChat(t)
+			boom := errors.New("lookup failed")
+			seams := filterWrites
+			if failing == "exists" {
+				seams.Exists = func(context.Context, int64, string) (bool, error) { return false, boom }
+			} else {
+				seams.Count = func(context.Context, int64) (int64, error) { return 0, boom }
+			}
+			filterApplySeams(t, seams)
+			got := applyFilterAdd(ctx, chatID, filterApplyInput("price"))
+			if got.Outcome != filterSaveFailed || !errors.Is(got.Err, boom) {
+				t.Errorf("failing %s lookup = %+v, want save failed with the error", failing, got)
+			}
+			if filters.DoesFilterExists(chatID, "price") {
+				t.Errorf("a filter was stored although the %s lookup failed", failing)
+			}
+		})
+	}
 
 	t.Run("remove drops both caches", func(t *testing.T) {
 		chatID := filterApplyChat(t)
@@ -301,5 +308,52 @@ func TestApplyFilterTooBroad(t *testing.T) {
 	}
 	if !filters.DoesFilterExists(command, "ab") {
 		t.Error("the two-character keyword was not stored")
+	}
+}
+
+// TestFilterCommandRefusesWhenLookupFails presses /filter with a failing existence or count lookup:
+// the owner sees the save-failed reply and no filter is stored, where the command used to add it.
+func TestFilterCommandRefusesWhenLookupFails(t *testing.T) {
+	withRealLocales(t)
+	want, err := i18n.MustNewTranslator("uk").GetString("common_settings_save_failed")
+	if err != nil || want == "" {
+		t.Fatalf("locale key common_settings_save_failed missing: %v", err)
+	}
+	for _, failing := range []string{"exists", "count"} {
+		t.Run(failing, func(t *testing.T) {
+			chatID := filterApplyChat(t)
+			seams := filterWrites
+			if failing == "exists" {
+				seams.Exists = func(context.Context, int64, string) (bool, error) { return false, errors.New("lookup failed") }
+			} else {
+				seams.Count = func(context.Context, int64) (int64, error) { return 0, errors.New("lookup failed") }
+			}
+			filterApplySeams(t, seams)
+			if got := filterCommandReply(t, chatID, "/filter price", "reply body"); got != want {
+				t.Errorf("/filter replied %q, want %q", got, want)
+			}
+			if filters.DoesFilterExists(chatID, "price") {
+				t.Error("a filter was stored although the lookup failed")
+			}
+		})
+	}
+}
+
+// TestFilterCommandCapPreCheckStays keeps the command's own cap answer at 150 rows, before any
+// argument check, with the apply functions' lookups healthy.
+func TestFilterCommandCapPreCheckStays(t *testing.T) {
+	withRealLocales(t)
+	want, err := i18n.MustNewTranslator("uk").GetString("filters_limit_exceeded")
+	if err != nil || want == "" {
+		t.Fatalf("locale key filters_limit_exceeded missing: %v", err)
+	}
+	chatID := filterApplyChat(t)
+	keywords := make([]string, 0, filtersCapMax)
+	for n := 0; n < filtersCapMax; n++ {
+		keywords = append(keywords, "word"+strconv.Itoa(n))
+	}
+	filterApplySeed(t, chatID, keywords...)
+	if got := filterCommandReply(t, chatID, "/filter overflow nope", ""); got != want {
+		t.Errorf("/filter at the cap replied %q, want %q", got, want)
 	}
 }

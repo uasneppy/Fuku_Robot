@@ -132,7 +132,8 @@ type filterRemoveResult struct {
 // checkFilterKeyword runs the checks every filter add shares, in order: a blank keyword, one over
 // listKeywordMaxRunes, one that would match almost every message, a keyword the chat already has, and the
 // chat's cap. It returns a result whose
-// outcome is filterAdded when nothing refuses the keyword. It logs the chat ID and the error only,
+// outcome is filterAdded when nothing refuses the keyword; a lookup that fails refuses it as
+// filterSaveFailed (nothing is stored on a guess). It logs the chat ID and the error only,
 // never the keyword.
 func checkFilterKeyword(ctx context.Context, chatID int64, keyword string) filterAddResult {
 	if strings.TrimSpace(keyword) == "" {
@@ -147,6 +148,7 @@ func checkFilterKeyword(ctx context.Context, chatID int64, keyword string) filte
 	exists, err := filterWrites.Exists(ctx, chatID, keyword)
 	if err != nil {
 		log.Errorf("[Filters] Existing keyword lookup failed for chat %d: %v", chatID, err)
+		return filterAddResult{Outcome: filterSaveFailed, Err: err}
 	}
 	if exists {
 		return filterAddResult{Outcome: filterExists}
@@ -154,6 +156,7 @@ func checkFilterKeyword(ctx context.Context, chatID int64, keyword string) filte
 	count, err := filterWrites.Count(ctx, chatID)
 	if err != nil {
 		log.Errorf("[Filters] Filter count lookup failed for chat %d: %v", chatID, err)
+		return filterAddResult{Outcome: filterSaveFailed, Err: err}
 	}
 	if count >= filtersCapMax {
 		return filterAddResult{Outcome: filterCapReached}

@@ -3478,7 +3478,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   stored row of the three commands and is never re-recorded. `/filter` refuses a keyword of exactly one code point outside
   Unicode category So (and a blank one) with the reply `filters_keyword_too_broad` and stores nothing (`keywordTooBroad` in
   `checkFilterKeyword`, shared with the Filters page): the provisional owner confirmation A19-2 of `19-SPIKE.md`, in its own
-  commit, so declining it is a revert of that commit.
+  commit, so declining it is a revert of that commit. A failed existing-keyword or filter-count read inside `checkFilterKeyword` is
+  `filterSaveFailed`: `/filter` answers `common_settings_save_failed` and stores nothing, where before it hid the error (read as
+  not found and 0) and added the filter. This is the provisional owner confirmation of `19-SPIKE.md` that follows AGENTS "never
+  discard a DB error on a state-changing path", also in its own commit and reverted alone to restore the old behaviour; the
+  command's own cap pre-check (`CountFilters`, `filters_limit_exceeded` before the argument checks) keeps its old hiding read.
 - Rules message (`rules.go`): `/rules` (in the group and in a private chat connected to it), the private rules message the
   `/start rules_<chat id>` deep link opens and the Rules page's Full preview are built by
   `buildRulesMessage` and sent by `sendRulesMessage`. The builder has two forms, the group form (`rulesFormGroup`: heading
