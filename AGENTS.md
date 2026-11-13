@@ -379,7 +379,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `chat_status_bot_not_admin`; every reason except `settings_edit_refuse_access_lost`, whose text says it, is followed by
   a blank line and `settings_edit_wait_stopped`, so the person knows the next message is not read). The Rules bot check
   proceeds only when `chat_status.IsBotAdmin` is true, as the command does; because that predicate returns a bare bool,
-  a false is classified by one live `getChatMember` of the bot (`botAdmin`): a definite non-administrator status or a
+  a false is classified by one live `getChatMember` of the bot (`botCheck`): a definite non-administrator status or a
   Telegram 4xx other than 429 ends the wait with `chat_status_bot_not_admin`, while a 429, a 5xx, a transport error, a
   timeout, or a live answer that says the bot is an administrator keeps it with `settings_check_failed`. An answer that cannot be established (a 429, a 5xx, a transport error, a timeout,
   an undecided gate, an unreadable page) answers `settings_check_failed` and keeps the wait. A message the check refuses
@@ -395,6 +395,20 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   that is not http or https instead of dropping it (EDIT-05). On the Rules page the three parts go through `settingsInputReply.applyRules`
   (`applyRulesText`, `applyRulesMedia`, `applyRulesButtons`), so Rules media and buttons store what the Welcome's store for the same
   message, with the same saved page, album gate and caption note. The typed reply is the sixth door of `TestSettingsGateAllDoors`.
+  Since Phase 19 plan 19-04 the door has a list branch (M43): `run` first asks whether the wait's page is a registered list page
+  (`settingsListByPage`) and, when it is, hands the reply to `runList` (`settings_list_input.go`), which sets `settingsInputReply.list`,
+  judges authority with `authorize(def.Right)` and calls the table's `Typed` handler; the editor's path below that check is
+  byte-identical (every Phase 11 and 12 door test passes unedited). `authorize(right)` is the shared judgement: the live
+  `getChatMember` of the sender, the owner gate, the bot's first half (`settingsRightBotFirst`), the member's part
+  (`settingsRightRefusalFor`), the bot's second half (`settingsRightBotAfter(..., true)`, which names `chat_status_bot_restrict_group_error`
+  for a typed reply, U-9) and a live `getChat`. The old Rules bot check is the same call in the second half. A bot half that the
+  commands' cached predicate refuses is classified by `botCheck`, one live `getChatMember` of the bot: a definite answer that the bot
+  lacks the right (not an administrator, or without `can_restrict_members` for the blacklist), or a Telegram client error, ends the wait
+  with the refusal; a 429, a 5xx, a timeout or a live record that shows the bot can keeps it with `settings_check_failed`. The list
+  parts are the static table `settingsListParts` (`(b,w) (i,k) (i,y) (e,n) (e,c)`), which `settingsInputValidPart` accepts besides
+  the editor's, so a marker or wait of a list part parses whether or not its page is registered. A message after the wait ended
+  answers `settings_entries_wait_ended_note` naming the part (`settings_entries_part_*`) for a list part and the editor's note
+  for an editor part. A list refusal draws its Cancel with the table's `CancelCode` (`renderSettingsInputRefusalCode`).
   After a group `/settings` passes its checks and the choice message is sent, `settings()` refreshes that group's roster
   record through `refreshChatAdminIndex` (at most two Telegram calls, a 10 s context, the error only logged), the
   second repair path after `/admincache` (D-07, MENU-10). It runs after the reply, so a slow or failed refresh never
@@ -1177,11 +1191,22 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   choice 40 and ban 39, Main cell 37 private and 33 group) and `Omitted` at 0, a row with an 18-digit ID getting no delete button
   and counting 1; `TestSettingsListBlacklistPageFitsEveryLocale` holds the list page of 32-ampersand entries with the two longest
   notices, the mixed action screen with eight count lines, the card with a 100-code-point entry and the group note to 3800 UTF-16
-  units in all 8 languages with a 64-rune title, and the row widths to the UI-SPEC (`{4,4,2,1,2}` middle page, `{3,2,2}` action,
+  units in all 8 languages with a 64-rune title, and the row widths to the UI-SPEC (`{4,4,2,2,2}` middle page with the Add button, `{3,2,2}` action,
   `{2,2}` card, `{1,2}` and `{2}` note); `TestSettingsBlacklistReadsCreateNothing` that opening Main, the page, the action screen and a
-  forged ask on a chat with no rows creates no row and fills no key in either menu. The page's action codes are `bp bx by bo bs`
-  (the pager is `bp` because the Deletion page's bot row codes `bw bg br ba bm` must stay unique among the codes of the section
-  and row tables and the actions, which also rules out `ba` for an Add button).
+  forged ask on a chat with no rows creates no row and fills no key in either menu. The page's action codes are `bp bx by bo bs bn bc`
+  (the pager is `bp` and Add is `bn` because the Deletion page's bot row codes `bw bg br ba bm` must stay unique among the codes of
+  the section and row tables and the actions). Plan 19-04 adds the typed add. `bn` (Add words, the table's `AddCode`) needs the
+  owner field `c` and the page's write right and writes the one wait of the user (`settingsInputSet`: page `b`, part `w`, the menu
+  message as `m`, ten minutes) through `settingsListRunAdd`, then edits the menu message into the prompt (`renderSettingsListPrompt`:
+  `settings_bl_wait`, `settings_bl_wait_rules` with 100, the wait footer, the replaced note when it replaced another wait, one
+  Cancel); with no Redis or a failed write it answers the alert `settings_entries_add_unavailable` and edits nothing, while the
+  list, the delete card and the action keep working. `bc` (Cancel, fields `t` and `c`, `t` a part of the page) ends the wait as the
+  editor's Cancel does and edits the message into the list's page 1. The Add button is first in the add row, `[➕ Add words | ⚡ Set
+  action]` and `[➕ Add words]` alone on an empty list. The typed message (`settingsBlacklistTyped`, run by the door's list branch)
+  is the text or caption split by `strings.Fields`, a repeat counted once, sorted against a fresh read into too long, too broad,
+  already listed and addable; with none addable it is refused with the counts and the wait kept, else it is claimed and stored
+  through `applyBlacklistAdd`, the function `/addblacklist` stores through, and the list page arrives as a new message at the page
+  of the first word added with one count line per non-zero category (counts only, never a word) while the prompt is closed.
 - The message editor's pages (`settings_edit.go`, pages `w` Welcome, `g` Goodbye and `r` Rules, orders 50, 60 and 70, each
   registered from that file's `init` through `registerSettingsPage` so `settings_pages.go` is never edited) show which
   parts of a message are set, one line per part from one parts table (`settingsEditPageDef.Parts`): Welcome and Goodbye
@@ -3898,7 +3923,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   goroutines uses Mute or Kick and never Warn (the warn module's SQLite transaction); a test that joins, rejoins or sends with
   a date takes the date before the message and at least 2 s apart; and a test never `t.Skip`s (CI's
   `scripts/check_test_results` fails on an unexpected skip, so a case that cannot run in a menu kind is not registered
-  there). The locale files now hold 404 `settings_` keys and 31 `mreq_` keys, each `settings_` key one row of the limits table
+  there). The locale files now hold 413 `settings_` keys and 31 `mreq_` keys, each `settings_` key one row of the limits table
   of `fuku/i18n/settings_locale_test.go` (Phase 19 plan 19-02 added two, `settings_state_private_only` and `settings_entries_group_note`, and plan 19-03 seven for the Blacklist page in task 1, three for its delete card in task 2 and seven for its action screen in task 3; the list toolkit is `settings_list_env_test.go`: `newSettingsListEnv`, `settingsListSeedBlacklist`, `settingsListCleanup`, `settingsListOpenPrivate`, `settingsListSentinel`) and each `mreq_` key one row of `memberReqLocaleLimits`. Phase 18 added 55 `settings_`
   keys (four of them, the Warnings page's, in plan 18-01 and 51 in plan 18-02: the six page names, three Main state words,
   the Warnings, Switches, Language, Log channel and Anonymous admins lines, and the Locks intro, two state words and 22 lock

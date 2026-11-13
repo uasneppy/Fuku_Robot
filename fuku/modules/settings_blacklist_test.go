@@ -75,8 +75,8 @@ func TestSettingsBlacklistOpens(t *testing.T) {
 			}
 			last = at
 		}
-		if got := settingsListRowWidths(keyboard); fmt.Sprint(got) != fmt.Sprint([]int{3, 1, 2}) {
-			t.Errorf("row widths = %v, want the delete row, the Action row and the navigation row", got)
+		if got := settingsListRowWidths(keyboard); fmt.Sprint(got) != fmt.Sprint([]int{3, 2, 2}) {
+			t.Errorf("row widths = %v, want the delete row, the Add and Action row and the navigation row", got)
 		}
 		if back := keyboard[len(keyboard)-1]; len(back) != 2 || !strings.Contains(back[0].Text, staffMarker("settings_btn_back")) {
 			t.Errorf("the page does not end with Back and Close: %+v", back)
@@ -837,8 +837,13 @@ func TestSettingsBlacklistAction(t *testing.T) {
 	t.Run("an empty list has no Action button, a stale bo draws the no-words line and a stale bs answers the notice", func(t *testing.T) {
 		env := newSettingsListEnv(t)
 		m := settingsBlacklistOpenMenu(env, env.chat)
-		if _, keyboard := m.last(); len(settingsAllButtons(keyboard)) != 2 {
-			t.Errorf("an empty list draws %d buttons, want Back and Close only", len(settingsAllButtons(keyboard)))
+		if _, keyboard := m.last(); len(settingsAllButtons(keyboard)) != 3 {
+			t.Errorf("an empty list draws %d buttons, want Add, Back and Close", len(settingsAllButtons(keyboard)))
+		}
+		if _, keyboard := m.last(); keyboard != nil {
+			if _, ok := settingsButtonByMarker(keyboard, "settings_btn_bl_action"); ok {
+				t.Errorf("an empty list draws the Action button")
+			}
 		}
 		m.press("a", settingsActBlacklistOpen)
 		text, keyboard := m.last()
@@ -1238,7 +1243,7 @@ func TestSettingsListBlacklistPageFitsEveryLocale(t *testing.T) {
 				}
 			}
 			for i, notice := range notices {
-				check(fmt.Sprintf("the list page with notice %d", i), renderSettingsList(private, def, entries, 2, notice), "[4 4 2 1 2]")
+				check(fmt.Sprintf("the list page with notice %d", i), renderSettingsList(private, def, entries, 2, notice), "[4 4 2 2 2]")
 				check(fmt.Sprintf("the mixed action screen with notice %d", i), renderSettingsBlacklistAction(private, eight, notice), "[3 2 2]")
 			}
 			card := renderSettingsListCard(private, def, settingsListEntry{ID: 12345678901234567, Text: ampersands}, 9999)

@@ -485,11 +485,24 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_bl_action_inert":      {56, 90},
 	"settings_bl_action_no_words":   {90, 140},
 	"settings_btn_bl_action":        {20, 20},
+
+	// Phase 19 (plan 19-04, task 1), the Blacklist typed add: the unavailable alert, the Add button, the prompt and the
+	// saved-notice count lines (UI-SPEC rows 4, 28, 30, 31 and 34 to 38).
+	"settings_entries_add_unavailable": {90, 150},
+	"settings_btn_bl_add":              {20, 20},
+	"settings_bl_wait":                 {200, 290},
+	"settings_bl_wait_rules":           {160, 230},
+	"settings_bl_saved_added":          {16, 28},
+	"settings_bl_saved_already":        {32, 50},
+	"settings_bl_saved_too_long":       {48, 70},
+	"settings_bl_saved_too_broad":      {60, 90},
+	"settings_bl_saved_failed":         {34, 54},
 }
 
 // settingsAlertKeys are shown as answerCallbackQuery alerts: plain text, no tag, at most
 // 200 characters in every language (Telegram's cap).
 var settingsAlertKeys = []string{
+	"settings_entries_add_unavailable",
 	"settings_not_your_menu",
 	"settings_sw_ai_unavailable",
 	"settings_not_admin",
@@ -774,6 +787,8 @@ func TestSettingsLabelLengths(t *testing.T) {
 		"settings_btn_edit_full_preview", "settings_btn_edit_cancel",
 		// The Blacklist list page's Action button (Phase 19, UI-SPEC check C19-2).
 		"settings_btn_bl_action",
+		// The Blacklist list page's Add button (Phase 19, UI-SPEC check C19-2).
+		"settings_btn_bl_add",
 	}
 	// The editor's half-width switch cells (Phase 12, UI-SPEC check 2): the template with
 	// {state} replaced by the icon alone is at most 20 code points, so a name is at most 18.

@@ -110,7 +110,7 @@ func TestSettingsListRender(t *testing.T) {
 			t.Errorf("page 2 lacks the page or count line:\n%s", screen.Text)
 		}
 		keyboard := screen.Keyboard.InlineKeyboard
-		if got, want := settingsListRowWidths(keyboard), []int{4, 4, 2, 1, 2}; fmt.Sprint(got) != fmt.Sprint(want) {
+		if got, want := settingsListRowWidths(keyboard), []int{4, 4, 2, 2, 2}; fmt.Sprint(got) != fmt.Sprint(want) {
 			t.Fatalf("row widths = %v, want %v", got, want)
 		}
 		for i, button := range keyboard[0] {
@@ -140,16 +140,16 @@ func TestSettingsListRender(t *testing.T) {
 	t.Run("the first page has Next only, the last Prev only, one page no pager and no page line", func(t *testing.T) {
 		entries := settingsListTestEntries(20)
 		first := renderSettingsList(v, def, entries, 1, "").Keyboard.InlineKeyboard
-		if got := settingsListRowWidths(first); fmt.Sprint(got) != fmt.Sprint([]int{4, 4, 1, 1, 2}) || first[2][0].Text != "Next ➡️" {
+		if got := settingsListRowWidths(first); fmt.Sprint(got) != fmt.Sprint([]int{4, 4, 1, 2, 2}) || first[2][0].Text != "Next ➡️" {
 			t.Errorf("first page rows = %v, pager %q", got, first[2][0].Text)
 		}
 		last := renderSettingsList(v, def, entries, 3, "")
-		if got := settingsListRowWidths(last.Keyboard.InlineKeyboard); fmt.Sprint(got) != fmt.Sprint([]int{4, 1, 1, 2}) || last.Keyboard.InlineKeyboard[1][0].Text != "⬅️ Prev" {
+		if got := settingsListRowWidths(last.Keyboard.InlineKeyboard); fmt.Sprint(got) != fmt.Sprint([]int{4, 1, 2, 2}) || last.Keyboard.InlineKeyboard[1][0].Text != "⬅️ Prev" {
 			t.Errorf("last page (4 entries) rows = %v", got)
 		}
 		one := renderSettingsList(v, def, settingsListTestEntries(5), 1, "")
-		if got := settingsListRowWidths(one.Keyboard.InlineKeyboard); fmt.Sprint(got) != fmt.Sprint([]int{4, 1, 1, 2}) {
-			t.Errorf("a page of 5 entries has rows %v, want {4,1,1,2}", got)
+		if got := settingsListRowWidths(one.Keyboard.InlineKeyboard); fmt.Sprint(got) != fmt.Sprint([]int{4, 1, 2, 2}) {
+			t.Errorf("a page of 5 entries has rows %v, want {4,1,2,2}", got)
 		}
 		if strings.Contains(one.Text, "Page 1/1") {
 			t.Errorf("a one-page list shows a page line:\n%s", one.Text)
@@ -176,8 +176,8 @@ func TestSettingsListRender(t *testing.T) {
 				t.Errorf("the empty list shows %q:\n%s", absent, screen.Text)
 			}
 		}
-		if got := settingsListRowWidths(screen.Keyboard.InlineKeyboard); fmt.Sprint(got) != fmt.Sprint([]int{2}) {
-			t.Errorf("the empty list has rows %v, want the navigation row alone", got)
+		if got := settingsListRowWidths(screen.Keyboard.InlineKeyboard); fmt.Sprint(got) != fmt.Sprint([]int{1, 2}) {
+			t.Errorf("the empty list has rows %v, want the Add button and the navigation row", got)
 		}
 	})
 

@@ -14,7 +14,6 @@ import (
 
 	"github.com/uasneppy/fuku_robot/fuku/db/lang"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
-	"github.com/uasneppy/fuku_robot/fuku/utils/chat_status"
 	"github.com/uasneppy/fuku_robot/fuku/utils/error_handling"
 	"github.com/uasneppy/fuku_robot/fuku/utils/formatting"
 )
@@ -75,6 +74,8 @@ type settingsInputReply struct {
 	def    settingsEditPageDef
 	member gotgbot.MergedChatMember
 	group  gotgbot.Chat
+	// list is the table of the list page whose wait is being run (nil for an editor page).
+	list *settingsListDef
 }
 
 // settingsInput is the typed-reply door. It returns ext.ContinueGroups for a message that is
@@ -163,24 +164,38 @@ func (r *settingsInputReply) waitEnded() bool {
 	if !ok {
 		return false
 	}
-	_, _, part, valid := settingsInputParseMarker(taken)
+	_, page, part, valid := settingsInputParseMarker(taken)
 	if !valid {
 		return false
 	}
-	r.plain(r.text("settings_edit_wait_ended_note", i18n.TranslationParams{"part": r.text(settingsInputPartWordKey(part))}))
+	if listPart := settingsListPartByCode(page, part); listPart != nil {
+		r.plain(r.text("settings_entries_wait_ended_note", i18n.TranslationParams{"part": r.text(listPart.WordKey)}))
+	} else {
+		r.plain(r.text("settings_edit_wait_ended_note", i18n.TranslationParams{"part": r.text(settingsInputPartWordKey(part))}))
+	}
 	log.Debugf("[Settings] user %d replied after the wait for the %s part ended", r.user.Id, part)
 	return true
 }
 
 // run judges the reply: authority first (as a press), then the check, the claim and the write.
 func (r *settingsInputReply) run() {
+	// A wait whose page is a list page is run by the list engine (M43); the editor's path below is unchanged.
+	if listDef, ok := settingsListByPage(r.wait.Page); ok {
+		part := settingsListPartByCode(r.wait.Page, r.wait.Part)
+		if part == nil {
+			r.end("settings_check_failed")
+			return
+		}
+		r.runList(listDef, *part)
+		return
+	}
 	def, ok := settingsEditPageByKey(r.wait.Page)
 	if !ok {
 		r.end("settings_check_failed")
 		return
 	}
 	r.def = def
-	if !r.authorize() {
+	if !r.authorize(def.EditRight) {
 		return
 	}
 	loadCtx, cancel := context.WithTimeout(context.Background(), settingsReadTimeout)
@@ -205,37 +220,28 @@ func (r *settingsInputReply) run() {
 		return
 	}
 
-	claim, claimed, err := settingsInputClaim(context.Background(), r.user.Id, r.wait.Nonce)
-	if err != nil {
-		log.Warnf("[Settings] claiming the wait of user %d failed: %v", r.user.Id, err)
-		r.keep("settings_check_failed")
-		return
-	}
+	// A claim lost to another delivery of the same message (or a Cancel) answers nothing.
+	claim, claimed := r.claimWait()
 	if !claimed {
-		// Another delivery of the same message (or a Cancel) got there first.
 		return
 	}
 	if !r.apply(verdict) {
 		log.Errorf("[Settings] the typed %s of chat %d could not be saved for user %d", r.wait.Part, r.wait.GroupID, r.user.Id)
-		if err := settingsInputRelease(context.Background(), r.user.Id, claim); err != nil {
-			log.Warnf("[Settings] giving the wait of user %d back failed: %v", r.user.Id, err)
-		}
+		r.releaseWait(claim)
 		r.refuse(r.text("common_settings_save_failed"))
 		return
 	}
-	if err := settingsInputFinish(context.Background(), r.user.Id, claim); err != nil {
-		log.Warnf("[Settings] finishing the wait of user %d failed: %v", r.user.Id, err)
-	}
+	r.finishWait(claim)
 	log.Infof("[Settings] user %d saved the typed %s of the %s page of chat %d", r.user.Id, r.wait.Part, def.Key, r.wait.GroupID)
 	r.saved(verdict)
 	r.closePrompt()
 }
 
 // authorize makes the live checks of a press, in order: the sender's member record, the owner
-// gate, the right of the part, and the group itself. It answers the refusal and returns false
-// when the reply may not go on. A loss ends the wait; an answer that cannot be established
-// keeps it.
-func (r *settingsInputReply) authorize() bool {
+// gate, the right of the part (the bot's first half, the member's part, the bot's second half, as a
+// press judges it) and the group itself. It answers the refusal and returns false when the reply may
+// not go on. A loss ends the wait; an answer that cannot be established keeps it.
+func (r *settingsInputReply) authorize(right settingsRight) bool {
 	member, err := lockdownLiveMember(r.b, r.wait.GroupID, r.user.Id)
 	if err != nil {
 		log.Warnf("[Settings] live check of user %d in chat %d for a typed reply failed: %v", r.user.Id, r.wait.GroupID, err)
@@ -262,11 +268,17 @@ func (r *settingsInputReply) authorize() bool {
 		return false
 	}
 
-	if key, _ := settingsRightRefusalFor(member, r.def.EditRight); key != "" {
+	botGroup := &gotgbot.Chat{Id: r.wait.GroupID, Type: "supergroup"}
+	if key := settingsRightBotFirst(r.b, botGroup, right); key != "" {
+		r.botCheck(key)
+		return false
+	}
+	if key, _ := settingsRightRefusalFor(member, right); key != "" {
 		r.end(key)
 		return false
 	}
-	if r.def.EditRight == settingsRightAdminBotAdmin && !r.botAdmin() {
+	if key := settingsRightBotAfter(r.b, botGroup, right, true); key != "" {
+		r.botCheck(key)
 		return false
 	}
 
@@ -291,33 +303,40 @@ func (r *settingsInputReply) authorize() bool {
 	return true
 }
 
-// botAdmin is the Rules bot check, never looser than /setrules: it proceeds only when
-// chat_status.IsBotAdmin is true. That predicate returns a bare bool, so a false is either a bot
-// that is no administrator or a lookup that failed; one live getChatMember of the bot tells the
-// two apart. A definite non-administrator status, or a Telegram client error, ends the wait; an
-// error that cannot be established (429, 5xx, transport, timeout) and a live answer that says
-// the bot is an administrator (the predicate's answer was stale) keep it. It answers the refusal
-// itself and reports whether the reply may go on.
-func (r *settingsInputReply) botAdmin() bool {
-	if chat_status.IsBotAdmin(r.b, nil, &gotgbot.Chat{Id: r.wait.GroupID, Type: "supergroup"}) {
-		return true
+// settingsBotKeyPasses is what a live record of the bot must show for the bot part that refused with key to have been
+// a stale answer: the restrict refusal needs an administrator with can_restrict_members, every other bot refusal an
+// administrator.
+func settingsBotKeyPasses(key string) func(gotgbot.MergedChatMember) bool {
+	if key == "chat_status_bot_restrict_group_error" {
+		return func(bot gotgbot.MergedChatMember) bool {
+			return bot.Status == gotgbot.ChatMemberStatusAdministrator && bot.CanRestrictMembers
+		}
 	}
+	return func(bot gotgbot.MergedChatMember) bool { return bot.Status == gotgbot.ChatMemberStatusAdministrator }
+}
+
+// botCheck classifies a bot part that the commands' own cached predicate refused (key is its refusal), never looser
+// than the command. Those predicates return a bare bool, so a false is either a bot that lacks the right or a lookup
+// that failed; one live getChatMember of the bot tells the two apart. A definite answer that the bot lacks the right,
+// or a Telegram client error, ends the wait with key; an error that cannot be established (429, 5xx, transport,
+// timeout) and a live record that shows the bot can (the predicate's answer was stale) keep it with
+// settings_check_failed. It answers the refusal itself, so the caller returns false afterwards.
+func (r *settingsInputReply) botCheck(key string) {
 	bot, err := lockdownLiveMember(r.b, r.wait.GroupID, r.b.Id)
 	if err != nil {
 		log.Warnf("[Settings] live check of the bot in chat %d for a typed reply failed: %v", r.wait.GroupID, err)
 		if isTelegramClientError(err) {
-			r.end("chat_status_bot_not_admin")
+			r.end(key)
 		} else {
 			r.keep("settings_check_failed")
 		}
-		return false
+		return
 	}
-	if bot.Status == gotgbot.ChatMemberStatusAdministrator {
+	if settingsBotKeyPasses(key)(bot) {
 		r.keep("settings_check_failed")
-		return false
+		return
 	}
-	r.end("chat_status_bot_not_admin")
-	return false
+	r.end(key)
 }
 
 // text translates key in the sender's language.
@@ -414,8 +433,14 @@ func (r *settingsInputReply) view() settingsView {
 // line, the still-waiting line and one Cancel button. It is pure, so a test can render exactly
 // what the door sends.
 func renderSettingsInputRefusal(v settingsView, def settingsEditPageDef, part, reason string) settingsScreen {
+	return renderSettingsInputRefusalCode(v, def.CancelCode, part, reason)
+}
+
+// renderSettingsInputRefusalCode is renderSettingsInputRefusal for a page that is named by its Cancel action code
+// alone (a list page).
+func renderSettingsInputRefusalCode(v settingsView, cancelCode, part, reason string) settingsScreen {
 	k := newSettingsKeyboard(v)
-	if cancel, ok := k.button(settingsText(v.Tr, "settings_btn_edit_cancel"), map[string]string{"a": def.CancelCode, "t": part}); ok {
+	if cancel, ok := k.button(settingsText(v.Tr, "settings_btn_edit_cancel"), map[string]string{"a": cancelCode, "t": part}); ok {
 		k.row(cancel)
 	}
 	return k.screen(reason + "\n\n" + settingsText(v.Tr, "settings_edit_still_waiting"))
@@ -424,7 +449,11 @@ func renderSettingsInputRefusal(v settingsView, def settingsEditPageDef, part, r
 // refuse answers a reply the check refused, as a reply to the message. The wait is untouched, its
 // time not extended.
 func (r *settingsInputReply) refuse(reason string) {
-	screen := renderSettingsInputRefusal(r.view(), r.def, r.wait.Part, reason)
+	cancelCode := r.def.CancelCode
+	if r.list != nil {
+		cancelCode = r.list.CancelCode
+	}
+	screen := renderSettingsInputRefusalCode(r.view(), cancelCode, r.wait.Part, reason)
 	id := r.send(screen.Text, &screen.Keyboard, true)
 	// The refusal carries a Cancel button of its own: note it on the wait, so a press on it ends
 	// this wait while a stale prompt's button still cannot.

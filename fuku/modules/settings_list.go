@@ -101,8 +101,15 @@ type settingsListDef struct {
 	EntryParam                                                          string
 	// BodyExtra adds lines after the count line of a non-empty list (the blacklist's action line).
 	BodyExtra func(v settingsView, entries []settingsListEntry) []string
-	// AddRowExtra returns the buttons of the row after the pager (the Add and Action buttons); none draws no row.
+	// AddRowExtra returns the buttons of the row after the pager that follow the Add button (the Action button); none
+	// draws no extra button.
 	AddRowExtra func(k *settingsKeyboard, entries []settingsListEntry) []gotgbot.InlineKeyboardButton
+	// AddCode, CancelCode and AddKey are the typed add's actions and the Add button's label key. An empty AddCode
+	// draws and registers no Add. Prompt gives the lines of the add prompt before its footer for a part, and Typed is
+	// the door's handler of a typed reply to the page's wait; both are set with AddCode.
+	AddCode, CancelCode, AddKey string
+	Prompt                      func(v settingsView, part string) []string
+	Typed                       func(r *settingsInputReply, part settingsListPart)
 	// Actions are the page's own action codes besides the engine's (the blacklist's action screen).
 	Actions map[string]settingsPageAction
 	// Redraw maps an action code of the page to the screen a notice refusal of that action redraws, which
@@ -255,9 +262,7 @@ func renderSettingsList(v settingsView, def settingsListDef, entries []settingsL
 		settingsListDeleteRows(k, def, first, shown, page)
 		settingsListPagerRow(k, def, page, pages)
 	}
-	if def.AddRowExtra != nil {
-		k.row(def.AddRowExtra(k, entries)...)
-	}
+	k.row(settingsListAddRow(k, def, entries)...)
 	k.navRow(false)
 	return k.screen(settingsCompose(v, def.TitleKey, body, notice, false))
 }
@@ -514,6 +519,11 @@ func settingsListActions(def settingsListDef) map[string]settingsPageAction {
 				return settingsListPrivateField(fields) && idOK && minuteOK
 			},
 			Run: settingsListRunYes(def),
+		}
+	}
+	if def.AddCode != "" {
+		for code, action := range settingsListAddActions(def) {
+			actions[code] = action
 		}
 	}
 	for code, action := range def.Actions {

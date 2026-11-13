@@ -13,7 +13,7 @@ import (
 // settingsListKeys are the locale keys a list table reads through its fields, which make check-translations cannot
 // see because they are not literal arguments of a GetString call.
 func settingsListKeys(def settingsListDef) []string {
-	keys := []string{def.TitleKey, def.IntroKey, def.CountKey, def.EmptyKey, def.DeleteAskKey, def.RemovedKey, def.AdminTagKey}
+	keys := []string{def.TitleKey, def.IntroKey, def.CountKey, def.EmptyKey, def.DeleteAskKey, def.RemovedKey, def.AdminTagKey, def.AddKey}
 	return slices.DeleteFunc(keys, func(key string) bool { return key == "" })
 }
 

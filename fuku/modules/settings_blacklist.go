@@ -4,6 +4,8 @@ import (
 	"context"
 	"html"
 	"slices"
+	"strings"
+	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	log "github.com/sirupsen/logrus"
@@ -29,6 +31,9 @@ const (
 	settingsActBlacklistSet  = "bs"
 	// settingsBlacklistActionMaxRunes caps a stored action value that has no option word when it is shown.
 	settingsBlacklistActionMaxRunes = 16
+	// settingsBlacklistApplyTimeout bounds the writes of one typed message: a message holds at most about two thousand
+	// words, each one insert.
+	settingsBlacklistApplyTimeout = 30 * time.Second
 )
 
 // The reads of the page, variables only so a test can count or fail them. Each adapts the repository's
@@ -255,8 +260,8 @@ func settingsBlacklistRunSet(p *settingsPress) *settingsScreen {
 	return &screen
 }
 
-// settingsBlacklistAddRow is the row after the pager: the Action button on a list with words, nothing on an empty
-// one (U-10). The Add button joins it in plan 19-04.
+// settingsBlacklistAddRow is the part of the row after the pager that follows the Add button: the Action button on a
+// list with words, nothing on an empty one (U-10).
 func settingsBlacklistAddRow(k *settingsKeyboard, entries []settingsListEntry) []gotgbot.InlineKeyboardButton {
 	if len(entries) == 0 {
 		return nil
@@ -300,6 +305,180 @@ func settingsBlacklistRemove(ctx context.Context, chatID, id int64) settingsList
 	return settingsListRemoval{Outcome: settingsListRemoveFailed}
 }
 
+// settingsBlacklistPrompt is the lines of the add prompt before its footer (Screen 5): what the owner is asked to send
+// and the rules a word must meet.
+func settingsBlacklistPrompt(v settingsView, _ string) []string {
+	return []string{
+		settingsText(v.Tr, "settings_bl_wait"),
+		settingsText(v.Tr, "settings_bl_wait_rules", i18n.TranslationParams{"max": listKeywordMaxRunes}),
+	}
+}
+
+// settingsBlacklistCounts is how many of the typed words fell into each category: the page words only counts, never a
+// word (U-7).
+type settingsBlacklistCounts struct {
+	Added, Already, TooLong, TooBroad, Failed int
+}
+
+// settingsBlacklistCountsOf is the counts of an apply result.
+func settingsBlacklistCountsOf(result blacklistAddResult) settingsBlacklistCounts {
+	return settingsBlacklistCounts{
+		Added:    len(result.Added),
+		Already:  len(result.Already),
+		TooLong:  len(result.TooLong),
+		TooBroad: len(result.TooBroad),
+		Failed:   result.Failed,
+	}
+}
+
+// settingsBlacklistCountLines is one line per non-zero category, in the order Added, Already, Too long, Too broad,
+// Failed.
+func settingsBlacklistCountLines(tr *i18n.Translator, c settingsBlacklistCounts) []string {
+	var lines []string
+	for _, line := range []struct {
+		key    string
+		n      int
+		params i18n.TranslationParams
+	}{
+		{"settings_bl_saved_added", c.Added, i18n.TranslationParams{"n": c.Added}},
+		{"settings_bl_saved_already", c.Already, i18n.TranslationParams{"n": c.Already}},
+		{"settings_bl_saved_too_long", c.TooLong, i18n.TranslationParams{"n": c.TooLong, "max": listKeywordMaxRunes}},
+		{"settings_bl_saved_too_broad", c.TooBroad, i18n.TranslationParams{"n": c.TooBroad}},
+		{"settings_bl_saved_failed", c.Failed, i18n.TranslationParams{"n": c.Failed}},
+	} {
+		if line.n > 0 {
+			lines = append(lines, settingsText(tr, line.key, line.params))
+		}
+	}
+	return lines
+}
+
+// settingsBlacklistSavedNotice is the notice of the saved page: the success mark on the first count line, the other
+// non-zero categories on their own lines and, for a message cut from an album, the album note.
+func settingsBlacklistSavedNotice(tr *i18n.Translator, c settingsBlacklistCounts, album bool) string {
+	lines := settingsBlacklistCountLines(tr, c)
+	if len(lines) == 0 {
+		return ""
+	}
+	notice := settingsNoticeOK(lines[0])
+	for _, line := range lines[1:] {
+		notice += "\n" + line
+	}
+	if album {
+		notice += "\n" + settingsText(tr, "settings_edit_album_cut")
+	}
+	return notice
+}
+
+// settingsBlacklistRefusalText is the reply to a message with no addable word: the first line, then one line per
+// non-zero category.
+func settingsBlacklistRefusalText(tr *i18n.Translator, c settingsBlacklistCounts) string {
+	text := settingsText(tr, "settings_bl_refuse_none")
+	for _, line := range settingsBlacklistCountLines(tr, c) {
+		text += "\n" + line
+	}
+	return text
+}
+
+// settingsBlacklistTypedWords splits the typed text like /addblacklist's arguments (strings.Fields), keeping each word as
+// typed and counting a repeat once (words that differ only in case are one word, as they are stored lower-cased).
+func settingsBlacklistTypedWords(text string) []string {
+	seen := make(map[string]struct{})
+	var words []string
+	for _, word := range strings.Fields(text) {
+		key := strings.ToLower(word)
+		if _, dup := seen[key]; dup {
+			continue
+		}
+		seen[key] = struct{}{}
+		words = append(words, word)
+	}
+	return words
+}
+
+// settingsBlacklistRows is the engine's fresh read as the rows applyBlacklistAdd takes.
+func settingsBlacklistRows(entries []settingsListEntry) models.BlacklistSettingsSlice {
+	rows := make(models.BlacklistSettingsSlice, 0, len(entries))
+	for _, e := range entries {
+		rows = append(rows, &models.BlacklistSettings{Word: e.Text, Action: e.Action})
+	}
+	return rows
+}
+
+// settingsBlacklistPrecheck sorts the typed words against the fresh list the way applyBlacklistAdd does and reports the
+// counts of what would be refused and how many words are addable, so a message with nothing to add is refused before
+// the wait is claimed.
+func settingsBlacklistPrecheck(words []string, existing models.BlacklistSettingsSlice) (settingsBlacklistCounts, int) {
+	var counts settingsBlacklistCounts
+	listed := make(map[string]struct{}, len(existing))
+	for _, word := range existing.Triggers() {
+		listed[word] = struct{}{}
+	}
+	valid, tooLong := blacklistSortWords(words)
+	counts.TooLong = len(tooLong)
+	addable := 0
+	for _, word := range valid {
+		switch _, isListed := listed[strings.ToLower(word)]; {
+		case keywordTooBroad(word):
+			counts.TooBroad++
+		case isListed:
+			counts.Already++
+		default:
+			addable++
+		}
+	}
+	return counts, addable
+}
+
+// settingsBlacklistTyped is the door's handler of a typed reply to the Blacklist wait (UI-SPEC section 6, one step):
+// the words are the text or caption of the message, split and de-duplicated, sorted against a fresh read, and, when at
+// least one is addable, claimed and stored through applyBlacklistAdd, the function /addblacklist stores through. A message
+// with no word, or none addable, is refused with the wait kept; a write that fails for every word releases the claim.
+func settingsBlacklistTyped(r *settingsInputReply, _ settingsListPart) {
+	words := settingsBlacklistTypedWords(r.msg.GetText())
+	if len(words) == 0 {
+		r.refuse(r.text("settings_edit_refuse_need_text"))
+		return
+	}
+	readCtx, cancelRead := context.WithTimeout(context.Background(), settingsReadTimeout)
+	entries, err := settingsBlacklistRead(readCtx, r.wait.GroupID)
+	cancelRead()
+	if err != nil {
+		log.Warnf("[Settings] the blacklist of chat %d could not be read for a typed reply: %v", r.wait.GroupID, err)
+		r.keep("settings_check_failed")
+		return
+	}
+	existing := settingsBlacklistRows(entries)
+	counts, addable := settingsBlacklistPrecheck(words, existing)
+	if addable == 0 {
+		r.refuse(settingsBlacklistRefusalText(r.tr, counts))
+		return
+	}
+	claim, claimed := r.claimWait()
+	if !claimed {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), settingsBlacklistApplyTimeout)
+	defer cancel()
+	result := applyBlacklistAdd(ctx, r.wait.GroupID, words, existing)
+	counts = settingsBlacklistCountsOf(result)
+	if result.Outcome != blacklistAdded {
+		r.releaseWait(claim)
+		if result.Outcome == blacklistAddSaveFailed {
+			log.Errorf("[Settings] the typed blacklist words of chat %d could not be saved for user %d", r.wait.GroupID, r.user.Id)
+			r.refuse(r.text("common_settings_save_failed"))
+			return
+		}
+		// Another admin listed every word between the read and the write: nothing is left to add.
+		r.refuse(settingsBlacklistRefusalText(r.tr, counts))
+		return
+	}
+	r.finishWait(claim)
+	log.Infof("[Settings] user %d added %d typed words to the blacklist of chat %d", r.user.Id, counts.Added, r.wait.GroupID)
+	r.sendSavedList(*r.list, result.Added[0], settingsBlacklistSavedNotice(r.tr, counts, settingsInputIsAlbum(r.msg)))
+	r.closePrompt()
+}
+
 // settingsBlacklistDef is the table of the Blacklist page.
 func settingsBlacklistDef() settingsListDef {
 	return settingsListDef{
@@ -323,6 +502,11 @@ func settingsBlacklistDef() settingsListDef {
 			return settingsBlacklistEntry(ctx, chatID, id)
 		},
 		Count:       func(ctx context.Context, chatID int64) (int, error) { return settingsBlacklistCount(ctx, chatID) },
+		AddCode:     "bn",
+		CancelCode:  "bc",
+		AddKey:      "settings_btn_bl_add",
+		Prompt:      settingsBlacklistPrompt,
+		Typed:       settingsBlacklistTyped,
 		IntroKey:    "settings_bl_intro",
 		CountKey:    "settings_bl_count",
 		EmptyKey:    "settings_bl_empty",

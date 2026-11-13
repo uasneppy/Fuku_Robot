@@ -217,10 +217,14 @@ func settingsInputNonceValid(n string) bool {
 	return true
 }
 
-// settingsInputValidPart reports whether part is a part of page the editor registers.
+// settingsInputValidPart reports whether part is a part of page the editor registers, or a part of a list page
+// (the static table of settings_list_input.go: a list page's parts are valid in the store whether or not the page
+// is registered).
 func settingsInputValidPart(page, part string) bool {
-	def, ok := settingsEditPageByKey(page)
-	return ok && settingsEditPartByCode(def, part) != nil
+	if def, ok := settingsEditPageByKey(page); ok && settingsEditPartByCode(def, part) != nil {
+		return true
+	}
+	return settingsListPartByCode(page, part) != nil
 }
 
 // settingsInputMarkerValue is the marker's value for a wait: "c|p|t".
