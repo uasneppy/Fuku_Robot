@@ -342,6 +342,11 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 				for name, screen := range settingsPrivacyPhase18Screens(tr, map[string]settingsView{"group": groupView, "private admin": privateAdminView}) {
 					screens[name] = screen
 				}
+				// Phase 19: the three list pages' screens (the group note in a group menu, every screen of the
+				// private menu), once per language with the worst entry and the longest two notices.
+				for name, screen := range settingsPrivacyPhase19Screens(tr, map[string]settingsView{"group": groupView, "private admin": privateAdminView}) {
+					screens[name] = screen
+				}
 
 				for name, screen := range screens {
 					all := settingsStaffPrivacyScreenText(screen)
@@ -637,6 +642,16 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 	})
 	t.Run("a group menu Phase 18 run by an admin who is not the creator names neither the Staff Group, the log channel nor a member", func(t *testing.T) {
 		settingsPrivacyPhase18Run(t, false)
+	})
+
+	// Phase 19: the same administrator drives the three list pages: in the private menu a delete ask, an action choice,
+	// an Add with its typed words and both typed steps of Filters and Notes; in a group menu every list cell and a
+	// forged press.
+	t.Run("a private Phase 19 run by an admin who is not the creator never names the Staff Group", func(t *testing.T) {
+		settingsPrivacyPhase19Run(t, true)
+	})
+	t.Run("a group menu Phase 19 run by an admin who is not the creator never names the Staff Group", func(t *testing.T) {
+		settingsPrivacyPhase19Run(t, false)
 	})
 
 	t.Run("a group menu run never names a Staff Group", func(t *testing.T) {
@@ -1415,6 +1430,214 @@ func settingsPrivacyPhase18Run(t *testing.T, private bool) {
 	} {
 		if strings.Contains(everything, leak) {
 			t.Errorf("a Phase 18 run of an admin who is not the creator received %q: %q", leak, everything)
+		}
+	}
+}
+
+// settingsPrivacyPhase19Screens renders the screens of the three list pages through their pure renderers for one
+// language: in a group menu the group note (with and without a bot username), and in the private menu of an administrator
+// who is not the creator each page's list (empty, one entry, eight and a middle page of three, with the longest two
+// notices and the worst entry), its delete card, its prompts, its refusal replies, its saved page and, for the Blacklist,
+// the action screen uniform, mixed, inert and empty. A notice only adds its own length, so two stand for all.
+func settingsPrivacyPhase19Screens(tr *i18n.Translator, views map[string]settingsView) map[string]settingsScreen {
+	screens := make(map[string]settingsScreen)
+	ampersands := strings.Repeat("&", 100)
+	until := time.Now()
+	entries := func(n int) []settingsListEntry {
+		out := make([]settingsListEntry, 0, n)
+		for i := 0; i < n; i++ {
+			out = append(out, settingsListEntry{ID: int64(10 + i), Text: strings.Repeat("&", 32) + string(rune('a'+i)), Action: "ban", AdminOnly: true})
+		}
+		return out
+	}
+	allCounts := settingsBlacklistCounts{Added: 99999, Already: 99999, TooLong: 99999, TooBroad: 99999, Failed: 99999}
+
+	for viewName, view := range views {
+		for _, def := range []settingsListDef{settingsBlacklistDef(), settingsFiltersDef(), settingsNotesDef()} {
+			at := func(what string) string { return fmt.Sprintf("phase 19 %s %s %s", def.Key, viewName, what) }
+			screens[at("group note")] = renderSettingsPrivateOnlyNote(view, def.TitleKey, "FukuTestBot")
+			screens[at("group note, no bot username")] = renderSettingsPrivateOnlyNote(view, def.TitleKey, "")
+			if !view.Private {
+				continue
+			}
+			first := settingsListFirstPart(def.Key)
+			notices := settingsBlacklistLongest([]string{
+				settingsNoticeOK(settingsListEntryText(tr, def.RemovedKey, def.EntryParam, ampersands)),
+				settingsNoticeWarn(settingsText(tr, "settings_card_expired")),
+				settingsNoticeWarn(settingsText(tr, "settings_entries_already_removed")),
+				settingsNoticeWarn(settingsText(tr, "common_settings_save_failed")),
+				settingsNoticeWarn(settingsText(tr, "connections_is_user_connected_bot_not_admin")),
+			}, 2)
+
+			screens[at("empty list")] = renderSettingsList(view, def, nil, 1, "")
+			screens[at("one entry")] = renderSettingsList(view, def, entries(1), 1, "")
+			for i, notice := range notices {
+				screens[at(fmt.Sprintf("eight entries, notice %d", i))] = renderSettingsList(view, def, entries(8), 1, notice)
+				screens[at(fmt.Sprintf("middle page, notice %d", i))] = renderSettingsList(view, def, entries(24), 2, notice)
+			}
+			screens[at("card")] = renderSettingsListCard(view, def, settingsListEntry{ID: 12345678901234567, Text: ampersands}, 9999)
+			screens[at("prompt, replaced")] = renderSettingsListPrompt(view, def, first.Code, until, true, "")
+			screens[at("prompt")] = renderSettingsListPrompt(view, def, first.Code, until, false, "")
+			if first.Next != "" {
+				screens[at("step 2 prompt")] = renderSettingsListPrompt(view, def, first.Next, until, true, ampersands)
+			}
+			for i, reason := range []string{
+				settingsText(tr, "settings_entries_refuse_blank"),
+				settingsText(tr, "common_settings_save_failed"),
+				settingsText(tr, "connections_is_user_connected_bot_not_admin"),
+				settingsText(tr, "settings_edit_refuse_need_text"),
+			} {
+				screens[at(fmt.Sprintf("refusal %d", i))] = renderSettingsInputRefusalCode(view, def.CancelCode, first.Code, reason)
+			}
+			if def.TwoStep != nil {
+				saved := settingsNoticeOK(settingsListEntryText(tr, def.TwoStep.SavedKey, def.EntryParam, ampersands)) + "\n" + settingsText(tr, "settings_edit_album_cut")
+				screens[at("saved page")] = renderSettingsList(view, def, entries(8), 1, saved)
+			} else {
+				screens[at("saved page")] = renderSettingsList(view, def, entries(8), 1, settingsBlacklistSavedNotice(tr, allCounts, true))
+				screens[at("refusal of nothing addable")] = renderSettingsInputRefusalCode(view, def.CancelCode, first.Code, settingsBlacklistRefusalText(tr, allCounts))
+			}
+			if def.Key != settingsPageBlacklist {
+				continue
+			}
+			eight := make([]settingsListEntry, 0, 8)
+			for i, action := range []string{"warn", "mute", "kick", "ban", "none", "tban", "tmute", "delete"} {
+				eight = append(eight, settingsListEntry{ID: int64(i + 1), Text: fmt.Sprintf("w%d", i), Action: action})
+			}
+			uniform := entries(3)
+			inert := entries(3)
+			for i := range inert {
+				inert[i].Action = "tban"
+			}
+			screens[at("action, uniform")] = renderSettingsBlacklistAction(view, uniform, "")
+			screens[at("action, mixed")] = renderSettingsBlacklistAction(view, eight, notices[0])
+			screens[at("action, inert")] = renderSettingsBlacklistAction(view, inert, "")
+			screens[at("action, empty")] = renderSettingsBlacklistAction(view, nil, "")
+		}
+	}
+	return screens
+}
+
+// settingsPrivacyPhase19AdminJSON is a getChatMember answer for an administrator who can restrict members and change
+// the group's info, the two rights the list pages' writes ask for between them.
+func settingsPrivacyPhase19AdminJSON(userID int64) string {
+	return fmt.Sprintf(
+		`{"status":"administrator","user":{"id":%d,"is_bot":false,"first_name":"Moderator"},"can_be_edited":false,`+
+			`"is_anonymous":false,"can_manage_chat":true,"can_delete_messages":false,"can_manage_video_chats":false,`+
+			`"can_restrict_members":true,"can_promote_members":false,"can_change_info":true,"can_invite_users":false}`, userID)
+}
+
+// settingsPrivacyPhase19Run is the Phase 19 run of an administrator who is not the creator, in the private menu or in a menu
+// opened in the group, over a group linked to a Staff Group. In the private menu it opens each list page, asks to delete an
+// entry, opens the Blacklist action screen and sets an action, and adds through the typed replies (words, then the two steps
+// of Filters and of Notes); in a group menu it opens each list cell, Back, a forged Cancel and every list action. Nothing the
+// bot produced names the Staff Group.
+func settingsPrivacyPhase19Run(t *testing.T, private bool) {
+	t.Helper()
+	setCachedBotUsername(t, "FukuTestBot")
+	env := newSettingsListEnv(t)
+	staffChat := settingsStaffTestOwnedStaffGroup(env.settingsEnv, settingsStaffPrivacyTitle)
+	linkLockdownGroupTo(env.lockdownEnv, staffChat)
+	chat := env.chat
+	moderator := gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: "Moderator"}
+	t.Cleanup(func() {
+		db.DB.Where("user_id = ?", moderator.Id).Delete(&models.User{})
+		dbcache.DeleteCache(dbcache.CacheKey("user", moderator.Id))
+		dbcache.ResetLocalForTest()
+	})
+	env.fake.setMemberRaw(chat.Id, moderator.Id, settingsPrivacyPhase19AdminJSON(moderator.Id))
+	env.fake.listAdministrator(chat.Id, moderator.Id)
+	settingsListSeedBlacklist(t, chat.Id, "alpha", "beta")
+	settingsListSeedFilters(t, chat.Id, "alpha")
+	settingsListSeedNotes(t, chat.Id, "alpha")
+
+	var (
+		msgID  int64
+		chatID = chat.Id
+	)
+	if private {
+		msgID, chatID = env.updateID(), moderator.Id
+		press := func(kv ...string) { env.pressPrivate(moderator, msgID, env.privateFields(chat.Id, kv...)) }
+		press("a", settingsActOpen, "p", settingsPageBlacklist)
+		press("a", "bx", "r", strconv.FormatInt(settingsBlacklistIDOf(t, chat.Id, "alpha"), 10), "v", "1")
+		press("a", "bp", "v", "1")
+		press("a", settingsActBlacklistOpen)
+		press("a", settingsActBlacklistSet, "v", "mute")
+		press("a", "bn")
+		settingsListDoorSay(env, moderator, "gamma delta")
+		press("a", settingsActOpen, "p", settingsPageFilters)
+		press("a", "ix", "r", strconv.FormatInt(settingsFiltersIDOf(t, chat.Id, "alpha"), 10), "v", "1")
+		press("a", "ig", "v", "1")
+		press("a", "ia")
+		settingsListDoorSay(env, moderator, "Keyword")
+		settingsListDoorSay(env, moderator, "A reply")
+		press("a", settingsActOpen, "p", settingsPageNotes)
+		press("a", "ex", "r", strconv.FormatInt(settingsNotesIDOf(t, chat.Id, "alpha"), 10), "v", "1")
+		press("a", "ea")
+		settingsListDoorSay(env, moderator, "Name")
+		settingsListDoorSay(env, moderator, "Some content")
+		press("a", settingsActBack)
+	} else {
+		msgID = env.openMenu(moderator)
+		press := func(kv ...string) { env.press(moderator, msgID, env.groupFields(moderator, kv...)) }
+		for _, page := range settingsPhase19Pages {
+			press("a", settingsActOpen, "p", page)
+			press("a", settingsActCancel, "p", page)
+		}
+		for _, row := range settingsPhase19Codes(settingsCardExpiry(time.Now())) {
+			kv := []string{"a", row.code}
+			for key, value := range row.fields {
+				kv = append(kv, key, value)
+			}
+			press(kv...)
+		}
+		press("a", settingsActBack)
+	}
+
+	var seen []string
+	for _, edit := range env.edits(chatID, msgID) {
+		seen = append(seen, fmt.Sprint(edit.Params["text"]))
+		for _, button := range settingsAllButtons(staffKeyboardOf(edit.Params["reply_markup"])) {
+			seen = append(seen, button.Text, button.CallbackData, button.Url)
+		}
+	}
+	for _, sent := range env.fake.sentTo(chatID) {
+		seen = append(seen, fmt.Sprint(sent.Params["text"]))
+		for _, button := range settingsAllButtons(staffKeyboardOf(sent.Params["reply_markup"])) {
+			seen = append(seen, button.Text, button.CallbackData, button.Url)
+		}
+	}
+	for _, answer := range env.fake.callsFor("answerCallbackQuery") {
+		seen = append(seen, fmt.Sprint(answer.Params["text"]))
+	}
+	everything := strings.Join(seen, "\n")
+
+	if n := len(env.edits(chatID, msgID)); n < 5 {
+		t.Fatalf("the run edited the menu only %d times", n)
+	}
+	if private {
+		for _, want := range []string{"settings_bl_intro", "settings_bl_action_line", "settings_flt_intro", "settings_notes_intro", "settings_bl_saved_added", "settings_flt_saved", "settings_notes_saved"} {
+			if !containsMarker(everything, want) {
+				t.Errorf("the run never produced %s: %q", want, everything)
+			}
+		}
+		if got := settingsBlacklistStored(t, chat.Id); got["gamma"] != "mute" || got["delta"] != "mute" || len(got) != 4 {
+			t.Errorf("the blacklist = %v, want alpha and beta and the typed gamma and delta, all on mute", got)
+		}
+		if _, ok := settingsFiltersStored(t, chat.Id)["keyword"]; !ok {
+			t.Errorf("the typed filter was not stored")
+		}
+		if _, ok := settingsNotesStored(t, chat.Id)["name"]; !ok {
+			t.Errorf("the typed note was not stored")
+		}
+	} else if !containsMarker(everything, "settings_entries_group_note") || containsMarker(everything, "settings_bl_count") {
+		t.Errorf("the group menu run did not draw only the group note: %q", everything)
+	}
+	for _, leak := range []string{
+		"ZZ Staff", settingsStaffPrivacyTitle, html.EscapeString(settingsStaffPrivacyTitle),
+		strings.TrimPrefix(strconv.FormatInt(staffChat.Id, 10), "-"), settingsStaffPrivacyDigits,
+	} {
+		if strings.Contains(everything, leak) {
+			t.Errorf("a Phase 19 run of an admin who is not the creator received %q: %q", leak, everything)
 		}
 	}
 }
