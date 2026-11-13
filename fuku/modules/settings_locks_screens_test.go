@@ -85,13 +85,19 @@ func TestSettingsLocksPageFitsEveryLocale(t *testing.T) {
 				"🚫 " + settingsText(tr, "settings_del_no_right"),
 				settingsUnknownState + " " + settingsText(tr, "settings_del_right_unknown"),
 			}
-			// The longest notices: the command's own failure sentence for each lock, and the refusal.
+			// The notices: none, the refusal, and the command's own failure sentence for the locks. A
+			// notice adds only its own length to the text and changes no button, so the longest three of
+			// the 44 failure sentences hold the worst case of every combination below; the others would
+			// render the same screens with less text, at ten times the cost of this test.
 			notices := []string{"", settingsNoticeWarn(settingsText(tr, "connections_is_user_connected_bot_not_admin"))}
+			var failures []string
 			for _, row := range settingsLockRows {
-				notices = append(notices,
+				failures = append(failures,
 					settingsLocksFailureNotice(press, "locks_lock_failed", row),
 					settingsLocksFailureNotice(press, "locks_unlock_failed", row))
 			}
+			slices.SortStableFunc(failures, func(a, b string) int { return panelUTF16Len(b) - panelUTF16Len(a) })
+			notices = append(notices, failures[:3]...)
 			for titleName, title := range titles {
 				for _, variant := range settingsWarnsViews(tr, title) {
 					budget := 9
