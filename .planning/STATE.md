@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 19
 current_phase_name: Blacklist, Filter and Note Pages
 status: executing
-stopped_at: Completed 19-07-PLAN.md
-last_updated: "2026-11-13T15:03:27.701Z"
+stopped_at: Completed 19-08-PLAN.md
+last_updated: "2026-11-13T15:57:37.359Z"
 last_activity: 2026-11-13
 last_activity_desc: Planned Phase 19 (12 plans), UI-SPEC approved
-state_head: c77937ebab8379255b102ef321fde12afdf9ba54
+state_head: 2ce26f87aefab0159575b22e700c55b198abf568
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 126
-  completed_plans: 120
+  completed_plans: 121
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 ## Current Position
 
 Phase: 19 (Blacklist, Filter and Note Pages) — plans 1 to 5 of 12 executed, ready to execute plan 6. Phase 18 (Remaining Settings Pages) is closed to `human_needed`: all 15 plans executed, the phase gate passed, `18-SECURITY.md` (51 of 51 closed, two small findings fixed), `18-VERIFICATION.md` (14 of 14 after the language callback was wired onto `applyGroupLanguage`, `99f796e`), `18-SPIKE.md` holds the 25 live checks
-Plan: 8 of 12 (19-01 to 19-07 complete; 19-08 next; the Filters page (page i, Order 47, Main at 17 cells) is the first real page on the two-step engine and its Apply hook takes the sender's translator, so 19-09 (Notes) gives hooks only and uses the generic read adapters settingsListReader, settingsListEntryReader and settingsListCounter; the Blacklist pager is bp and Add is bn, the Filters codes are ig ix iy ia ic; a Filters test uses a live creator (settingsFiltersOwner), never env.admin, who lacks can_change_info; the Main-entry count in TestSettingsPhase18Cost is 18 and 19-09 makes it 19; applyNoteAdd and the note readers come from 19-08; CONTEXT defaults A19-2, A19-3 and A19-6 and the fail-closed /filter lookup are provisional owner confirmations)
+Plan: 9 of 12 (19-01 to 19-08 complete; 19-09 next (Notes page `e`); the Filters page (page i, Order 47, Main at 17 cells) is the first real page on the two-step engine and its Apply hook takes the sender's translator, so 19-09 (Notes) gives hooks only and uses the generic read adapters settingsListReader, settingsListEntryReader and settingsListCounter; the Blacklist pager is bp and Add is bn, the Filters codes are ig ix iy ia ic; a Filters test uses a live creator (settingsFiltersOwner), never env.admin, who lacks can_change_info; the Main-entry count in TestSettingsPhase18Cost is 18 and 19-09 makes it 19; applyNoteAdd, applyNoteRemoveByID and the note readers (ListNoteEntriesFresh, GetNoteEntryFresh, CountNotesFresh, NoteExistsContext) exist since 19-08, with the shape outcome noteNameBadShape; CONTEXT defaults A19-2, A19-3, A19-4 and A19-6 and the fail-closed /filter and /save lookups are provisional owner confirmations, each in its own revertable commit)
 Status: Phase 18 closed to `human_needed` (live checks deferred, see Deferred Items); Phase 19 is executing (19-06 done: the generic two-step add engine of the door's list branch, four strings (424 settings_ keys), a swap-and-restore test page; 19-05 done: the filter commands behind apply functions and a golden, the typed-content extraction, the A19-2 refusal and the fail-closed lookups of /filter in their own commits, the fresh filter readers). Phases 10 to 18 are not marked Complete in ROADMAP
 Last activity: 2026-11-13 — Completed 19-05 (filter apply functions behind a golden, ExtractTypedNoteOrFilter, A19-2 for filters, fail-closed /filter lookups, fresh filter readers)
 
@@ -191,6 +191,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 19 P05 | 2h | 3 tasks | 18 files |
 | Phase 19 P06 | approx 1h | 3 tasks | 15 files |
 | Phase 19 P07 | 100min | 3 tasks | 20 files |
+| Phase 19 P08 | 70min | 3 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -297,6 +298,7 @@ Recent decisions affecting current work:
 - [Phase 19]: 19-03: the Blacklist pager code is bp, not the UI-SPEC's bg, because bg is the Deletion page's Bot goodbye row code; 19-04's Add must not use ba (Bot auto)
 - [Phase 19]: 19-05: /filter refuses a one-code-point keyword (A19-2, filters_keyword_too_broad) and refuses when its existence or count lookup fails (common_settings_save_failed); each is a provisional owner confirmation in its own commit (f0dd7f7, 4f794f1)
 - [Phase 19]: 19-05: ExtractTypedNoteOrFilter shares extractReplyContent with ExtractNoteAndFilter so a typed filter or note reply is stored exactly as the command stores it; the two-word-keyword reply quirk is not copied
+- [Phase 19]: 19-08: the shape outcome of checkNoteName is noteNameBadShape because noteNameInvalid is the validation function; A19-4 and the fail-closed /save lookup are provisional owner confirmations, each in its own revertable commit (2eeac8f, ed7988a)
 
 ### Pending Todos
 
@@ -380,8 +382,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-13T15:03:24.143Z
-Stopped at: Completed 19-07-PLAN.md
+Last session: 2026-11-13T15:57:33.345Z
+Stopped at: Completed 19-08-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
