@@ -380,7 +380,7 @@ Plans:
   3. A Log channel page shows the group's log channel and turns each log category on or off; linking a new channel stays a command. An Anonymous admins page sets the anonymous-admin mode, with the same rights `/anonadmin` needs.
   4. A Locks page turns each lock type on or off, paged.
   5. Every setting changed on these pages is stored, cached and refused exactly as by its command, and the page and the command always show the same value.
-**Plans:** 10/15 plans executed
+**Plans:** 11/15 plans executed
 - [x] 18-01-PLAN.md — the tracer: the /setwarnlimit and /setwarnmode goldens, applyWarnLimit and applyWarnMode, the warns reader and the Warnings page's limit stepper with its four strings (wave 1)
 - [x] 18-02-PLAN.md — the other 51 new settings strings in all 8 locales with their limits and cell checks (wave 2)
 - [x] 18-03-PLAN.md — the Warnings page complete: the action choice, the inert line, the bounds, drift, rights, bytes and fit (wave 3)
@@ -391,7 +391,7 @@ Plans:
 - [x] 18-08-PLAN.md — the /log and /nolog golden, applyLogCategory and the log channel reader (wave 8)
 - [x] 18-09-PLAN.md — the Log channel page: six categories, the audit post, the not-linked refusal and its privacy (wave 9)
 - [x] 18-10-PLAN.md — the /anonadmin golden, applyAnonAdmin, its reader and the Anonymous admins page with the owner right (wave 10)
-- [ ] 18-11-PLAN.md — the /lock and /unlock golden, applyLock and the lock table held equal to the commands (wave 11)
+- [x] 18-11-PLAN.md — the /lock and /unlock golden, applyLock and the lock table held equal to the commands (wave 11)
 - [ ] 18-12-PLAN.md — the Locks page: 22 locks over two pages, the kg pager, the right line and the final Main grid (wave 12)
 - [ ] 18-13-PLAN.md — Main with fifteen pages, the privacy sweep in 8 languages, and the codes, reads and cost across pages (wave 13)
 - [ ] 18-14-PLAN.md — the end-to-end proof that each page's setting is what the bot acts on (wave 14)
@@ -428,5 +428,5 @@ Phases run in numeric order, 10 → 19, which is the owner's priority. Phase 18 
 | 15. AI Spam-Name Check | 11/11 | In Progress | - |
 | 16. Scheduled Deletion of Service and Bot Messages | 9/9 | In Progress | - |
 | 17. Command, Edit and Self-Destruct Deletion | 12/12 | In Progress | - |
-| 18. Remaining Settings Pages | 10/15 | In Progress | - |
+| 18. Remaining Settings Pages | 11/15 | In Progress | - |
 | 19. Blacklist, Filter and Note Pages | 0/TBD | Not started | - |

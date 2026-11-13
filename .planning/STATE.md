@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 18
 current_phase_name: Remaining Settings Pages
 status: executing
-stopped_at: Completed 18-10-PLAN.md
-last_updated: "2026-11-12T23:54:43.814Z"
-last_activity: 2026-11-12
-last_activity_desc: Completed 18-10-PLAN.md
-state_head: 2c1aa20baa4c824dc5a03dfeaa9eb325880e702a
+stopped_at: Completed 18-11-PLAN.md
+last_updated: "2026-11-13T00:33:22.270Z"
+last_activity: 2026-11-13
+last_activity_desc: Completed 18-11-PLAN.md
+state_head: b5d302f54c3897c3ab513c734730358fe31b0dd1
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 114
-  completed_plans: 108
+  completed_plans: 109
   percent: 0
 ---
 
@@ -29,10 +29,10 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 
 ## Current Position
 
-Phase: 18 (Remaining Settings Pages) — executing, plan 10 of 15 done (18-10 `/anonadmin` behind `applyAnonAdmin`: the golden recorded first (23 cases, including the admin row the command's own read creates for a refused non-owner), `admin.LoadAnonAdminContext` (no row created), and the Anonymous admins page (`y`, Order 89, icon 🎭): control `m` (`tg` only, `settingsRightOwnerBotAdmin`, the live creator with the bot an administrator, refused exactly as the command refuses), opening for any admin the owner gate admits also while the bot is not an administrator (the stated looseness); 18-09 the Log channel page (`o`, Order 88) over `applyLogCategory` with the `#SETTINGS` audit post and no channel name anywhere, and the shared `settingsToggleGrid`; 18-08 `/log` and `/nolog` behind `applyLogCategory`: the golden recorded first (25 cases, every request, the `#SETTINGS` audit post and the stored flags, the continue-on-failed-save quirk pinned), `applyLogCategory` for one category with the commands keeping their loop and audit post, and `logchannels.LoadContext`, which tells a chat with no linked channel from a failed read; 18-07 the Language page (`u`, Order 87): the `change_language` callback and `/lang` golden recorded first (21 cases, both branches), `applyGroupLanguage` behind the callback's group branch, `lang.LoadGroupLanguageContext`, control `l` (`st` only, two lower-case letters, `settingsRightAdmin`), the grid of the enabled languages with a check mark in place of the stored one's flag, and the translator swapped to the code just written in a group menu only, never reaching the user's own language; 18-06 the Switches page (`t`, Order 86): Reports, the AI spam filter and Auto-approve as `tg`-only toggles through `applyReportsEnabled`, `applyAISpamEnabled` and `applyAutoApprove` behind the commands' rights, the AI status line and Off-only form with the alert-plus-redraw gate for a stale On press, Main's `{n} on` state, and the shared `settingsToggleSet`; 18-05 the `/aispam` golden recorded first (27 cases, the save error returned), `aispamConfigured` (the TypeSafe value set and `ENABLE_AISPAM` on, never the Anthropic key), `applyAISpamEnabled` and `aispam.LoadEnabledContext`; 18-04 `/reports` and `/autoapprove` goldens recorded first, `applyReportsEnabled` and `applyAutoApprove`, `reports.LoadChatStatusContext`, and the two composite rights `settingsRightChangeInfoBotAdmin` and `settingsRightOwnerBotAdmin`, the only framework edit of the phase; 18-03 the Warnings page finished: the action choice through `applyWarnMode`, the inert line, the bounds, forged-press refusals, and the drift, authority, byte and fit proofs, with AGENTS.md, README, docs and the start of `18-SPIKE.md`; 18-02 the strings: the other 51 `settings_` keys in all 8 locales, 385 per file, with their limits rows and the Phase 18 cell-length checks; 18-01 the tracer: the `/setwarnlimit` and `/setwarnmode` golden recorded first, `applyWarnLimit` and `applyWarnMode`, the error-returning warn settings reader, and the Warnings page's limit stepper with its four strings in all 8 locales). Phase 17 (Command, Edit and Self-Destruct Deletion) is closed: all 12 plans executed, reviewed, fixed, security audited (48 of 48 threats closed), validated and verified `human_needed` (10/10 truths in code and tests); DEL-03, DEL-04 and DEL-05 are ticked and Phase 17 is not marked Complete in ROADMAP.
-Plan: 11 of 15
-Status: Ready to execute plan 18-11. Phases 10 to 17 stay `human_needed` (live checks deferred, see Deferred Items) and are not marked Complete in ROADMAP
-Last activity: 2026-11-12 — Completed 18-10-PLAN.md
+Phase: 18 (Remaining Settings Pages) — executing, plan 11 of 15 done (18-11 `/lock` and `/unlock` behind `applyLock`: the golden recorded first (19 cases: every refusal, an unknown name refusing the whole call before any write, one, several, a restriction with a lock, one of several failing to save, plus the `/locks` text after each write, `/locktypes` and an empty `/locks`), `applyLock` for one kind through the `lockWrites` seam with `applyLockList` as the commands' shared loop, and `settingsLockRows`, the table of the 22 locks (two-letter codes, name keys, pages of 12 and 10) held equal to `/locktypes` in both directions with every name, Locks word, page title and log category name checked in 8 languages; no page is registered yet; 18-10 `/anonadmin` behind `applyAnonAdmin`: the golden recorded first (23 cases, including the admin row the command's own read creates for a refused non-owner), `admin.LoadAnonAdminContext` (no row created), and the Anonymous admins page (`y`, Order 89, icon 🎭): control `m` (`tg` only, `settingsRightOwnerBotAdmin`, the live creator with the bot an administrator, refused exactly as the command refuses), opening for any admin the owner gate admits also while the bot is not an administrator (the stated looseness); 18-09 the Log channel page (`o`, Order 88) over `applyLogCategory` with the `#SETTINGS` audit post and no channel name anywhere, and the shared `settingsToggleGrid`; 18-08 `/log` and `/nolog` behind `applyLogCategory`: the golden recorded first (25 cases, every request, the `#SETTINGS` audit post and the stored flags, the continue-on-failed-save quirk pinned), `applyLogCategory` for one category with the commands keeping their loop and audit post, and `logchannels.LoadContext`, which tells a chat with no linked channel from a failed read; 18-07 the Language page (`u`, Order 87): the `change_language` callback and `/lang` golden recorded first (21 cases, both branches), `applyGroupLanguage` behind the callback's group branch, `lang.LoadGroupLanguageContext`, control `l` (`st` only, two lower-case letters, `settingsRightAdmin`), the grid of the enabled languages with a check mark in place of the stored one's flag, and the translator swapped to the code just written in a group menu only, never reaching the user's own language; 18-06 the Switches page (`t`, Order 86): Reports, the AI spam filter and Auto-approve as `tg`-only toggles through `applyReportsEnabled`, `applyAISpamEnabled` and `applyAutoApprove` behind the commands' rights, the AI status line and Off-only form with the alert-plus-redraw gate for a stale On press, Main's `{n} on` state, and the shared `settingsToggleSet`; 18-05 the `/aispam` golden recorded first (27 cases, the save error returned), `aispamConfigured` (the TypeSafe value set and `ENABLE_AISPAM` on, never the Anthropic key), `applyAISpamEnabled` and `aispam.LoadEnabledContext`; 18-04 `/reports` and `/autoapprove` goldens recorded first, `applyReportsEnabled` and `applyAutoApprove`, `reports.LoadChatStatusContext`, and the two composite rights `settingsRightChangeInfoBotAdmin` and `settingsRightOwnerBotAdmin`, the only framework edit of the phase; 18-03 the Warnings page finished: the action choice through `applyWarnMode`, the inert line, the bounds, forged-press refusals, and the drift, authority, byte and fit proofs, with AGENTS.md, README, docs and the start of `18-SPIKE.md`; 18-02 the strings: the other 51 `settings_` keys in all 8 locales, 385 per file, with their limits rows and the Phase 18 cell-length checks; 18-01 the tracer: the `/setwarnlimit` and `/setwarnmode` golden recorded first, `applyWarnLimit` and `applyWarnMode`, the error-returning warn settings reader, and the Warnings page's limit stepper with its four strings in all 8 locales). Phase 17 (Command, Edit and Self-Destruct Deletion) is closed: all 12 plans executed, reviewed, fixed, security audited (48 of 48 threats closed), validated and verified `human_needed` (10/10 truths in code and tests); DEL-03, DEL-04 and DEL-05 are ticked and Phase 17 is not marked Complete in ROADMAP.
+Plan: 12 of 15
+Status: Ready to execute plan 18-12. Phases 10 to 17 stay `human_needed` (live checks deferred, see Deferred Items) and are not marked Complete in ROADMAP
+Last activity: 2026-11-13 — Completed 18-11-PLAN.md
 
 Progress: [░░░░░░░░░░] 0% (v1.1)
 
@@ -181,6 +181,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 18 P08 | 55 min | 2 tasks | 6 files |
 | Phase 18 P09 | 46min | 3 tasks | 10 files |
 | Phase 18 P10 | 70min | 4 tasks | 14 files |
+| Phase 18 P11 | 70min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -363,8 +364,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-12T23:54:41.289Z
-Stopped at: Completed 18-10-PLAN.md
+Last session: 2026-11-13T00:33:19.975Z
+Stopped at: Completed 18-11-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
