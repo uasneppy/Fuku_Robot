@@ -410,7 +410,17 @@ Plans:
   2. A Filters page lists the filters (paged), deletes one, and adds one by typing the keyword and then the reply.
   3. A Notes page lists the notes (paged), deletes one, and adds one by typing the name and then the content.
   4. Each add, delete and action change is stored, cached and refused exactly as the matching command does it, and works in the group at once: the blacklisted word is acted on, the filter answers and the note can be fetched.
-**Plans:** TBD
+**Plans:** 10 plans
+- [ ] 19-01-PLAN.md — the blacklist commands' golden, applyBlacklistAdd, Remove, RemoveByID and Action, the fresh chat-scoped readers, the too-broad refusal and inherited action (A19-2, A19-3), and the PostgreSQL proof of the action CHECK with its conditional migration (wave 1)
+- [ ] 19-02-PLAN.md — the tracer page: the list engine, PrivateOnly, settingsCardRowsTo and the ninth right, the Blacklist page's list, delete card and action screen, 19 strings and Main at 16 cells (wave 2)
+- [ ] 19-03-PLAN.md — the typed-reply door's list branch, the wait's bounded w and q fields and advance script, and adding blacklisted words by one typed message (wave 3)
+- [ ] 19-04-PLAN.md — the filter commands' golden, applyFilterAdd and Remove, ExtractTypedNoteOrFilter behind a characterization of the extraction, the too-broad refusal for /filter and the filter readers (wave 4)
+- [ ] 19-05-PLAN.md — the two-step add and the Filters page: list, delete card, keyword then reply, the cap, 18 strings and Main at 17 cells (wave 5)
+- [ ] 19-06-PLAN.md — the note commands' golden, applyNoteAdd and Remove, the note-name rule (A19-4) and the note readers (wave 6)
+- [ ] 19-07-PLAN.md — the Notes page: list with the admin-only tag, delete card, name then content, 14 strings and Main at its final 18 cells (wave 7)
+- [ ] 19-08-PLAN.md — the cross-page sweeps: codes, Main, privacy in 8 languages and in group menus, logs, the owner gate at the list doors, reads and cost (wave 8)
+- [ ] 19-09-PLAN.md — the end-to-end proof that each page changes what the bot does in the group, also for a Staff Group, without Redis and across replicas (wave 9)
+- [ ] 19-10-PLAN.md — the rulebook read whole, README and docs, 19-SPIKE.md, the phase gate and the PAGE-07 to PAGE-09 ticks (wave 10)
 **UI hint**: yes
 
 ## Progress
