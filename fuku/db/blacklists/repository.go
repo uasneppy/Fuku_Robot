@@ -2,9 +2,12 @@ package blacklists
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
 	"github.com/uasneppy/fuku_robot/fuku/db/cache"
@@ -109,6 +112,58 @@ func GetBlacklistSettingsContext(ctx context.Context, chatId int64) models.Black
 		return models.BlacklistSettingsSlice{}
 	}
 	return result
+}
+
+// ListBlacklistEntriesFresh reads the chat's blacklist rows (ID, word and action) with one
+// query. It is fresh, chat-scoped and uncached, returns its error, and creates nothing.
+func ListBlacklistEntriesFresh(ctx context.Context, chatId int64) ([]models.BlacklistSettings, error) {
+	var rows []models.BlacklistSettings
+	err := db.DB.WithContext(ctx).Select("id", "word", "action").Where("chat_id = ?", chatId).Order("id").Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+// GetBlacklistEntryFresh reads one blacklist row by its ID, only when it belongs to the
+// chat: a missing ID and the ID of another chat's row both return nil and a nil error. It is
+// fresh, chat-scoped and uncached, returns its read error, and creates nothing.
+func GetBlacklistEntryFresh(ctx context.Context, chatId, id int64) (*models.BlacklistSettings, error) {
+	var row models.BlacklistSettings
+	err := db.DB.WithContext(ctx).Where("id = ? AND chat_id = ?", id, chatId).Take(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+// CountBlacklistFresh counts the chat's blacklist rows. It is fresh, chat-scoped and
+// uncached, returns its error, and creates nothing.
+func CountBlacklistFresh(ctx context.Context, chatId int64) (int64, error) {
+	var count int64
+	err := db.DB.WithContext(ctx).Model(&models.BlacklistSettings{}).Where("chat_id = ?", chatId).Count(&count).Error
+	return count, err
+}
+
+// RemoveBlacklistByID deletes one blacklist row by its ID, only when it belongs to the chat,
+// in one conditional statement, and returns the stored word of the row that went. A missing ID
+// and the ID of another chat's row delete nothing and return removed false. The chat's cached
+// blacklist is dropped only when a row went.
+func RemoveBlacklistByID(ctx context.Context, chatId, id int64) (word string, removed bool, err error) {
+	var rows []models.BlacklistSettings
+	result := db.DB.WithContext(ctx).Clauses(clause.Returning{}).Where("id = ? AND chat_id = ?", id, chatId).Delete(&rows)
+	if result.Error != nil {
+		log.Errorf("[Database] RemoveBlacklistByID: %v - %d", result.Error, chatId)
+		return "", false, result.Error
+	}
+	if len(rows) != 1 {
+		return "", false, nil
+	}
+	cache.DeleteCache(cache.CacheKey("blacklist", chatId))
+	return rows[0].Word, true, nil
 }
 
 func LoadBlacklistsStats() (blacklistTriggers, blacklistChats int64) {

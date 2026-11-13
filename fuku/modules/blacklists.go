@@ -44,17 +44,20 @@ var blacklistActionValues = []string{"mute", "kick", "warn", "ban", "none"}
 // blacklistWriteSeams are the repository writes the apply functions call, a variable so a
 // test can make one fail.
 type blacklistWriteSeams struct {
-	Add       func(ctx context.Context, chatID int64, word, action string) error
-	Remove    func(ctx context.Context, chatID int64, word string) error
-	SetAction func(ctx context.Context, chatID int64, action string) (int64, error)
+	Add    func(ctx context.Context, chatID int64, word, action string) error
+	Remove func(ctx context.Context, chatID int64, word string) error
+	// RemoveByID deletes one row by ID only when it belongs to the chat and returns its word.
+	RemoveByID func(ctx context.Context, chatID, id int64) (word string, removed bool, err error)
+	SetAction  func(ctx context.Context, chatID int64, action string) (int64, error)
 }
 
 // blacklistWrites is the one place the blacklist commands and the settings menu reach the
 // repository's writes through.
 var blacklistWrites = blacklistWriteSeams{
-	Add:       blacklists.AddBlacklistContext,
-	Remove:    blacklists.RemoveBlacklistContext,
-	SetAction: blacklists.SetBlacklistActionContext,
+	Add:        blacklists.AddBlacklistContext,
+	Remove:     blacklists.RemoveBlacklistContext,
+	RemoveByID: blacklists.RemoveBlacklistByID,
+	SetAction:  blacklists.SetBlacklistActionContext,
 }
 
 // blacklistAddOutcome is what applyBlacklistAdd did overall; its zero value is applied.
@@ -88,6 +91,28 @@ type blacklistRemoveResult struct {
 	Removed []string
 	// Failed counts the words whose delete failed.
 	Failed int
+}
+
+// blacklistRemoveByIDOutcome is what applyBlacklistRemoveByID did; its zero value is removed.
+type blacklistRemoveByIDOutcome int
+
+const (
+	// blacklistRemovedByID means the chat's row was deleted.
+	blacklistRemovedByID blacklistRemoveByIDOutcome = iota
+	// blacklistRemoveGone means no row of this chat has the ID: already removed, never
+	// existed or another chat's row, which are all one answer.
+	blacklistRemoveGone
+	// blacklistRemoveByIDSaveFailed means the delete failed.
+	blacklistRemoveByIDSaveFailed
+)
+
+// blacklistRemoveByIDResult is what applyBlacklistRemoveByID returns.
+type blacklistRemoveByIDResult struct {
+	Outcome blacklistRemoveByIDOutcome
+	// Word is the stored word of the deleted row, for the caller's notice.
+	Word string
+	// Err is the repository error of a failed delete, for the caller's own handling.
+	Err error
 }
 
 // blacklistActionOutcome is what applyBlacklistAction did; its zero value is applied.
@@ -194,6 +219,24 @@ func applyBlacklistRemove(ctx context.Context, chatID int64, words, existing []s
 		result.Removed = append(result.Removed, word)
 	}
 	return result
+}
+
+// applyBlacklistRemoveByID deletes one word by its row ID, only when the row belongs to the
+// chat, so an ID of another chat deletes nothing. It judges no person's rights and logs the
+// chat ID and the error only, never the word.
+func applyBlacklistRemoveByID(ctx context.Context, chatID, id int64) blacklistRemoveByIDResult {
+	word, removed, err := blacklistWrites.RemoveByID(ctx, chatID, id)
+	if err != nil {
+		log.WithFields(log.Fields{
+			"chatId": chatID,
+			"error":  err,
+		}).Error("[Blacklists] Failed to remove a blacklist word by ID")
+		return blacklistRemoveByIDResult{Outcome: blacklistRemoveByIDSaveFailed, Err: err}
+	}
+	if !removed {
+		return blacklistRemoveByIDResult{Outcome: blacklistRemoveGone}
+	}
+	return blacklistRemoveByIDResult{Outcome: blacklistRemovedByID, Word: word}
 }
 
 // applyBlacklistAction sets the action of every word of the chat. The caller lower-cases the

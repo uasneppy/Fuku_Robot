@@ -193,4 +193,47 @@ func TestApplyBlacklist(t *testing.T) {
 			t.Errorf("failing seam: result = %+v, want save failed with the error", result)
 		}
 	})
+
+	t.Run("remove by ID", func(t *testing.T) {
+		chatID := blacklistApplyChat(t)
+		other := blacklistApplyChat(t)
+		blacklistApplySeed(t, chatID, "warn", secretWord, "eggs")
+		blacklistApplySeed(t, other, "warn", "foreign")
+		rowID := func(chat int64, word string) int64 {
+			var row models.BlacklistSettings
+			if err := db.DB.Where("chat_id = ? AND word = ?", chat, word).Take(&row).Error; err != nil {
+				t.Fatalf("read row id: %v", err)
+			}
+			return int64(row.ID)
+		}
+		ownID, foreignID, eggsID := rowID(chatID, secretWord), rowID(other, "foreign"), rowID(chatID, "eggs")
+
+		hook.Reset()
+		if got := applyBlacklistRemoveByID(ctx, chatID, foreignID); got.Outcome != blacklistRemoveGone || got.Word != "" {
+			t.Errorf("another chat's ID: result = %+v, want gone", got)
+		}
+		if got := blacklistApplyStoredWords(t, other); !slices.Equal(got, []string{"foreign=warn"}) {
+			t.Errorf("another chat's row changed: %q", got)
+		}
+		got := applyBlacklistRemoveByID(ctx, chatID, ownID)
+		if got.Outcome != blacklistRemovedByID || got.Word != secretWord {
+			t.Errorf("own ID: result = %+v, want removed with the stored word", got)
+		}
+		if got := blacklists.GetBlacklistSettingsContext(ctx, chatID).Triggers(); !slices.Equal(got, []string{"eggs"}) {
+			t.Errorf("the chat reads %q after the delete, want [eggs]", got)
+		}
+		if got := applyBlacklistRemoveByID(ctx, chatID, ownID).Outcome; got != blacklistRemoveGone {
+			t.Errorf("second delete = %v, want gone", got)
+		}
+
+		failing := blacklistWrites
+		failing.RemoveByID = func(context.Context, int64, int64) (string, bool, error) {
+			return "", false, errors.New("database is down")
+		}
+		blacklistApplySeams(t, failing)
+		if got := applyBlacklistRemoveByID(ctx, chatID, eggsID); got.Outcome != blacklistRemoveByIDSaveFailed || got.Err == nil {
+			t.Errorf("failing seam: result = %+v, want save failed with the error", got)
+		}
+		assertNoWordLogged(t)
+	})
 }
