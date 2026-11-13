@@ -28,6 +28,8 @@ func settingsListExtraKeys() []string {
 		// The Filters page's two prompts, its two refusals and its cap notice (Phase 19, plan 19-07).
 		"settings_flt_wait_keyword", "settings_flt_wait_keyword_rules", "settings_flt_wait_reply",
 		"settings_flt_refuse_exists", "settings_flt_refuse_cap",
+		// The Notes page's two prompts (Phase 19, plan 19-09).
+		"settings_notes_wait_name", "settings_notes_wait_name_rules", "settings_notes_wait_content",
 	}
 	for _, part := range settingsListParts {
 		keys = append(keys, part.WordKey)

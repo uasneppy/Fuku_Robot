@@ -33,8 +33,8 @@ func settingsMainStateLine(text, titleKey string) (string, bool) {
 // private shape ends with the Groups and Close row; the hand-built subtests of
 // TestSettingsMainGrid keep their own literals.
 const (
-	settingsMainShapeGroup   = "s|l / c|f / n|k / b|i / w|g / r|m / d|t / u|o / y / a / close"
-	settingsMainShapePrivate = "s|l / c|f / n|k / b|i / w|g / r|m / d|t / u|o / y / a / groups|close"
+	settingsMainShapeGroup   = "s|l / c|f / n|k / b|i / w|g / r|e / m|d / t|u / o|y / a / close"
+	settingsMainShapePrivate = "s|l / c|f / n|k / b|i / w|g / r|e / m|d / t|u / o|y / a / groups|close"
 	settingsMainOwnerRows    = 11
 )
 
@@ -550,12 +550,12 @@ func settingsMainLines(text string) []string {
 	return lines
 }
 
-// settingsMainTitleKeys are the title keys of the eighteen pages in the order Main draws them for the
-// owner: the seventeen grid pages in grid order, then Access.
+// settingsMainTitleKeys are the title keys of the nineteen pages in the order Main draws them for the
+// owner: the eighteen grid pages in grid order, then Access.
 var settingsMainTitleKeys = []string{
 	"settings_page_staff", "settings_page_lockdown", "settings_page_captcha", "settings_page_antiflood",
 	"settings_page_warns", "settings_page_locks", "settings_page_blacklist", "settings_page_filters", "settings_page_welcome", "settings_page_goodbye",
-	"settings_page_rules", "settings_page_mreq", "settings_page_del", "settings_page_switches",
+	"settings_page_rules", "settings_page_notes", "settings_page_mreq", "settings_page_del", "settings_page_switches",
 	"settings_page_lang", "settings_page_log", "settings_page_anon", "settings_page_access",
 }
 

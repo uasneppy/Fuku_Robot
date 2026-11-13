@@ -16,6 +16,7 @@ import (
 	dbcache "github.com/uasneppy/fuku_robot/fuku/db/cache"
 	db_filters "github.com/uasneppy/fuku_robot/fuku/db/filters"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
+	db_notes "github.com/uasneppy/fuku_robot/fuku/db/notes"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
 	"github.com/uasneppy/fuku_robot/fuku/utils/content"
 )
@@ -41,7 +42,7 @@ func newSettingsListEnv(t *testing.T) *settingsListEnv {
 	return env
 }
 
-// settingsListCleanup deletes the list rows of the chats (blacklists and filters) and their cached copies before the
+// settingsListCleanup deletes the list rows of the chats (blacklists, filters and notes) and their cached copies before the
 // test and again when it ends, then resets the in-process cache layer.
 func settingsListCleanup(t *testing.T, chatIDs ...int64) {
 	t.Helper()
@@ -51,6 +52,7 @@ func settingsListCleanup(t *testing.T, chatIDs ...int64) {
 		}
 		db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.BlacklistSettings{})
 		db.DB.Where("chat_id IN ?", chatIDs).Delete(&db.ChatFilters{})
+		db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.Notes{})
 		for _, id := range chatIDs {
 			for _, key := range []string{"blacklist", "filter_list", "filters_optimized", "notes_list"} {
 				dbcache.DeleteCache(dbcache.CacheKey(key, id))
@@ -86,6 +88,25 @@ func settingsListSeedFilters(t *testing.T, chatID int64, keywords ...string) {
 		if _, err := db_filters.AddFilterContext(context.Background(), chatID, keyword, "reply "+keyword, "", nil, db.TEXT); err != nil {
 			t.Fatalf("seed filter %q: %v", keyword, err)
 		}
+	}
+}
+
+// settingsListSeedNotes stores text notes with the given names in the chat through the repository, as /save does (each
+// with a content naming its name).
+func settingsListSeedNotes(t *testing.T, chatID int64, names ...string) {
+	t.Helper()
+	for _, name := range names {
+		if _, err := db_notes.AddNoteContext(context.Background(), chatID, name, "content "+name, "", nil, db.TEXT, false, false, false, true, false, false); err != nil {
+			t.Fatalf("seed note %q: %v", name, err)
+		}
+	}
+}
+
+// settingsListSeedAdminNote stores one text note that only administrators can fetch.
+func settingsListSeedAdminNote(t *testing.T, chatID int64, name string) {
+	t.Helper()
+	if _, err := db_notes.AddNoteContext(context.Background(), chatID, name, "content "+name, "", nil, db.TEXT, false, false, true, true, false, false); err != nil {
+		t.Fatalf("seed admin note %q: %v", name, err)
 	}
 }
 

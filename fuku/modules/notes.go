@@ -210,6 +210,16 @@ func applyNoteRemoveByID(ctx context.Context, chatID, id int64) noteRemoveByIDRe
 	return noteRemoveByIDResult{Outcome: noteRemovedByID, Name: name}
 }
 
+// resolveNotePrivateConflict is the rule /save and the Notes page share for the two private-notes directives: a
+// note that asks to be sent to the private chat ({private}) and to the group ({noprivate}) at once keeps neither, so
+// it follows the group's own setting, and the caller says so (conflict true). Any other combination is unchanged.
+func resolveNotePrivateConflict(pvtOnly, grpOnly bool) (pvt, grp, conflict bool) {
+	if pvtOnly && grpOnly {
+		return false, false, true
+	}
+	return pvtOnly, grpOnly, false
+}
+
 // offerNoteOverwrite answers /save for a name the chat already has with the overwrite card: the new content
 // is cached under a fresh token and the Yes and No buttons carry only that token.
 func offerNoteOverwrite(b *gotgbot.Bot, ctx *ext.Context, data overwriteNote) error {
@@ -321,8 +331,9 @@ func (m moduleStruct) addNote(b *gotgbot.Bot, ctx *ext.Context) error {
 		return ext.EndGroups
 	}
 
-	if grpOnly && pvtOnly {
-		grpOnly, pvtOnly = false, false
+	var conflict bool
+	pvtOnly, grpOnly, conflict = resolveNotePrivateConflict(pvtOnly, grpOnly)
+	if conflict {
 		noteConflictText, _ := tr.GetString("notes_private_conflict_warning")
 		noteString += noteConflictText
 	}

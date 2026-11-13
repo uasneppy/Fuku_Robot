@@ -533,6 +533,20 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_flt_refuse_cap":    {100, 150},
 	"settings_flt_delete_ask":    {150, 220},
 	"settings_flt_removed":       {64, 100},
+
+	// Phase 19 (plan 19-09, task 1), the Notes page: its name, list page, admin tag, Add button, both prompts and the
+	// saved notice (UI-SPEC rows 54 to 63 and 67).
+	"settings_page_notes":            {18, 18},
+	"settings_notes_intro":           {110, 170},
+	"settings_notes_count":           {16, 24},
+	"settings_notes_empty":           {40, 64},
+	"settings_notes_admin_tag":       {16, 22},
+	"settings_btn_notes_add":         {20, 20},
+	"settings_notes_wait_name":       {170, 250},
+	"settings_notes_wait_name_rules": {80, 120},
+	"settings_notes_name_line":       {32, 44},
+	"settings_notes_wait_content":    {390, 540},
+	"settings_notes_saved":           {100, 160},
 }
 
 // settingsAlertKeys are shown as answerCallbackQuery alerts: plain text, no tag, at most
@@ -755,6 +769,7 @@ func TestSettingsLabelLengths(t *testing.T) {
 		{"🔐", "settings_page_locks"},
 		{"🔤", "settings_page_blacklist"},
 		{"🔁", "settings_page_filters"},
+		{"📝", "settings_page_notes"},
 	}
 	options := []string{
 		"settings_opt_math", "settings_opt_text", "settings_opt_turnstile",
@@ -828,6 +843,8 @@ func TestSettingsLabelLengths(t *testing.T) {
 		"settings_btn_bl_add",
 		// The Filters list page's Add button (Phase 19, UI-SPEC check C19-2).
 		"settings_btn_flt_add",
+		// The Notes list page's Add button (Phase 19, UI-SPEC check C19-2).
+		"settings_btn_notes_add",
 	}
 	// The editor's half-width switch cells (Phase 12, UI-SPEC check 2): the template with
 	// {state} replaced by the icon alone is at most 20 code points, so a name is at most 18.
