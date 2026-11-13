@@ -3545,6 +3545,18 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   and `FilterExistsContext` (fresh, chat-scoped, error-returning, creating nothing and filling neither `filter_list` nor
   `filters_optimized`) and deletes one filter through `applyFilterRemoveByID` (`filters.RemoveFilterByID`: one `DELETE ... WHERE id = ?
   AND chat_id = ? RETURNING`, both caches dropped only when a row went, so an ID of another chat deletes nothing).
+  The notes (Phase 19) are written by `applyNoteAdd` and `applyNoteRemove` (with `checkNoteName`) in `notes.go`, through the
+  `noteWrites` seam (defaults `notes.AddNoteContext`, `RemoveNoteContext` and `NoteExistsContext`; `AddNote`, `RemoveNote` and
+  `DoesNoteExists` stay as wrappers with their old hiding behaviour, and `AddNoteContext` reports whether a row was inserted).
+  `/save` and `/addnote`, `/clear` and `/rmnote` keep their own gates, argument checks, extraction, private-flag conflict, overwrite
+  card (`offerNoteOverwrite`) and replies and map the typed result: an existing name is the overwrite card, a lost insert race
+  (`noteRaced`) is replied as a success exactly as before, the success text splices the name three times unescaped (a kept quirk),
+  and `/clear` keeps its cached `GetNotesListContext` existence check, its `ExtractQuotes` and its `notes_removed_success` even when
+  nothing matched the quoted form. `UpdateNote` (the overwrite callback), `RemoveAllNotes` (`/clearall`) and the backup import are
+  other writes and are not on the apply functions. `notes_list` is not in `skipLocal`: another replica can serve the old list for up
+  to `CACHE_LOCAL_TTL`, exactly as after the commands, and every write drops it on this replica. The apply functions log the chat ID
+  and the error only, never a note name. `TestLegacyNoteRequests` pins every request and stored row of the three commands and is
+  never re-recorded.
 - Rules message (`rules.go`): `/rules` (in the group and in a private chat connected to it), the private rules message the
   `/start rules_<chat id>` deep link opens and the Rules page's Full preview are built by
   `buildRulesMessage` and sent by `sendRulesMessage`. The builder has two forms, the group form (`rulesFormGroup`: heading
@@ -4173,7 +4185,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `TestLegacyAnonAdminRequests` and `TestLegacyLockRequests`, which record what each command sent and stored before its
   extraction into an apply function and are never re-recorded or weakened. Phase 19 adds `TestLegacyBlacklistRequests`
   (`blacklists_legacy_request_test.go`, chats from `-1009919001101`), `TestLegacyFilterRequests` (`filters_legacy_request_test.go`,
-  chats from `-1009919001201`, the overwrite card's random token replaced by a fixed marker) and every `TestLegacy*Requests` golden of Phase 19 joins
+  chats from `-1009919001201`, the overwrite card's random token replaced by a fixed marker), `TestLegacyNoteRequests`
+  (`notes_legacy_request_test.go`, chats from `-1009919001301`, the same marker) and every `TestLegacy*Requests` golden of Phase 19 joins
   that rule: committed alone before the production change, never re-recorded or weakened. The tests across the six pages are
   `TestSettingsMainPhase18` and the fifteen-cell subtest of `TestSettingsMainGrid` (`settings_main_test.go`: the final
   grid, one state line per page in order with their defaults (eighteen since plan 19-07), the unknown mark on a page whose read fails with every other line
