@@ -3557,6 +3557,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   to `CACHE_LOCAL_TTL`, exactly as after the commands, and every write drops it on this replica. The apply functions log the chat ID
   and the error only, never a note name. `TestLegacyNoteRequests` pins every request and stored row of the three commands and is
   never re-recorded.
+  `/save` refuses a note name that contains white space, starts with `#` or is over 100 code points with the reply
+  `notes_name_invalid` and stores nothing (`noteNameInvalid` in `list_validation.go`, run by `checkNoteName` after the blank check
+  and before the existence read, outcome `noteNameBadShape`): `#name` and `/get` take the first space-separated token, so such a
+  name could never be fetched. This is the provisional owner confirmation A19-4 of `19-SPIKE.md`, in its own commit, so declining
+  it is a revert of that commit (the locale key goes with it); `/clear` is not touched and still strips a leading `#`.
 - Rules message (`rules.go`): `/rules` (in the group and in a private chat connected to it), the private rules message the
   `/start rules_<chat id>` deep link opens and the Rules page's Full preview are built by
   `buildRulesMessage` and sent by `sendRulesMessage`. The builder has two forms, the group form (`rulesFormGroup`: heading

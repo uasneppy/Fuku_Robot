@@ -1334,6 +1334,7 @@ notes_invalid: अमान्य नोट!
 notes_save_success: "नोट <b>%s</b> सेव किया गया!\n<code>#%s</code> या <code>/get %s</code> से प्राप्त करें।"
 notes_save_failed: "नोट सेव करने में विफल। कृपया बाद में पुनः प्रयास करें।"
 notes_keyword_required: "कृपया जवाब देने के लिए एक कीवर्ड दें!"
+notes_name_invalid: "नोट का नाम एक ही शब्द होना चाहिए, अधिकतम 100 अक्षरों का, और # से शुरू नहीं होना चाहिए।"
 notes_overwrite_confirm: "नोट पहले से मौजूद है!\nक्या आप इसे ओवरराइट करना चाहते हैं?"
 notes_remove_keyword_required: "कृपया हटाने के लिए एक कीवर्ड दें!"
 notes_not_exists: "नोट मौजूद नहीं है!"

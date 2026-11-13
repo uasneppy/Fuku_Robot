@@ -1381,6 +1381,7 @@ captcha_math_time_remaining: |
 notes_save_success: "Catatan <b>%s</b> tersimpan!\nDapatkan dengan <code>#%s</code> atau <code>/get %s</code>."
 notes_save_failed: "Gagal menyimpan catatan. Silakan coba lagi nanti."
 notes_keyword_required: "Silakan berikan kata kunci untuk dibalas!"
+notes_name_invalid: "Nama catatan harus satu kata dengan maksimal 100 karakter dan tidak boleh diawali dengan #."
 notes_overwrite_confirm: "Catatan sudah ada!\nApakah Anda ingin menimpanya?"
 notes_remove_keyword_required: "Silakan berikan kata kunci untuk dihapus!"
 notes_not_exists: "Catatan tidak ada!"

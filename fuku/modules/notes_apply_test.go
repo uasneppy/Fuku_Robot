@@ -16,6 +16,7 @@ import (
 	dbcache "github.com/uasneppy/fuku_robot/fuku/db/cache"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/db/notes"
+	"github.com/uasneppy/fuku_robot/fuku/i18n"
 )
 
 // noteApplyChat returns a fresh chat ID whose note rows, settings row and cache entries are deleted
@@ -87,6 +88,11 @@ func TestApplyNote(t *testing.T) {
 		chatID := noteApplyChat(t)
 		if got := applyNoteAdd(ctx, chatID, noteApplyInput("  ")).Outcome; got != noteNameBlank {
 			t.Errorf("blank = %v, want blank", got)
+		}
+		for _, bad := range []string{"two words", "#rules", strings.Repeat("x", listKeywordMaxRunes+1)} {
+			if got := applyNoteAdd(ctx, chatID, noteApplyInput(bad)).Outcome; got != noteNameBadShape {
+				t.Errorf("name %q = %v, want bad shape", bad, got)
+			}
 		}
 		noteApplySeed(t, chatID, "taken")
 		if got := applyNoteAdd(ctx, chatID, noteApplyInput("TAKEN")).Outcome; got != noteExists {
@@ -225,5 +231,65 @@ func TestNoteCommandsWriteThroughApplyFunctions(t *testing.T) {
 	}
 	if adds != 1 || removes != 1 {
 		t.Errorf("seam calls: add %d, remove %d, want 1 each", adds, removes)
+	}
+}
+
+// TestApplyNoteNameRule proves A19-4: a name that could never be fetched is refused by the check, by the
+// apply function and by /save, with nothing stored, and a plain name still stores.
+func TestApplyNoteNameRule(t *testing.T) {
+	withRealLocales(t)
+	ctx := context.Background()
+	chatID := noteApplyChat(t)
+	for _, bad := range []string{"two words", "a\tb", "a\u3000b", "#rules", strings.Repeat("x", listKeywordMaxRunes+1)} {
+		if got := checkNoteName(ctx, chatID, bad).Outcome; got != noteNameBadShape {
+			t.Errorf("checkNoteName(%q) = %v, want bad shape", bad, got)
+		}
+		if got := applyNoteAdd(ctx, chatID, noteApplyInput(bad)).Outcome; got != noteNameBadShape {
+			t.Errorf("applyNoteAdd(%q) = %v, want bad shape", bad, got)
+		}
+	}
+
+	admin := gotgbot.User{Id: 777000, FirstName: "Telegram"}
+	member := gotgbot.User{Id: 42, FirstName: "Member"}
+	chat := gotgbot.Chat{Id: chatID, Type: "supergroup", Title: "Notes Chat"}
+	run := func(text string, reply *gotgbot.Message) []moduleBotCall {
+		client := newModuleBotClient()
+		bot := newModuleTestBot(client)
+		msgCtx := newModuleMessageContext(bot, chat, admin, text)
+		msgCtx.EffectiveMessage.ReplyToMessage = reply
+		if err := notesModule.addNote(bot, msgCtx); err != ext.EndGroups {
+			t.Fatalf("addNote(%q) error = %v, want EndGroups", text, err)
+		}
+		return client.callsFor("sendMessage")
+	}
+	wantInvalid, _ := i18n.MustNewTranslator("uk").GetString("notes_name_invalid")
+	if wantInvalid == "" {
+		t.Fatal("notes_name_invalid is missing")
+	}
+	reply := &gotgbot.Message{MessageId: 55, Date: 1, Chat: chat, From: &member, Text: "reply body"}
+	for _, tc := range []struct {
+		name  string
+		text  string
+		reply *gotgbot.Message
+	}{
+		{"quoted two words in the reply form", `/save "two words"`, reply},
+		{"leading hash inline", "/save #x hello", nil},
+		{"leading hash in the reply form", "/save #x", reply},
+	} {
+		calls := run(tc.text, tc.reply)
+		if len(calls) != 1 || calls[0].Params["text"] != wantInvalid {
+			t.Errorf("%s: replies = %v, want one notes_name_invalid", tc.name, calls)
+		}
+	}
+	var stored int64
+	if err := db.DB.Model(&models.Notes{}).Where("chat_id = ?", chatID).Count(&stored).Error; err != nil || stored != 0 {
+		t.Errorf("stored notes after the refusals = %d (%v), want 0", stored, err)
+	}
+
+	if calls := run("/save rules hello there", nil); len(calls) != 1 {
+		t.Fatalf("/save rules replies = %d, want one", len(calls))
+	}
+	if !notes.DoesNoteExists(chatID, "rules") {
+		t.Error("a plain name was not stored")
 	}
 }

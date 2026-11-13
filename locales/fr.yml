@@ -812,6 +812,7 @@ notes_invalid: Note invalide !
 notes_save_success: "Note <b>%s</b> sauvegardée !\nObtenez-la avec <code>#%s</code> ou <code>/get %s</code>."
 notes_save_failed: "Échec de la sauvegarde de la note. Veuillez réessayer plus tard."
 notes_keyword_required: "Veuillez me donner un mot-clé auquel répondre !"
+notes_name_invalid: "Le nom d'une note doit être un seul mot de 100 caractères au plus et ne doit pas commencer par #."
 notes_overwrite_confirm: "La note existe déjà !\nVoulez-vous l'écraser ?"
 notes_remove_keyword_required: "Veuillez me donner un mot-clé à supprimer !"
 notes_not_exists: "La note n'existe pas !"

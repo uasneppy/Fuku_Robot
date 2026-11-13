@@ -1389,6 +1389,7 @@ captcha_math_time_remaining: |
 notes_save_success: "¡Nota <b>%s</b> guardada!\nObtenla con <code>#%s</code> o <code>/get %s</code>."
 notes_save_failed: "Error al guardar la nota. Por favor, inténtalo de nuevo más tarde."
 notes_keyword_required: "¡Por favor proporciona una palabra clave para responder!"
+notes_name_invalid: "El nombre de una nota debe ser una sola palabra de hasta 100 caracteres y no puede empezar por #."
 notes_overwrite_confirm: "¡La nota ya existe!\n¿Quieres sobrescribirla?"
 notes_remove_keyword_required: "¡Por favor proporciona una palabra clave para eliminar!"
 notes_not_exists: "¡La nota no existe!"

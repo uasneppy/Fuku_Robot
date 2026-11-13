@@ -25,3 +25,14 @@ func keywordTooBroad(word string) bool {
 	r, _ := utf8.DecodeRuneInString(word)
 	return !unicode.Is(unicode.So, r)
 }
+
+// noteNameInvalid reports whether a note name could never be fetched or would not fit: it contains white
+// space, starts with #, or is over listKeywordMaxRunes code points. #name and /get take the first
+// space-separated token after the # or the command, so a name with a space, or one that starts with #, that
+// was stored could never be called back. The length bound also bounds the typed wait's one text field.
+func noteNameInvalid(name string) bool {
+	if strings.HasPrefix(name, "#") || utf8.RuneCountInString(name) > listKeywordMaxRunes {
+		return true
+	}
+	return strings.IndexFunc(name, unicode.IsSpace) >= 0
+}

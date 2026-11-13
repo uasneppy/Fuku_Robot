@@ -72,6 +72,9 @@ const (
 	noteAdded noteAddOutcome = iota
 	// noteNameBlank means the name is empty.
 	noteNameBlank
+	// noteNameBadShape means the name has white space or a leading # or is over listKeywordMaxRunes code
+	// points (noteNameInvalid): it could never be fetched by #name or /get.
+	noteNameBadShape
 	// noteExists means the chat already has a note with this name; the command offers to overwrite it.
 	noteExists
 	// noteRaced means another writer stored the name between the check and the insert; /save answers it
@@ -118,12 +121,15 @@ type noteRemoveResult struct {
 	Err     error
 }
 
-// checkNoteName runs the checks every note add shares, in order: a blank name, then a name the chat already
-// has. It returns a result whose outcome is noteAdded when nothing refuses the name. A failed existence
+// checkNoteName runs the checks every note add shares, in order: a blank name, a name that could never be
+// fetched (noteNameInvalid), then a name the chat already has. It returns a result whose outcome is noteAdded when nothing refuses the name. A failed existence
 // lookup is logged by chat ID and read as "not found", as the command always did. It never logs the name.
 func checkNoteName(ctx context.Context, chatID int64, name string) noteAddResult {
 	if strings.TrimSpace(name) == "" {
 		return noteAddResult{Outcome: noteNameBlank}
+	}
+	if noteNameInvalid(name) {
+		return noteAddResult{Outcome: noteNameBadShape}
 	}
 	exists, err := noteWrites.Exists(ctx, chatID, name)
 	if err != nil {
@@ -299,6 +305,8 @@ func (m moduleStruct) addNote(b *gotgbot.Bot, ctx *ext.Context) error {
 	switch added.Outcome {
 	case noteNameBlank:
 		return replyNoteKey(b, ctx, "notes_keyword_required")
+	case noteNameBadShape:
+		return replyNoteKey(b, ctx, "notes_name_invalid")
 	case noteExists:
 		return offerNoteOverwrite(b, ctx, overwriteNote{
 			overwriteBase: overwriteBase{

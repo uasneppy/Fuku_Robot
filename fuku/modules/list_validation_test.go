@@ -37,3 +37,27 @@ func TestKeywordTooBroad(t *testing.T) {
 		}
 	}
 }
+
+func TestNoteNameInvalid(t *testing.T) {
+	cases := []struct {
+		name string
+		note string
+		want bool
+	}{
+		{"two words", "two words", true},
+		{"tab inside", "a\tb", true},
+		{"ideographic space", "a　b", true},
+		{"leading hash", "#rules", true},
+		{"101 code points", strings.Repeat("x", listKeywordMaxRunes+1), true},
+		{"plain", "rules", false},
+		{"hyphen", "staff-rules", false},
+		{"cyrillic", "правила", false},
+		{"inner hash", "a#b", false},
+		{"100 code points", strings.Repeat("界", listKeywordMaxRunes), false},
+	}
+	for _, tc := range cases {
+		if got := noteNameInvalid(tc.note); got != tc.want {
+			t.Errorf("%s: noteNameInvalid(%q) = %v, want %v", tc.name, tc.note, got, tc.want)
+		}
+	}
+}

@@ -1164,6 +1164,7 @@ captcha_math_time_remaining: |
 notes_save_success: "Заметка <b>%s</b> сохранена!\nПолучите её с помощью <code>#%s</code> или <code>/get %s</code>."
 notes_save_failed: "Не удалось сохранить заметку. Пожалуйста, попробуйте позже."
 notes_keyword_required: "Пожалуйста, дайте ключевое слово для ответа!"
+notes_name_invalid: "Название заметки должно быть одним словом не длиннее 100 символов и не должно начинаться с #."
 notes_overwrite_confirm: "Заметка уже существует!\nХотите перезаписать её?"
 notes_remove_keyword_required: "Пожалуйста, дайте ключевое слово для удаления!"
 notes_not_exists: "Заметка не существует!"

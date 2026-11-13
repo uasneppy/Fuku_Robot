@@ -800,6 +800,7 @@ captcha_math_time_remaining: |
 notes_save_success: "Нотатку <b>%s</b> збережено!\nОтримати її можна через <code>#%s</code> або <code>/get %s</code>."
 notes_save_failed: "Не вдалося зберегти нотатку. Спробуйте пізніше."
 notes_keyword_required: "Вкажіть ключове слово, на яке відповідати!"
+notes_name_invalid: "Назва нотатки має бути одним словом не довше 100 символів і не повинна починатися з #."
 notes_overwrite_confirm: "Нотатка вже існує!\nБажаєте перезаписати її?"
 notes_remove_keyword_required: "Вкажіть ключове слово для видалення!"
 notes_not_exists: "Нотатки не існує!"
