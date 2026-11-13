@@ -1171,7 +1171,17 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   screen opens the list (`a=op&p=b`), not Main. A stored `none` is accepted by PostgreSQL since plan 19-01's migration
   (`TestSettingsBlacklistAction`, `TestSettingsParityBlacklistAction`, `TestSettingsDriftBlacklist`,
   `TestSettingsAuthorityParityBlacklist`: the four refusals of the ninth right with nothing written, the commands refusing or
-  writing for the same member and bot records, and the owner-gate carve-out).
+  writing for the same member and bot records, and the owner-gate carve-out). The worst cases are measured, not assumed:
+  `TestSettingsListBlacklistCallbackBytes` renders a 79,992-entry list (9,999 pages, 17-digit row IDs, a 14-character chat ID, a
+  10-digit opener) and holds every button at most 64 bytes with the UI-SPEC's exact sizes (pager 40, ask 60, Yes 64, action 33,
+  choice 40 and ban 39, Main cell 37 private and 33 group) and `Omitted` at 0, a row with an 18-digit ID getting no delete button
+  and counting 1; `TestSettingsListBlacklistPageFitsEveryLocale` holds the list page of 32-ampersand entries with the two longest
+  notices, the mixed action screen with eight count lines, the card with a 100-code-point entry and the group note to 3800 UTF-16
+  units in all 8 languages with a 64-rune title, and the row widths to the UI-SPEC (`{4,4,2,1,2}` middle page, `{3,2,2}` action,
+  `{2,2}` card, `{1,2}` and `{2}` note); `TestSettingsBlacklistReadsCreateNothing` that opening Main, the page, the action screen and a
+  forged ask on a chat with no rows creates no row and fills no key in either menu. The page's action codes are `bp bx by bo bs`
+  (the pager is `bp` because the Deletion page's bot row codes `bw bg br ba bm` must stay unique among the codes of the section
+  and row tables and the actions, which also rules out `ba` for an Add button).
 - The message editor's pages (`settings_edit.go`, pages `w` Welcome, `g` Goodbye and `r` Rules, orders 50, 60 and 70, each
   registered from that file's `init` through `registerSettingsPage` so `settings_pages.go` is never edited) show which
   parts of a message are set, one line per part from one parts table (`settingsEditPageDef.Parts`): Welcome and Goodbye

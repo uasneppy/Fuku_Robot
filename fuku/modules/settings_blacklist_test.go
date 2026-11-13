@@ -20,6 +20,7 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/db/blacklists"
 	dbcache "github.com/uasneppy/fuku_robot/fuku/db/cache"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
+	"github.com/uasneppy/fuku_robot/fuku/i18n"
 )
 
 // settingsBlacklistTexts is every text the bot sent or edited and every callback answer of the fake so far, joined, so a
@@ -1056,5 +1057,238 @@ func TestSettingsAuthorityParityBlacklist(t *testing.T) {
 				t.Errorf("the permitted presses left %v, want alpha deleted and the rest on ban", after)
 			}
 		})
+	}
+}
+
+// settingsBlacklistWorstEntries makes n entries with 17-digit row IDs, the worst case the delete buttons carry.
+func settingsBlacklistWorstEntries(n int) []settingsListEntry {
+	entries := make([]settingsListEntry, 0, n)
+	for i := 0; i < n; i++ {
+		entries = append(entries, settingsListEntry{ID: 12345678901234500 + int64(i), Text: fmt.Sprintf("w%06d", i), Action: "ban"})
+	}
+	return entries
+}
+
+// settingsBlacklistWorstViews are the two menus at the worst-case IDs of the UI-SPEC's callback table: a 14-character chat
+// ID in a private menu and a 10-digit opener in a group menu.
+func settingsBlacklistWorstViews(tr *i18n.Translator) map[string]settingsView {
+	base := settingsView{Tr: tr, GroupID: -1001234567890, GroupTitle: "Group"}
+	private, group := base, base
+	private.Private, private.OwnerKey, private.OwnerValue = true, "c", "-1001234567890"
+	group.OwnerKey, group.OwnerValue = "u", "1234567890"
+	return map[string]settingsView{"private": private, "group": group}
+}
+
+func TestSettingsListBlacklistCallbackBytes(t *testing.T) {
+	withRealLocales(t)
+	tr := i18n.MustNewTranslator("en")
+	views := settingsBlacklistWorstViews(tr)
+	private := views["private"]
+	def := settingsBlacklistDef()
+	// 79,992 entries are 9,999 pages: the pager cursor v reaches its four digits.
+	worst := settingsBlacklistWorstEntries(settingsListPageSize * 9999)
+
+	// sizes records the largest button of each action code on a screen.
+	sizes := make(map[string]int)
+	measure := func(name string, screen settingsScreen) {
+		t.Helper()
+		if screen.Omitted != 0 {
+			t.Errorf("%s: %d buttons were omitted for their size, want none", name, screen.Omitted)
+		}
+		for _, button := range settingsAllButtons(screen.Keyboard.InlineKeyboard) {
+			if button.CallbackData == "" {
+				continue
+			}
+			if size := len(button.CallbackData); size > 64 {
+				t.Errorf("%s: button %q carries %d bytes, over the 64-byte cap", name, button.Text, size)
+			}
+			fields := settingsButtonFields(t, button)
+			key := fields["a"]
+			if key == settingsActBlacklistSet {
+				key += ":" + fields["v"]
+			}
+			sizes[key] = max(sizes[key], len(button.CallbackData))
+		}
+	}
+
+	for name, page := range map[string]int{"first": 1, "middle": 5000, "page 9998": 9998, "last": 9999} {
+		measure("list "+name, renderSettingsList(private, def, worst, page, ""))
+	}
+	measure("a one-entry list", renderSettingsList(private, def, worst[:1], 1, ""))
+	measure("an empty list", renderSettingsList(private, def, nil, 1, ""))
+	measure("the card", renderSettingsListCard(private, def, worst[0], 9999))
+	measure("the uniform action screen", renderSettingsBlacklistAction(private, worst[:3], ""))
+	mixed := slices.Clone(worst[:3])
+	mixed[0].Action = "warn"
+	measure("the mixed action screen", renderSettingsBlacklistAction(private, mixed, ""))
+	measure("the empty action screen", renderSettingsBlacklistAction(private, nil, ""))
+	measure("the group note", renderSettingsPrivateOnlyNote(views["group"], def.TitleKey, "FukuTestBot"))
+
+	for code, want := range map[string]int{
+		"bp": 40, "bx": 60, "by": 64, "bo": 33,
+		settingsActBlacklistSet + ":warn": 40, settingsActBlacklistSet + ":mute": 40,
+		settingsActBlacklistSet + ":kick": 40, settingsActBlacklistSet + ":none": 40, settingsActBlacklistSet + ":ban": 39,
+	} {
+		if got := sizes[code]; got != want {
+			t.Errorf("the largest %s button is %d bytes, the UI-SPEC table says %d", code, got, want)
+		}
+	}
+	if got := sizes[settingsActBack]; got != 33 {
+		t.Errorf("Back is %d bytes in a private menu, want 33", got)
+	}
+
+	// Main's cell of the page and the group menu's Back and Close.
+	cell := func(v settingsView) int {
+		screen := renderSettingsMain(v, []settingsMainEntry{{Key: settingsPageBlacklist, Icon: def.Icon, Title: "Blacklist", State: "1", Known: true}}, "")
+		for _, button := range settingsAllButtons(screen.Keyboard.InlineKeyboard) {
+			if f := settingsButtonFields(t, button); f["a"] == settingsActOpen {
+				return len(button.CallbackData)
+			}
+		}
+		return 0
+	}
+	if got := cell(private); got != 37 {
+		t.Errorf("the Main cell is %d bytes in a private menu, want 37", got)
+	}
+	if got := cell(views["group"]); got != 33 {
+		t.Errorf("the Main cell is %d bytes in a group menu, want 33", got)
+	}
+	groupNote := renderSettingsPrivateOnlyNote(views["group"], def.TitleKey, "FukuTestBot")
+	for _, button := range settingsAllButtons(groupNote.Keyboard.InlineKeyboard) {
+		if button.CallbackData != "" && len(button.CallbackData) != 29 {
+			t.Errorf("group note button %q is %d bytes, want 29", button.Text, len(button.CallbackData))
+		}
+	}
+
+	t.Run("a row whose ID has 18 digits has no delete button and is counted", func(t *testing.T) {
+		entries := settingsBlacklistWorstEntries(3)
+		entries[1].ID = 123456789012345678
+		screen := renderSettingsList(private, def, entries, 1, "")
+		if screen.Omitted != 1 {
+			t.Errorf("Omitted = %d, want 1", screen.Omitted)
+		}
+		if got := len(screen.Keyboard.InlineKeyboard[0]); got != 2 {
+			t.Errorf("the delete row has %d buttons, want 2", got)
+		}
+	})
+}
+
+// settingsBlacklistLongest returns the n longest of texts by UTF-16 units.
+func settingsBlacklistLongest(texts []string, n int) []string {
+	sorted := slices.Clone(texts)
+	slices.SortStableFunc(sorted, func(a, b string) int { return panelUTF16Len(b) - panelUTF16Len(a) })
+	return sorted[:min(n, len(sorted))]
+}
+
+func TestSettingsListBlacklistPageFitsEveryLocale(t *testing.T) {
+	withRealLocales(t)
+	title := strings.Repeat("Ж", 64)
+	ampersands := strings.Repeat("&", 100)
+	def := settingsBlacklistDef()
+	// The entries a middle page of the worst entries shows: 32 ampersands each, five UTF-16 units once escaped.
+	entries := make([]settingsListEntry, 0, 24)
+	for i := 0; i < 24; i++ {
+		entries = append(entries, settingsListEntry{ID: int64(10 + i), Text: strings.Repeat("&", 32) + string(rune('a'+i)), Action: "ban"})
+	}
+	// Eight stored actions, one word each: the mixed screen's worst case.
+	eight := make([]settingsListEntry, 0, 8)
+	for i, action := range []string{"warn", "mute", "kick", "ban", "none", "tban", "tmute", "delete"} {
+		eight = append(eight, settingsListEntry{ID: int64(i + 1), Text: fmt.Sprintf("w%d", i), Action: action})
+	}
+	widths := func(screen settingsScreen) string {
+		return fmt.Sprint(settingsListRowWidths(screen.Keyboard.InlineKeyboard))
+	}
+
+	for _, code := range memberReqScreenLanguages {
+		t.Run(code, func(t *testing.T) {
+			tr := i18n.MustNewTranslator(code)
+			views := settingsBlacklistWorstViews(tr)
+			for name, v := range views {
+				v.GroupTitle = title
+				views[name] = v
+			}
+			private := views["private"]
+
+			// A notice adds only its own length, so the two longest of the notices a page of this table can show hold the
+			// worst case of every combination.
+			notices := settingsBlacklistLongest([]string{
+				settingsNoticeOK(settingsListEntryText(tr, "settings_bl_removed", "word", ampersands)),
+				settingsNoticeWarn(settingsText(tr, "settings_card_expired")),
+				settingsNoticeWarn(settingsText(tr, "settings_entries_already_removed")),
+				settingsNoticeWarn(settingsText(tr, "common_settings_save_failed")),
+				settingsNoticeWarn(settingsText(tr, "chat_status_bot_restrict_error")),
+				settingsNoticeWarn(settingsText(tr, "connections_is_user_connected_bot_not_admin")),
+			}, 2)
+
+			check := func(name string, screen settingsScreen, wantWidths string) {
+				t.Helper()
+				if units := panelUTF16Len(screen.Text); units == 0 || units > 3800 {
+					t.Errorf("%s is %d UTF-16 units, want 1..3800", name, units)
+				}
+				if screen.Omitted != 0 {
+					t.Errorf("%s omitted %d buttons", name, screen.Omitted)
+				}
+				if got := widths(screen); got != wantWidths {
+					t.Errorf("%s has row widths %s, want %s", name, got, wantWidths)
+				}
+				for _, button := range settingsAllButtons(screen.Keyboard.InlineKeyboard) {
+					if label := []rune(button.Text); len(label) > 20 && !strings.HasPrefix(button.Text, "🗑") && button.Url == "" {
+						t.Errorf("%s: button %q has %d code points, want at most 20", name, button.Text, len(label))
+					}
+				}
+			}
+			for i, notice := range notices {
+				check(fmt.Sprintf("the list page with notice %d", i), renderSettingsList(private, def, entries, 2, notice), "[4 4 2 1 2]")
+				check(fmt.Sprintf("the mixed action screen with notice %d", i), renderSettingsBlacklistAction(private, eight, notice), "[3 2 2]")
+			}
+			card := renderSettingsListCard(private, def, settingsListEntry{ID: 12345678901234567, Text: ampersands}, 9999)
+			check("the card", card, "[2 2]")
+			if !strings.Contains(card.Text, strings.Repeat("&amp;", 100)) {
+				t.Errorf("the card does not name the 100-code-point entry")
+			}
+			check("the group note", renderSettingsPrivateOnlyNote(views["group"], def.TitleKey, "FukuTestBot"), "[1 2]")
+			check("the group note without a bot username", renderSettingsPrivateOnlyNote(views["group"], def.TitleKey, ""), "[2]")
+		})
+	}
+}
+
+func TestSettingsBlacklistReadsCreateNothing(t *testing.T) {
+	setCachedBotUsername(t, "FukuTestBot")
+	env := newSettingsListEnv(t)
+	chat := env.addChat()
+	settingsListCleanup(t, chat.Id)
+	count := func() (rows, chats int64) {
+		db.DB.Model(&models.BlacklistSettings{}).Where("chat_id = ?", chat.Id).Count(&rows)
+		db.DB.Model(&models.Chat{}).Where("chat_id = ?", chat.Id).Count(&chats)
+		return rows, chats
+	}
+	cacheKey := dbcache.CacheKey("blacklist", chat.Id)
+
+	// A private menu: Main, the list page, the action screen and a forged ask on a chat with no rows.
+	rows, chats := count()
+	if rows != 0 {
+		t.Fatalf("the fresh chat already has %d blacklist rows", rows)
+	}
+	m := settingsBlacklistOpenMenu(env, chat)
+	m.press("a", settingsActBack)
+	m.press("a", settingsActOpen, "p", settingsPageBlacklist)
+	m.press("a", settingsActBlacklistOpen)
+	m.press("a", "bx", "r", "42", "v", "1")
+	m.press("a", settingsActBlacklistSet, "v", "ban")
+	if text, _ := m.last(); !strings.Contains(text, staffMarker("settings_bl_action_no_words")) {
+		t.Fatalf("the screens did not draw as expected:\n%s", text)
+	}
+	if gotRows, gotChats := count(); gotRows != 0 || gotChats != chats {
+		t.Errorf("a private menu left %d blacklist rows and changed the chat rows from %d to %d", gotRows, chats, gotChats)
+	}
+	if env.redis.Exists(cacheKey) {
+		t.Errorf("a private menu filled %s", cacheKey)
+	}
+
+	// A group menu: Main and the page's note read nothing and create nothing.
+	groupMsg := env.openMenu(env.admin)
+	env.press(env.admin, groupMsg, env.groupFields(env.admin, "a", settingsActOpen, "p", settingsPageBlacklist))
+	if gotRows, _ := count(); gotRows != 0 || env.redis.Exists(cacheKey) {
+		t.Errorf("a group menu left %d blacklist rows or filled %s", gotRows, cacheKey)
 	}
 }
