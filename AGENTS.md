@@ -1291,7 +1291,15 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (the cached `IsUserAdmin` of the bot, the notice `connections_is_user_connected_bot_not_admin`; in the typed door a false is
   classified by one live `getChatMember` of the bot, a definite non-administrator ending the wait and a 429 or 5xx keeping it with
   `settings_check_failed`) and then the member's `can_change_info` (the alert `settings_no_change_info`). The owner-gate carve-out
-  stands: a non-owner administrator with the switch off is refused by the menu and not by the command.
+  stands: a non-owner administrator with the switch off is refused by the menu and not by the command. Parity with the commands is proved by
+  `TestSettingsParityNoteAdd` (a text with entities and newlines, a photo with a caption holding `{admin}`, a video, markdown buttons and a text
+  with both `{private}` and `{noprivate}`: the page and `/save NAME` replying to the same message leave the same row, flags included, and drop
+  the same key), `TestSettingsParityNoteRemove` (a delete by row ID and `/clear NAME`), `TestSettingsDriftNotes` and
+  `TestSettingsAuthorityParityNotes` (the bot a member, an administrator without `can_change_info`, a plain member, the owner gate, every check
+  held: presses and both typed steps), and the limits by `TestSettingsListNotesCallbackBytes` (the Yes is exactly 64 bytes at a 17-digit ID;
+  pager 40, ask 60, Add 33, Cancel 37), `TestSettingsListNotesPageFitsEveryLocale` (3800 UTF-16 units in 8 languages, rows `{4,4,2,1,2}` for a
+  full middle page with every entry admin-only) and `TestSettingsNotesReadsCreateNothing` (no `notes`, `notes_settings` or `chats` row and no
+  `notes_list` key from opening Main, the page or a forged ask); the forged presses of the page's codes are held by `TestSettingsListForged`.
 - The message editor's pages (`settings_edit.go`, pages `w` Welcome, `g` Goodbye and `r` Rules, orders 50, 60 and 70, each
   registered from that file's `init` through `registerSettingsPage` so `settings_pages.go` is never edited) show which
   parts of a message are set, one line per part from one parts table (`settingsEditPageDef.Parts`): Welcome and Goodbye

@@ -6,6 +6,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -18,6 +20,8 @@ import (
 	dbcache "github.com/uasneppy/fuku_robot/fuku/db/cache"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	db_notes "github.com/uasneppy/fuku_robot/fuku/db/notes"
+	"github.com/uasneppy/fuku_robot/fuku/i18n"
+	"github.com/uasneppy/fuku_robot/fuku/utils/cache"
 	"github.com/uasneppy/fuku_robot/fuku/utils/content"
 )
 
@@ -592,5 +596,538 @@ func TestSettingsListDoorNotesRefusals(t *testing.T) {
 				t.Errorf("a refused typed step wrote %v", got)
 			}
 		})
+	}
+}
+
+// settingsNotesCommandTwin makes the command twin of the flow's chat: a second chat of the env whose creator is the
+// same owner and whose bot is an administrator, with the note commands loaded on the env's dispatcher.
+func settingsNotesCommandTwin(f *settingsNotesFlow) gotgbot.Chat {
+	f.env.t.Helper()
+	twin := settingsFiltersCommandTwin(f.settingsFiltersFlow)
+	f.env.fake.setBotRole(twin.Id, staffRoleAdmin)
+	return twin
+}
+
+// settingsNotesRowShape is the stored row as one comparable value: everything but its ID, chat and times.
+func settingsNotesRowShape(row models.Notes) string {
+	return fmt.Sprintf("%q|%q|%d|%q|%+v|admin %v|private %v|group %v|preview %v|protected %v|nonotif %v", row.NoteName, row.NoteContent, row.MsgType, row.FileID,
+		[]db.Button(row.Buttons), row.AdminOnly, row.PrivateOnly, row.GroupOnly, row.WebPreview, row.IsProtected, row.NoNotif)
+}
+
+func TestSettingsParityNoteAdd(t *testing.T) {
+	env := newSettingsListEnv(t)
+	LoadNotes(env.dispatcher)
+	f := newSettingsNotesFlow(env, env.chat)
+	pageChat := env.chat
+	commandChat := settingsNotesCommandTwin(f)
+
+	photo := settingsMediaItemID("photo", "parity-photo")
+	photo.Caption = "Staff only {admin}"
+	photo.CaptionEntities = []gotgbot.MessageEntity{{Type: "bold", Offset: 0, Length: 5}}
+	video := settingsMediaItemID("video", "parity-video")
+	cases := []struct {
+		name    string
+		message gotgbot.Message
+	}{
+		{"a text with entities and newlines", gotgbot.Message{
+			Text: "Hello\nbold world", Entities: []gotgbot.MessageEntity{{Type: "bold", Offset: 6, Length: 4}},
+		}},
+		{"a photo with a caption holding {admin}", photo},
+		{"a video", video},
+		{"a text with markdown buttons", gotgbot.Message{Text: "Open [Docs](buttonurl://https://example.com)"}},
+		{"a text with both {private} and {noprivate}", gotgbot.Message{Text: "Where? {private} {noprivate}"}},
+	}
+	for i, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			name := fmt.Sprintf("parity%d", i)
+			pageKey := settingsNotesPrimeCache(t, env, pageChat.Id)
+			commandKey := settingsNotesPrimeCache(t, env, commandChat.Id)
+
+			f.begin()
+			f.say(name)
+			sendPrivateMessage(env.settingsEnv, f.user, tc.message)
+			settingsFiltersCommand(env, commandChat, f.user, "/save "+name, &tc.message)
+
+			pageRow, ok := settingsNotesStored(t, pageChat.Id)[name]
+			if !ok {
+				t.Fatalf("the page stored no note %q: %v", name, settingsNotesStored(t, pageChat.Id))
+			}
+			commandRow, ok := settingsNotesStored(t, commandChat.Id)[name]
+			if !ok {
+				t.Fatalf("/save stored no note %q: %v", name, settingsNotesStored(t, commandChat.Id))
+			}
+			if got, want := settingsNotesRowShape(pageRow), settingsNotesRowShape(commandRow); got != want {
+				t.Errorf("the page stored %s, /save stored %s", got, want)
+			}
+			for _, key := range []string{pageKey, commandKey} {
+				if env.redis.Exists(key) {
+					t.Errorf("the cache key %s survived the add", key)
+				}
+			}
+		})
+	}
+}
+
+func TestSettingsParityNoteRemove(t *testing.T) {
+	env := newSettingsListEnv(t)
+	LoadNotes(env.dispatcher)
+	f := newSettingsNotesFlow(env, env.chat)
+	pageChat := env.chat
+	commandChat := settingsNotesCommandTwin(f)
+	for _, chat := range []gotgbot.Chat{pageChat, commandChat} {
+		settingsListSeedNotes(t, chat.Id, "alpha", "beta", "gamma")
+	}
+	pageKey := settingsNotesPrimeCache(t, env, pageChat.Id)
+	commandKey := settingsNotesPrimeCache(t, env, commandChat.Id)
+
+	m := settingsListOpenMenuPage(env, pageChat, f.user, settingsPageNotes)
+	m.tap(m.button("🗑 2"))
+	yes, _ := m.markedButton("settings_btn_yes")
+	m.tap(yes)
+	settingsFiltersCommand(env, commandChat, f.user, "/clear beta", nil)
+
+	shapes := func(chatID int64) []string {
+		var out []string
+		for _, row := range settingsNotesStored(t, chatID) {
+			out = append(out, settingsNotesRowShape(row))
+		}
+		slices.Sort(out)
+		return out
+	}
+	if page, command := shapes(pageChat.Id), shapes(commandChat.Id); !reflect.DeepEqual(page, command) || len(page) != 2 {
+		t.Errorf("the page left %v and /clear left %v, want the same two rows", page, command)
+	}
+	for _, key := range []string{pageKey, commandKey} {
+		if env.redis.Exists(key) {
+			t.Errorf("the cache key %s survived the delete", key)
+		}
+	}
+}
+
+func TestSettingsDriftNotes(t *testing.T) {
+	env := newSettingsListEnv(t)
+	LoadNotes(env.dispatcher)
+	f := newSettingsNotesFlow(env, env.chat)
+	m := settingsListOpenMenuPage(env, env.chat, f.user, settingsPageNotes)
+	draw := func() string {
+		t.Helper()
+		m.press("a", settingsActOpen, "p", settingsPageNotes)
+		text, _ := m.last()
+		return text
+	}
+	mainLine := func() string {
+		t.Helper()
+		msgID := env.updateID()
+		env.pressPrivate(f.user, msgID, env.privateFields(env.chat.Id, "a", settingsActBack))
+		text, _ := env.lastEdit(f.user.Id, msgID)
+		line, _ := settingsMainStateLine(text, "settings_page_notes")
+		return line
+	}
+
+	settingsFiltersCommand(env, env.chat, f.user, "/save spam", &gotgbot.Message{Text: "the content"})
+	settingsFiltersCommand(env, env.chat, f.user, "/save secret", &gotgbot.Message{Text: "{admin} hidden"})
+	out := draw()
+	for _, want := range []string{"1. <code>secret</code> · " + staffMarker("settings_notes_admin_tag"), "2. <code>spam</code>", staffMarker("settings_notes_count") + " 2"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("a note added by /save is not drawn (%q):\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "<code>spam</code> · ") {
+		t.Errorf("a note anyone can fetch is tagged admin-only:\n%s", out)
+	}
+	if line := mainLine(); !strings.HasSuffix(line, " 2") {
+		t.Errorf("Main's Notes line = %q, want it to end in 2", line)
+	}
+	settingsFiltersCommand(env, env.chat, f.user, "/clear spam", nil)
+	if out = draw(); strings.Contains(out, "<code>spam</code>") || !strings.Contains(out, staffMarker("settings_notes_count")+" 1") {
+		t.Errorf("a note removed by /clear is still drawn:\n%s", out)
+	}
+	if line := mainLine(); !strings.HasSuffix(line, " 1") {
+		t.Errorf("Main's Notes line = %q after /clear, want it to end in 1", line)
+	}
+}
+
+func TestSettingsAuthorityParityNotes(t *testing.T) {
+	type scenario struct {
+		name string
+		// botRole is the bot's role in the chat; setup returns the presser.
+		botRole string
+		setup   func(env *settingsListEnv, chat gotgbot.Chat) gotgbot.User
+		// wantKey is the refusal the menu answers; wantAlert says it is an alert (else a notice over a redraw). Empty
+		// wantKey means the menu writes.
+		wantKey   string
+		wantAlert bool
+		// typedKey is what the door answers a typed step with; empty means it writes.
+		typedKey string
+		// commandWrites is whether /save writes for the same records.
+		commandWrites bool
+	}
+	scenarios := []scenario{
+		{name: "the bot is a member", botRole: staffRoleMember, wantKey: "connections_is_user_connected_bot_not_admin",
+			typedKey: "connections_is_user_connected_bot_not_admin",
+			setup:    func(env *settingsListEnv, chat gotgbot.Chat) gotgbot.User { return settingsFiltersOwner(env, chat) }},
+		{name: "an administrator without can_change_info", botRole: staffRoleAdmin, wantKey: "settings_no_change_info", wantAlert: true, typedKey: "settings_no_change_info",
+			setup: func(env *settingsListEnv, chat gotgbot.Chat) gotgbot.User {
+				listEditAdmin(env.settingsEnv, chat, env.admin, false)
+				cache.InvalidateAdminCache(chat.Id)
+				return env.admin
+			}},
+		{name: "a plain member", botRole: staffRoleAdmin, wantKey: "settings_not_admin", wantAlert: true, typedKey: "settings_edit_refuse_access_lost",
+			setup: func(env *settingsListEnv, chat gotgbot.Chat) gotgbot.User {
+				user := gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: "Presser"}
+				env.fake.setMember(chat.Id, user.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+				return user
+			}},
+		{name: "the owner gate refuses a non-owner administrator who holds can_change_info", botRole: staffRoleAdmin,
+			wantKey: "settings_gate_owner_only", wantAlert: true, typedKey: "settings_gate_owner_only", commandWrites: true,
+			setup: func(env *settingsListEnv, chat gotgbot.Chat) gotgbot.User {
+				user := gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: "Presser"}
+				listEditAdmin(env.settingsEnv, chat, user, true)
+				env.newOwner(chat)
+				env.setAdminsAllowed(chat.Id, false)
+				return user
+			}},
+		{name: "every check held", botRole: staffRoleAdmin, commandWrites: true,
+			setup: func(env *settingsListEnv, chat gotgbot.Chat) gotgbot.User { return settingsFiltersOwner(env, chat) }},
+	}
+
+	env := newSettingsListEnv(t)
+	LoadNotes(env.dispatcher)
+	for _, sc := range scenarios {
+		t.Run(sc.name, func(t *testing.T) {
+			chat := env.addChat()
+			env.fake.setBotRole(chat.Id, sc.botRole)
+			settingsListCleanup(t, chat.Id)
+			settingsListSeedNotes(t, chat.Id, "alpha", "beta")
+			user := sc.setup(env, chat)
+			t.Cleanup(func() {
+				db.DB.Where("user_id = ?", user.Id).Delete(&models.User{})
+				dbcache.DeleteCache(dbcache.CacheKey("user", user.Id))
+				dbcache.ResetLocalForTest()
+			})
+			alphaID := settingsNotesIDOf(t, chat.Id, "alpha")
+
+			// The command first: it refuses for the same member and bot records, or writes (the owner gate is the documented
+			// carve-out, which gates the menu and not the command).
+			settingsFiltersCommand(env, chat, user, "/save viacommand", &gotgbot.Message{Text: "the content"})
+			if _, wrote := settingsNotesStored(t, chat.Id)["viacommand"]; wrote != sc.commandWrites {
+				t.Errorf("/save wrote = %v, want %v (stored %v)", wrote, sc.commandWrites, settingsNotesStored(t, chat.Id))
+			}
+
+			// A typed step is judged like a press. A wait is written directly (the Add press itself is refused when the
+			// records refuse); the door then reads the same records live.
+			for _, step := range []struct{ name, part, text, key string }{
+				{"the name step", "n", "typedname", "typedname"},
+				{"the content step", "c", "the content", "typedstep"},
+			} {
+				wait := settingsInputWait{GroupID: chat.Id, Page: settingsPageNotes, Part: "n", PromptMsgID: 1, Nonce: "0123456789abcdef"}
+				if _, err := settingsInputSet(context.Background(), user.Id, wait); err != nil {
+					t.Fatalf("%s: write the wait: %v", step.name, err)
+				}
+				if step.part == "c" {
+					wait.Part, wait.Nonce, wait.Pending, wait.StepMsgID = "c", "fedcba9876543210", "typedstep", 1
+					wait.ExpiresAt = time.Now().Add(settingsInputTTL)
+					if advanced, err := settingsInputAdvance(context.Background(), user.Id, "0123456789abcdef", wait); err != nil || !advanced {
+						t.Fatalf("%s: move the wait to step 2: %v, %v", step.name, advanced, err)
+					}
+				}
+				before := len(env.fake.sentTo(user.Id))
+				if step.part == "n" {
+					settingsListDoorSay(env, user, step.text)
+				} else {
+					sendPrivateMessage(env.settingsEnv, user, gotgbot.Message{Text: step.text})
+				}
+				_, stored := settingsNotesStored(t, chat.Id)[step.key]
+				if sc.typedKey != "" {
+					got := fmt.Sprint(env.fake.sentTo(user.Id)[before].Params["text"])
+					if !strings.Contains(got, staffMarker(sc.typedKey)) {
+						t.Errorf("%s: answered %q, want %s", step.name, got, sc.typedKey)
+					}
+					if stored || env.redis.Exists(settingsInputKey(user.Id)) {
+						t.Errorf("%s: a refused typed step wrote or left the wait (stored %v)", step.name, stored)
+					}
+					if sc.typedKey != "settings_edit_refuse_access_lost" && !strings.Contains(got, staffMarker("settings_edit_wait_stopped")) {
+						t.Errorf("%s: the refusal does not say the wait stopped", step.name)
+					}
+				} else if step.part == "c" && !stored {
+					t.Errorf("%s: the typed content was not stored where the commands write", step.name)
+				}
+				if sc.typedKey == "" && step.part == "n" {
+					if got := env.redis.HGet(settingsInputKey(user.Id), "t"); got != "c" {
+						t.Errorf("%s: the wait is at %q after an accepted name, want c", step.name, got)
+					}
+					continue
+				}
+				settingsEditWaitGone(t, env.settingsEnv, user)
+			}
+			if sc.typedKey != "" && sc.typedKey != "settings_gate_owner_only" && sc.commandWrites {
+				t.Errorf("a typed step was refused where the commands write (%s), and that is not the owner-gate carve-out", sc.typedKey)
+			}
+			before := settingsNotesStored(t, chat.Id)
+
+			m := settingsListOpenMenuPage(env, chat, user, settingsPageNotes)
+			presses := map[string][]string{
+				"the delete ask": {"a", "ex", "r", strconv.FormatInt(alphaID, 10), "v", "1"},
+				"the delete Yes": {"a", "ey", "r", strconv.FormatInt(alphaID, 10), "e", settingsCardExpiry(time.Now())},
+				"Add":            {"a", "ea"},
+			}
+			for _, name := range []string{"the delete ask", "the delete Yes", "Add"} {
+				answers, edits := env.answerCount(), len(env.edits(user.Id, m.msgID))
+				m.press(presses[name]...)
+				if got := env.answerCount() - answers; got != 1 {
+					t.Errorf("%s: answered %d times, want once", name, got)
+				}
+				switch {
+				case sc.wantKey == "":
+				case sc.wantAlert:
+					if text, alert := env.lastAnswer(); !strings.Contains(text, staffMarker(sc.wantKey)) || !alert {
+						t.Errorf("%s: answered %q (alert %v), want the alert %s", name, text, alert, sc.wantKey)
+					}
+					if got := len(env.edits(user.Id, m.msgID)); got != edits {
+						t.Errorf("%s: an alert refusal edited the menu", name)
+					}
+				default:
+					if text, alert := env.lastAnswer(); text != "" || alert {
+						t.Errorf("%s: a notice refusal answered %q (alert %v), want an empty answer", name, text, alert)
+					}
+					if text, _ := m.last(); !strings.Contains(text, settingsNoticeWarnIcon+staffMarker(sc.wantKey)) {
+						t.Errorf("%s: the redraw lacks the notice %s:\n%s", name, sc.wantKey, text)
+					}
+				}
+			}
+			after := settingsNotesStored(t, chat.Id)
+			if sc.wantKey != "" {
+				if !reflect.DeepEqual(before, after) {
+					t.Errorf("a refused press wrote: %v -> %v", before, after)
+				}
+				if env.redis.Exists(settingsInputKey(user.Id)) {
+					t.Errorf("a refused Add created a wait")
+				}
+				return
+			}
+			if _, still := after["alpha"]; still {
+				t.Errorf("the permitted Yes did not delete alpha: %v", after)
+			}
+			if !env.redis.Exists(settingsInputKey(user.Id)) {
+				t.Errorf("the permitted Add created no wait")
+			}
+		})
+	}
+}
+
+// settingsNotesWorstEntries makes n entries with 17-digit row IDs, the worst case the delete buttons carry.
+func settingsNotesWorstEntries(n int) []settingsListEntry {
+	entries := make([]settingsListEntry, 0, n)
+	for i := 0; i < n; i++ {
+		entries = append(entries, settingsListEntry{ID: 12345678901234500 + int64(i), Text: fmt.Sprintf("n%06d", i), AdminOnly: true})
+	}
+	return entries
+}
+
+func TestSettingsListNotesCallbackBytes(t *testing.T) {
+	withRealLocales(t)
+	tr := i18n.MustNewTranslator("en")
+	views := settingsBlacklistWorstViews(tr)
+	private := views["private"]
+	def := settingsNotesDef()
+	// 79,992 entries are 9,999 pages: the pager cursor v reaches its four digits.
+	worst := settingsNotesWorstEntries(settingsListPageSize * 9999)
+
+	sizes := make(map[string]int)
+	measure := func(name string, screen settingsScreen) {
+		t.Helper()
+		if screen.Omitted != 0 {
+			t.Errorf("%s: %d buttons were omitted for their size, want none", name, screen.Omitted)
+		}
+		for _, button := range settingsAllButtons(screen.Keyboard.InlineKeyboard) {
+			if button.CallbackData == "" {
+				continue
+			}
+			if size := len(button.CallbackData); size > 64 {
+				t.Errorf("%s: button %q carries %d bytes, over the 64-byte cap", name, button.Text, size)
+			}
+			code := settingsButtonFields(t, button)["a"]
+			sizes[code] = max(sizes[code], len(button.CallbackData))
+		}
+	}
+	for name, page := range map[string]int{"first": 1, "middle": 5000, "page 9998": 9998, "last": 9999} {
+		measure("list "+name, renderSettingsList(private, def, worst, page, ""))
+	}
+	measure("a one-entry list", renderSettingsList(private, def, worst[:1], 1, ""))
+	measure("an empty list", renderSettingsList(private, def, nil, 1, ""))
+	measure("the card", renderSettingsListCard(private, def, worst[0], 9999))
+	until := time.Now()
+	measure("the name prompt", renderSettingsListPrompt(private, def, "n", until, true, ""))
+	measure("the content prompt", renderSettingsListPrompt(private, def, "c", until, true, "name"))
+	measure("the group note", renderSettingsPrivateOnlyNote(views["group"], def.TitleKey, "FukuTestBot"))
+
+	for code, want := range map[string]int{"eg": 40, "ex": 60, "ey": 64, "ea": 33, "ec": 37} {
+		if got := sizes[code]; got != want {
+			t.Errorf("the largest %s button is %d bytes, the UI-SPEC table says %d", code, got, want)
+		}
+	}
+	cell := func(v settingsView) int {
+		screen := renderSettingsMain(v, []settingsMainEntry{{Key: settingsPageNotes, Icon: def.Icon, Title: "Notes", State: "1", Known: true}}, "")
+		for _, button := range settingsAllButtons(screen.Keyboard.InlineKeyboard) {
+			if f := settingsButtonFields(t, button); f["a"] == settingsActOpen {
+				return len(button.CallbackData)
+			}
+		}
+		return 0
+	}
+	if got := cell(private); got != 37 {
+		t.Errorf("the Main cell is %d bytes in a private menu, want 37", got)
+	}
+	if got := cell(views["group"]); got != 33 {
+		t.Errorf("the Main cell is %d bytes in a group menu, want 33", got)
+	}
+
+	t.Run("a row whose ID has 18 digits has no delete button and is counted", func(t *testing.T) {
+		entries := settingsNotesWorstEntries(3)
+		entries[1].ID = 123456789012345678
+		screen := renderSettingsList(private, def, entries, 1, "")
+		if screen.Omitted != 1 {
+			t.Errorf("Omitted = %d, want 1", screen.Omitted)
+		}
+		if got := len(screen.Keyboard.InlineKeyboard[0]); got != 2 {
+			t.Errorf("the delete row has %d buttons, want 2", got)
+		}
+	})
+}
+
+func TestSettingsListNotesPageFitsEveryLocale(t *testing.T) {
+	withRealLocales(t)
+	title := strings.Repeat("Ж", 64)
+	ampersands := strings.Repeat("&", 100)
+	def := settingsNotesDef()
+	// The entries a middle page of the worst entries shows: 32 ampersands each, all admin-only, so each line carries the tag.
+	entries := make([]settingsListEntry, 0, 24)
+	for i := 0; i < 24; i++ {
+		entries = append(entries, settingsListEntry{ID: int64(10 + i), Text: strings.Repeat("&", 32) + string(rune('a'+i)), AdminOnly: true})
+	}
+	widths := func(screen settingsScreen) string {
+		return fmt.Sprint(settingsListRowWidths(screen.Keyboard.InlineKeyboard))
+	}
+
+	for _, code := range memberReqScreenLanguages {
+		t.Run(code, func(t *testing.T) {
+			tr := i18n.MustNewTranslator(code)
+			views := settingsBlacklistWorstViews(tr)
+			for name, v := range views {
+				v.GroupTitle = title
+				views[name] = v
+			}
+			private := views["private"]
+			check := func(name string, screen settingsScreen, wantWidths string) {
+				t.Helper()
+				if units := panelUTF16Len(screen.Text); units == 0 || units > 3800 {
+					t.Errorf("%s is %d UTF-16 units, want 1..3800", name, units)
+				}
+				if screen.Omitted != 0 {
+					t.Errorf("%s omitted %d buttons", name, screen.Omitted)
+				}
+				if wantWidths != "" {
+					if got := widths(screen); got != wantWidths {
+						t.Errorf("%s has row widths %s, want %s", name, got, wantWidths)
+					}
+				}
+				for _, button := range settingsAllButtons(screen.Keyboard.InlineKeyboard) {
+					if label := []rune(button.Text); len(label) > 20 && !strings.HasPrefix(button.Text, "🗑") && button.Url == "" {
+						t.Errorf("%s: button %q has %d code points, want at most 20", name, button.Text, len(label))
+					}
+				}
+			}
+
+			// A notice only adds its own length, so the two longest of the notices a page of this table can show hold the
+			// worst case of every combination: the removed notice, the expiry, the save failure and the bot notice.
+			notices := settingsBlacklistLongest([]string{
+				settingsNoticeOK(settingsListEntryText(tr, "settings_notes_removed", "name", ampersands)),
+				settingsNoticeWarn(settingsText(tr, "settings_card_expired")),
+				settingsNoticeWarn(settingsText(tr, "common_settings_save_failed")),
+				settingsNoticeWarn(settingsText(tr, "connections_is_user_connected_bot_not_admin")),
+			}, 2)
+			for i, notice := range notices {
+				check(fmt.Sprintf("the list page with notice %d", i), renderSettingsList(private, def, entries, 2, notice), "[4 4 2 1 2]")
+			}
+			check("the empty list", renderSettingsList(private, def, nil, 1, ""), "[1 2]")
+			card := renderSettingsListCard(private, def, settingsListEntry{ID: 12345678901234567, Text: ampersands}, 9999)
+			check("the card", card, "[2 2]")
+			if !strings.Contains(card.Text, strings.Repeat("&amp;", 100)) {
+				t.Errorf("the card does not name the 100-code-point name")
+			}
+			until := time.Now()
+			check("the name prompt with the replaced note", renderSettingsListPrompt(private, def, "n", until, true, ""), "[1]")
+			step2 := renderSettingsListPrompt(private, def, "c", until, true, ampersands)
+			check("the content prompt with a 100-code-point name and the replaced note", step2, "[1]")
+			if !strings.Contains(step2.Text, strings.Repeat("&amp;", 100)) {
+				t.Errorf("the content prompt does not name the 100-code-point name")
+			}
+
+			// Every refusal reply, each with the Cancel button and the still-waiting line, and the replies that end a wait.
+			refusals := []string{
+				settingsText(tr, "settings_entries_refuse_blank"),
+				settingsText(tr, "notes_name_invalid"),
+				settingsNotesExistsText(tr, ampersands),
+				settingsText(tr, "settings_edit_refuse_need_text"),
+				settingsText(tr, "content_need_note_content"),
+				content.TextLengthRefusal(strings.Repeat("x", 5000), db.TEXT, code),
+				content.TextLengthRefusal(strings.Repeat("x", 2000), db.PHOTO, code),
+				settingsText(tr, "common_settings_save_failed"),
+				settingsText(tr, "connections_is_user_connected_bot_not_admin"),
+				settingsText(tr, "settings_no_change_info"),
+			}
+			for i, reason := range refusals {
+				check(fmt.Sprintf("refusal %d", i), renderSettingsInputRefusalCode(private, def.CancelCode, "c", reason), "[1]")
+				if ended := reason + "\n\n" + settingsText(tr, "settings_edit_wait_stopped"); panelUTF16Len(ended) > 3800 {
+					t.Errorf("the wait-ended reply %d is %d UTF-16 units", i, panelUTF16Len(ended))
+				}
+			}
+			warning := strings.TrimLeft(settingsText(tr, "notes_private_conflict_warning"), "\n")
+			saved := settingsNoticeOK(settingsListEntryText(tr, def.TwoStep.SavedKey, def.EntryParam, ampersands)) + "\n" + warning + "\n" + settingsText(tr, "settings_edit_album_cut")
+			check("the saved page with the conflict warning", renderSettingsList(private, def, entries, 2, saved), "[4 4 2 1 2]")
+			check("the group note", renderSettingsPrivateOnlyNote(views["group"], def.TitleKey, "FukuTestBot"), "[1 2]")
+		})
+	}
+}
+
+func TestSettingsNotesReadsCreateNothing(t *testing.T) {
+	setCachedBotUsername(t, "FukuTestBot")
+	env := newSettingsListEnv(t)
+	chat := env.addChat()
+	env.fake.setBotRole(chat.Id, staffRoleAdmin)
+	settingsListCleanup(t, chat.Id)
+	count := func() (notes, settings, chats int64) {
+		db.DB.Model(&models.Notes{}).Where("chat_id = ?", chat.Id).Count(&notes)
+		db.DB.Model(&models.NotesSettings{}).Where("chat_id = ?", chat.Id).Count(&settings)
+		db.DB.Model(&models.Chat{}).Where("chat_id = ?", chat.Id).Count(&chats)
+		return notes, settings, chats
+	}
+	key := dbcache.CacheKey("notes_list", chat.Id)
+
+	// A private menu: Main, the page and the card of a forged ask on a chat with no notes.
+	notes, settings, chats := count()
+	if notes != 0 || settings != 0 {
+		t.Fatalf("the fresh chat already has %d notes and %d notes_settings rows", notes, settings)
+	}
+	owner := settingsFiltersOwner(env, chat)
+	m := settingsListOpenMenuPage(env, chat, owner, settingsPageNotes)
+	m.press("a", settingsActBack)
+	m.press("a", settingsActOpen, "p", settingsPageNotes)
+	m.press("a", "ex", "r", "42", "v", "1")
+	if text, _ := m.last(); !strings.Contains(text, staffMarker("settings_entries_already_removed")) {
+		t.Fatalf("the screens did not draw as expected:\n%s", text)
+	}
+	if gotNotes, gotSettings, gotChats := count(); gotNotes != 0 || gotSettings != 0 || gotChats != chats {
+		t.Errorf("a private menu left %d notes and %d notes_settings rows and changed the chat rows from %d to %d", gotNotes, gotSettings, chats, gotChats)
+	}
+
+	// A group menu: Main and the page's note read nothing and create nothing.
+	groupMsg := env.openMenu(env.admin)
+	env.press(env.admin, groupMsg, env.groupFields(env.admin, "a", settingsActOpen, "p", settingsPageNotes))
+	if gotNotes, gotSettings, _ := count(); gotNotes != 0 || gotSettings != 0 {
+		t.Errorf("a group menu left %d notes and %d notes_settings rows", gotNotes, gotSettings)
+	}
+	if env.redis.Exists(key) {
+		t.Errorf("opening filled the command's cache key %s", key)
 	}
 }
