@@ -1691,6 +1691,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   conditional update (`link_revoked_at IS NULL`), so one confirm wins, and in the same transaction it marks every posted,
   open copy with live buttons `edit_pending`. The columns are read fresh, never cached, and never part of
   backup/export/import/reset.
+- `blacklists.action` is checked only by `chk_blacklist_action` (eight values, NOT VALID) since migration 20261113120000
+  dropped the legacy `chk_blacklists_action` of 20250805204145, which lacked `none` and made `/blacklistaction none` fail on a
+  chain-built PostgreSQL database (Phase 19, research C-16). SQLite test databases are built from the model, which carries the
+  eight-value check only.
 - `chat_settings_access` (migration 20261104120000) is the owner switch "Admins can change settings", one row per chat; a
   chat without a row means owner only. It is read only through `menuaccess.AdminsAllowedFresh`, a fresh query that is never
   cached (so no `DeleteCache` applies, and a cache added later needs `skipLocal` and a `DeleteCache` on every write), and an
@@ -3652,6 +3656,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `TestScheduleBatchKeepsEarliest` (a batch keeps the earliest time under concurrent callers, and never rewrites kind or
   sent time), `TestScheduleBatchDuplicateKey` (one call naming one key several times writes one row, the Go dedupe PostgreSQL
   needs), `TestCountPending` (the bounded exact count) and `TestDropPendingMessage` (one pending row by chat, message and kind).
+  The Phase 19 guarantee is `TestBlacklistActionValuesOnPostgres` (`./fuku/db/migrations`: on a chain-built database
+  `UPDATE blacklists SET action = v` succeeds for warn, mute, kick, ban and none and fails with SQLSTATE 23514 for any other
+  value, and exactly one CHECK mentions the column, `chk_blacklist_action`; PostgreSQL only, it skips locally;
+  `TestBlacklistActionMigrationStatements` is its database-free half and runs in `make test`).
   The pattern is anchored with `$`, so list the real top-level test function names and add the test's package to the
   target. Add a test there when a new guarantee rests on a partial unique index, a `CHECK` or a conditional update.
 - In CI, keep the migration-chain step before `make test`; its `schema_migrations` rows back the checksum test.
