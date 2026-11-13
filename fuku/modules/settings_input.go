@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
@@ -25,14 +26,19 @@ import (
 // Set on a part of a group's message, the bot waits for that person's next private message.
 // The wait lives only in Redis, so any replica can read it: one hash per user whose own
 // PEXPIRE is the wait's expiry. There is no timer, no process map and no shutdown drain, and
-// the hash holds IDs and codes only, never message text or a file ID.
+// the hash holds IDs and codes only, never message text or a file ID, with one exception: the
+// bounded field w, the step-1 keyword or name of a two-step list add (at most 100 code points,
+// never logged, never in callback data, deleted with the hash by every end), and the ID field q,
+// the step-1 message's ID.
 //
 // The keys sit in the fuku:settings:* family, outside the fuku:cache: prefix, so
 // CLEAR_CACHE_ON_STARTUP keeps them.
 
 const (
 	// settingsInputKeyPrefix is the wait's hash: c group chat ID, p page key, t part, m prompt
-	// message ID, n nonce, x expiry in unix ms, and k while a claim is held.
+	// message ID, n nonce, x expiry in unix ms, k while a claim is held, and, on the second part
+	// of a two-step list add only, w (the step-1 keyword or name, the one user-text field, at most
+	// 100 code points) and q (the step-1 message's ID).
 	settingsInputKeyPrefix = "fuku:settings:input:"
 	// settingsInputDoneKeyPrefix is the marker "c|p|t". Every Set writes it and every deliberate
 	// end deletes it with the wait, so a marker with no wait means only "the wait expired".
@@ -67,6 +73,11 @@ type settingsInputWait struct {
 	PromptMsgID int64
 	Nonce       string
 	ExpiresAt   time.Time
+	// Pending is the step-1 keyword or name of a two-step list add (the hash field w), set on a step-2 part only. It
+	// is user text bounded to listKeywordMaxRunes code points; it is never logged and never put in callback data.
+	Pending string
+	// StepMsgID is the ID of the step-1 message (the hash field q), set on a step-2 part only.
+	StepMsgID int64
 }
 
 // settingsInputCancelOutcome is what a cancel found.
@@ -99,6 +110,37 @@ redis.call('HSET', KEYS[1], 'c', ARGV[2], 'p', ARGV[3], 't', ARGV[4], 'm', ARGV[
 redis.call('PEXPIRE', KEYS[1], ARGV[1])
 redis.call('SET', KEYS[2], ARGV[8], 'PX', ARGV[9])
 return old
+`)
+
+// settingsInputAdvanceScript moves a wait from step 1 to step 2 of a two-step list add, atomically: only the holder of
+// the wait's nonce, for the same group and page, and only while no claim is held. It sets the new part t, the bounded
+// step-1 text w, the step-1 message's ID q, a new nonce and a fresh expiry, drops every refusal field r<id> of step 1
+// and rewrites the marker for the new part.
+//
+// KEYS[1] = the wait, KEYS[2] = the marker. ARGV = old nonce, new nonce, new part, w, q, expiry ms, ttl ms, marker
+// value, marker ttl ms, c, p. Returns 1 after the advance and 0 otherwise (nothing is changed).
+var settingsInputAdvanceScript = redis.NewScript(`
+if redis.call('HGET', KEYS[1], 'n') ~= ARGV[1] then return 0 end
+if redis.call('HEXISTS', KEYS[1], 'k') == 1 then return 0 end
+if redis.call('HGET', KEYS[1], 'c') ~= ARGV[10] or redis.call('HGET', KEYS[1], 'p') ~= ARGV[11] then return 0 end
+local f = redis.call('HKEYS', KEYS[1])
+for i = 1, #f do
+  if string.sub(f[i], 1, 1) == 'r' then redis.call('HDEL', KEYS[1], f[i]) end
+end
+redis.call('HSET', KEYS[1], 't', ARGV[3], 'w', ARGV[4], 'q', ARGV[5], 'n', ARGV[2], 'x', ARGV[6])
+redis.call('PEXPIRE', KEYS[1], ARGV[7])
+redis.call('SET', KEYS[2], ARGV[8], 'PX', ARGV[9])
+return 1
+`)
+
+// settingsInputSetPromptScript records the ID of the step-2 prompt message on the wait of the holder of the nonce, so
+// the Cancel button on that message can end the wait.
+//
+// KEYS[1] = the wait. ARGV = the wait's nonce, the prompt message's ID. Returns 1 when recorded, 0 for a stale nonce.
+var settingsInputSetPromptScript = redis.NewScript(`
+if redis.call('HGET', KEYS[1], 'n') ~= ARGV[1] then return 0 end
+redis.call('HSET', KEYS[1], 'm', ARGV[2])
+return 1
 `)
 
 // settingsInputCancelAnyScript is /cancel: it deletes the wait and the marker unless a claim is
@@ -256,14 +298,32 @@ func settingsInputWaitFromFields(fields map[string]string) (*settingsInputWait, 
 	if err != nil || expiry <= 0 {
 		return nil, false
 	}
-	return &settingsInputWait{
+	wait := &settingsInputWait{
 		GroupID:     groupID,
 		Page:        page,
 		Part:        part,
 		PromptMsgID: promptID,
 		Nonce:       nonce,
 		ExpiresAt:   time.UnixMilli(expiry),
-	}, true
+	}
+	// w and q belong to the second part of a two-step list add and are ignored anywhere else.
+	if listPart := settingsListPartByCode(page, part); listPart != nil && listPart.Step == 2 {
+		stepID, err := strconv.ParseInt(fields["q"], 10, 64)
+		if err != nil || stepID <= 0 || !settingsInputPendingValid(fields["w"]) {
+			return nil, false
+		}
+		wait.Pending, wait.StepMsgID = fields["w"], stepID
+	}
+	return wait, true
+}
+
+// settingsInputPendingValid reports whether w can be the step-1 text of a two-step add: valid UTF-8, not blank and at
+// most listKeywordMaxRunes code points.
+func settingsInputPendingValid(w string) bool {
+	if !utf8.ValidString(w) || strings.TrimSpace(w) == "" {
+		return false
+	}
+	return utf8.RuneCountInString(w) <= listKeywordMaxRunes
 }
 
 // settingsInputClient is the Redis client, or errSettingsInputUnavailable without one.
@@ -319,6 +379,55 @@ func settingsInputSet(ctx context.Context, userID int64, w settingsInputWait) (*
 		return nil, nil
 	}
 	return previous, nil
+}
+
+// settingsInputAdvance moves userID's wait from step 1 to the step-2 part named by next, for the holder of oldNonce. next
+// carries the group, page, the step-2 part, the step-1 text (Pending), the step-1 message's ID (StepMsgID), a new
+// nonce that differs from oldNonce and an optional expiry (zero means ten minutes from now). It returns true after the
+// advance and false, with nothing changed, for a stale nonce, a held claim or a wait of another group or page. A wait
+// no reader would accept is refused with errSettingsInputInvalid before any write. Pending is never logged.
+func settingsInputAdvance(ctx context.Context, userID int64, oldNonce string, next settingsInputWait) (bool, error) {
+	client, err := settingsInputClient()
+	if err != nil {
+		return false, err
+	}
+	listPart := settingsListPartByCode(next.Page, next.Part)
+	if next.GroupID >= 0 || listPart == nil || listPart.Step != 2 || !settingsInputPendingValid(next.Pending) ||
+		next.StepMsgID <= 0 || !settingsInputNonceValid(oldNonce) || !settingsInputNonceValid(next.Nonce) || next.Nonce == oldNonce {
+		return false, errSettingsInputInvalid
+	}
+	if next.ExpiresAt.IsZero() {
+		next.ExpiresAt = time.Now().Add(settingsInputTTL)
+	}
+	ctx, cancel := context.WithTimeout(ctx, settingsInputRedisTimeout)
+	defer cancel()
+
+	advanced, err := settingsInputAdvanceScript.Run(ctx, client,
+		[]string{settingsInputKey(userID), settingsInputDoneKey(userID)},
+		oldNonce, next.Nonce, next.Part, next.Pending, strconv.FormatInt(next.StepMsgID, 10),
+		strconv.FormatInt(next.ExpiresAt.UnixMilli(), 10), settingsInputTTL.Milliseconds(),
+		settingsInputMarkerValue(next.GroupID, next.Page, next.Part), settingsInputMarkerTTL.Milliseconds(),
+		strconv.FormatInt(next.GroupID, 10), next.Page,
+	).Int()
+	if err != nil {
+		return false, err
+	}
+	return advanced == 1, nil
+}
+
+// settingsInputSetPrompt records messageID as the prompt message of userID's wait, for the holder of nonce; a stale
+// nonce changes nothing. The Cancel button on that message then ends the wait.
+func settingsInputSetPrompt(ctx context.Context, userID int64, nonce string, messageID int64) error {
+	client, err := settingsInputClient()
+	if err != nil {
+		return err
+	}
+	if messageID <= 0 || !settingsInputNonceValid(nonce) {
+		return errSettingsInputInvalid
+	}
+	ctx, cancel := context.WithTimeout(ctx, settingsInputRedisTimeout)
+	defer cancel()
+	return settingsInputSetPromptScript.Run(ctx, client, []string{settingsInputKey(userID)}, nonce, strconv.FormatInt(messageID, 10)).Err()
 }
 
 // settingsInputCancelAny deletes userID's wait and marker, whatever part the wait is for. A

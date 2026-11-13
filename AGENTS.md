@@ -1448,14 +1448,17 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   a replace of the whole roster or a clear. Only a cycle cut off by a cancel gives it back, by compare-and-delete.
 - The message editor's wait for a typed reply (`settings_input.go`, all outside the `fuku:cache:` prefix in the
   `fuku:settings:*` family, so `CLEAR_CACHE_ON_STARTUP` keeps them, and holding IDs and codes only, never message text or
-  a file ID). `fuku:settings:input:<user>` is one hash per user with `c` (group chat ID), `p` (page key), `t` (part), `m`
+  a file ID, except the one bounded user-text field `w` below). `fuku:settings:input:<user>` is one hash per user with `c` (group chat ID), `p` (page key), `t` (part), `m`
   (prompt message ID), `n` (16 hex nonce from `crypto/rand`), `x` (expiry, unix ms), `r<message id>` for each refusal reply that carries a Cancel button (at most 40 fields in
-  all, no text) and, while a claim is held, `k`; its own
+  all, no text), while a claim is held `k`, and, on the second part of a two-step list add only (Filters `(i,y)`, Notes `(e,c)`), `w`
+  (the step-1 keyword or name: valid UTF-8, not blank, at most 100 code points, never logged, never in callback data, deleted with the
+  hash by every end) and `q` (the step-1 message's ID; a step-2 hash without a valid `w` and a positive `q` is no wait, and the two
+  are ignored on a step-1 part); its own
   10-minute `PEXPIRE` is the wait's expiry, with no timer, no process map and no shutdown drain.
   `fuku:settings:inputdone:<user>` is the marker `c|p|t`, 15 minutes, written by every Set; every deliberate end (finish,
   the Cancel button, `/cancel`, an ended access) deletes both keys in one script, so a marker with no wait means only
   "the wait expired". `fuku:settings:inputalbum:<user>:<media_group_id>` is the album memory, `SET NX EX 30`, for a media
-  group ID of 1 to 20 digits (anything else is not an album and writes nothing). Atomicity is seven Lua scripts in
+  group ID of 1 to 20 digits (anything else is not an album and writes nothing). Atomicity is nine Lua scripts in
   `settings_input.go`: Set (writes both keys and returns the replaced wait's fields; it deletes the hash first, so the
   refusal fields below never survive a new Set), note-refusal (adds the field `r<message id>` for a refusal reply, only for the
   holder of the nonce and at most 40 fields in all), claim (only the holder of the
@@ -1463,7 +1466,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   their own bound, so a cancelled update never strands a claim; release removes only `k`, so the wait keeps its remaining
   TTL), and the Cancel button's and `/cancel`'s scripts (a held claim answers busy and deletes nothing; the button also
   compares `c`, `p`, `t` and the pressed message's ID with `m` or a noted refusal `r<id>`, so a stale prompt never ends a
-  newer wait, not even one for the same group, page and part). Reads are one pipeline of `HGETALL` and `GET`; a hash
+  newer wait, not even one for the same group, page and part), advance (`settingsInputAdvance`, Phase 19, M41: only the holder of the nonce, for
+  the same group and page, with no claim held, moves the wait from step 1 to step 2: it sets `t`, `w`, `q`, a new nonce and a fresh ten
+  minutes, drops every `r<id>` field and rewrites the marker) and set-prompt (`settingsInputSetPrompt`: records `m` for the holder of the
+  nonce, so the Cancel button on the step-2 prompt ends the wait); both are proved at the store level and their first production
+  caller is the two-step engine of plan 19-06 (provisional owner confirmation A19-6: the keyword lives in the wait hash for at most the
+  wait's ten minutes). Reads are one pipeline of `HGETALL` and `GET`; a hash
   that does not parse is no wait. Without Redis every store function returns `errSettingsInputUnavailable`, so Set
   answers `settings_edit_unavailable` and nothing else needs Redis.
 - `fuku:staff:act:<token>` is the staff action card hash. It lives 5 minutes plus 1 minute grace while pending and

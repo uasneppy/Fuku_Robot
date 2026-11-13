@@ -627,3 +627,230 @@ func TestSettingsCancelInGroupPassesOn(t *testing.T) {
 		}
 	}
 }
+
+func TestSettingsInputListParts(t *testing.T) {
+	valid := [][2]string{
+		{"b", "w"}, {"i", "k"}, {"i", "y"}, {"e", "n"}, {"e", "c"},
+		{settingsPageWelcome, settingsEditPartText}, {settingsPageRules, settingsEditPartMedia},
+	}
+	for _, c := range valid {
+		if !settingsInputValidPart(c[0], c[1]) {
+			t.Errorf("settingsInputValidPart(%q, %q) = false, want true", c[0], c[1])
+		}
+	}
+	for _, c := range [][2]string{{"b", "k"}, {"i", "w"}, {"e", "y"}, {"b", "x"}, {"q", "w"}} {
+		if settingsInputValidPart(c[0], c[1]) {
+			t.Errorf("settingsInputValidPart(%q, %q) = true, want false", c[0], c[1])
+		}
+	}
+}
+
+// settingsInputStepOneWait sets a wait for the filter's keyword part of group -100 and returns it.
+func settingsInputStepOneWait(t *testing.T, user gotgbot.User) settingsInputWait {
+	t.Helper()
+	wait := settingsInputTestWait(t, -100)
+	wait.Page, wait.Part = "i", "k"
+	if _, err := settingsInputSet(context.Background(), user.Id, wait); err != nil {
+		t.Fatalf("settingsInputSet() error = %v", err)
+	}
+	return wait
+}
+
+// settingsInputNextOf is the step-2 wait that follows step 1 with a fresh nonce.
+func settingsInputNextOf(t *testing.T, step1 settingsInputWait, pending string, stepMsgID int64) settingsInputWait {
+	t.Helper()
+	nonce, err := newSettingsInputNonce()
+	if err != nil {
+		t.Fatalf("newSettingsInputNonce() error = %v", err)
+	}
+	return settingsInputWait{GroupID: step1.GroupID, Page: step1.Page, Part: "y", Nonce: nonce, Pending: pending, StepMsgID: stepMsgID}
+}
+
+func TestSettingsInputAdvance(t *testing.T) {
+	env := newSettingsEnv(t)
+	ctx := context.Background()
+
+	t.Run("the holder of the nonce moves the wait to step 2 and nothing of step 1 stays", func(t *testing.T) {
+		user := settingsInputTestUser()
+		step1 := settingsInputStepOneWait(t, user)
+		if err := settingsInputNoteRefusal(ctx, user.Id, step1.Nonce, 55); err != nil {
+			t.Fatalf("settingsInputNoteRefusal() error = %v", err)
+		}
+		next := settingsInputNextOf(t, step1, "price list", 77)
+
+		advanced, err := settingsInputAdvance(ctx, user.Id, step1.Nonce, next)
+		if err != nil || !advanced {
+			t.Fatalf("settingsInputAdvance() = %v, %v, want true", advanced, err)
+		}
+		key := settingsInputKey(user.Id)
+		fields, err := env.redis.HKeys(key)
+		if err != nil {
+			t.Fatalf("HKeys error = %v", err)
+		}
+		if got := strings.Join(sorted(fields), ","); got != "c,m,n,p,q,t,w,x" {
+			t.Errorf("fields after the advance = %q, want c,m,n,p,q,t,w,x (the refusal field is gone)", got)
+		}
+		if env.redis.HGet(key, "t") != "y" || env.redis.HGet(key, "w") != "price list" || env.redis.HGet(key, "q") != "77" || env.redis.HGet(key, "n") != next.Nonce {
+			t.Errorf("fields t,w,q,n = %q,%q,%q,%q, want y, price list, 77 and the new nonce",
+				env.redis.HGet(key, "t"), env.redis.HGet(key, "w"), env.redis.HGet(key, "q"), env.redis.HGet(key, "n"))
+		}
+		if ttl := env.redis.TTL(key); ttl != settingsInputTTL {
+			t.Errorf("wait TTL = %v, want a fresh %v", ttl, settingsInputTTL)
+		}
+		if marker, err := env.redis.Get(settingsInputDoneKey(user.Id)); err != nil || marker != "-100|i|y" {
+			t.Errorf("marker = %q, %v, want -100|i|y", marker, err)
+		}
+		read, _, err := settingsInputRead(ctx, user.Id)
+		if err != nil || read == nil || read.Part != "y" || read.Pending != "price list" || read.StepMsgID != 77 || read.Nonce != next.Nonce {
+			t.Errorf("settingsInputRead() = %+v, %v, want the step-2 wait with its keyword", read, err)
+		}
+
+		// A new Set leaves neither w nor q, and /cancel and finish delete the keyword with the hash.
+		if _, err := settingsInputSet(ctx, user.Id, step1); err != nil {
+			t.Fatalf("settingsInputSet() error = %v", err)
+		}
+		if env.redis.HGet(key, "w") != "" || env.redis.HGet(key, "q") != "" {
+			t.Errorf("a Set after the advance kept w or q")
+		}
+		if _, err := settingsInputAdvance(ctx, user.Id, step1.Nonce, settingsInputNextOf(t, step1, "again", 78)); err != nil {
+			t.Fatalf("second advance error = %v", err)
+		}
+		if outcome, err := settingsInputCancelAny(ctx, user.Id); err != nil || outcome != settingsInputCancelDeleted || env.redis.Exists(key) {
+			t.Errorf("settingsInputCancelAny() = %v, %v, key present %v, want Deleted and no keyword left", outcome, err, env.redis.Exists(key))
+		}
+		if _, err := settingsInputSet(ctx, user.Id, step1); err != nil {
+			t.Fatalf("settingsInputSet() error = %v", err)
+		}
+		again := settingsInputNextOf(t, step1, "third", 79)
+		if _, err := settingsInputAdvance(ctx, user.Id, step1.Nonce, again); err != nil {
+			t.Fatalf("third advance error = %v", err)
+		}
+		claim, ok, err := settingsInputClaim(ctx, user.Id, again.Nonce)
+		if err != nil || !ok {
+			t.Fatalf("settingsInputClaim() = %v, %v", ok, err)
+		}
+		if err := settingsInputFinish(ctx, user.Id, claim); err != nil || env.redis.Exists(key) {
+			t.Errorf("settingsInputFinish() error = %v, key present %v, want the keyword deleted with the hash", err, env.redis.Exists(key))
+		}
+	})
+
+	t.Run("a stale nonce, a held claim or another group changes nothing", func(t *testing.T) {
+		user := settingsInputTestUser()
+		step1 := settingsInputStepOneWait(t, user)
+		key := settingsInputKey(user.Id)
+		snapshot := func() string {
+			fields, _ := env.redis.HKeys(key)
+			var parts []string
+			for _, f := range sorted(fields) {
+				parts = append(parts, f+"="+env.redis.HGet(key, f))
+			}
+			return strings.Join(parts, ",")
+		}
+		before := snapshot()
+
+		stale := settingsInputNextOf(t, step1, "kw", 5)
+		if advanced, err := settingsInputAdvance(ctx, user.Id, stale.Nonce, stale); err == nil || advanced {
+			t.Errorf("an advance from the new nonce itself = %v, %v, want a refusal", advanced, err)
+		}
+		other := settingsInputTestWait(t, -100)
+		if advanced, err := settingsInputAdvance(ctx, user.Id, other.Nonce, settingsInputNextOf(t, step1, "kw", 5)); err != nil || advanced {
+			t.Errorf("an advance from a stale nonce = %v, %v, want false", advanced, err)
+		}
+		wrongGroup := settingsInputNextOf(t, step1, "kw", 5)
+		wrongGroup.GroupID = -200
+		if advanced, err := settingsInputAdvance(ctx, user.Id, step1.Nonce, wrongGroup); err != nil || advanced {
+			t.Errorf("an advance naming another group = %v, %v, want false", advanced, err)
+		}
+		if _, ok, err := settingsInputClaim(ctx, user.Id, step1.Nonce); err != nil || !ok {
+			t.Fatalf("settingsInputClaim() = %v, %v", ok, err)
+		}
+		claimed := snapshot()
+		if advanced, err := settingsInputAdvance(ctx, user.Id, step1.Nonce, settingsInputNextOf(t, step1, "kw", 5)); err != nil || advanced {
+			t.Errorf("an advance while a claim is held = %v, %v, want false", advanced, err)
+		}
+		if got := snapshot(); got != claimed || strings.Contains(before, "k=") || !strings.Contains(claimed, "t=k") {
+			t.Errorf("a refused advance changed the wait: %q -> %q", claimed, got)
+		}
+	})
+
+	t.Run("an invalid advance is refused before any write", func(t *testing.T) {
+		user := settingsInputTestUser()
+		step1 := settingsInputStepOneWait(t, user)
+		key := settingsInputKey(user.Id)
+		cases := map[string]func(*settingsInputWait){
+			"a step-1 part":   func(w *settingsInputWait) { w.Part = "k" },
+			"a blank keyword": func(w *settingsInputWait) { w.Pending = " \t " },
+			"101 code points": func(w *settingsInputWait) { w.Pending = strings.Repeat("é", 101) },
+			"no step message": func(w *settingsInputWait) { w.StepMsgID = 0 },
+			"bad UTF-8":       func(w *settingsInputWait) { w.Pending = "a\xffb" },
+			"a bad nonce":     func(w *settingsInputWait) { w.Nonce = "XYZ" },
+		}
+		for name, mutate := range cases {
+			next := settingsInputNextOf(t, step1, "kw", 5)
+			mutate(&next)
+			if advanced, err := settingsInputAdvance(ctx, user.Id, step1.Nonce, next); err == nil || advanced {
+				t.Errorf("%s: settingsInputAdvance() = %v, %v, want a refusal", name, advanced, err)
+			}
+		}
+		if got := env.redis.HGet(key, "t"); got != "k" || env.redis.HGet(key, "w") != "" {
+			t.Errorf("a refused advance wrote: t=%q w=%q", got, env.redis.HGet(key, "w"))
+		}
+		// 100 code points is the largest keyword.
+		if advanced, err := settingsInputAdvance(ctx, user.Id, step1.Nonce, settingsInputNextOf(t, step1, strings.Repeat("é", 100), 5)); err != nil || !advanced {
+			t.Errorf("a 100 code point keyword = %v, %v, want accepted", advanced, err)
+		}
+	})
+
+	t.Run("a hash with a malformed step-2 field reads as no wait and w and q on step 1 are ignored", func(t *testing.T) {
+		user := settingsInputTestUser()
+		step1 := settingsInputStepOneWait(t, user)
+		key := settingsInputKey(user.Id)
+		env.redis.HSet(key, "w", "ignored", "q", "9")
+		if read, _, err := settingsInputRead(ctx, user.Id); err != nil || read == nil || read.Pending != "" || read.StepMsgID != 0 {
+			t.Errorf("a step-1 wait with w and q read as %+v, %v, want them ignored", read, err)
+		}
+		if advanced, err := settingsInputAdvance(ctx, user.Id, step1.Nonce, settingsInputNextOf(t, step1, "kw", 5)); err != nil || !advanced {
+			t.Fatalf("advance = %v, %v", advanced, err)
+		}
+		for name, mutate := range map[string]func(){
+			"w missing": func() { env.redis.HDel(key, "w") },
+			"w blank":   func() { env.redis.HSet(key, "w", "  ") },
+			"q missing": func() { env.redis.HSet(key, "w", "kw"); env.redis.HDel(key, "q") },
+			"q zero":    func() { env.redis.HSet(key, "q", "0") },
+			"q text":    func() { env.redis.HSet(key, "q", "x") },
+		} {
+			mutate()
+			if read, _, err := settingsInputRead(ctx, user.Id); err != nil || read != nil {
+				t.Errorf("%s: settingsInputRead() = %+v, %v, want no wait", name, read, err)
+			}
+		}
+	})
+}
+
+func TestSettingsInputSetPrompt(t *testing.T) {
+	env := newSettingsEnv(t)
+	ctx := context.Background()
+	user := settingsInputTestUser()
+	step1 := settingsInputStepOneWait(t, user)
+	next := settingsInputNextOf(t, step1, "kw", 5)
+	if advanced, err := settingsInputAdvance(ctx, user.Id, step1.Nonce, next); err != nil || !advanced {
+		t.Fatalf("advance = %v, %v", advanced, err)
+	}
+	key := settingsInputKey(user.Id)
+
+	if err := settingsInputSetPrompt(ctx, user.Id, step1.Nonce, 900); err != nil || env.redis.HGet(key, "m") == "900" {
+		t.Errorf("a stale nonce: error = %v, m = %q, want nothing recorded", err, env.redis.HGet(key, "m"))
+	}
+	if err := settingsInputSetPrompt(ctx, user.Id, next.Nonce, 901); err != nil || env.redis.HGet(key, "m") != "901" {
+		t.Errorf("the holder: error = %v, m = %q, want 901", err, env.redis.HGet(key, "m"))
+	}
+	if err := settingsInputSetPrompt(ctx, user.Id, next.Nonce, 0); err == nil {
+		t.Errorf("a zero message ID was accepted")
+	}
+	if outcome, err := settingsInputCancel(ctx, user.Id, next.GroupID, "i", "y", 901); err != nil || outcome != settingsInputCancelDeleted {
+		t.Errorf("the Cancel button on the recorded prompt = %v, %v, want Deleted", outcome, err)
+	}
+	if env.redis.Exists(key) || env.redis.Exists(settingsInputDoneKey(user.Id)) {
+		t.Errorf("the Cancel left the wait or its marker")
+	}
+}
