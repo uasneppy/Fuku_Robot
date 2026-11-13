@@ -17,15 +17,6 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/utils/helpers"
 )
 
-// fwdLastText returns the text of the last message sent to chat, or "" when none was.
-func fwdLastText(env *staffActionEnv, chat int64) string {
-	sent := env.fake.sentTo(chat)
-	if len(sent) == 0 {
-		return ""
-	}
-	return fmt.Sprint(sent[len(sent)-1].Params["text"])
-}
-
 // fwdWantReply sends text as from in chat and requires the reply to carry marker.
 func fwdWantReply(t *testing.T, env *staffActionEnv, chat gotgbot.Chat, from gotgbot.User, text, marker string) string {
 	t.Helper()
