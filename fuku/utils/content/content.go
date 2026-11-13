@@ -45,20 +45,11 @@ type WelcomeResult struct {
 	ErrorMsg string
 }
 
-//nolint:dupl // ExtractNoteAndFilter shares media detection logic with ExtractWelcome
-func ExtractNoteAndFilter(msg *gotgbot.Message, isFilter bool, language string) ExtractResult {
-	var result ExtractResult
-	result.DataType = -1
+// newExtractResult returns the result a note or filter extraction starts from: no content (DataType -1)
+// and the "you need to give it some content" refusal that stays when nothing is extracted.
+func newExtractResult(isFilter bool, language string) ExtractResult {
+	result := ExtractResult{DataType: -1}
 	tr := i18n.MustNewTranslator(language)
-
-	if msg == nil {
-		result.ErrorMsg, _ = tr.GetString("content_invalid_message")
-		if result.ErrorMsg == "" {
-			result.ErrorMsg = "Invalid message: message is nil"
-		}
-		return result
-	}
-
 	if isFilter {
 		result.ErrorMsg, _ = tr.GetString("content_need_filter_content")
 		if result.ErrorMsg == "" {
@@ -70,49 +61,104 @@ func ExtractNoteAndFilter(msg *gotgbot.Message, isFilter bool, language string) 
 			result.ErrorMsg = "You need to give the note some content!"
 		}
 	}
+	return result
+}
+
+// finishExtract applies the length check, the button clean-up and, for a note, the directive parser to an
+// extraction, exactly as the commands always did after reading the content.
+func finishExtract(result *ExtractResult, buttons []tgmd2html.ButtonV2, isFilter bool, language string) {
+	preFixes(buttons, result.KeyWord, &result.Text, &result.DataType, result.FileID, &result.Buttons, &result.ErrorMsg, language)
+
+	if result.DataType != -1 && !isFilter {
+		result.PvtOnly, result.GrpOnly, result.AdminOnly, result.WebPreview, result.IsProtected, result.NoNotif, _ = NotesParser(result.Text)
+	}
+}
+
+//nolint:dupl // ExtractNoteAndFilter shares media detection logic with ExtractWelcome
+func ExtractNoteAndFilter(msg *gotgbot.Message, isFilter bool, language string) ExtractResult {
+	if msg == nil {
+		return invalidMessageResult(language)
+	}
 
 	var (
 		rawText string
 		args    = strings.Fields(msg.Text)[1:]
 	)
-	_buttons := make([]tgmd2html.ButtonV2, 0)
 	replyMsg := msg.ReplyToMessage
 
 	setRawText(msg, args, &rawText)
 
+	if replyMsg != nil && len(args) >= 1 {
+		return extractReplyContent(replyMsg, rawText, strings.Join(args, " "), isFilter, language)
+	}
+
+	result := newExtractResult(isFilter, language)
+	_buttons := make([]tgmd2html.ButtonV2, 0)
 	if len(args) >= 2 && replyMsg == nil {
-		if len(args) > 0 {
-			result.KeyWord = args[0]
-			if len(args) > 1 {
-				result.Text = strings.Join(args[1:], " ")
-			}
-		}
+		result.KeyWord = args[0]
+		result.Text = strings.Join(args[1:], " ")
 		result.Text, _buttons = tgmd2html.MD2HTMLButtonsV2(result.Text)
 		result.DataType = db.TEXT
-	} else if replyMsg != nil && len(args) >= 1 {
-		result.KeyWord = strings.Join(args, " ")
-
-		if replyMsg.ReplyMarkup == nil {
-			result.Text, _buttons = tgmd2html.MD2HTMLButtonsV2(rawText)
-		} else {
-			result.Text, _ = tgmd2html.MD2HTMLButtonsV2(rawText)
-			_buttons = inlineKeyboardToButtonV2(replyMsg.ReplyMarkup)
-		}
-
-		if replyMsg.Text != "" {
-			result.DataType = db.TEXT
-		} else {
-			result.FileID, result.DataType = extractMediaFromReply(replyMsg)
-		}
 	}
 
-	preFixes(_buttons, result.KeyWord, &result.Text, &result.DataType, result.FileID, &result.Buttons, &result.ErrorMsg, language)
-
-	if result.DataType != -1 && !isFilter {
-		result.PvtOnly, result.GrpOnly, result.AdminOnly, result.WebPreview, result.IsProtected, result.NoNotif, _ = NotesParser(result.Text)
-	}
-
+	finishExtract(&result, _buttons, isFilter, language)
 	return result
+}
+
+// invalidMessageResult is the result for a nil message.
+func invalidMessageResult(language string) ExtractResult {
+	result := ExtractResult{DataType: -1}
+	result.ErrorMsg, _ = i18n.MustNewTranslator(language).GetString("content_invalid_message")
+	if result.ErrorMsg == "" {
+		result.ErrorMsg = "Invalid message: message is nil"
+	}
+	return result
+}
+
+// extractReplyContent is the reply form of the note and filter extraction: the content is the replied-to
+// message (its text, or its media with the caption as text), the keyword is the one the caller names and
+// rawText is the markdown the text and buttons are read from. A replied-to message that carries an inline
+// keyboard gives its link buttons instead of the ones written in the text.
+func extractReplyContent(replyMsg *gotgbot.Message, rawText, keyword string, isFilter bool, language string) ExtractResult {
+	result := newExtractResult(isFilter, language)
+	result.KeyWord = keyword
+
+	var _buttons []tgmd2html.ButtonV2
+	if replyMsg.ReplyMarkup == nil {
+		result.Text, _buttons = tgmd2html.MD2HTMLButtonsV2(rawText)
+	} else {
+		result.Text, _ = tgmd2html.MD2HTMLButtonsV2(rawText)
+		_buttons = inlineKeyboardToButtonV2(replyMsg.ReplyMarkup)
+	}
+
+	if replyMsg.Text != "" {
+		result.DataType = db.TEXT
+	} else {
+		result.FileID, result.DataType = extractMediaFromReply(replyMsg)
+	}
+
+	finishExtract(&result, _buttons, isFilter, language)
+	return result
+}
+
+// ExtractTypedNoteOrFilter extracts the content of a filter or a note from a message that was typed or sent
+// on its own, such as the reply the settings menu waits for, exactly as the command extracts it from the
+// message it replies to: /filter K or /save K replying to content gives the same result for a one-word
+// keyword K. The raw text is the one the reply form uses for a single argument, the caption's markdown when
+// the message has a caption and no text and its text's markdown otherwise; the length refusals, the default
+// button name, the dropped links and, for a note, the directives are the command's. A keyword of several
+// words keeps the content's own text, where the command's reply form with two arguments reads the text from
+// the command message instead (a quirk the typed form does not copy). A nil message gives the
+// invalid-message refusal.
+func ExtractTypedNoteOrFilter(content *gotgbot.Message, keyword string, isFilter bool, language string) ExtractResult {
+	if content == nil {
+		return invalidMessageResult(language)
+	}
+	rawText := content.OriginalMDV2()
+	if content.Text == "" && content.Caption != "" {
+		rawText = content.OriginalCaptionMDV2()
+	}
+	return extractReplyContent(content, rawText, keyword, isFilter, language)
 }
 
 func extractMediaFromReply(replyMsg *gotgbot.Message) (fileid string, dataType int) {
