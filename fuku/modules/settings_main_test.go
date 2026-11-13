@@ -30,9 +30,9 @@ func settingsMainStateLine(text, titleKey string) (string, bool) {
 // private shape ends with the Groups and Close row; the hand-built subtests of
 // TestSettingsMainGrid keep their own literals.
 const (
-	settingsMainShapeGroup   = "s|l / c|f / n|w / g|r / m|d / t|u / o|y / a / close"
-	settingsMainShapePrivate = "s|l / c|f / n|w / g|r / m|d / t|u / o|y / a / groups|close"
-	settingsMainOwnerRows    = 9
+	settingsMainShapeGroup   = "s|l / c|f / n|k / w|g / r|m / d|t / u|o / y / a / close"
+	settingsMainShapePrivate = "s|l / c|f / n|k / w|g / r|m / d|t / u|o / y / a / groups|close"
+	settingsMainOwnerRows    = 10
 )
 
 // settingsMainShape writes a Main keyboard as its rows of short names: a page button is its p

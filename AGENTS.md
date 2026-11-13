@@ -545,7 +545,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   outcome, and a log line carries chat, user and hold IDs only.
 - The `settings|v1` namespace is the settings menu (`settings_menu.go`, `settings_pages.go`). Fields: `a` action, `c` the
   group's chat ID (a menu opened in private), `u` the opener's user ID (a menu opened in the group), `p` page (`s` staff,
-  `l` lockdown, `c` captcha, `f` antiflood, `w` welcome, `g` goodbye, `r` rules, `m` member requirements, `d` deletion, `n` warnings, `t` switches, `u` language, `o` log channel, `y` anonymous admins, `a` access), `t` control, `v` the absolute target value; `e` (confirm expiry), `r`
+  `l` lockdown, `c` captcha, `f` antiflood, `w` welcome, `g` goodbye, `r` rules, `m` member requirements, `d` deletion, `n` warnings, `t` switches, `u` language, `o` log channel, `y` anonymous admins, `k` locks, `a` access), `t` control, `v` the absolute target value; `e` (confirm expiry), `r`
   (the lockdown row ID of a Lift card), `l` (the link row ID of an Unlink card) and `s` (Staff Group row ID) arrive with
   the confirm cards and the Link pick. Core action codes: `oh` open here (the choice
   message becomes the Main page), `op` open page `p` (also Refresh and a stepper's value button), `bk` Back to Main, `cl`
@@ -1051,6 +1051,31 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   behaviour change; the change is refused exactly as the command refuses it. `TestSettingsAnonAdminOpens`,
   `TestSettingsParityAnonAdmin` (the press and `/anonadmin on|off` by the live creator leave the same row and the same behaviour
   of the anonymous-admin check) and the tests that follow hold it (`settings_anonadmin_test.go`).
+- The Locks page (`settings_locks.go`, page `k`, `Order` 44, icon 🔐, `settings_page_locks`, between Antiflood and Welcome, Phase 18,
+  plans 18-11 and 18-12) registers from its own file through `registerSettingsPage`, with no `Hidden`, so a Staff Group's own
+  menu shows it too. It is drawn from the one table `settingsLockRows` (22 locks: the two-letter control code a button carries,
+  the kind `/lock` takes, the name key and the page, 12 on page 1 and 10 on page 2) and every control, line and cell is built
+  from it. The 22 controls are `tg` only (`Actions`, so an `st` is an invalid request before any I/O) with `Validate` exactly `0`
+  or `1` (`settingsEditSwitchValue`) and each declares `settingsRightAdminFloodBot`, because `/lock` and `/unlock` ask
+  `IsUserConnected(true, true)` first (an administrator and the bot as an administrator): the press needs both, the bot part
+  judged first, and the refusal is the notice `connections_is_user_connected_bot_not_admin`. A press goes through
+  `settingsToggleSet`, writes exactly its own lock through `applyLock` (the function the commands call, with the row's `Kind`;
+  no other lock is touched) and redraws the page the lock is on, so no page field travels with a toggle. A lock with no row
+  reads Unlocked, as the watchers read it, so the page lists all 22 locks while `/locks` lists only the ones that have a row;
+  the two never disagree on a value. The page reads through `locks.GetChatLocksCachedContext` (the `settingsLocksRead`
+  seam: the `locks_map:<chat>` key the watchers read, its error returned, no row created) and a failed read is the cannot-open
+  edit and the unknown mark on Main. Main's state is `settings_state_locks_on` with the number of the table's kinds stored
+  locked. The body is the intro (`settings_locks_intro`: admins and approved members are exempt), one
+  `settings_main_state_line` per lock of the page (🔒 or 🔓, the name, `settings_locks_state_on` or `_off`), the page line
+  (`staff_panel_page`) and the status slot; the keyboard is the shared two-column toggle grid `settingsToggleGrid` with the lock
+  and the open lock as icons, the pager row and Back and Close. There is no confirmation card for `all` or `messages`
+  (A18-8, parity with `/lock all`: one tap undoes it; the owner decides in `18-SPIKE.md`).
+  The status slot carries the Phase 16 right line, because a lock deletes a message only while the bot can delete it: every
+  draw (open, a toggle, a page turn) makes exactly one live `getChatMember` of the bot through `settingsDelReadRight`,
+  `deletionReadBotRight` and the deletion pacer under `settingsDelHereTimeout`, after the press is answered empty and before the
+  edit, and a press refused in step 1 or by its right makes none. `🚫 ` and `settings_del_no_right` is a definite cannot, `❔ `
+  and `settings_del_right_unknown` anything that could not be established, nothing when the bot can delete; no button is ever
+  disabled, and no new pacer, key or shutdown handler exists. Main makes no call for the Locks line.
 - The message editor's pages (`settings_edit.go`, pages `w` Welcome, `g` Goodbye and `r` Rules, orders 50, 60 and 70, each
   registered from that file's `init` through `registerSettingsPage` so `settings_pages.go` is never edited) show which
   parts of a message are set, one line per part from one parts table (`settingsEditPageDef.Parts`): Welcome and Goodbye
@@ -1090,7 +1115,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   write redraws the freshly loaded page with `common_settings_save_failed` and the old state. A menu opened in the group has an Open in private URL row (the
   existing `/start settings_<chat id>` deep link, left out and logged when the bot has no username) above the navigation
   row, a private menu has none; a private page has at most 8 rows and a group-menu page at most 9, and every page ends
-  with Back and Close. Main lists the pages after Antiflood (`s|l / c|f / n|w / g|r / m|d / t|u / o|y`, then Access for the owner, so nine rows in a private and in a group menu; `n` is the Warnings page, `m` the Member requirements page, `d` the Deletion page, `t` the Switches page, `u` the Language page, `o` the Log channel page and `y` the Anonymous admins page; later Phase 18 plans add the rest of the grid) with
+  with Back and Close. Main lists the pages after Antiflood (the final grid `s|l / c|f / n|k / w|g / r|m / d|t / u|o / y`, then Access for the owner, so ten rows in a private and in a group menu for the owner and nine for an administrator; `n` is the Warnings page, `k` the Locks page, `m` the Member requirements page, `d` the Deletion page, `t` the Switches page, `u` the Language page, `o` the Log channel page and `y` the Anonymous admins page, 15 cells in all) with
   `common_status_on` or `common_status_off` for Welcome and Goodbye and `settings_state_set` or `settings_state_not_set`
   for Rules. The Deletion line reads `Off` or `{n} on`, and `n` counts the three member rules too (at most 20 rules).
   Each part has its row right after the body (`settingsEditPartRows`): `[Set]` while the part is not set and
@@ -3248,7 +3273,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   and the page (12 on page 1, 10 on page 2). `TestSettingsLocksTableMatchesCommand` holds it equal to `/locktypes` in both
   directions (a lock added to `lockMap` or `restrMap` needs a row, and the reverse) and `TestSettingsLocksKeysExist`
   holds every name key, the Locks words, the six Phase 18 page titles and the six log category names in all 8 languages,
-  because `make check-translations` cannot see table fields. The table has no registered page yet.
+  because `make check-translations` cannot see table fields. The page that draws the table is the Locks page (see the settings
+  Callbacks bullets).
 - Rules message (`rules.go`): `/rules` (in the group and in a private chat connected to it), the private rules message the
   `/start rules_<chat id>` deep link opens and the Rules page's Full preview are built by
   `buildRulesMessage` and sent by `sendRulesMessage`. The builder has two forms, the group form (`rulesFormGroup`: heading
