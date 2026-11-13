@@ -82,6 +82,15 @@ const (
 	// callback, so the non-owner refusal is the alert chat_status_owner_button_error, the key the command's own
 	// permission responder picks for a button.
 	settingsRightOwnerBotAdmin
+	// settingsRightRestrictBotRestrict is the right of the blacklist writes (Phase 19, M42), judged in
+	// /addblacklist's, /rmblacklist's and /blacklistaction's order: the bot an administrator by
+	// chat_status.IsUserAdmin (IsUserConnected's bot check, notice connections_is_user_connected_bot_not_admin) and by
+	// chat_status.IsBotAdmin (notice chat_status_bot_not_admin, which the commands leave silent), then the creator or
+	// an administrator with can_restrict_members from the presser's own member record (alert settings_no_restrict),
+	// then the bot's own restrict right by chat_status.CanBotRestrict (notice chat_status_bot_restrict_error for a
+	// press, chat_status_bot_restrict_group_error for a typed reply). It is appended after settingsRightOwnerBotAdmin
+	// so the zero value stays settingsRightAdmin.
+	settingsRightRestrictBotRestrict
 )
 
 // settingsRightRefusalFor judges the member-record part of a right: the one pure decision a
@@ -94,7 +103,7 @@ func settingsRightRefusalFor(member gotgbot.MergedChatMember, right settingsRigh
 	switch right {
 	case settingsRightAdmin, settingsRightAdminBotAdmin, settingsRightAdminFloodBot:
 		return "", false
-	case settingsRightRestrict:
+	case settingsRightRestrict, settingsRightRestrictBotRestrict:
 		switch staffIssuerSkipReason(member) {
 		case "":
 			return "", false
@@ -130,42 +139,69 @@ func settingsRightRefusalFor(member gotgbot.MergedChatMember, right settingsRigh
 
 // settingsRightRefusal returns the locale key of the refusal when the press lacks the
 // right, and whether it is an alert (the page is not edited) or a notice line on the
-// redrawn page. It returns "" when the right is held. The bot checks use the commands' own
-// cached predicates, never a live bot lookup, so the menu refuses exactly what the command
-// refuses.
+// redrawn page. It returns "" when the right is held. The order is the bot's first half
+// (settingsRightBotFirst), the member's part (settingsRightRefusalFor), then the bot's second half
+// (settingsRightBotAfter): the order of the command each right mirrors. The bot checks use the
+// commands' own cached predicates, never a live bot lookup, so the menu refuses exactly what the
+// command refuses.
 func settingsRightRefusal(p *settingsPress, right settingsRight) (key string, alert bool) {
-	if key := settingsRightBotFirstRefusal(p, right); key != "" {
+	if key := settingsRightBotFirst(p.b, p.group, right); key != "" {
 		return key, false
 	}
 	if key, alert := settingsRightRefusalFor(p.member, right); key != "" {
 		return key, alert
 	}
-	switch right {
-	case settingsRightAdminBotAdmin:
-		if !chat_status.IsBotAdmin(p.b, nil, p.group) {
-			return "chat_status_bot_not_admin", false
-		}
-	case settingsRightAdminFloodBot:
-		if !chat_status.IsUserAdmin(p.b, p.group.Id, p.b.Id) {
-			return "connections_is_user_connected_bot_not_admin", false
-		}
-	}
-	return "", false
+	return settingsRightBotAfter(p.b, p.group, right, false), false
 }
 
-// settingsRightBotFirstRefusal is the bot part of the two composite rights, judged before their member part
-// because the commands they mirror check the bot first (/autoapprove's IsUserConnected and /anonadmin's
-// RequireBotAdmin run before the user right). It returns the locale key of a notice, or "" when the right has no
-// bot-first part or the bot passes. The six older rights keep their own order in settingsRightRefusal.
-func settingsRightBotFirstRefusal(p *settingsPress, right settingsRight) string {
+// settingsRightBotFirst is the bot part of a right that the command it mirrors checks before the user's right
+// (/autoapprove's IsUserConnected and /anonadmin's RequireBotAdmin, and /addblacklist's IsUserConnected and
+// silent IsBotAdmin). It returns the locale key of a notice, or "" when the right has no bot-first part or the bot
+// passes. The cached predicates can answer false for a bot that is an administrator, so the typed-reply door of
+// plan 19-04 classifies such a false with one live lookup before it refuses.
+func settingsRightBotFirst(b *gotgbot.Bot, group *gotgbot.Chat, right settingsRight) string {
 	switch right {
 	case settingsRightChangeInfoBotAdmin:
-		if !chat_status.IsUserAdmin(p.b, p.group.Id, p.b.Id) {
+		if !chat_status.IsUserAdmin(b, group.Id, b.Id) {
 			return "connections_is_user_connected_bot_not_admin"
 		}
 	case settingsRightOwnerBotAdmin:
-		if !chat_status.IsBotAdmin(p.b, nil, p.group) {
+		if !chat_status.IsBotAdmin(b, nil, group) {
 			return "chat_status_bot_not_admin"
+		}
+	case settingsRightRestrictBotRestrict:
+		if !chat_status.IsUserAdmin(b, group.Id, b.Id) {
+			return "connections_is_user_connected_bot_not_admin"
+		}
+		if !chat_status.IsBotAdmin(b, nil, group) {
+			return "chat_status_bot_not_admin"
+		}
+	}
+	return ""
+}
+
+// settingsRightBotAfter is the bot part of a right that the command checks after the user's right: /captcha's
+// IsBotAdmin, /setflood's IsUserAdmin of the bot and the blacklist commands' CanBotRestrict. It returns the locale
+// key of a notice, or "" when the right has no such part or the bot passes. typed picks the key by update kind as
+// the command's permission responder does (U-9): a press (a callback) gets chat_status_bot_restrict_error, a typed
+// reply (a message) gets chat_status_bot_restrict_group_error. The same classification note as
+// settingsRightBotFirst applies to the door.
+func settingsRightBotAfter(b *gotgbot.Bot, group *gotgbot.Chat, right settingsRight, typed bool) string {
+	switch right {
+	case settingsRightAdminBotAdmin:
+		if !chat_status.IsBotAdmin(b, nil, group) {
+			return "chat_status_bot_not_admin"
+		}
+	case settingsRightAdminFloodBot:
+		if !chat_status.IsUserAdmin(b, group.Id, b.Id) {
+			return "connections_is_user_connected_bot_not_admin"
+		}
+	case settingsRightRestrictBotRestrict:
+		if !chat_status.CanBotRestrict(b, nil, group) {
+			if typed {
+				return "chat_status_bot_restrict_group_error"
+			}
+			return "chat_status_bot_restrict_error"
 		}
 	}
 	return ""

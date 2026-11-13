@@ -13,6 +13,8 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
+	"github.com/uasneppy/fuku_robot/fuku/db/blacklists"
+	dbcache "github.com/uasneppy/fuku_robot/fuku/db/cache"
 	"github.com/uasneppy/fuku_robot/fuku/db/lang"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
@@ -538,6 +540,87 @@ func TestSettingsRights(t *testing.T) {
 				}
 			})
 		}
+	})
+
+	t.Run("settingsRightRestrictBotRestrict mirrors /addblacklist", func(t *testing.T) {
+		aenv := newSettingsEnv(t)
+		LoadBlacklists(aenv.dispatcher)
+		noRestrict := gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: "NoRestrict"}
+		plain := gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: "Plain"}
+
+		newChat := func(t *testing.T, role string) gotgbot.Chat {
+			t.Helper()
+			chat := aenv.addChat()
+			aenv.fake.setBotRole(chat.Id, role)
+			aenv.fake.setMember(chat.Id, noRestrict.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusAdministrator})
+			aenv.fake.setMember(chat.Id, plain.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+			clean := func() {
+				db.DB.Where("chat_id = ?", chat.Id).Delete(&models.BlacklistSettings{})
+				dbcache.DeleteCache(dbcache.CacheKey("blacklist", chat.Id))
+				dbcache.ResetLocalForTest()
+			}
+			clean()
+			t.Cleanup(clean)
+			return chat
+		}
+		refusal := func(t *testing.T, chat gotgbot.Chat, user gotgbot.User) (string, bool) {
+			t.Helper()
+			member, err := lockdownLiveMember(aenv.bot, chat.Id, user.Id)
+			if err != nil {
+				t.Fatalf("live member: %v", err)
+			}
+			return settingsRightRefusal(&settingsPress{b: aenv.bot, group: &chat, member: member}, settingsRightRestrictBotRestrict)
+		}
+		stored := func(chat gotgbot.Chat) int {
+			rows, err := blacklists.ListBlacklistEntriesFresh(context.Background(), chat.Id)
+			if err != nil {
+				t.Fatalf("read the blacklist: %v", err)
+			}
+			return len(rows)
+		}
+
+		t.Run("the bot is a member: the first bot check, and the command writes nothing", func(t *testing.T) {
+			chat := newChat(t, staffRoleMember)
+			if key, alert := refusal(t, chat, aenv.admin); key != "connections_is_user_connected_bot_not_admin" || alert {
+				t.Errorf("menu refusal = (%q, alert %v), want the notice connections_is_user_connected_bot_not_admin", key, alert)
+			}
+			aenv.sendIn(chat, aenv.admin, "/addblacklist zzword")
+			if stored(chat) != 0 || !settingsAntifloodSentHas(aenv, chat.Id, staffMarker("connections_is_user_connected_bot_not_admin")) {
+				t.Errorf("/addblacklist by an administrator with a bot that is a member stored %d words, want none and the same refusal", stored(chat))
+			}
+		})
+
+		t.Run("the bot is an administrator without can_restrict_members: the press and the typed key differ", func(t *testing.T) {
+			chat := newChat(t, staffRoleAdminNoRestrict)
+			if key, alert := refusal(t, chat, aenv.admin); key != "chat_status_bot_restrict_error" || alert {
+				t.Errorf("menu refusal = (%q, alert %v), want the notice chat_status_bot_restrict_error", key, alert)
+			}
+			aenv.sendIn(chat, aenv.admin, "/addblacklist zzword")
+			if stored(chat) != 0 || !settingsAntifloodSentHas(aenv, chat.Id, staffMarker("chat_status_bot_restrict_group_error")) {
+				t.Errorf("/addblacklist with a bot that cannot restrict stored %d words, want none and chat_status_bot_restrict_group_error", stored(chat))
+			}
+		})
+
+		t.Run("an administrator without can_restrict_members and a plain member: the member part", func(t *testing.T) {
+			chat := newChat(t, staffRoleAdmin)
+			if key, alert := refusal(t, chat, noRestrict); key != "settings_no_restrict" || !alert {
+				t.Errorf("administrator without the right = (%q, alert %v), want the alert settings_no_restrict", key, alert)
+			}
+			if key, alert := refusal(t, chat, plain); key != "settings_not_admin" || !alert {
+				t.Errorf("plain member = (%q, alert %v), want the alert settings_not_admin", key, alert)
+			}
+		})
+
+		t.Run("every check held: no refusal, and the command stores the word", func(t *testing.T) {
+			chat := newChat(t, staffRoleAdmin)
+			if key, alert := refusal(t, chat, aenv.admin); key != "" || alert {
+				t.Errorf("menu refusal = (%q, alert %v), want none", key, alert)
+			}
+			aenv.sendIn(chat, aenv.admin, "/addblacklist zzword")
+			if stored(chat) != 1 {
+				t.Errorf("/addblacklist stored %d words, want 1", stored(chat))
+			}
+		})
 	})
 }
 

@@ -656,7 +656,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   picker), one clean match links at once, and several make the picker, which lists at most 8 and adds
   `settings_staff_pick_more` (how many are missing and that `/linkstaff <id>` links any of them) when there are more.
   The Unlink card is the shared two-tap card of `settings_card.go`: `settingsCardRows` adds `[Yes | No]` and the
-  navigation row, Yes carries `e` (unix minutes, `settingsCardLifetime` 5 minutes ahead, a variable only for tests), expiry
+  navigation row (it calls `settingsCardRowsTo(k, yes, no)`, the sibling that takes the No fields of the caller, `{a: no, p: page}`
+  for `settingsCardRows`, so the list pages' delete card can return to the pager page the ask came from, M40), Yes carries `e` (unix minutes, `settingsCardLifetime` 5 minutes ahead, a variable only for tests), expiry
   is lazy (`settingsCardExpired`: a Yes whose minute is past redraws the page with `settings_card_expired` and runs
   nothing, an `e` that is not digits only, positive and 63-bit is an invalid request), there is no timer and no Redis
   key, and Yes goes through the whole press pipeline and then the action's own live checks (`runUnlinkGroup` checks the
@@ -1316,9 +1317,24 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   notice `chat_status_bot_not_admin`, then anyone but the live creator of the press's own member record with the alert
   `chat_status_owner_button_error`, the key the command's permission responder picks for a button (a press is a callback; the
   Access page's `settingsRightOwner` keeps `settings_access_owner_only`). The bot parts use the commands' own cached predicates, never a
-  live bot lookup (`settingsRightBotFirstRefusal`), and the six older rights keep their order exactly. No editor part declares the
+  live bot lookup (`settingsRightBotFirst`, below), and the six older rights keep their order exactly. No editor part declares the
   new rights, so the typed-reply door is unchanged (`settingsRightRefusalFor` answers their member parts for it all the same;
   `TestSettingsRights` "mirrors /autoapprove" and "mirrors /anonadmin", `TestSettingsRightRefusalForParity`).
+  The ninth right (Phase 19, plan 19-02, M42), `settingsRightRestrictBotRestrict`, is appended after `settingsRightOwnerBotAdmin` and is
+  the right of every blacklist write (`/addblacklist`, `/rmblacklist`, `/blacklistaction`; nine rights in all). It judges in the commands'
+  order: the bot an administrator by `chat_status.IsUserAdmin` (notice `connections_is_user_connected_bot_not_admin`, the commands'
+  `IsUserConnected`) and by `chat_status.IsBotAdmin` (notice `chat_status_bot_not_admin`, which the commands leave silent and the menu
+  must say), then the member's creator-or-`can_restrict_members` from the press's own record (the alert `settings_no_restrict`, the
+  member part of `settingsRightRestrict`: `settingsRightRefusalFor` answers it for a typed reply too), then the bot's own restrict right
+  by `chat_status.CanBotRestrict` (notice `chat_status_bot_restrict_error` for a press, `chat_status_bot_restrict_group_error` for a
+  typed reply, as the command's permission responder picks by update kind, U-9). The bot parts are two shared functions, no longer a
+  press-only helper: `settingsRightBotFirst(b, group, right)` (the bot-first checks of the two Phase 18 composites and of the ninth
+  right) and `settingsRightBotAfter(b, group, right, typed)` (`/captcha`'s `IsBotAdmin`, `/setflood`'s `IsUserAdmin` of the bot, moved
+  unchanged, and the ninth right's `CanBotRestrict`), and `settingsRightRefusal` runs bot first, member part, bot after, so every older
+  right answers the same keys in the same order. Both read the commands' cached predicates and a false can be a stale cache, so the
+  typed-reply door of plan 19-04 classifies such a false with one live `getChatMember` before it refuses. No page declares the ninth
+  right until the Blacklist page of plan 19-03 does and the door first uses it (typed) in 19-04. `TestSettingsRights` "mirrors
+  /addblacklist", `TestSettingsRightRefusalForParity` and `TestSettingsRightBotHalves` hold it.
   The Switches page declares three rights: Reports `settingsRightAdminFloodBot` (`/reports`), the AI spam filter `settingsRightAdmin`
   (`/aispam`, no bot check) and Auto-approve `settingsRightChangeInfoBotAdmin` (`/autoapprove`), each judged on every press
   (`TestSettingsAuthorityParitySwitches`).

@@ -1,8 +1,14 @@
+//go:build testtools
+
 package modules
 
 import (
+	"fmt"
+	"maps"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
@@ -159,4 +165,120 @@ func TestSettingsPrivateOnlyPage(t *testing.T) {
 			t.Errorf("an ordinary page ran MainState %d and Open %d times in a group menu, want once each", probe.mainState, probe.open)
 		}
 	})
+}
+
+func TestSettingsCardRowsTo(t *testing.T) {
+	v := settingsView{Tr: i18n.MustNewTranslator("en"), OwnerKey: "u", OwnerValue: "7", GroupID: -1001234567890}
+	fieldsOf := func(button gotgbot.InlineKeyboardButton) map[string]string {
+		decoded, ok := decodeCallbackData(button.CallbackData, settingsCallbackNamespace)
+		if !ok {
+			t.Fatalf("button %q carries %q, not settings callback data", button.Text, button.CallbackData)
+		}
+		return decoded.Fields
+	}
+	wantExpiry := func(e string) {
+		t.Helper()
+		minute, err := strconv.ParseInt(e, 10, 64)
+		if err != nil {
+			t.Fatalf("e = %q is not a minute", e)
+		}
+		if want := time.Now().Add(settingsCardLifetime).Unix() / 60; minute < want-1 || minute > want+1 {
+			t.Errorf("e = %d, want about %d (one card lifetime ahead)", minute, want)
+		}
+	}
+
+	t.Run("the caller chooses the No fields", func(t *testing.T) {
+		k := newSettingsKeyboard(v)
+		settingsCardRowsTo(k, map[string]string{"a": "zy", "r": "5"}, map[string]string{"a": "zg", "v": "3"})
+		if len(k.rows) != 2 || len(k.rows[0]) != 2 || len(k.rows[1]) != 2 {
+			t.Fatalf("card rows = %+v, want [Yes No] then Back and Close", k.rows)
+		}
+		yes, no := fieldsOf(k.rows[0][0]), fieldsOf(k.rows[0][1])
+		wantExpiry(yes["e"])
+		delete(yes, "e")
+		if want := map[string]string{"a": "zy", "r": "5", "u": "7"}; !maps.Equal(yes, want) {
+			t.Errorf("Yes fields = %v, want %v plus e", yes, want)
+		}
+		if want := map[string]string{"a": "zg", "v": "3", "u": "7"}; !maps.Equal(no, want) {
+			t.Errorf("No fields = %v, want exactly %v", no, want)
+		}
+		if got := fieldsOf(k.rows[1][0])["a"]; got != settingsActBack {
+			t.Errorf("the navigation row starts with %q, want Back", got)
+		}
+	})
+
+	t.Run("settingsCardRows keeps its No: cancel back to the page", func(t *testing.T) {
+		k := newSettingsKeyboard(v)
+		settingsCardRows(k, map[string]string{"a": "zy"}, "l")
+		yes, no := fieldsOf(k.rows[0][0]), fieldsOf(k.rows[0][1])
+		wantExpiry(yes["e"])
+		if want := map[string]string{"a": settingsActCancel, "p": "l", "u": "7"}; !maps.Equal(no, want) {
+			t.Errorf("No fields = %v, want %v", no, want)
+		}
+		if yes["a"] != "zy" || len(k.rows) != 2 {
+			t.Errorf("Yes = %v and %d rows, want a=zy and two rows", yes, len(k.rows))
+		}
+	})
+
+	t.Run("the caller's map is not changed", func(t *testing.T) {
+		yes := map[string]string{"a": "zy"}
+		settingsCardRowsTo(newSettingsKeyboard(v), yes, map[string]string{"a": "zg"})
+		if len(yes) != 1 {
+			t.Errorf("the caller's Yes fields became %v", yes)
+		}
+	})
+}
+
+// settingsBotHalvesRow is what the two bot halves answer for one right with the bot in one state.
+type settingsBotHalvesRow struct {
+	first, after, afterTyped string
+}
+
+func TestSettingsRightBotHalves(t *testing.T) {
+	const (
+		connected  = "connections_is_user_connected_bot_not_admin"
+		botNotAdm  = "chat_status_bot_not_admin"
+		restrict   = "chat_status_bot_restrict_error"
+		restrictGr = "chat_status_bot_restrict_group_error"
+	)
+	env := newSettingsEnv(t)
+	states := []struct {
+		name, role string
+	}{
+		{"the bot is a member", staffRoleMember},
+		{"the bot is an administrator without restrict", staffRoleAdminNoRestrict},
+		{"the bot is an administrator with restrict", staffRoleAdmin},
+	}
+	// want[right][state index]. A right with no bot part answers nothing in every state.
+	none := settingsBotHalvesRow{}
+	want := map[settingsRight][3]settingsBotHalvesRow{
+		settingsRightAdmin:               {none, none, none},
+		settingsRightAdminBotAdmin:       {{"", botNotAdm, botNotAdm}, none, none},
+		settingsRightAdminFloodBot:       {{"", connected, connected}, none, none},
+		settingsRightRestrict:            {none, none, none},
+		settingsRightOwner:               {none, none, none},
+		settingsRightChangeInfo:          {none, none, none},
+		settingsRightChangeInfoBotAdmin:  {{connected, "", ""}, none, none},
+		settingsRightOwnerBotAdmin:       {{botNotAdm, "", ""}, none, none},
+		settingsRightRestrictBotRestrict: {{connected, restrict, restrictGr}, {"", restrict, restrictGr}, none},
+	}
+	if len(want) != 9 {
+		t.Fatalf("the table covers %d rights, want all nine", len(want))
+	}
+	for right, rows := range want {
+		for i, state := range states {
+			t.Run(fmt.Sprintf("right %d, %s", right, state.name), func(t *testing.T) {
+				chat := env.addChat()
+				env.fake.setBotRole(chat.Id, state.role)
+				got := settingsBotHalvesRow{
+					first:      settingsRightBotFirst(env.bot, &chat, right),
+					after:      settingsRightBotAfter(env.bot, &chat, right, false),
+					afterTyped: settingsRightBotAfter(env.bot, &chat, right, true),
+				}
+				if got != rows[i] {
+					t.Errorf("halves = %+v, want %+v", got, rows[i])
+				}
+			})
+		}
+	}
 }

@@ -136,7 +136,7 @@ func settingsHooksCreatorJSON(userID int64) string {
 
 // TestSettingsRightRefusalForParity pins the member-record part of every right: the three
 // rights that existed before answer exactly what they answered, the two bot rights have no
-// member part, and settingsRightRefusal agrees with the pure function wherever it needs no bot.
+// member part, the ninth right (Phase 19) judges the member as settingsRightRestrict does, and settingsRightRefusal agrees with the pure function wherever it needs no bot.
 func TestSettingsRightRefusalForParity(t *testing.T) {
 	const (
 		notAdmin   = "settings_not_admin"
@@ -190,6 +190,13 @@ func TestSettingsRightRefusalForParity(t *testing.T) {
 		{"owner and bot: restricted", settingsRightOwnerBotAdmin, restricted, verdict{ownerBtn, true}},
 		{"owner and bot: left", settingsRightOwnerBotAdmin, left, verdict{ownerBtn, true}},
 		{"owner and bot: kicked", settingsRightOwnerBotAdmin, kicked, verdict{ownerBtn, true}},
+		{"restrict and bot: creator", settingsRightRestrictBotRestrict, creator, verdict{}},
+		{"restrict and bot: administrator with the right", settingsRightRestrictBotRestrict, adminRestrict, verdict{}},
+		{"restrict and bot: administrator without it", settingsRightRestrictBotRestrict, adminPlain, verdict{noRestrict, true}},
+		{"restrict and bot: member", settingsRightRestrictBotRestrict, plainMember, verdict{notAdmin, true}},
+		{"restrict and bot: restricted", settingsRightRestrictBotRestrict, restricted, verdict{notAdmin, true}},
+		{"restrict and bot: left", settingsRightRestrictBotRestrict, left, verdict{notAdmin, true}},
+		{"restrict and bot: kicked", settingsRightRestrictBotRestrict, kicked, verdict{notAdmin, true}},
 		{"bot admin right has no member part", settingsRightAdminBotAdmin, plainMember, verdict{}},
 		{"flood bot right has no member part", settingsRightAdminFloodBot, plainMember, verdict{}},
 		{"an unknown right fails closed", settingsRight(99), creator, verdict{notAdmin, true}},
@@ -206,7 +213,7 @@ func TestSettingsRightRefusalForParity(t *testing.T) {
 			// the unknown one are left out: the former need a bot lookup of their own, and so
 			// do the two composite rights, whose bot part is judged first (TestSettingsRights).
 			switch tc.right {
-			case settingsRightAdminBotAdmin, settingsRightAdminFloodBot, settingsRightChangeInfoBotAdmin, settingsRightOwnerBotAdmin, settingsRight(99):
+			case settingsRightAdminBotAdmin, settingsRightAdminFloodBot, settingsRightChangeInfoBotAdmin, settingsRightOwnerBotAdmin, settingsRightRestrictBotRestrict, settingsRight(99):
 				return
 			}
 			press := &settingsPress{b: env.bot, group: &env.chat, member: tc.member}
