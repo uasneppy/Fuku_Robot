@@ -497,6 +497,16 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_bl_saved_too_long":       {48, 70},
 	"settings_bl_saved_too_broad":      {60, 90},
 	"settings_bl_saved_failed":         {34, 54},
+
+	// Phase 19 (plan 19-04, task 2), the door's list replies: the wait-ended note, the five part words and the refusal's
+	// first line (UI-SPEC rows 5 to 10 and 39).
+	"settings_entries_wait_ended_note": {100, 160},
+	"settings_entries_part_words":      {16, 24},
+	"settings_entries_part_keyword":    {16, 24},
+	"settings_entries_part_reply":      {16, 24},
+	"settings_entries_part_name":       {16, 24},
+	"settings_entries_part_content":    {16, 24},
+	"settings_bl_refuse_none":          {48, 80},
 }
 
 // settingsAlertKeys are shown as answerCallbackQuery alerts: plain text, no tag, at most

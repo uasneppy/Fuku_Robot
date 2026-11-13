@@ -17,6 +17,16 @@ func settingsListKeys(def settingsListDef) []string {
 	return slices.DeleteFunc(keys, func(key string) bool { return key == "" })
 }
 
+// settingsListExtraKeys are the keys the list pages' typed add reads through code the engine does not enumerate: the
+// part words of the static part table and the prompt lines of each table's Prompt.
+func settingsListExtraKeys() []string {
+	keys := []string{"settings_bl_wait", "settings_bl_wait_rules"}
+	for _, part := range settingsListParts {
+		keys = append(keys, part.WordKey)
+	}
+	return keys
+}
+
 // TestSettingsListKeysExist is the guard of every locale key a registered list table reads through a field: a key
 // missing from one language would ship an empty line, button or card. Every key must translate to a non-empty
 // string in all 8 languages, and a card or notice key must keep the placeholder the engine splices the entry into.
@@ -32,6 +42,12 @@ func TestSettingsListKeysExist(t *testing.T) {
 				text, err := tr.GetString(key)
 				if err != nil || strings.TrimSpace(text) == "" {
 					t.Errorf("%s: page %s key %q does not translate: %q, %v", code, def.Key, key, text, err)
+				}
+			}
+			for _, key := range settingsListExtraKeys() {
+				text, err := tr.GetString(key)
+				if err != nil || strings.TrimSpace(text) == "" {
+					t.Errorf("%s: typed-add key %q does not translate: %q, %v", code, key, text, err)
 				}
 			}
 			for _, key := range []string{def.DeleteAskKey, def.RemovedKey} {
