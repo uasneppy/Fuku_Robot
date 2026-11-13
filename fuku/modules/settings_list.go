@@ -110,6 +110,11 @@ type settingsListDef struct {
 	AddCode, CancelCode, AddKey string
 	Prompt                      func(v settingsView, part string) []string
 	Typed                       func(r *settingsInputReply, part settingsListPart)
+	// TwoStep, when set, makes the page's add two typed messages (a keyword or name, then the content) run by the
+	// engine's own flow; the page gives hooks only and Typed stays nil. AddGate, when set, is consulted before the
+	// Add press writes a wait: a non-nil screen is drawn instead and no wait is created (the Filters cap).
+	TwoStep *settingsListTwoStep
+	AddGate func(p *settingsPress) *settingsScreen
 	// Actions are the page's own action codes besides the engine's (the blacklist's action screen).
 	Actions map[string]settingsPageAction
 	// Redraw maps an action code of the page to the screen a notice refusal of that action redraws, which

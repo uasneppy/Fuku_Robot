@@ -400,16 +400,33 @@ var settingsInputEndKeysSayStopped = map[string]bool{"settings_edit_refuse_acces
 // part is left alone) and answers key, then a blank line and the line that says the wait ended
 // unless the reason already does. The person has been told, so the marker goes too.
 func (r *settingsInputReply) end(key string) {
-	outcome, err := settingsInputCancel(context.Background(), r.user.Id, r.wait.GroupID, r.wait.Page, r.wait.Part, r.wait.PromptMsgID)
-	if err != nil && !errors.Is(err, errSettingsInputUnavailable) {
-		log.Warnf("[Settings] ending the wait of user %d failed: %v", r.user.Id, err)
-	}
-	log.Debugf("[Settings] the wait of user %d ended with outcome %d", r.user.Id, int(outcome))
+	r.cancelWait()
 	text := r.text(key)
 	if !settingsInputEndKeysSayStopped[key] {
 		text += "\n\n" + r.text("settings_edit_wait_stopped")
 	}
 	r.plain(text)
+}
+
+// endWith is end for a reason that is already finished text (a refusal the page worded, with the user's entry
+// spliced in): it cancels this wait, then answers the text, a blank line and the line that says the wait ended.
+func (r *settingsInputReply) endWith(text string) {
+	r.cancelWait()
+	r.plain(r.endText(text))
+}
+
+// endText is the answer of a wait that ended: the reason, a blank line and settings_edit_wait_stopped.
+func (r *settingsInputReply) endText(reason string) string {
+	return reason + "\n\n" + r.text("settings_edit_wait_stopped")
+}
+
+// cancelWait deletes this wait and its marker, logging a failure only.
+func (r *settingsInputReply) cancelWait() {
+	outcome, err := settingsInputCancel(context.Background(), r.user.Id, r.wait.GroupID, r.wait.Page, r.wait.Part, r.wait.PromptMsgID)
+	if err != nil && !errors.Is(err, errSettingsInputUnavailable) {
+		log.Warnf("[Settings] ending the wait of user %d failed: %v", r.user.Id, err)
+	}
+	log.Debugf("[Settings] the wait of user %d ended with outcome %d", r.user.Id, int(outcome))
 }
 
 // view is the private menu of the group being configured, as a press builds it.
@@ -547,13 +564,18 @@ func (r *settingsInputReply) saved(verdict settingsEditVerdict) {
 
 // closePrompt edits the waiting prompt to the closed line with no keyboard, best effort.
 func (r *settingsInputReply) closePrompt() {
+	r.editPrompt("settings_edit_prompt_closed")
+}
+
+// editPrompt edits the waiting prompt message to the text of key with no keyboard, best effort.
+func (r *settingsInputReply) editPrompt(key string) {
 	if r.wait.PromptMsgID == 0 {
 		return
 	}
 	_, _, err := r.b.EditMessageText(&gotgbot.EditMessageTextOpts{
 		ChatId:    r.msg.Chat.Id,
 		MessageId: r.wait.PromptMsgID,
-		Text:      r.text("settings_edit_prompt_closed"),
+		Text:      r.text(key),
 		ParseMode: formatting.HTML,
 	})
 	if err != nil && !isMessageNotModified(err) {

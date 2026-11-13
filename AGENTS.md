@@ -409,6 +409,22 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   the editor's, so a marker or wait of a list part parses whether or not its page is registered. A message after the wait ended
   answers `settings_entries_wait_ended_note` naming the part (`settings_entries_part_*`) for a list part and the editor's note
   for an editor part. A list refusal draws its Cancel with the table's `CancelCode` (`renderSettingsInputRefusalCode`).
+  The two-step add (Phase 19 plan 19-06, `settingsListTwoStep`) is run by the engine, never by a page: `runList` hands a part of a table
+  with `TwoStep` set whose static `Step` is 1 and whose `Next` is set to `listStepOne` and a step-2 part to `listStepTwo`; a one-step page keeps
+  the table's `Typed`. Step 1 needs text (`r.msg.Text`; a media message is `settings_edit_refuse_need_text`), normalises it with the table's
+  `Normalise` and runs its `Check`: a refusal (a finished text) keeps the wait at step 1 through `refuse` (not extended, the refusal's Cancel noted
+  on the wait), so the next message is read as the keyword again, and an error is `settings_check_failed` with the wait kept. An accepted step 1 is one
+  `settingsInputAdvance` (the normalised entry in `w`, this message's ID in `q`, a new nonce, ten fresh minutes: a lost advance, from a second
+  delivery, a Cancel or a newer Add, sends nothing), then the step-2 prompt is sent as a reply to the step-1 message and recorded as `m`
+  (`settingsInputSetPrompt`) and the step-1 prompt is edited to `settings_entries_step_done` with no keyboard. Step 2 ignores with no reply a message
+  whose ID is not greater than `q` (U-11: a redelivered keyword message is never stored as the content), extracts the content with
+  `content.ExtractTypedNoteOrFilter(msg, w, IsFilter, the sender's language)` (a refusal is `DataType == -1`, which the commands read the same way,
+  because the result is created holding the "needs content" text and never cleared; the wait stays with `w`), runs `Check` again (a refusal now ends
+  the wait through `endWith`: the text, a blank line and `settings_edit_wait_stopped`), claims, calls the table's `Apply` and finishes: a saved entry
+  is answered with the list page as a new message at the page holding it with `✅ ` and `SavedKey` naming the entry, the page's `Notice` line and
+  the album note, and the step-2 prompt is closed; a taken one (another admin's entry or the cap reached between the steps) finishes and ends with
+  its text; a failed write releases the claim and answers `common_settings_save_failed` with the wait kept. Neither `w` nor a keyword is ever logged,
+  put in callback data or in a button label; the prompt shows it escaped and cut at 100 code points.
   After a group `/settings` passes its checks and the choice message is sent, `settings()` refreshes that group's roster
   record through `refreshChatAdminIndex` (at most two Telegram calls, a 10 s context, the error only logged), the
   second repair path after `/admincache` (D-07, MENU-10). It runs after the reply, so a slow or failed refresh never
@@ -1207,6 +1223,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   already listed and addable; with none addable it is refused with the counts and the wait kept, else it is claimed and stored
   through `applyBlacklistAdd`, the function `/addblacklist` stores through, and the list page arrives as a new message at the page
   of the first word added with one count line per non-zero category (counts only, never a word) while the prompt is closed.
+  A table with a two-step add gives `TwoStep` (Phase 19 plan 19-06: `Normalise`, `Check`, `IsFilter`, `Apply`, `KeyLineKey`, `SavedKey`; the flow itself,
+  described in the door's bullet under Handlers, is the engine's) and leaves `Typed` nil, and may give `AddGate`, which the Add press consults first: a
+  non-nil screen is drawn instead and no wait is created (the Filters cap of 150). A page therefore gives hooks only and writes no flow code. The
+  Add prompt of a two-step page also carries `settings_entries_step` (1 of 2, or 2 of 2 with the escaped keyword line of `KeyLineKey` and
+  `settings_entries_wait_content_limits` 4096 and 1024), so `renderSettingsListPrompt` takes the keyword.
 - The message editor's pages (`settings_edit.go`, pages `w` Welcome, `g` Goodbye and `r` Rules, orders 50, 60 and 70, each
   registered from that file's `init` through `registerSettingsPage` so `settings_pages.go` is never edited) show which
   parts of a message are set, one line per part from one parts table (`settingsEditPageDef.Parts`): Welcome and Goodbye
@@ -1469,8 +1490,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   newer wait, not even one for the same group, page and part), advance (`settingsInputAdvance`, Phase 19, M41: only the holder of the nonce, for
   the same group and page, with no claim held, moves the wait from step 1 to step 2: it sets `t`, `w`, `q`, a new nonce and a fresh ten
   minutes, drops every `r<id>` field and rewrites the marker) and set-prompt (`settingsInputSetPrompt`: records `m` for the holder of the
-  nonce, so the Cancel button on the step-2 prompt ends the wait); both are proved at the store level and their first production
-  caller is the two-step engine of plan 19-06 (provisional owner confirmation A19-6: the keyword lives in the wait hash for at most the
+  nonce, so the Cancel button on the step-2 prompt ends the wait); both are proved at the store level and their production
+  caller is `listStepOne`, the two-step engine of plan 19-06 (provisional owner confirmation A19-6: the keyword lives in the wait hash for at most the
   wait's ten minutes). Reads are one pipeline of `HGETALL` and `GET`; a hash
   that does not parse is no wait. Without Redis every store function returns `errSettingsInputUnavailable`, so Set
   answers `settings_edit_unavailable` and nothing else needs Redis.
@@ -3952,8 +3973,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   goroutines uses Mute or Kick and never Warn (the warn module's SQLite transaction); a test that joins, rejoins or sends with
   a date takes the date before the message and at least 2 s apart; and a test never `t.Skip`s (CI's
   `scripts/check_test_results` fails on an unexpected skip, so a case that cannot run in a menu kind is not registered
-  there). The locale files now hold 420 `settings_` keys and 31 `mreq_` keys, each `settings_` key one row of the limits table
-  of `fuku/i18n/settings_locale_test.go` (Phase 19 plan 19-02 added two, `settings_state_private_only` and `settings_entries_group_note`, and plan 19-03 seven for the Blacklist page in task 1, three for its delete card in task 2 and seven for its action screen in task 3, and plan 19-04 nine for the typed add in task 1 and seven (the wait-ended note, the five part words and the no-addable-word refusal) in task 2; the typed add's tests are `TestSettingsListDoor*` (`settings_list_door_test.go`: one step, refusals, authority with the live bot classification, replaced waits, expiry, Cancel, albums, no Redis), `TestSettingsParityBlacklistAdd` and the typed column of `TestSettingsAuthorityParityBlacklist` (`settings_blacklist_test.go`); the list toolkit is `settings_list_env_test.go`: `newSettingsListEnv`, `settingsListSeedBlacklist`, `settingsListCleanup`, `settingsListOpenPrivate`, `settingsListSentinel`) and each `mreq_` key one row of `memberReqLocaleLimits`. Phase 18 added 55 `settings_`
+  there). The locale files now hold 423 `settings_` keys and 31 `mreq_` keys, each `settings_` key one row of the limits table
+  of `fuku/i18n/settings_locale_test.go` (Phase 19 plan 19-02 added two, `settings_state_private_only` and `settings_entries_group_note`, and plan 19-03 seven for the Blacklist page in task 1, three for its delete card in task 2 and seven for its action screen in task 3, and plan 19-04 nine for the typed add in task 1 and seven (the wait-ended note, the five part words and the no-addable-word refusal) in task 2; the typed add's tests are `TestSettingsListDoor*` (`settings_list_door_test.go`: one step, refusals, authority with the live bot classification, replaced waits, expiry, Cancel, albums, no Redis), `TestSettingsParityBlacklistAdd` and the typed column of `TestSettingsAuthorityParityBlacklist` (`settings_blacklist_test.go`); the list toolkit is `settings_list_env_test.go`: `newSettingsListEnv`, `settingsListSeedBlacklist`, `settingsListCleanup`, `settingsListOpenPrivate`, `settingsListSentinel`; plan 19-06 adds three keys, rows 11, 12 and 14 of the UI-SPEC, and `withTestSettingsList(t, def)`, which installs a test-only list page over the registries by saving the entries of its key, its list table and its action codes and replacing them, restoring every one in `t.Cleanup` (never `registerSettingsPage`, which panics on a duplicate key, so a test page may reuse key `i` or `e` before or after the real page exists); the two-step engine is proved on such a page, `settingsListTestTwoStepDef` with key `i` and codes `zg zx zy za zc`, by `TestSettingsListTwoStepFlow` (`settings_list_twostep_test.go`)) and each `mreq_` key one row of `memberReqLocaleLimits`. Phase 18 added 55 `settings_`
   keys (four of them, the Warnings page's, in plan 18-01 and 51 in plan 18-02: the six page names, three Main state words,
   the Warnings, Switches, Language, Log channel and Anonymous admins lines, and the Locks intro, two state words and 22 lock
   names), each one row of `settingsLocaleLimits` (`settings_sw_ai_unavailable` also in `settingsAlertKeys`, being the alert of

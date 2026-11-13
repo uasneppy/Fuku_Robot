@@ -5,7 +5,9 @@ package modules
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
@@ -13,6 +15,8 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/db/blacklists"
 	dbcache "github.com/uasneppy/fuku_robot/fuku/db/cache"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
+	"github.com/uasneppy/fuku_robot/fuku/i18n"
+	"github.com/uasneppy/fuku_robot/fuku/utils/content"
 )
 
 // settingsListSentinel is the word the privacy tests seed and then search every group-menu edit and answer for: it
@@ -100,4 +104,160 @@ func settingsListWords(n int) []string {
 		words = append(words, fmt.Sprintf("w%02d", i))
 	}
 	return words
+}
+
+// settingsListRegistry is what the settings registries hold for one page key and a set of action codes: the page, the
+// list table and the action entries. withTestSettingsList saves it, replaces it and restores it.
+type settingsListRegistry struct {
+	page       settingsPage
+	hasPage    bool
+	list       settingsListDef
+	hasList    bool
+	actions    map[string]settingsActionEntry
+	hasActions map[string]bool
+}
+
+// settingsListRegistryOf snapshots the registry entries of key and codes.
+func settingsListRegistryOf(key string, codes []string) settingsListRegistry {
+	snap := settingsListRegistry{actions: map[string]settingsActionEntry{}, hasActions: map[string]bool{}}
+	snap.page, snap.hasPage = settingsPages[key]
+	snap.list, snap.hasList = settingsLists[key]
+	for _, code := range codes {
+		snap.actions[code], snap.hasActions[code] = settingsActions[code]
+	}
+	return snap
+}
+
+// restore puts the snapshot back: an entry that was absent is removed again.
+func (snap settingsListRegistry) restore(key string, codes []string) {
+	if snap.hasPage {
+		settingsPages[key] = snap.page
+	} else {
+		delete(settingsPages, key)
+	}
+	if snap.hasList {
+		settingsLists[key] = snap.list
+	} else {
+		delete(settingsLists, key)
+	}
+	for _, code := range codes {
+		if snap.hasActions[code] {
+			settingsActions[code] = snap.actions[code]
+		} else {
+			delete(settingsActions, code)
+		}
+	}
+}
+
+// withTestSettingsList installs the page and the list table of def over the registries by saving what is there under
+// def.Key and the page's action codes and replacing it, and restores every entry in t.Cleanup. It never calls
+// registerSettingsPage, which panics on a duplicate key at init, so a test page may reuse the key of a real page
+// (Filters or Notes) whether or not that page is registered. It refuses a code that another page owns. A test that
+// uses it never calls t.Parallel.
+func withTestSettingsList(t *testing.T, def settingsListDef) {
+	t.Helper()
+	page := settingsListPage(def)
+	codes := make([]string, 0, len(page.Actions))
+	for code := range page.Actions {
+		if owner, taken := settingsActions[code]; taken && owner.pageKey != def.Key {
+			t.Fatalf("the test list page %q cannot use action code %q: page %q owns it", def.Key, code, owner.pageKey)
+		}
+		codes = append(codes, code)
+	}
+	saved := settingsListRegistryOf(def.Key, codes)
+	settingsPages[def.Key] = page
+	settingsLists[def.Key] = def
+	for code, action := range page.Actions {
+		settingsActions[code] = settingsActionEntry{pageKey: def.Key, action: action}
+	}
+	t.Cleanup(func() { saved.restore(def.Key, codes) })
+}
+
+// settingsListTestApply is one call of the test page's Apply: the keyword it was given and the extraction.
+type settingsListTestApply struct {
+	Norm string
+	Ex   content.ExtractResult
+}
+
+// settingsListTestStore is the in-memory list behind the test-only two-step page and the knobs a test turns: the
+// refusal or error its Check answers, the gate screen its Add shows and the outcome its Apply answers.
+type settingsListTestStore struct {
+	entries      []settingsListEntry
+	nextID       int64
+	checkRefusal string
+	checkErr     error
+	checkCalls   int
+	gate         string
+	applyOutcome settingsListApplyOutcome
+	applyText    string
+	applyNotice  string
+	applies      []settingsListTestApply
+}
+
+// settingsListTestTwoStepCodes are the action codes of the test page: unused by every real page.
+var settingsListTestTwoStepCodes = []string{"zg", "zx", "zy", "za", "zc"}
+
+// settingsListTestTwoStepDef is the table of the test-only two-step page: key i (the Filters parts of the static part
+// table), its own codes, existing locale keys standing in for the Filters wording and the store's hooks.
+func settingsListTestTwoStepDef(store *settingsListTestStore) settingsListDef {
+	return settingsListDef{
+		Key:          "i",
+		Order:        47,
+		Icon:         "🧪",
+		TitleKey:     "settings_page_blacklist",
+		PagerCode:    "zg",
+		AskCode:      "zx",
+		YesCode:      "zy",
+		AddCode:      "za",
+		CancelCode:   "zc",
+		AddKey:       "settings_btn_bl_add",
+		Right:        settingsRightAdmin,
+		IntroKey:     "settings_bl_intro",
+		CountKey:     "settings_bl_count",
+		EmptyKey:     "settings_bl_empty",
+		DeleteAskKey: "settings_bl_delete_ask",
+		RemovedKey:   "settings_bl_removed",
+		EntryParam:   "word",
+		Read: func(context.Context, int64) ([]settingsListEntry, error) {
+			return append([]settingsListEntry(nil), store.entries...), nil
+		},
+		Entry: func(_ context.Context, _, id int64) (*settingsListEntry, error) {
+			for _, e := range store.entries {
+				if e.ID == id {
+					return &e, nil
+				}
+			}
+			return nil, nil
+		},
+		Count:  func(context.Context, int64) (int, error) { return len(store.entries), nil },
+		Remove: func(context.Context, int64, int64) settingsListRemoval { return settingsListRemoval{} },
+		Prompt: func(v settingsView, _ string) []string { return []string{settingsText(v.Tr, "settings_bl_wait")} },
+		AddGate: func(*settingsPress) *settingsScreen {
+			if store.gate == "" {
+				return nil
+			}
+			return &settingsScreen{Text: store.gate}
+		},
+		TwoStep: &settingsListTwoStep{
+			Normalise: func(text string) string { return strings.ToLower(strings.Join(strings.Fields(text), " ")) },
+			Check: func(_ context.Context, _ int64, norm string, _ *i18n.Translator) (string, error) {
+				store.checkCalls++
+				if utf8.RuneCountInString(norm) > listKeywordMaxRunes {
+					return "too-long-keyword", nil
+				}
+				return store.checkRefusal, store.checkErr
+			},
+			IsFilter: true,
+			Apply: func(_ context.Context, _ int64, norm string, ex content.ExtractResult) settingsListApplyResult {
+				store.applies = append(store.applies, settingsListTestApply{Norm: norm, Ex: ex})
+				if store.applyOutcome == settingsListApplySaved {
+					store.nextID++
+					store.entries = append(store.entries, settingsListEntry{ID: store.nextID, Text: norm})
+				}
+				return settingsListApplyResult{Outcome: store.applyOutcome, Text: store.applyText, Notice: store.applyNotice}
+			},
+			KeyLineKey: "settings_bl_delete_ask",
+			SavedKey:   "settings_bl_removed",
+		},
+	}
 }

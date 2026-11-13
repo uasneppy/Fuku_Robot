@@ -507,6 +507,12 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_entries_part_name":       {16, 24},
 	"settings_entries_part_content":    {16, 24},
 	"settings_bl_refuse_none":          {48, 80},
+
+	// Phase 19 (plan 19-06), the two-step add's step line, the closed step-1 prompt and the step-2 content limits
+	// (UI-SPEC rows 11, 12 and 14).
+	"settings_entries_step":                {24, 32},
+	"settings_entries_step_done":           {60, 90},
+	"settings_entries_wait_content_limits": {76, 110},
 }
 
 // settingsAlertKeys are shown as answerCallbackQuery alerts: plain text, no tag, at most
