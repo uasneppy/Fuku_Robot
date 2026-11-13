@@ -72,7 +72,7 @@ const (
 // interpolated. Group titles are user-controlled, and the translator runs a
 // printf-style pass over the interpolated text, so a title such as "100%d" must
 // be spliced in afterwards, never passed through the translator.
-const staffGroupsToken = "<<staff-groups>>"
+const staffGroupsToken = "<<staff-groups>>" // #nosec G101 -- a placeholder spliced after translation, not a credential
 
 // replyStaff sends an HTML reply to the command message and logs a failure.
 func replyStaff(c *helpers.CommandContext, text string) {
