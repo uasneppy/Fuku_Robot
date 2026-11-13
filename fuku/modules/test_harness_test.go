@@ -365,6 +365,8 @@ func TestMain(m *testing.M) {
 		&models.AISpamSettings{},
 		&models.StaffGroup{},
 		&models.StaffGroupLink{},
+		&models.StaffForwardBlock{},
+		&models.StaffForwardBlockSettings{},
 		&models.StaffAction{},
 		&models.StaffActionGroup{},
 		&models.ChatLockdown{},

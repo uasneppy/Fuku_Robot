@@ -2620,6 +2620,13 @@ staff_help_msg: |
   Cada ação aplicada e cada anulação é publicada no canal de registo do grupo onde foi aplicada (categoria de registo de admin).
   /sban, /dban, /skick, /dkick, /smute e /dmute não são usados aqui.
   Envie estes comandos como si próprio, não de forma anónima.
+
+  *Lista de bloqueio de encaminhamentos (no Grupo de Staff):*
+  × /addfwdblock origem: Bloqueia encaminhamentos de um canal (ID ou @utilizador) em todos os grupos associados. Eu elimino-os e aplico a ação da lista ao membro. Apenas o criador do Grupo de Staff altera a lista.
+  × /rmfwdblock ID: Desbloqueia uma origem.
+  × /fwdblocklist: Mostra as origens bloqueadas.
+  × /fwdblockaction [ação]: Mostra ou altera a ação: none (só eliminar), warn, mute, kick ou ban.
+  Um encaminhamento de um grupo só é detetado se foi publicado por um admin anónimo.
 staff_set_done: "Este grupo agora é um Grupo de Staff. ID do chat: <code>{chat_id}</code>"
 staff_set_already: "Este grupo já é um Grupo de Staff."
 staff_refuse_not_owner: "Apenas o criador deste grupo pode torná-lo um Grupo de Staff."
@@ -2627,6 +2634,23 @@ staff_check_failed: "Não consegui verificar agora quem criou este grupo. Nada f
 staff_panel_chat_id: "ID de chat do Grupo de Staff: <code>{chat_id}</code>"
 staff_panel_no_links: "Ainda não há grupos vinculados."
 staff_unset_not_staff: "Este grupo não é um Grupo de Staff."
+staff_fwdblock_owner_only: "Apenas o criador deste Grupo de Staff pode alterar a lista de bloqueio de encaminhamentos. Os admins podem vê-la. Nada foi alterado."
+staff_fwdblock_usage_add: "Uso: <code>/addfwdblock &lt;ID ou @utilizador&gt;</code>. A origem é um canal ou um grupo. Adicione uma origem de cada vez."
+staff_fwdblock_usage_rm: "Uso: <code>/rmfwdblock &lt;ID&gt;</code>, com um ID mostrado por /fwdblocklist."
+staff_fwdblock_added: "Os encaminhamentos de {source} estão agora bloqueados em todos os grupos associados."
+staff_fwdblock_already: "{source} já está na lista de bloqueio."
+staff_fwdblock_not_found: "Não encontrei esse canal ou grupo. Verifique o @utilizador ou use o ID numérico. Nada foi guardado."
+staff_fwdblock_not_source: "Isso não é um canal nem um grupo, por isso não pode ser uma origem de encaminhamentos. Nada foi guardado."
+staff_fwdblock_full: "A lista de bloqueio está cheia ({max} origens). Remova uma primeiro."
+staff_fwdblock_check_failed: "Não consegui consultar essa origem agora. Nada foi guardado, tente novamente daqui a pouco."
+staff_fwdblock_removed: "{source} já não está bloqueado."
+staff_fwdblock_not_listed: "Essa origem não está na lista de bloqueio."
+staff_fwdblock_list_header: "Origens de encaminhamento bloqueadas. Ação: {action}"
+staff_fwdblock_list_empty: "Ainda não há nenhuma origem de encaminhamentos bloqueada. Adicione uma com /addfwdblock."
+staff_fwdblock_list_more: "…e mais {n}."
+staff_fwdblock_action_current: "Ação para um encaminhamento bloqueado: {action}."
+staff_fwdblock_action_changed: "A ação para um encaminhamento bloqueado agora é: {action}."
+staff_fwdblock_action_usage: "Uso: <code>/fwdblockaction &lt;none|warn|mute|kick|ban&gt;</code>. none só elimina o encaminhamento."
 staff_unset_confirm_prompt: "Tem a certeza? Remover o estado de Staff desvinculará {count} grupo(s) deste Grupo de Staff."
 staff_btn_confirm: "Confirmar"
 staff_btn_cancel: "Cancelar"

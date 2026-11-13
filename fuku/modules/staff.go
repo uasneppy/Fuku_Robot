@@ -400,6 +400,10 @@ func LoadStaff(dispatcher *ext.Dispatcher) {
 	helpers.WrapCommand(dispatcher, staffDesc, staffModule.staffPanel)
 	helpers.WrapCommand(dispatcher, linkStaffDesc, staffModule.linkStaff)
 	helpers.WrapCommand(dispatcher, unlinkStaffDesc, staffModule.unlinkStaff)
+	helpers.WrapCommand(dispatcher, addFwdBlockDesc, staffModule.addFwdBlock)
+	helpers.WrapCommand(dispatcher, rmFwdBlockDesc, staffModule.rmFwdBlock)
+	helpers.WrapCommand(dispatcher, fwdBlockListDesc, staffModule.fwdBlockList)
+	helpers.WrapCommand(dispatcher, fwdBlockActionDesc, staffModule.fwdBlockAction)
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("staff|"), staffModule.staffCallback))
 }
 

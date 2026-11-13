@@ -2335,6 +2335,13 @@ staff_help_msg: |
   हर लागू की गई कार्रवाई और हर पूर्ववत उस ग्रुप के लॉग चैनल में पोस्ट होता है जहां वह लागू हुआ (एडमिन लॉग श्रेणी)।
   /sban, /dban, /skick, /dkick, /smute और /dmute यहां इस्तेमाल नहीं होते।
   ये कमांड अपने नाम से भेजें, अनाम रूप से नहीं।
+
+  *फ़ॉरवर्ड ब्लॉकलिस्ट (स्टाफ ग्रुप में):*
+  × /addfwdblock स्रोत: किसी चैनल (आईडी या @username) से फ़ॉरवर्ड सभी लिंक किए गए ग्रुपों में ब्लॉक करें। मैं उन्हें हटाता हूं और सदस्य पर सूची की कार्रवाई लागू करता हूं। सूची केवल स्टाफ ग्रुप का निर्माता बदल सकता है।
+  × /rmfwdblock आईडी: किसी स्रोत को अनब्लॉक करें।
+  × /fwdblocklist: ब्लॉक किए गए स्रोत दिखाएं।
+  × /fwdblockaction [कार्रवाई]: कार्रवाई दिखाएं या बदलें: none (केवल हटाना), warn, mute, kick या ban।
+  किसी ग्रुप से फ़ॉरवर्ड तभी पकड़ा जाता है जब उसे अनाम एडमिन ने भेजा हो।
 staff_set_done: "यह ग्रुप अब एक स्टाफ ग्रुप है। चैट आईडी: <code>{chat_id}</code>"
 staff_set_already: "यह ग्रुप पहले से ही एक स्टाफ ग्रुप है।"
 staff_refuse_not_owner: "केवल इस ग्रुप को बनाने वाला ही इसे स्टाफ ग्रुप बना सकता है।"
@@ -2342,6 +2349,23 @@ staff_check_failed: "मैं अभी यह जांच नहीं कर
 staff_panel_chat_id: "स्टाफ ग्रुप की चैट आईडी: <code>{chat_id}</code>"
 staff_panel_no_links: "अभी तक कोई ग्रुप जुड़ा नहीं है।"
 staff_unset_not_staff: "यह ग्रुप स्टाफ ग्रुप नहीं है।"
+staff_fwdblock_owner_only: "केवल इस स्टाफ ग्रुप का निर्माता फ़ॉरवर्ड ब्लॉकलिस्ट बदल सकता है। एडमिन इसे देख सकते हैं। कुछ भी नहीं बदला गया।"
+staff_fwdblock_usage_add: "उपयोग: <code>/addfwdblock &lt;आईडी या @username&gt;</code>। स्रोत एक चैनल या ग्रुप होता है। एक बार में एक स्रोत जोड़ें।"
+staff_fwdblock_usage_rm: "उपयोग: <code>/rmfwdblock &lt;आईडी&gt;</code>, ऐसी आईडी के साथ जो /fwdblocklist में दिखती है।"
+staff_fwdblock_added: "{source} से फ़ॉरवर्ड अब सभी लिंक किए गए ग्रुपों में ब्लॉक हैं।"
+staff_fwdblock_already: "{source} पहले से ब्लॉकलिस्ट में है।"
+staff_fwdblock_not_found: "मुझे वह चैनल या ग्रुप नहीं मिला। @username जांचें या उसकी संख्यात्मक आईडी इस्तेमाल करें। कुछ भी सहेजा नहीं गया।"
+staff_fwdblock_not_source: "यह चैनल या ग्रुप नहीं है, इसलिए यह फ़ॉरवर्ड का स्रोत नहीं हो सकता। कुछ भी सहेजा नहीं गया।"
+staff_fwdblock_full: "ब्लॉकलिस्ट भरी हुई है ({max} स्रोत)। पहले एक हटाएं।"
+staff_fwdblock_check_failed: "मैं अभी उस स्रोत को जांच नहीं पाया। कुछ भी सहेजा नहीं गया, कृपया थोड़ी देर में फिर कोशिश करें।"
+staff_fwdblock_removed: "{source} अब ब्लॉक नहीं है।"
+staff_fwdblock_not_listed: "वह स्रोत ब्लॉकलिस्ट में नहीं है।"
+staff_fwdblock_list_header: "ब्लॉक किए गए फ़ॉरवर्ड स्रोत। कार्रवाई: {action}"
+staff_fwdblock_list_empty: "अभी कोई फ़ॉरवर्ड स्रोत ब्लॉक नहीं है। /addfwdblock से एक जोड़ें।"
+staff_fwdblock_list_more: "…और {n} और।"
+staff_fwdblock_action_current: "ब्लॉक किए गए फ़ॉरवर्ड पर कार्रवाई: {action}।"
+staff_fwdblock_action_changed: "ब्लॉक किए गए फ़ॉरवर्ड पर कार्रवाई अब है: {action}।"
+staff_fwdblock_action_usage: "उपयोग: <code>/fwdblockaction &lt;none|warn|mute|kick|ban&gt;</code>। none केवल फ़ॉरवर्ड हटाता है।"
 staff_unset_confirm_prompt: "क्या आप निश्चित हैं? स्टाफ का दर्जा हटाने पर इस स्टाफ ग्रुप से {count} ग्रुप अनलिंक हो जाएंगे।"
 staff_btn_confirm: "पुष्टि करें"
 staff_btn_cancel: "रद्द करें"

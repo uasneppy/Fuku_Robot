@@ -17,6 +17,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
+	"github.com/uasneppy/fuku_robot/fuku/db/cache"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
 	"github.com/uasneppy/fuku_robot/fuku/utils/helpers"
@@ -311,5 +312,10 @@ func staffCleanup(t *testing.T, chatIDs ...int64) {
 		db.DB.Where("staff_chat_id IN ? OR summary_chat_id IN ?", chatIDs, chatIDs).Delete(&models.StaffAction{})
 		db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.StaffGroup{})
 		db.DB.Where("group_chat_id IN ? OR staff_chat_id IN ?", chatIDs, chatIDs).Delete(&models.StaffGroupLink{})
+		db.DB.Where("staff_chat_id IN ?", chatIDs).Delete(&models.StaffForwardBlock{})
+		db.DB.Where("staff_chat_id IN ?", chatIDs).Delete(&models.StaffForwardBlockSettings{})
+		for _, id := range chatIDs {
+			cache.DeleteCache(cache.CacheKey("staff_forward_block", id))
+		}
 	})
 }

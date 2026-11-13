@@ -35,6 +35,9 @@ func cleanupStaffRows(t *testing.T, chatIDs ...int64) {
 	t.Cleanup(func() {
 		db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.StaffGroup{})
 		db.DB.Where("group_chat_id IN ? OR staff_chat_id IN ?", chatIDs, chatIDs).Delete(&models.StaffGroupLink{})
+		db.DB.Where("staff_chat_id IN ?", chatIDs).Delete(&models.StaffForwardBlock{})
+		db.DB.Where("staff_chat_id IN ?", chatIDs).Delete(&models.StaffForwardBlockSettings{})
+		invalidateForwardBlockKeys(chatIDs...)
 	})
 }
 
@@ -964,7 +967,7 @@ func TestStaffRepoDeleteOrphanLinks(t *testing.T) {
 // Backup export, import and reset must never create, restore or erase Staff
 // Groups or links, so no backup module may name them.
 func TestStaffTablesStayOutOfBackup(t *testing.T) {
-	for _, name := range []string{"staff", "staff_groups", "staff_group_links", "staff_group", "staff_links"} {
+	for _, name := range []string{"staff", "staff_groups", "staff_group_links", "staff_group", "staff_links", "staff_forward_blocks", "staff_forward_block_settings", "forward_blocks"} {
 		if backup.IsValidModule(name) {
 			t.Errorf("backup module %q is valid; Staff Groups must stay out of backup", name)
 		}

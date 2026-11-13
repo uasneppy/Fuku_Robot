@@ -159,9 +159,10 @@ func CountLinksByStaffFresh(staffChatID int64) (int64, error) {
 	return count, nil
 }
 
-// DeleteStaffGroupWithLinks removes the Staff Group chatID and every link whose
-// staff_chat_id is chatID in one transaction, so either all of them still exist
-// or none do. removed lists the deleted links in link-id order.
+// DeleteStaffGroupWithLinks removes the Staff Group chatID, every link whose
+// staff_chat_id is chatID and the Staff Group's forward blocklist (its sources and
+// its action) in one transaction, so either all of them still exist or none do.
+// removed lists the deleted links in link-id order.
 //
 // The staff_groups row is deleted first: that delete claims the row, so when two
 // callers race only the one whose delete affected a row gets deleted=true and a
@@ -181,6 +182,9 @@ func DeleteStaffGroupWithLinks(chatID int64) (removed []models.StaffGroupLink, d
 		if err := tx.Where("staff_chat_id = ?", chatID).Delete(&models.StaffGroupLink{}).Error; err != nil {
 			return err
 		}
+		if err := deleteForwardBlocksTx(tx, chatID); err != nil {
+			return err
+		}
 		deleted = true
 		return nil
 	})
@@ -192,6 +196,7 @@ func DeleteStaffGroupWithLinks(chatID int64) (removed []models.StaffGroupLink, d
 		return nil, false, nil
 	}
 	invalidateStaffKeys(chatID)
+	invalidateForwardBlockKeys(chatID)
 	for _, link := range removed {
 		invalidateStaffKeys(link.GroupChatID)
 	}

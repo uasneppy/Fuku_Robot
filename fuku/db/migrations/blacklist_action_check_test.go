@@ -48,14 +48,10 @@ func TestBlacklistActionMigrationStatements(t *testing.T) {
 		}
 	}
 
-	entries, err := os.ReadDir(filepath.Dir(path))
-	if err != nil {
-		t.Fatalf("list migrations: %v", err)
-	}
-	for _, entry := range entries {
-		if name := entry.Name(); strings.HasSuffix(name, ".sql") && name > blacklistActionMigration {
-			t.Errorf("%s sorts after %s: a newer migration must carry a later timestamp", name, blacklistActionMigration)
-		}
+	// The migration must sort after the one that was newest when it was written. A check that no
+	// migration sorts after it would fail the moment any later migration is added.
+	if previous := scheduledDeletionMigration; blacklistActionMigration <= previous {
+		t.Errorf("%s must sort after %s", blacklistActionMigration, previous)
 	}
 }
 

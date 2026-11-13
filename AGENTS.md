@@ -1833,6 +1833,31 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `ADD CONSTRAINT`: an add without the drops would change nothing and say nothing. `captcha.SetCaptchaMode` accepts
   the three values and invalidates `captcha_settings` after the write. A `turnstile` stored on a bot whose web captcha
   is unavailable (or imported from another bot) is handled at join by the math fallback, never by refusing the row.
+- `staff_forward_blocks` and `staff_forward_block_settings` (migration 20261113130000) are a Staff Group's forward
+  blocklist, one list per Staff Group and no per-group list. `staff_forward_blocks` is one listed source: `staff_chat_id`,
+  `source_chat_id` (always negative, a channel or a group, under `chk_staff_forward_blocks_source`), `source_title` (the
+  title Telegram gave when the source was added, empty when the bot could not see it, cut to 64 code points, shown only
+  to the Staff Group's own administrators), `created_by` and `created_at`, unique on `(staff_chat_id, source_chat_id)`
+  (`uk_staff_forward_blocks_source`). `staff_forward_block_settings` holds the list's one action, one row per Staff Group
+  (`staff_chat_id` is the key): `none` (delete the forward only), `warn`, `mute`, `kick` or `ban` under
+  `chk_staff_forward_block_action`, the vocabulary of the blacklist (`staff.ForwardBlockActions` equals
+  `blacklistActionValues`, `TestForwardBlockVocabulary`); a Staff Group without a row means `none`. Neither table has a
+  foreign key. The rules are read through `cache.GetFromCacheOrLoad` under `cache.CacheKey("staff_forward_block", staff
+  chat)` (`staff.GetForwardBlockRules`: the action and the source IDs in one struct; `GetForwardBlockRulesFresh` is the
+  same query without the cache; a failed load is returned, never replaced by defaults) and the prefix is listed in
+  `skipLocal`, because the watcher reads it on every forward from a listed source and a removed source must stop acting
+  on every replica at the next message. The list pages and the apply functions read fresh (`ListForwardBlocksFresh`,
+  `GetForwardBlockFresh`, `CountForwardBlocksFresh`). Every write (`AddForwardBlock`, `RemoveForwardBlockByID`,
+  `RemoveForwardBlockBySource`, `SetForwardBlockAction`) drops the key after commit. `AddForwardBlock` is one transaction:
+  the `staff_groups` row must exist (`ErrStaffGroupMissing`), the list must be below `ForwardBlockMax` (200,
+  `ErrForwardBlockFull`; a soft cap read inside the insert transaction, so two concurrent adds can pass it by one) and
+  the insert is `ON CONFLICT DO NOTHING` on the unique key, so a repeat is `added=false`. `SetForwardBlockAction` checks
+  the action before any write and writes one column-targeted `INSERT ... ON CONFLICT (staff_chat_id) DO UPDATE` of
+  `action`, `updated_by` and `updated_at`. `RemoveForwardBlockByID` is one conditional `DELETE ... WHERE id = ? AND
+  staff_chat_id = ? RETURNING`, so another Staff Group's row ID removes nothing. `RekeyChat` also re-keys both tables and
+  `DeleteStaffGroupWithLinks` deletes both tables' rows in its transaction (both drop the key), so a chat migration moves
+  the list with the Staff Group and an unset deletes it. Neither table is part of backup, export, import or reset
+  (`TestStaffTablesStayOutOfBackup`).
 - `staff_actions` and `staff_action_groups` are the staff audit record (migration 20261005120000). They are read only
   through fresh queries, never cached (so no `DeleteCache` applies to them), and never part of
   backup/export/import/reset. A record is created at Confirm and a failed create aborts the card; each group's prior
@@ -2973,10 +2998,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Staff Group chat migration is re-keyed by `staff.RekeyChat` from both migrate service messages and the 400
   `migrate_to_chat_id` parameter; other per-chat settings are not migrated. It also re-keys `staff_actions.staff_chat_id`,
   never summary_chat_id or `staff_action_groups.group_chat_id`, and `summary_msg_id` is only valid together with
-  `summary_chat_id`.
+  `summary_chat_id`. It re-keys the forward blocklist too (`staff_forward_blocks.staff_chat_id` and
+  `staff_forward_block_settings.staff_chat_id`, in the same transaction) and drops the `staff_forward_block` key of the
+  old and the new ID after the commit.
 - Staff links: authority reads use uncached `staff.*Fresh` plus live `chat_status.CheckOwner`; only `OwnerMismatch`
   removes a link (errors are unknown); each automatic removal or health change is one conditional statement, and only
-  the caller with RowsAffected == 1 posts the Staff Group notice.
+  the caller with RowsAffected == 1 posts the Staff Group notice. Unsetting a Staff Group (`DeleteStaffGroupWithLinks`)
+  deletes the Staff Group row, its links and its forward blocklist (sources and action) in one transaction; unlinking one
+  group deletes no list, because the list belongs to the Staff Group and the link gate stops it acting in that group.
 - The `/staff` panel marks a linked group whose lockdown is confirmed with one `staff_panel_row_lockdown` line (the
   confirmation time in UTC, `staffLinkRow.LockedSince`), also when the bot has left that group. `buildStaffPanel` loads
   every locked group with one `lockdown.ListActiveByChatsFresh` call after `buildStaffPanelRows`, so `renderStaffPanel`
@@ -3356,6 +3385,35 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   and only an active row counts. None of them may restrict or announce an unmute when it returns an error: `/unmute` and
   the button report the error, a captcha pass schedules its retry, and staff `/unmute` fails that group. The `/unmute`
   reply adds `mutes_unmute_lockdown_note` during a lockdown.
+- The forward blocklist commands (`staff_forwardblock.go`, registered from `LoadStaff` through `helpers.WrapCommand`, none
+  `Disableable`): `/addfwdblock <ID or @username>`, `/rmfwdblock <ID>`, `/fwdblocklist` and `/fwdblockaction [none|warn|mute|kick|ban]`
+  work only inside a Staff Group, and every descriptor's checks run in this order: `RejectAnonymousSender`, `RequireGroup`,
+  `requireStaffGroup` (a fresh `staff.GetStaffGroupFresh`: not one replies `staff_unset_not_staff`, an unreadable row
+  `staff_check_failed`), `RequireUserAdmin` (the cached list, so a plain member is refused as for every admin command) and,
+  for a write, `requireStaffGroupCreator` (a live `chat_status.CheckOwner` on the Staff Group, never the admin cache: unknown
+  replies `staff_check_failed`, a mismatch `staff_fwdblock_owner_only`, and nothing is written or looked up on either).
+  Writes are the Staff Group's live creator only (add, remove, and `/fwdblockaction` with an argument, whose creator check
+  runs in the handler because the same command also reads); reading (`/fwdblocklist`, `/fwdblockaction` with no argument)
+  needs only an administrator of the Staff Group. This is deliberately stricter than "creator or administrator": the list
+  changes what the bot does to members in every linked group, an administrator of the Staff Group is not known to be an
+  administrator of each linked group, and nobody acts in a group where they are not an admin; the Staff Group's creator
+  is the one person the code proves is the creator of every linked group, because a link is deleted when its maker stops
+  being the live creator of either side. Relaxing it later is one check swap. The handlers call apply functions that
+  judge no person's rights (`applyForwardBlockAdd`, `applyForwardBlockRemove`, `applyForwardBlockRemoveByID`,
+  `applyForwardBlockAction`, each returning a typed result with a zero-value success outcome and writing through the
+  `forwardBlockWrites` seam), and `forwardBlockAddText`, `forwardBlockRemoveText` and `forwardBlockActionText` word every
+  outcome once for the commands and the settings page. A source ref is parsed strictly first (`parseForwardBlockRef`: a
+  negative ID through `parseStaffChatIDArg`, an `@name` through `staffUsernameRe`, nothing else, and a bad ref makes no
+  Telegram call). An `@username` is resolved by one live `getChat` through the seam `forwardBlockResolve` (a raw request
+  because gotgbot's `GetChat` takes only an int64, bounded by 8 s) and stored as its numeric chat ID, never re-resolved: a
+  Telegram client error other than 429 for a name is not found, a result that is not a channel, supergroup or group with
+  a negative ID is not a source, and a 429, a 5xx, a transport error or a timeout stores nothing. A typed negative ID is
+  stored as typed: a resolvable one is type-checked and gets its title, a definite client error (a channel the bot cannot
+  see) is stored unverified with an empty title, and an unknown error stores nothing. The commands answer only inside the
+  Staff Group and no notice names a source or the Staff Group outside it; the list shows the ID in code and the escaped
+  title (at most 40, then a more-line). `rmfwdblock` takes the source chat ID the list shows. `TestForwardBlockCommands`,
+  `TestForwardBlockCommandRefusals`, `TestApplyForwardBlockAdd`, `TestApplyForwardBlockRemove` and
+  `TestApplyForwardBlockAction` hold it.
 - StaffActions (staff `/ban` across linked groups): per-group authority is only the live `getChatMember(group, issuer)`
   answer, creator or administrator with `can_restrict_members`, never the cached admin predicates. The link owner is
   rechecked through `recheckLink`. No write ever targets the Staff Group and nothing is posted into a linked group's own
@@ -3845,7 +3903,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   last name and no username), `clearCreator` (no creator entry and no live creator) and `otherReplica` (a second dispatcher
   and bot fake over the same database and miniredis, with update IDs from 50000 so they never meet the base environment's).
 - The harness `AutoMigrate` lists (`fuku/modules/test_harness_test.go`, `fuku/db/staff/testmain_test.go`,
-  `fuku/db/testmain_test.go`) include the staff audit models, and `staffCleanup` deletes audit rows. The lockdown
+  `fuku/db/testmain_test.go`) include the staff audit models and the two forward blocklist models (`StaffForwardBlock`, `StaffForwardBlockSettings`), and
+  `staffCleanup` deletes audit rows and the forward blocklist rows and keys of its chats. The lockdown
   models are in `fuku/modules/test_harness_test.go`, `fuku/db/testmain_test.go` and
   `fuku/db/lockdown/testmain_test.go` (not in the staff package's list), and `lockdownCleanup` deletes lockdown rows.
   The Phase 5 models (`ChatLockdownAlert`, `ChatLockdownBurst`, `ChatLockdownBanRun`) are in
@@ -3934,6 +3993,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `UPDATE blacklists SET action = v` succeeds for warn, mute, kick, ban and none and fails with SQLSTATE 23514 for any other
   value, and exactly one CHECK mentions the column, `chk_blacklist_action`; PostgreSQL only, it skips locally;
   `TestBlacklistActionMigrationStatements` is its database-free half and runs in `make test`).
+  The forward blocklist guarantees (quick task 261113-tjj) are `TestStaffForwardBlockConstraints` (`./fuku/db/staff`: the
+  unique key, `chk_staff_forward_blocks_source` and `chk_staff_forward_block_action` refuse a duplicate, a non-negative
+  source and an action outside the five; it also runs on SQLite in `make test`) and `TestStaffForwardBlockMigrationDefaults`
+  (`./fuku/db/migrations`: the statements run twice without error, a row with only its required columns reads the defaults,
+  the three named constraints refuse with SQLSTATE 23505 and 23514; PostgreSQL only, it skips locally;
+  `TestStaffForwardBlockMigrationStatements` is its database-free half and runs in `make test`).
   The pattern is anchored with `$`, so list the real top-level test function names and add the test's package to the
   target. Add a test there when a new guarantee rests on a partial unique index, a `CHECK` or a conditional update.
 - In CI, keep the migration-chain step before `make test`; its `schema_migrations` rows back the checksum test.

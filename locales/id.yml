@@ -2648,6 +2648,13 @@ staff_help_msg: |
   Setiap aksi yang diterapkan dan setiap pembatalan diposting ke kanal log grup tempat aksi itu diterapkan (kategori log admin).
   /sban, /dban, /skick, /dkick, /smute, dan /dmute tidak dipakai di sini.
   Kirim perintah ini atas nama Anda sendiri, bukan secara anonim.
+
+  *Daftar blokir forward (di Grup Staf):*
+  × /addfwdblock sumber: Blokir forward dari sebuah kanal (ID atau @username) di semua grup yang terhubung. Saya menghapusnya dan menerapkan aksi daftar ke anggota. Hanya pembuat Grup Staf yang mengubah daftar.
+  × /rmfwdblock ID: Buka blokir sebuah sumber.
+  × /fwdblocklist: Tampilkan sumber yang diblokir.
+  × /fwdblockaction [aksi]: Tampilkan atau ubah aksi: none (hanya hapus), warn, mute, kick, atau ban.
+  Forward dari grup hanya terdeteksi bila diposting admin anonim.
 staff_set_done: "Grup ini sekarang menjadi Grup Staf. ID obrolan: <code>{chat_id}</code>"
 staff_set_already: "Grup ini sudah menjadi Grup Staf."
 staff_refuse_not_owner: "Hanya pembuat grup ini yang dapat menjadikannya Grup Staf."
@@ -2655,6 +2662,23 @@ staff_check_failed: "Saya tidak dapat memverifikasi siapa pembuat grup ini saat 
 staff_panel_chat_id: "ID obrolan Grup Staf: <code>{chat_id}</code>"
 staff_panel_no_links: "Belum ada grup yang terhubung."
 staff_unset_not_staff: "Grup ini bukan Grup Staf."
+staff_fwdblock_owner_only: "Hanya pembuat Grup Staf ini yang dapat mengubah daftar blokir forward. Admin dapat melihatnya. Tidak ada yang diubah."
+staff_fwdblock_usage_add: "Penggunaan: <code>/addfwdblock &lt;ID atau @username&gt;</code>. Sumber adalah kanal atau grup. Tambahkan satu sumber setiap kali."
+staff_fwdblock_usage_rm: "Penggunaan: <code>/rmfwdblock &lt;ID&gt;</code>, dengan ID yang ditampilkan oleh /fwdblocklist."
+staff_fwdblock_added: "Forward dari {source} sekarang diblokir di semua grup yang terhubung."
+staff_fwdblock_already: "{source} sudah ada di daftar blokir."
+staff_fwdblock_not_found: "Saya tidak menemukan kanal atau grup itu. Periksa @username atau gunakan ID numeriknya. Tidak ada yang disimpan."
+staff_fwdblock_not_source: "Itu bukan kanal atau grup, jadi tidak bisa menjadi sumber forward. Tidak ada yang disimpan."
+staff_fwdblock_full: "Daftar blokir penuh ({max} sumber). Hapus satu terlebih dahulu."
+staff_fwdblock_check_failed: "Saya tidak bisa memeriksa sumber itu sekarang. Tidak ada yang disimpan, coba lagi sebentar lagi."
+staff_fwdblock_removed: "{source} tidak lagi diblokir."
+staff_fwdblock_not_listed: "Sumber itu tidak ada di daftar blokir."
+staff_fwdblock_list_header: "Sumber forward yang diblokir. Aksi: {action}"
+staff_fwdblock_list_empty: "Belum ada sumber forward yang diblokir. Tambahkan satu dengan /addfwdblock."
+staff_fwdblock_list_more: "…dan {n} lainnya."
+staff_fwdblock_action_current: "Aksi untuk forward yang diblokir: {action}."
+staff_fwdblock_action_changed: "Aksi untuk forward yang diblokir sekarang: {action}."
+staff_fwdblock_action_usage: "Penggunaan: <code>/fwdblockaction &lt;none|warn|mute|kick|ban&gt;</code>. none hanya menghapus forward."
 staff_unset_confirm_prompt: "Yakin? Menghapus status Staf akan memutuskan tautan {count} grup dari Grup Staf ini."
 staff_btn_confirm: "Konfirmasi"
 staff_btn_cancel: "Batal"

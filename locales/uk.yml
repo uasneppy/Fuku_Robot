@@ -2028,6 +2028,13 @@ staff_help_msg: |
   Кожна виконана дія і кожне скасування публікуються в каналі журналу групи, до якої їх застосовано (категорія журналу admin).
   /sban, /dban, /skick, /dkick, /smute і /dmute тут не використовуються.
   Надсилайте ці команди від свого імені, а не анонімно.
+
+  *Список блокування пересилань (у Staff-групі):*
+  × /addfwdblock джерело: Блокує пересилання з каналу (ID або @username) в усіх пов'язаних групах. Я видаляю їх і застосовую до учасника дію списку. Список змінює лише творець Staff-групи.
+  × /rmfwdblock ID: Розблоковує джерело.
+  × /fwdblocklist: Показує заблоковані джерела.
+  × /fwdblockaction [дія]: Показує або змінює дію: none (лише видалити), warn, mute, kick або ban.
+  Пересилання з групи помічається, лише якщо його надіслав анонімний адмін.
 staff_set_done: "Тепер ця група є Staff-групою. ID чату: <code>{chat_id}</code>"
 staff_set_already: "Ця група вже є Staff-групою."
 staff_refuse_not_owner: "Зробити цю групу Staff-групою може лише її творець."
@@ -2035,6 +2042,23 @@ staff_check_failed: "Зараз я не можу перевірити, хто с
 staff_panel_chat_id: "ID чату Staff-групи: <code>{chat_id}</code>"
 staff_panel_no_links: "Жодної групи ще не прив'язано."
 staff_unset_not_staff: "Ця група не є Staff-групою."
+staff_fwdblock_owner_only: "Лише творець цієї Staff-групи може змінювати список блокування пересилань. Адміни можуть його переглядати. Нічого не змінено."
+staff_fwdblock_usage_add: "Використання: <code>/addfwdblock &lt;ID або @username&gt;</code>. Джерело — канал або група. Додавайте по одному джерелу."
+staff_fwdblock_usage_rm: "Використання: <code>/rmfwdblock &lt;ID&gt;</code>, де ID показано в /fwdblocklist."
+staff_fwdblock_added: "Пересилання з {source} тепер блокуються в усіх пов'язаних групах."
+staff_fwdblock_already: "{source} уже в списку блокування."
+staff_fwdblock_not_found: "Я не знайшов цей канал або групу. Перевірте @username або використайте числовий ID. Нічого не збережено."
+staff_fwdblock_not_source: "Це не канал і не група, тому джерелом пересилань бути не може. Нічого не збережено."
+staff_fwdblock_full: "Список блокування заповнений ({max} джерел). Спершу видаліть одне."
+staff_fwdblock_check_failed: "Зараз не вдалося перевірити це джерело. Нічого не збережено, спробуйте ще раз трохи згодом."
+staff_fwdblock_removed: "{source} більше не блокується."
+staff_fwdblock_not_listed: "Цього джерела немає в списку блокування."
+staff_fwdblock_list_header: "Заблоковані джерела пересилань. Дія: {action}"
+staff_fwdblock_list_empty: "Поки жодне джерело пересилань не заблоковано. Додайте його командою /addfwdblock."
+staff_fwdblock_list_more: "…і ще {n}."
+staff_fwdblock_action_current: "Дія для заблокованого пересилання: {action}."
+staff_fwdblock_action_changed: "Тепер дія для заблокованого пересилання: {action}."
+staff_fwdblock_action_usage: "Використання: <code>/fwdblockaction &lt;none|warn|mute|kick|ban&gt;</code>. none лише видаляє пересилання."
 staff_unset_confirm_prompt: "Ви впевнені? Прибравши статус Staff, ви відв'яжете від цієї Staff-групи груп: {count}."
 staff_btn_confirm: "Підтвердити"
 staff_btn_cancel: "Скасувати"

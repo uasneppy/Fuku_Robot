@@ -2658,6 +2658,13 @@ staff_help_msg: |
   Cada acción aplicada y cada deshacer se publica en el canal de registro del grupo donde se aplicó (categoría de registro de admin).
   /sban, /dban, /skick, /dkick, /smute y /dmute no se usan aquí.
   Envía estos comandos como tú mismo, no de forma anónima.
+
+  *Lista de bloqueo de reenvíos (en el Grupo de Staff):*
+  × /addfwdblock fuente: Bloquea los reenvíos de un canal (ID o @usuario) en todos los grupos vinculados. Los elimino y aplico la acción de la lista al miembro. Solo el creador del Grupo de Staff cambia la lista.
+  × /rmfwdblock ID: Desbloquea una fuente.
+  × /fwdblocklist: Muestra las fuentes bloqueadas.
+  × /fwdblockaction [acción]: Muestra o cambia la acción: none (solo eliminar), warn, mute, kick o ban.
+  Un reenvío de un grupo solo se detecta si lo publicó un admin anónimo.
 staff_set_done: "Este grupo ahora es un Grupo de Staff. ID del chat: <code>{chat_id}</code>"
 staff_set_already: "Este grupo ya es un Grupo de Staff."
 staff_refuse_not_owner: "Solo el creador de este grupo puede convertirlo en Grupo de Staff."
@@ -2665,6 +2672,23 @@ staff_check_failed: "Ahora mismo no pude verificar quién creó este grupo. No s
 staff_panel_chat_id: "ID de chat del Grupo de Staff: <code>{chat_id}</code>"
 staff_panel_no_links: "Aún no hay grupos vinculados."
 staff_unset_not_staff: "Este grupo no es un Grupo de Staff."
+staff_fwdblock_owner_only: "Solo el creador de este Grupo de Staff puede cambiar la lista de bloqueo de reenvíos. Los admins pueden verla. No se cambió nada."
+staff_fwdblock_usage_add: "Uso: <code>/addfwdblock &lt;ID o @usuario&gt;</code>. La fuente es un canal o un grupo. Añade una fuente cada vez."
+staff_fwdblock_usage_rm: "Uso: <code>/rmfwdblock &lt;ID&gt;</code>, con un ID que muestre /fwdblocklist."
+staff_fwdblock_added: "Los reenvíos desde {source} ahora están bloqueados en todos los grupos vinculados."
+staff_fwdblock_already: "{source} ya está en la lista de bloqueo."
+staff_fwdblock_not_found: "No encontré ese canal o grupo. Revisa el @usuario o usa su ID numérico. No se guardó nada."
+staff_fwdblock_not_source: "Eso no es un canal ni un grupo, así que no puede ser una fuente de reenvíos. No se guardó nada."
+staff_fwdblock_full: "La lista de bloqueo está llena ({max} fuentes). Elimina una primero."
+staff_fwdblock_check_failed: "No pude consultar esa fuente ahora. No se guardó nada, inténtalo de nuevo en un momento."
+staff_fwdblock_removed: "{source} ya no está bloqueado."
+staff_fwdblock_not_listed: "Esa fuente no está en la lista de bloqueo."
+staff_fwdblock_list_header: "Fuentes de reenvío bloqueadas. Acción: {action}"
+staff_fwdblock_list_empty: "Aún no hay ninguna fuente de reenvíos bloqueada. Añade una con /addfwdblock."
+staff_fwdblock_list_more: "…y {n} más."
+staff_fwdblock_action_current: "Acción para un reenvío bloqueado: {action}."
+staff_fwdblock_action_changed: "La acción para un reenvío bloqueado ahora es: {action}."
+staff_fwdblock_action_usage: "Uso: <code>/fwdblockaction &lt;none|warn|mute|kick|ban&gt;</code>. none solo elimina el reenvío."
 staff_unset_confirm_prompt: "¿Seguro? Quitar el estado de Staff desvinculará {count} grupo(s) de este Grupo de Staff."
 staff_btn_confirm: "Confirmar"
 staff_btn_cancel: "Cancelar"

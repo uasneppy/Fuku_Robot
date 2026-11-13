@@ -2574,6 +2574,13 @@ staff_help_msg: |
   Chaque action appliquée et chaque annulation est publiée dans le canal de journal du groupe concerné (catégorie de journal admin).
   /sban, /dban, /skick, /dkick, /smute et /dmute ne sont pas utilisées ici.
   Envoyez ces commandes en votre nom, pas de façon anonyme.
+
+  *Liste de blocage des transferts (dans le groupe Staff) :*
+  × /addfwdblock source : Bloque les transferts d'un canal (ID ou @pseudo) dans tous les groupes liés. Je les supprime et j'applique l'action de la liste au membre. Seul le créateur du groupe Staff modifie la liste.
+  × /rmfwdblock ID : Débloque une source.
+  × /fwdblocklist : Affiche les sources bloquées.
+  × /fwdblockaction [action] : Affiche ou change l'action : none (supprimer seulement), warn, mute, kick ou ban.
+  Un transfert depuis un groupe n'est détecté que s'il vient d'un admin anonyme.
 staff_set_done: "Ce groupe est maintenant un groupe Staff. ID de discussion : <code>{chat_id}</code>"
 staff_set_already: "Ce groupe est déjà un groupe Staff."
 staff_refuse_not_owner: "Seul le créateur de ce groupe peut en faire un groupe Staff."
@@ -2581,6 +2588,23 @@ staff_check_failed: "Je n'ai pas pu vérifier qui a créé ce groupe pour le mom
 staff_panel_chat_id: "ID de discussion du groupe Staff : <code>{chat_id}</code>"
 staff_panel_no_links: "Aucun groupe n'est encore lié."
 staff_unset_not_staff: "Ce groupe n'est pas un groupe Staff."
+staff_fwdblock_owner_only: "Seul le créateur de ce groupe Staff peut modifier la liste de blocage des transferts. Les admins peuvent la consulter. Rien n'a été modifié."
+staff_fwdblock_usage_add: "Utilisation : <code>/addfwdblock &lt;ID ou @pseudo&gt;</code>. La source est un canal ou un groupe. Ajoutez une source à la fois."
+staff_fwdblock_usage_rm: "Utilisation : <code>/rmfwdblock &lt;ID&gt;</code>, avec un ID affiché par /fwdblocklist."
+staff_fwdblock_added: "Les transferts depuis {source} sont désormais bloqués dans tous les groupes liés."
+staff_fwdblock_already: "{source} figure déjà dans la liste de blocage."
+staff_fwdblock_not_found: "Je n'ai pas trouvé ce canal ou ce groupe. Vérifiez le @pseudo ou utilisez son ID numérique. Rien n'a été enregistré."
+staff_fwdblock_not_source: "Ce n'est ni un canal ni un groupe, donc ce ne peut pas être une source de transferts. Rien n'a été enregistré."
+staff_fwdblock_full: "La liste de blocage est pleine ({max} sources). Retirez-en une d'abord."
+staff_fwdblock_check_failed: "Je n'ai pas pu consulter cette source pour le moment. Rien n'a été enregistré, réessayez dans un instant."
+staff_fwdblock_removed: "{source} n'est plus bloqué."
+staff_fwdblock_not_listed: "Cette source ne figure pas dans la liste de blocage."
+staff_fwdblock_list_header: "Sources de transfert bloquées. Action : {action}"
+staff_fwdblock_list_empty: "Aucune source de transfert n'est encore bloquée. Ajoutez-en une avec /addfwdblock."
+staff_fwdblock_list_more: "…et {n} de plus."
+staff_fwdblock_action_current: "Action pour un transfert bloqué : {action}."
+staff_fwdblock_action_changed: "L'action pour un transfert bloqué est maintenant : {action}."
+staff_fwdblock_action_usage: "Utilisation : <code>/fwdblockaction &lt;none|warn|mute|kick|ban&gt;</code>. none supprime seulement le transfert."
 staff_unset_confirm_prompt: "Êtes-vous sûr ? Retirer le statut Staff dissociera {count} groupe(s) de ce groupe Staff."
 staff_btn_confirm: "Confirmer"
 staff_btn_cancel: "Annuler"

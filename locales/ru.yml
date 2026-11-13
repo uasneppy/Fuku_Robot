@@ -2395,6 +2395,13 @@ staff_help_msg: |
   Каждое применённое действие и каждая отмена публикуется в канале журнала той группы, где оно было применено (категория журнала админов).
   /sban, /dban, /skick, /dkick, /smute и /dmute здесь не используются.
   Отправляйте эти команды от своего имени, а не анонимно.
+
+  *Список блокировки пересылок (в штаб-группе):*
+  × /addfwdblock источник: Блокирует пересылки из канала (ID или @username) во всех связанных группах. Я удаляю их и применяю к участнику действие списка. Список меняет только создатель штаб-группы.
+  × /rmfwdblock ID: Разблокирует источник.
+  × /fwdblocklist: Показывает заблокированные источники.
+  × /fwdblockaction [действие]: Показывает или меняет действие: none (только удалить), warn, mute, kick или ban.
+  Пересылка из группы замечается, только если её отправил анонимный админ.
 staff_set_done: "Эта группа теперь штаб-группа. ID чата: <code>{chat_id}</code>"
 staff_set_already: "Эта группа уже является штаб-группой."
 staff_refuse_not_owner: "Только создатель этой группы может сделать её штаб-группой."
@@ -2402,6 +2409,23 @@ staff_check_failed: "Сейчас не удалось проверить, кто
 staff_panel_chat_id: "ID чата штаб-группы: <code>{chat_id}</code>"
 staff_panel_no_links: "Связанных групп пока нет."
 staff_unset_not_staff: "Эта группа не является штаб-группой."
+staff_fwdblock_owner_only: "Только создатель этой штаб-группы может менять список блокировки пересылок. Админы могут его просматривать. Ничего не изменено."
+staff_fwdblock_usage_add: "Использование: <code>/addfwdblock &lt;ID или @username&gt;</code>. Источник — канал или группа. Добавляйте по одному источнику."
+staff_fwdblock_usage_rm: "Использование: <code>/rmfwdblock &lt;ID&gt;</code>, где ID показан в /fwdblocklist."
+staff_fwdblock_added: "Пересылки из {source} теперь блокируются во всех связанных группах."
+staff_fwdblock_already: "{source} уже в списке блокировки."
+staff_fwdblock_not_found: "Я не нашёл этот канал или группу. Проверьте @username или используйте числовой ID. Ничего не сохранено."
+staff_fwdblock_not_source: "Это не канал и не группа, поэтому источником пересылок быть не может. Ничего не сохранено."
+staff_fwdblock_full: "Список блокировки заполнен ({max} источников). Сначала удалите один."
+staff_fwdblock_check_failed: "Сейчас не удалось проверить этот источник. Ничего не сохранено, попробуйте ещё раз чуть позже."
+staff_fwdblock_removed: "{source} больше не блокируется."
+staff_fwdblock_not_listed: "Этого источника нет в списке блокировки."
+staff_fwdblock_list_header: "Заблокированные источники пересылок. Действие: {action}"
+staff_fwdblock_list_empty: "Пока ни один источник пересылок не заблокирован. Добавьте его командой /addfwdblock."
+staff_fwdblock_list_more: "…и ещё {n}."
+staff_fwdblock_action_current: "Действие для заблокированной пересылки: {action}."
+staff_fwdblock_action_changed: "Теперь действие для заблокированной пересылки: {action}."
+staff_fwdblock_action_usage: "Использование: <code>/fwdblockaction &lt;none|warn|mute|kick|ban&gt;</code>. none только удаляет пересылку."
 staff_unset_confirm_prompt: "Вы уверены? Снятие статуса штаб-группы отвяжет от неё группы: {count}."
 staff_btn_confirm: "Подтвердить"
 staff_btn_cancel: "Отмена"
