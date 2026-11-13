@@ -19,7 +19,7 @@
 | Pattern | Description | Severity | Prevention Mechanism |
 |---------|-------------|----------|---------------------|
 | Pushing while a meaningful CI run is in flight | CI cancels in-progress runs on a new push, so frequent pushes leave the Test Suite perpetually cancelled | blocking | push only verified plan boundaries; batch commits and push a code head only when its CI can run to the end; a docs-only push on top of a code head restarts that run |
-| Blind tick of requirements | `requirements.mark-complete` ticks every ID in a plan's frontmatter | blocking | only the closing plan (19-10) completes PAGE-07 to PAGE-09; earlier plans leave them Pending |
+| Blind tick of requirements | `requirements.mark-complete` ticks every ID in a plan's frontmatter | blocking | only the closing plan (19-12) completes PAGE-07 to PAGE-09; earlier plans leave them Pending |
 | Trusting hand-backs | an executor said a gate passed that it had not fully run (earlier phases) | advisory | re-run the cheap gates yourself before pushing |
 | Foreground sleep chains | the harness blocks `sleep` chains | advisory | wait with `run_in_background` loops or by ending the turn; notifications wake the session |
 | Uncommitted agent work across a container restart | two agents lost whole sections of work this way | blocking | executors commit after every task; planners and researchers write their file in sections |
