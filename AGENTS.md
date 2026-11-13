@@ -545,7 +545,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   outcome, and a log line carries chat, user and hold IDs only.
 - The `settings|v1` namespace is the settings menu (`settings_menu.go`, `settings_pages.go`). Fields: `a` action, `c` the
   group's chat ID (a menu opened in private), `u` the opener's user ID (a menu opened in the group), `p` page (`s` staff,
-  `l` lockdown, `c` captcha, `f` antiflood, `w` welcome, `g` goodbye, `r` rules, `m` member requirements, `d` deletion, `n` warnings, `t` switches, `u` language, `o` log channel, `y` anonymous admins, `k` locks, `a` access), `t` control, `v` the absolute target value; `e` (confirm expiry), `r`
+  `l` lockdown, `c` captcha, `f` antiflood, `w` welcome, `g` goodbye, `r` rules, `m` member requirements, `d` deletion, `n` warnings, `t` switches, `u` language, `o` log channel, `y` anonymous admins, `k` locks, `a` access), `t` control, `v` the absolute target value (the Locks page's pager is its own
+  action code `kg`, with `v` the absolute page); `e` (confirm expiry), `r`
   (the lockdown row ID of a Lift card), `l` (the link row ID of an Unlink card) and `s` (Staff Group row ID) arrive with
   the confirm cards and the Link pick. Core action codes: `oh` open here (the choice
   message becomes the Main page), `op` open page `p` (also Refresh and a stepper's value button), `bk` Back to Main, `cl`
@@ -601,8 +602,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   the final Main has fifteen grid cells (`s|l / c|f / n|k / w|g / r|m / d|t / u|o / y`, the Anonymous admins cell alone),
   then Access for the live owner and the navigation row, so ten rows for the owner and nine for an administrator, and
   sixteen state lines in the grid's order with Access last. It is the one screen over the content-page row budget (eight
-  rows private, nine in a group) by two rows for the owner and one for an administrator: that budget is for pages that
-  carry controls and a body, Main carries navigation only, and Telegram's own limits (100 buttons, 8 to a row) are met by
+  rows private, nine in a group): in a private menu by two rows for the owner and one for an administrator, in a group menu
+  by one row for the owner and none for an administrator, because Main has the same ten and nine rows in both. That budget
+  is for pages that carry controls and a body, Main carries navigation only, and Telegram's own limits (100 buttons, 8 to a row) are met by
   a wide margin. The second hub the UI-SPEC kept as a fallback (A18-A1) is not built, because nothing forced it (D-23).
   The Main states of the six Phase 18 pages are database reads only, a failed read is the unknown mark on that page's line
   alone, and drawing Main makes no Telegram call of its own (`TestSettingsMainPhase18`); `settingsMainWorstState` holds
@@ -1293,7 +1295,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `/cleangoodbye` refuse through `CanUserChangeInfo`); it also gates every choice of the Deletion page (`/cleanservice` asks for it too), the three Member messages rows (`mc`, `me`, `ms`, Off included) and the Self-destruct card's Yes (`dy`), each judged on the press's fresh member record, so a Yes after the presser lost the right is refused with nothing written, while opening the section, a list and a row screen needs only the admin check every press makes (`TestSettingsAuthorityDeletionMember`; the owner gate's carve-out applies: a non-owner administrator with the switch off is refused at step 4b). `settingsRightRefusalFor` is the one pure judgement of a right's
   member-record part, shared by a button press and a typed reply, so the two can never judge a right differently.
   Two composite rights (Phase 18, the only framework edit of that phase, appended after `settingsRightChangeInfo` so the zero value
-  stays `settingsRightAdmin`) judge the bot part first, as the commands they mirror do, then the member part:
+  stays `settingsRightAdmin`, which makes eight rights in all) judge the bot part first, as the commands they mirror do, then the member part:
   `settingsRightChangeInfoBotAdmin` (`/autoapprove`: `IsUserConnected` with its bot check runs before `CanUserChangeInfo`) refuses a bot
   that `chat_status.IsUserAdmin` does not find an administrator with the notice `connections_is_user_connected_bot_not_admin`, then
   answers what `settingsRightChangeInfo` answers (the alert `settings_no_change_info`); `settingsRightOwnerBotAdmin` (`/anonadmin`:
@@ -3212,6 +3214,18 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   leave, `/welcome`, `/rules` and the previews all build their message through `renderGreeting` and `buildRulesMessage`
   (which builds its text with `buildRulesText`), never a second builder, and a preview never writes and never sends to
   the group.
+  Phase 18 added nine apply functions in all, `applyWarnLimit`, `applyWarnMode`, `applyReportsEnabled`, `applyAutoApprove`,
+  `applyAISpamEnabled`, `applyGroupLanguage`, `applyLogCategory`, `applyAnonAdmin` and `applyLock`, and six new
+  error-returning readers that create no row (`warns.LoadWarnSettingsContext`, `reports.LoadChatStatusContext`,
+  `aispam.LoadEnabledContext`, `lang.LoadGroupLanguageContext`, `logchannels.LoadContext` and `admin.LoadAnonAdminContext`;
+  the Switches page's auto-approve and the Locks page read through `greetings.LoadSettingsContext` and
+  `locks.GetChatLocksCachedContext`, which already existed in that shape). Every command keeps its own gates, order and
+  replies and maps the typed result to them, and each command's golden `TestLegacy*Requests` was recorded before its
+  extraction and is never re-recorded or weakened. None of the cache keys these settings use is in `skipLocal`, so after a
+  write another replica can serve the old value for up to `CACHE_LOCAL_TTL`, exactly as it can after the command:
+  `warn_settings`, `ai_spam_settings`, `greetings` (the commands' cached reads; the page's own read of it is a plain query),
+  `chat_lang`, `chat_settings`, `chat`, `log_channel` and `locks_map` (cached for an hour and dropped on every write). Reports
+  and the `admin` row are not cached, so there is nothing to lag. The replica that took the press is always consistent.
   The warn settings (Phase 18) follow the same rule: `applyWarnLimit` (the limit, 1..100) and `applyWarnMode` (the action
   at the limit) in `warns.go` hold the validation, the repository write (through the `warnSettingsWrites` seam) and its
   `warn_settings:<chat>` cache drop, and return a `warnSettingsResult` (outcome, the command's reply key, the row read
