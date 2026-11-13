@@ -33,9 +33,9 @@ func settingsMainStateLine(text, titleKey string) (string, bool) {
 // private shape ends with the Groups and Close row; the hand-built subtests of
 // TestSettingsMainGrid keep their own literals.
 const (
-	settingsMainShapeGroup   = "s|l / c|f / n|k / b|w / g|r / m|d / t|u / o|y / a / close"
-	settingsMainShapePrivate = "s|l / c|f / n|k / b|w / g|r / m|d / t|u / o|y / a / groups|close"
-	settingsMainOwnerRows    = 10
+	settingsMainShapeGroup   = "s|l / c|f / n|k / b|i / w|g / r|m / d|t / u|o / y / a / close"
+	settingsMainShapePrivate = "s|l / c|f / n|k / b|i / w|g / r|m / d|t / u|o / y / a / groups|close"
+	settingsMainOwnerRows    = 11
 )
 
 // settingsMainShape writes a Main keyboard as its rows of short names: a page button is its p
@@ -391,7 +391,7 @@ func settingsMainWorstState(tr *i18n.Translator) string {
 		// Phase 19: a list page's fixed state in a group menu and its largest private count (a capped list
 		// reads n/150, digits only, so five digits is the widest).
 		settingsText(tr, "settings_state_private_only"),
-		"99999",
+		"99999/150",
 	}
 	for _, mode := range settingsWarnsStoredModes {
 		candidates = append(candidates, settingsText(tr, "settings_state_warns", i18n.TranslationParams{
@@ -550,11 +550,11 @@ func settingsMainLines(text string) []string {
 	return lines
 }
 
-// settingsMainTitleKeys are the title keys of the seventeen pages in the order Main draws them for the
-// owner: the sixteen grid pages in grid order, then Access.
+// settingsMainTitleKeys are the title keys of the eighteen pages in the order Main draws them for the
+// owner: the seventeen grid pages in grid order, then Access.
 var settingsMainTitleKeys = []string{
 	"settings_page_staff", "settings_page_lockdown", "settings_page_captcha", "settings_page_antiflood",
-	"settings_page_warns", "settings_page_locks", "settings_page_blacklist", "settings_page_welcome", "settings_page_goodbye",
+	"settings_page_warns", "settings_page_locks", "settings_page_blacklist", "settings_page_filters", "settings_page_welcome", "settings_page_goodbye",
 	"settings_page_rules", "settings_page_mreq", "settings_page_del", "settings_page_switches",
 	"settings_page_lang", "settings_page_log", "settings_page_anon", "settings_page_access",
 }
@@ -586,7 +586,7 @@ func TestSettingsMainPhase18(t *testing.T) {
 		return out
 	}
 
-	t.Run("the owner's Main in a group and in private: the final grid, sixteen lines in order, the defaults", func(t *testing.T) {
+	t.Run("the owner's Main in a group and in private: the final grid, one line per page in order, the defaults", func(t *testing.T) {
 		settingsDelMenus(t, func(t *testing.T, m *settingsDelMenu) {
 			shape := settingsMainShapeGroup
 			if m.private {

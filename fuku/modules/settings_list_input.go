@@ -329,14 +329,15 @@ type settingsListApplyResult struct {
 // settingsListTwoStep gives the hooks of a two-step list page (Filters, Notes): the engine owns the flow, the page
 // owns only what is its own. Normalise turns the first typed message into the keyword or name; Check refuses it with
 // a finished reason (empty when it is fine) or fails with an error that keeps the wait; IsFilter picks the extraction's
-// mode; Apply stores the entry with the content extracted exactly as the command's reply form extracts it. KeyLineKey
+// mode; Apply stores the entry with the content extracted exactly as the command's reply form extracts it and, with the
+// sender's translator, words the reason of a taken result itself. KeyLineKey
 // is the step-2 prompt's line naming the keyword and SavedKey the saved notice, each taking the entry under the
 // table's EntryParam.
 type settingsListTwoStep struct {
 	Normalise  func(text string) string
 	Check      func(ctx context.Context, chatID int64, norm string, tr *i18n.Translator) (refusal string, err error)
 	IsFilter   bool
-	Apply      func(ctx context.Context, chatID int64, norm string, ex content.ExtractResult) settingsListApplyResult
+	Apply      func(ctx context.Context, chatID int64, norm string, ex content.ExtractResult, tr *i18n.Translator) settingsListApplyResult
 	KeyLineKey string
 	SavedKey   string
 }
@@ -465,7 +466,7 @@ func (r *settingsInputReply) listStepTwo(def settingsListDef, _ settingsListPart
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), settingsReadTimeout)
 	defer cancel()
-	result := ts.Apply(ctx, r.wait.GroupID, norm, extracted)
+	result := ts.Apply(ctx, r.wait.GroupID, norm, extracted, r.tr)
 	switch result.Outcome {
 	case settingsListApplySaved:
 		r.finishWait(claim)

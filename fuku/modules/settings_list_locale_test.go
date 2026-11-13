@@ -14,13 +14,20 @@ import (
 // see because they are not literal arguments of a GetString call.
 func settingsListKeys(def settingsListDef) []string {
 	keys := []string{def.TitleKey, def.IntroKey, def.CountKey, def.EmptyKey, def.DeleteAskKey, def.RemovedKey, def.AdminTagKey, def.AddKey}
+	if def.TwoStep != nil {
+		keys = append(keys, def.TwoStep.KeyLineKey, def.TwoStep.SavedKey)
+	}
 	return slices.DeleteFunc(keys, func(key string) bool { return key == "" })
 }
 
 // settingsListExtraKeys are the keys the list pages' typed add reads through code the engine does not enumerate: the
 // part words of the static part table and the prompt lines of each table's Prompt.
 func settingsListExtraKeys() []string {
-	keys := []string{"settings_bl_wait", "settings_bl_wait_rules"}
+	keys := []string{
+		"settings_bl_wait", "settings_bl_wait_rules",
+		// The Filters page's two prompts (Phase 19, plan 19-07).
+		"settings_flt_wait_keyword", "settings_flt_wait_keyword_rules", "settings_flt_wait_reply",
+	}
 	for _, part := range settingsListParts {
 		keys = append(keys, part.WordKey)
 	}
@@ -50,7 +57,7 @@ func TestSettingsListKeysExist(t *testing.T) {
 					t.Errorf("%s: typed-add key %q does not translate: %q, %v", code, key, text, err)
 				}
 			}
-			for _, key := range []string{def.DeleteAskKey, def.RemovedKey} {
+			for _, key := range settingsListEntryKeys(def) {
 				if key == "" {
 					continue
 				}
@@ -60,4 +67,14 @@ func TestSettingsListKeysExist(t *testing.T) {
 			}
 		}
 	}
+}
+
+// settingsListEntryKeys are the keys of a table that splice the entry under its EntryParam: the delete card, the
+// removed notice and, for a two-step page, the step-2 key line and the saved notice.
+func settingsListEntryKeys(def settingsListDef) []string {
+	keys := []string{def.DeleteAskKey, def.RemovedKey}
+	if def.TwoStep != nil {
+		keys = append(keys, def.TwoStep.KeyLineKey, def.TwoStep.SavedKey)
+	}
+	return keys
 }

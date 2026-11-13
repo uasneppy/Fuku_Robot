@@ -13,9 +13,12 @@ import (
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
+	"github.com/uasneppy/fuku_robot/fuku/db"
 	"github.com/uasneppy/fuku_robot/fuku/db/blacklists"
 	dbcache "github.com/uasneppy/fuku_robot/fuku/db/cache"
+	db_filters "github.com/uasneppy/fuku_robot/fuku/db/filters"
 	"github.com/uasneppy/fuku_robot/fuku/utils/cache"
+	"github.com/uasneppy/fuku_robot/fuku/utils/content"
 )
 
 // settingsListDoorWait opens the Blacklist page of chat in a private menu of user and presses Add, so user has a wait
@@ -580,5 +583,115 @@ func TestSettingsListDoorNoRedis(t *testing.T) {
 	}
 	if keys := settingsEditInputKeys(env.settingsEnv); len(keys) != 0 {
 		t.Errorf("Add without Redis left %v", keys)
+	}
+}
+
+// settingsListDoorPhoto is the reply of the Filters door tests: a photo with a bold caption and a markdown button.
+func settingsListDoorPhoto() gotgbot.Message {
+	msg := settingsMediaItemID("photo", "price-photo")
+	msg.Caption = "Our prices\n[Shop](buttonurl://https://example.com)"
+	msg.CaptionEntities = []gotgbot.MessageEntity{{Type: "bold", Offset: 4, Length: 6}}
+	return msg
+}
+
+func TestSettingsListDoorTwoStep(t *testing.T) {
+	env := newSettingsListEnv(t)
+	user := settingsFiltersOwner(env, env.chat)
+	// The commands' cached reads are primed, so the typed add must drop both keys.
+	filterKeys := []string{dbcache.CacheKey("filter_list", env.chat.Id), dbcache.CacheKey("filters_optimized", env.chat.Id)}
+	settingsListSeedFilters(t, env.chat.Id, "alpha")
+	db_filters.GetFiltersListContext(context.Background(), env.chat.Id)
+	if _, err := db_filters.GetChatFiltersCachedContext(context.Background(), env.chat.Id); err != nil {
+		t.Fatalf("prime the optimized filters: %v", err)
+	}
+	for _, key := range filterKeys {
+		if !env.redis.Exists(key) {
+			t.Fatalf("the command's cache key %s was not primed", key)
+		}
+	}
+	m := settingsListOpenMenuPage(env, env.chat, user, settingsPageFilters)
+	add, ok := m.markedButton("settings_btn_flt_add")
+	if !ok {
+		t.Fatalf("the Filters page has no Add button")
+	}
+	m.tap(add)
+
+	prompt, keyboard := m.last()
+	for _, want := range []string{
+		staffMarker("settings_header") + " " + staffMarker("settings_page_filters"),
+		staffMarker("settings_flt_wait_keyword"), staffMarker("settings_flt_wait_keyword_rules") + " 100",
+		staffMarker("settings_entries_step") + " 1 2", staffMarker("settings_edit_wait_footer"),
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("the step-1 prompt lacks %q:\n%s", want, prompt)
+		}
+	}
+	if len(keyboard) != 1 || len(keyboard[0]) != 1 {
+		t.Fatalf("the step-1 keyboard = %+v, want one row with Cancel", keyboard)
+	}
+	if fields := settingsButtonFields(t, keyboard[0][0]); fields["a"] != "ic" || fields["t"] != "k" || len(fields) != 3 {
+		t.Errorf("Cancel carries %v, want ic, t=k and c", fields)
+	}
+
+	sentBefore := len(env.fake.sentTo(user.Id))
+	keywordID := settingsListDoorSay(env, user, "Price  List")
+	step2 := settingsListDoorReply(t, env, user, sentBefore, "settings_flt_keyword_line", "settings_flt_wait_reply", "settings_entries_wait_content_limits")
+	text := fmt.Sprint(step2.Params["text"])
+	for _, want := range []string{staffMarker("settings_flt_keyword_line") + " price list", staffMarker("settings_entries_step") + " 2 2"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("the step-2 prompt lacks %q:\n%s", want, text)
+		}
+	}
+	if reply := fmt.Sprint(step2.Params["reply_parameters"]); !strings.Contains(reply, strconv.FormatInt(keywordID, 10)) {
+		t.Errorf("the step-2 prompt replies to %s, want the keyword message %d", reply, keywordID)
+	}
+	step2Keyboard := staffKeyboardOf(step2.Params["reply_markup"])
+	if len(step2Keyboard) != 1 || len(step2Keyboard[0]) != 1 {
+		t.Fatalf("the step-2 keyboard = %+v, want one row with Cancel", step2Keyboard)
+	}
+	if fields := settingsButtonFields(t, step2Keyboard[0][0]); fields["a"] != "ic" || fields["t"] != "y" || len(fields) != 3 {
+		t.Errorf("the step-2 Cancel carries %v, want ic, t=y and c", fields)
+	}
+	if got := len(settingsFiltersStored(t, env.chat.Id)); got != 1 {
+		t.Fatalf("step 1 changed the list to %d filters", got)
+	}
+
+	sentBefore = len(env.fake.sentTo(user.Id))
+	photo := settingsListDoorPhoto()
+	sendPrivateMessage(env.settingsEnv, user, photo)
+
+	want := content.ExtractTypedNoteOrFilter(&photo, "price list", true, "en")
+	if want.DataType != db.PHOTO || want.FileID != "price-photo" || len(want.Buttons) != 1 || want.Buttons[0].Name != "Shop" {
+		t.Fatalf("the extraction of the test message = %+v, want a photo with the Shop button", want)
+	}
+	stored := settingsFiltersStored(t, env.chat.Id)
+	row, ok := stored["price list"]
+	if !ok || len(stored) != 2 {
+		t.Fatalf("stored filters = %v, want alpha and price list", stored)
+	}
+	if row.FilterReply != want.Text || row.MsgType != want.DataType || row.FileID != want.FileID ||
+		len(row.Buttons) != 1 || row.Buttons[0] != want.Buttons[0] {
+		t.Errorf("stored row = %+v, want the fields /filter stores for that reply: %+v", row, want)
+	}
+	for _, key := range filterKeys {
+		if env.redis.Exists(key) {
+			t.Errorf("the add did not drop %s", key)
+		}
+	}
+	saved := settingsListDoorReply(t, env, user, sentBefore, "settings_page_filters")
+	savedText := fmt.Sprint(saved.Params["text"])
+	for _, wantText := range []string{settingsNoticeOKIcon + staffMarker("settings_flt_saved") + " price list", "2. <code>price list</code>", staffMarker("settings_flt_count") + " 2 150"} {
+		if !strings.Contains(savedText, wantText) {
+			t.Errorf("the saved page lacks %q:\n%s", wantText, savedText)
+		}
+	}
+	if keys := settingsEditInputKeys(env.settingsEnv); len(keys) != 0 {
+		t.Errorf("the finished flow left %v behind", keys)
+	}
+	msgID := env.updateID()
+	env.pressPrivate(user, msgID, env.privateFields(env.chat.Id, "a", settingsActBack))
+	mainText, _ := env.lastEdit(user.Id, msgID)
+	if line, ok := settingsMainStateLine(mainText, "settings_page_filters"); !ok || !strings.HasSuffix(line, " 2/150") {
+		t.Errorf("Main's Filters line = %q, want it to end in 2/150", line)
 	}
 }

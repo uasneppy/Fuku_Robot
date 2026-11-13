@@ -14,6 +14,7 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/db"
 	"github.com/uasneppy/fuku_robot/fuku/db/blacklists"
 	dbcache "github.com/uasneppy/fuku_robot/fuku/db/cache"
+	db_filters "github.com/uasneppy/fuku_robot/fuku/db/filters"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
 	"github.com/uasneppy/fuku_robot/fuku/utils/content"
@@ -75,6 +76,26 @@ func settingsListSeedBlacklistAction(t *testing.T, chatID int64, word, action st
 	if err := blacklists.AddBlacklistContext(context.Background(), chatID, word, action); err != nil {
 		t.Fatalf("seed blacklist word %q (%s): %v", word, action, err)
 	}
+}
+
+// settingsListSeedFilters stores text filters with the given keywords in the chat through the repository, as /filter
+// does (each with a reply naming its keyword).
+func settingsListSeedFilters(t *testing.T, chatID int64, keywords ...string) {
+	t.Helper()
+	for _, keyword := range keywords {
+		if _, err := db_filters.AddFilterContext(context.Background(), chatID, keyword, "reply "+keyword, "", nil, db.TEXT); err != nil {
+			t.Fatalf("seed filter %q: %v", keyword, err)
+		}
+	}
+}
+
+// settingsListOpenMenuPage opens the list page of the given key for chat in a fresh private message of user and returns
+// the menu on it.
+func settingsListOpenMenuPage(env *settingsListEnv, chat gotgbot.Chat, user gotgbot.User, page string) *settingsBlacklistMenu {
+	env.t.Helper()
+	m := &settingsBlacklistMenu{env: env, chat: chat, user: user, msgID: env.updateID()}
+	m.press("a", settingsActOpen, "p", page)
+	return m
 }
 
 // settingsListOpenPrivate presses the Main cell of page in a private menu of the env's chat as user (a fresh message
@@ -248,7 +269,7 @@ func settingsListTestTwoStepDef(store *settingsListTestStore) settingsListDef {
 				return store.checkRefusal, store.checkErr
 			},
 			IsFilter: true,
-			Apply: func(_ context.Context, _ int64, norm string, ex content.ExtractResult) settingsListApplyResult {
+			Apply: func(_ context.Context, _ int64, norm string, ex content.ExtractResult, _ *i18n.Translator) settingsListApplyResult {
 				store.applies = append(store.applies, settingsListTestApply{Norm: norm, Ex: ex})
 				if store.applyOutcome == settingsListApplySaved {
 					store.nextID++

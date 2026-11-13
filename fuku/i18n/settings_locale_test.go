@@ -514,6 +514,19 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_entries_step_done":           {60, 90},
 	"settings_entries_refuse_blank":        {64, 100},
 	"settings_entries_wait_content_limits": {76, 110},
+
+	// Phase 19 (plan 19-07, task 1), the Filters page: its name, list page, Add button, both prompts and the saved
+	// notice (UI-SPEC rows 40 to 48 and 53).
+	"settings_page_filters":           {18, 18},
+	"settings_flt_intro":              {150, 220},
+	"settings_flt_count":              {28, 40},
+	"settings_flt_empty":              {40, 64},
+	"settings_btn_flt_add":            {20, 20},
+	"settings_flt_wait_keyword":       {190, 280},
+	"settings_flt_wait_keyword_rules": {150, 220},
+	"settings_flt_keyword_line":       {40, 50},
+	"settings_flt_wait_reply":         {300, 420},
+	"settings_flt_saved":              {96, 150},
 }
 
 // settingsAlertKeys are shown as answerCallbackQuery alerts: plain text, no tag, at most
@@ -735,6 +748,7 @@ func TestSettingsLabelLengths(t *testing.T) {
 		{"🎭", "settings_page_anon"},
 		{"🔐", "settings_page_locks"},
 		{"🔤", "settings_page_blacklist"},
+		{"🔁", "settings_page_filters"},
 	}
 	options := []string{
 		"settings_opt_math", "settings_opt_text", "settings_opt_turnstile",
@@ -806,6 +820,8 @@ func TestSettingsLabelLengths(t *testing.T) {
 		"settings_btn_bl_action",
 		// The Blacklist list page's Add button (Phase 19, UI-SPEC check C19-2).
 		"settings_btn_bl_add",
+		// The Filters list page's Add button (Phase 19, UI-SPEC check C19-2).
+		"settings_btn_flt_add",
 	}
 	// The editor's half-width switch cells (Phase 12, UI-SPEC check 2): the template with
 	// {state} replaced by the icon alone is at most 20 code points, so a name is at most 18.

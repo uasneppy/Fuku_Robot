@@ -163,8 +163,8 @@ func TestSettingsPhase18Codes(t *testing.T) {
 				t.Errorf("Phase 18 page %q is not registered", key)
 			}
 		}
-		// The sixteen pages of Phase 18 and the Blacklist page of Phase 19, and no other.
-		want := []string{"s", "l", "c", "f", "n", "k", "b", "w", "g", "r", "m", "d", "t", "u", "o", "y", "a"}
+		// The sixteen pages of Phase 18 and the Blacklist and Filters pages of Phase 19, and no other.
+		want := []string{"s", "l", "c", "f", "n", "k", "b", "i", "w", "g", "r", "m", "d", "t", "u", "o", "y", "a"}
 		if got := slices.Sorted(maps.Keys(seen)); !slices.Equal(got, slices.Sorted(slices.Values(want))) {
 			t.Errorf("registered pages = %v, want %v", got, slices.Sorted(slices.Values(want)))
 		}
