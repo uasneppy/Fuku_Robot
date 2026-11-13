@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
+	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
 	dbcache "github.com/uasneppy/fuku_robot/fuku/db/cache"
@@ -752,4 +753,249 @@ func TestSettingsLocksFailedWrite(t *testing.T) {
 			t.Errorf("unlock notice = %q, want %q", got, want)
 		}
 	})
+}
+
+// settingsLocksPlainMember is a member who is neither listed as an administrator nor approved, in the
+// env's chat, with the rows of its own removed when the test ends.
+func settingsLocksPlainMember(t *testing.T, env *settingsDelEnv, chat gotgbot.Chat) gotgbot.User {
+	t.Helper()
+	member := gotgbot.User{Id: uniqueLinkOwnerID() + 47, FirstName: "Plain"}
+	t.Cleanup(func() {
+		db.DB.Where("user_id IN ?", []int64{member.Id}).Delete(&models.User{})
+		dbcache.DeleteCache(dbcache.CacheKey("user", member.Id))
+		dbcache.ResetLocalForTest()
+	})
+	env.fake.setMember(chat.Id, member.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+	return member
+}
+
+func TestSettingsDriftLocks(t *testing.T) {
+	const menuMsgID = 7616
+	env := newSettingsLocksEnv(t)
+	chat := env.chat
+	member := settingsLocksPlainMember(t, env, chat)
+
+	// linkDeletes sends a link as the plain member through the real watcher and returns how many
+	// messages the bot has deleted in the chat so far.
+	linkDeletes := func() int {
+		t.Helper()
+		ctx := newModuleMessageContext(env.bot, chat, member, "https://example.com")
+		ctx.EffectiveMessage.Entities = []gotgbot.MessageEntity{{Type: "url", Offset: 0, Length: 19}}
+		if err := locksModule.permHandler(env.bot, ctx); err != ext.ContinueGroups {
+			t.Fatalf("permHandler error = %v, want ContinueGroups", err)
+		}
+		return len(callsToChat(env.fake.staffBotClient, "deleteMessage", chat.Id))
+	}
+	open := func() (string, [][]gotgbot.InlineKeyboardButton) {
+		t.Helper()
+		env.pressRaw(chat, env.admin, menuMsgID, encodeCallbackData(settingsCallbackNamespace,
+			env.groupFields(env.admin, "a", "op", "p", settingsPageLocks)))
+		return env.lastEdit(chat.Id, menuMsgID)
+	}
+
+	// A command write is what the next draw shows, across the cache, and what the watcher reads.
+	env.sendIn(chat, env.admin, "/lock url")
+	dbcache.ResetLocalForTest()
+	text, _ := open()
+	settingsLocksWantLines(t, text, 1, "url")
+	if got := linkDeletes(); got != 1 {
+		t.Fatalf("after /lock url the watcher deleted %d links, want 1", got)
+	}
+
+	// A page write is what the watcher reads for the next message.
+	settingsLocksToggle(t, env, chat, menuMsgID, settingsLocksCode(t, "url"), "0")
+	dbcache.ResetLocalForTest()
+	if got := linkDeletes(); got != 1 {
+		t.Errorf("after the page unlocked url the watcher deleted again (%d deletes in all), want still 1", got)
+	}
+	settingsLocksToggle(t, env, chat, menuMsgID, settingsLocksCode(t, "url"), "1")
+	dbcache.ResetLocalForTest()
+	if got := linkDeletes(); got != 2 {
+		t.Errorf("after the page locked url again the watcher deleted %d links in all, want 2", got)
+	}
+	text, _ = open()
+	settingsLocksWantLines(t, text, 1, "url")
+
+	// What the page draws is what the watcher's loader reads, kind by kind.
+	read := locks.GetChatLocks(chat.Id)
+	for _, row := range settingsLockRows {
+		if want := row.Kind == "url"; read[row.Kind] != want {
+			t.Errorf("the watchers read %s = %v, want %v", row.Kind, read[row.Kind], want)
+		}
+	}
+}
+
+func TestSettingsAuthorityParityLocks(t *testing.T) {
+	const menuMsgID = 7717
+	gifCode := settingsLocksCode(t, "gif")
+	press := func(env *settingsDelEnv, chat gotgbot.Chat, from gotgbot.User, kv ...string) {
+		env.pressRaw(chat, from, menuMsgID, encodeCallbackData(settingsCallbackNamespace, env.groupFields(from, kv...)))
+	}
+	toggle := []string{"a", "tg", "p", settingsPageLocks, "t", gifCode, "v", "1"}
+
+	t.Run("a live administrator writes by both", func(t *testing.T) {
+		env := newSettingsLocksEnv(t)
+		commandChat, menuChat := env.chat, env.addChat()
+		lockGoldenCleanup(t, menuChat.Id)
+		env.sendIn(commandChat, env.admin, "/lock gif")
+		press(env, menuChat, env.admin, toggle...)
+		for _, id := range []int64{commandChat.Id, menuChat.Id} {
+			if got := settingsLocksStored(t, id); got != "gif=true" {
+				t.Errorf("chat %d stored %q, want gif=true", id, got)
+			}
+		}
+	})
+
+	t.Run("a plain member is refused by both", func(t *testing.T) {
+		env := newSettingsLocksEnv(t)
+		chat := env.chat
+		member := settingsLocksPlainMember(t, env, chat)
+		env.sendIn(chat, member, "/lock gif")
+		if !settingsAntifloodSentHas(env.settingsEnv, chat.Id, staffMarker("connections_is_user_connected_user_not_admin")) {
+			t.Error("the command did not refuse a plain member")
+		}
+		answers := env.answerCount()
+		env.pressPrivate(member, 7718, env.privateFields(chat.Id, toggle...))
+		if got := env.answerCount() - answers; got != 1 {
+			t.Errorf("the press answered %d times, want once", got)
+		}
+		if answer, alert := env.lastAnswer(); !alert || !strings.Contains(answer, staffMarker("settings_not_admin")) {
+			t.Errorf("answer = %q (alert %v), want the alert settings_not_admin", answer, alert)
+		}
+		if got := settingsLocksStored(t, chat.Id); got != "" {
+			t.Errorf("a plain member's press or command stored %q", got)
+		}
+	})
+
+	t.Run("a bot that is not an administrator is refused by both, and the pager needs only the admin check", func(t *testing.T) {
+		env := newSettingsLocksEnv(t)
+		commandChat, menuChat := env.chat, env.addChat()
+		lockGoldenCleanup(t, menuChat.Id)
+		for _, id := range []int64{commandChat.Id, menuChat.Id} {
+			env.fake.setBotRole(id, staffRoleMember)
+		}
+		env.sendIn(commandChat, env.admin, "/lock gif")
+		press(env, menuChat, env.admin, toggle...)
+		if text, _ := env.lastEdit(menuChat.Id, menuMsgID); !containsMarker(text, "connections_is_user_connected_bot_not_admin") {
+			t.Errorf("the press drew %q, want the bot-not-admin notice", text)
+		}
+		for _, id := range []int64{commandChat.Id, menuChat.Id} {
+			if got := settingsLocksStored(t, id); got != "" {
+				t.Errorf("chat %d stored %q with the bot not an administrator", id, got)
+			}
+		}
+		// Turning the page writes nothing, so it asks only for the live admin check.
+		press(env, menuChat, env.admin, "a", settingsActLocksPage, "v", "2")
+		text, _ := env.lastEdit(menuChat.Id, menuMsgID)
+		if got := settingsLocksPageOf(t, text); got != 2 || containsMarker(text, "connections_is_user_connected_bot_not_admin") {
+			t.Errorf("the pager drew page %d with %q, want page 2 with no refusal", got, text)
+		}
+	})
+
+	t.Run("an administrator the owner gate refuses is refused by the menu only (the documented carve-out)", func(t *testing.T) {
+		resetSettingsOwnerMemo(t)
+		env := newSettingsLocksEnv(t)
+		commandChat, menuChat := env.addChat(), env.addChat()
+		lockGoldenCleanup(t, commandChat.Id)
+		lockGoldenCleanup(t, menuChat.Id)
+		for _, chat := range []gotgbot.Chat{commandChat, menuChat} {
+			env.newOwner(chat)
+			env.setAdminsAllowed(chat.Id, false)
+		}
+		answers := env.answerCount()
+		press(env, menuChat, env.admin, toggle...)
+		if got := env.answerCount() - answers; got != 1 {
+			t.Errorf("the gated press answered %d times, want once", got)
+		}
+		if answer, alert := env.lastAnswer(); !alert || !strings.Contains(answer, staffMarker("settings_gate_owner_only")) {
+			t.Errorf("answer = %q (alert %v), want the alert settings_gate_owner_only", answer, alert)
+		}
+		if got := settingsLocksStored(t, menuChat.Id); got != "" {
+			t.Errorf("the gated press stored %q", got)
+		}
+		env.sendIn(commandChat, env.admin, "/lock gif")
+		if got := settingsLocksStored(t, commandChat.Id); got != "gif=true" {
+			t.Errorf("/lock stored %q for an administrator the menu refuses, want gif=true", got)
+		}
+		env.setAdminsAllowed(menuChat.Id, true)
+		press(env, menuChat, env.admin, toggle...)
+		if got := settingsLocksStored(t, menuChat.Id); got != "gif=true" {
+			t.Errorf("with the switch on the press stored %q, want gif=true", got)
+		}
+	})
+}
+
+func TestSettingsLocksReadsCreateNothing(t *testing.T) {
+	const menuMsgID = 7818
+	chatRows := func(chatID int64) int64 {
+		t.Helper()
+		var n int64
+		if err := db.DB.Model(&models.Chat{}).Where("chat_id = ?", chatID).Count(&n).Error; err != nil {
+			t.Fatalf("count chats: %v", err)
+		}
+		return n
+	}
+
+	t.Run("opening Main and both pages creates no row", func(t *testing.T) {
+		env := newSettingsLocksEnv(t)
+		chat := env.addChat()
+		lockGoldenCleanup(t, chat.Id)
+		open := func(kv ...string) string {
+			env.pressRaw(chat, env.admin, menuMsgID, encodeCallbackData(settingsCallbackNamespace, env.groupFields(env.admin, kv...)))
+			text, _ := env.lastEdit(chat.Id, menuMsgID)
+			return text
+		}
+		if text := open("a", "op", "p", settingsPageLocks); settingsLocksPageOf(t, text) != 1 {
+			t.Fatalf("the page drew %q", text)
+		}
+		if text := open("a", settingsActLocksPage, "v", "2"); settingsLocksPageOf(t, text) != 2 {
+			t.Fatalf("page 2 drew %q", text)
+		}
+		mainText := open("a", "bk")
+		if line, found := settingsMainStateLine(mainText, "settings_page_locks"); !found || strings.HasSuffix(line, settingsUnknownState) {
+			t.Errorf("Main status line = %q (found %v), want the state", line, found)
+		}
+		if got := settingsLocksStored(t, chat.Id); got != "" {
+			t.Errorf("opening stored lock rows %q", got)
+		}
+		if got := chatRows(chat.Id); got != 0 {
+			t.Errorf("opening created %d chats rows", got)
+		}
+	})
+
+	t.Run("a failing reader is the cannot-open edit and the unknown mark", func(t *testing.T) {
+		env := newSettingsLocksEnv(t)
+		mreqSwap(t, &settingsLocksRead, func(context.Context, int64) (map[string]bool, error) {
+			return nil, errors.New("database is gone")
+		})
+		m := env.groupMenu()
+		if line, found := settingsMainStateLine(m.mainText, "settings_page_locks"); !found || !strings.HasSuffix(line, settingsUnknownState) {
+			t.Errorf("Main status line = %q (found %v), want the unknown mark", line, found)
+		}
+		for _, kv := range [][]string{
+			{"a", "op", "p", settingsPageLocks},
+			{"a", settingsActLocksPage, "v", "2"},
+			{"a", "tg", "p", settingsPageLocks, "t", settingsLocksCode(t, "gif"), "v", "1"},
+		} {
+			m.press(kv...)
+			text, keyboard := m.last()
+			if !containsMarker(text, "settings_cannot_open") || settingsLocksCellCount(keyboard) != 0 {
+				t.Errorf("press %v drew %q, want the cannot-open edit", kv, text)
+			}
+		}
+		if got := settingsLocksStored(t, env.chat.Id); got != "" {
+			t.Errorf("a failing reader stored %q", got)
+		}
+	})
+}
+
+// settingsLocksCellCount is how many lock toggle cells a keyboard has.
+func settingsLocksCellCount(keyboard [][]gotgbot.InlineKeyboardButton) int {
+	n := 0
+	for _, button := range settingsAllButtons(keyboard) {
+		if decoded, ok := decodeCallbackData(button.CallbackData, settingsCallbackNamespace); ok && decoded.Fields["a"] == "tg" {
+			n++
+		}
+	}
+	return n
 }
