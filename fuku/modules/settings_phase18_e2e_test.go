@@ -3,12 +3,16 @@
 package modules
 
 import (
+	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
+	"github.com/uasneppy/fuku_robot/fuku/db/aispam"
+	"github.com/uasneppy/fuku_robot/fuku/db/approvals"
 	dbcache "github.com/uasneppy/fuku_robot/fuku/db/cache"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/db/warns"
@@ -114,6 +118,44 @@ func (e *phase18E2E) warnCount(userID int64) int {
 	return count
 }
 
+// post runs a message with the given entities in the group as from, through the real dispatcher, and
+// returns the message's ID.
+func (e *phase18E2E) post(from gotgbot.User, text string, entities ...gotgbot.MessageEntity) int64 {
+	e.t.Helper()
+	id := e.updateID()
+	update := &gotgbot.Update{
+		UpdateId: id,
+		Message: &gotgbot.Message{
+			MessageId: id, Date: 1, Chat: e.chat, From: &from, Text: text, Entities: entities,
+		},
+	}
+	if err := e.dispatcher.ProcessUpdate(e.bot, update, nil); err != nil {
+		e.t.Fatalf("ProcessUpdate(%d) error = %v", id, err)
+	}
+	return id
+}
+
+// deleted counts the deleteMessage requests for message msgID of the group.
+func (e *phase18E2E) deleted(msgID int64) int {
+	count := 0
+	for _, call := range callsToChat(e.fake.staffBotClient, "deleteMessage", e.chat.Id) {
+		if staffParamInt(call.Params, "message_id") == msgID {
+			count++
+		}
+	}
+	return count
+}
+
+// repliesWith counts the messages the bot sent to the group that carry the marker of the locale key.
+func (e *phase18E2E) repliesWith(key string) int {
+	return settingsStaffTestMessagesWith(e.settingsEnv, e.chat.Id, key)
+}
+
+// linkEntity marks the first URL of a text that starts with "see ".
+func linkEntity(url string) gotgbot.MessageEntity {
+	return gotgbot.MessageEntity{Type: "url", Offset: 4, Length: int64(len(url))}
+}
+
 func TestSettingsPhase18EndToEnd(t *testing.T) {
 	t.Run("warnings", func(t *testing.T) {
 		e := newPhase18E2E(t, func(e *phase18E2E) { LoadWarns(e.dispatcher) })
@@ -206,6 +248,145 @@ func TestSettingsPhase18EndToEnd(t *testing.T) {
 		}
 		if got := e.warnCount(inert.Id); got != 2 {
 			t.Errorf("the member's warns under tban = %d, want 2 (not cleared)", got)
+		}
+	})
+
+	t.Run("locks", func(t *testing.T) {
+		e := newPhase18E2E(t, func(e *phase18E2E) { LoadLocks(e.dispatcher) })
+		lockGoldenCleanup(t, e.chat.Id)
+		settingsLocksWarmBotRight(e.settingsDelEnv)
+		member, approved := e.member("Member"), e.member("Approved")
+		if err := approvals.AddApprovedUser(e.chat.Id, approved.Id, e.owner.Id, ""); err != nil {
+			t.Fatalf("approve: %v", err)
+		}
+		const link = "http://example.test/x"
+		text := "see " + link
+
+		// Nothing is locked yet: a link stays.
+		if id := e.post(member, text, linkEntity(link)); e.deleted(id) != 0 {
+			t.Fatal("a link was deleted before anything was locked")
+		}
+
+		msgID, keyboard := e.openPage(settingsPageLocks)
+		keyboard = e.tap(msgID, e.buttonFor(keyboard, "a", "tg", "t", settingsLocksCode(t, "url"), "v", "1"))
+		if got := settingsLocksStored(t, e.chat.Id); got != "url=true" {
+			t.Fatalf("stored locks = %q, want url=true", got)
+		}
+		dbcache.ResetLocalForTest()
+
+		if id := e.post(member, text, linkEntity(link)); e.deleted(id) != 1 {
+			t.Errorf("a member's link was deleted %d times, want once", e.deleted(id))
+		}
+		if id := e.post(member, "no link here"); e.deleted(id) != 0 {
+			t.Error("a member's plain text was deleted")
+		}
+		if id := e.post(e.admin, text, linkEntity(link)); e.deleted(id) != 0 {
+			t.Error("an administrator's link was deleted")
+		}
+		if id := e.post(approved, text, linkEntity(link)); e.deleted(id) != 0 {
+			t.Error("an approved member's link was deleted")
+		}
+		e.post(e.admin, "/locks")
+		if reply := e.lastReply(); !strings.Contains(reply, "url = true") {
+			t.Errorf("/locks answered %q, want url = true as the page shows", reply)
+		}
+
+		// Unlocking from the page stops it.
+		e.tap(msgID, e.buttonFor(keyboard, "a", "tg", "t", settingsLocksCode(t, "url"), "v", "0"))
+		dbcache.ResetLocalForTest()
+		if id := e.post(member, text, linkEntity(link)); e.deleted(id) != 0 {
+			t.Error("a link was deleted after the page unlocked it")
+		}
+		e.post(e.admin, "/locks")
+		if reply := e.lastReply(); !strings.Contains(reply, "url = false") {
+			t.Errorf("/locks answered %q after the unlock, want url = false", reply)
+		}
+	})
+
+	t.Run("ai spam", func(t *testing.T) {
+		withAISpamConfigured(t)
+		e := newPhase18E2E(t, func(e *phase18E2E) { LoadAISpam(e.dispatcher) })
+		settingsSwCleanup(t, e.chat.Id)
+		msgID, keyboard := e.openPage(settingsPageSwitches)
+		on := e.buttonFor(keyboard, "a", "tg", "t", settingsSwAIKey, "v", "1")
+
+		// The filter becomes unavailable while the page is open: the command and the stale press refuse
+		// the same way, for both causes, and nothing is stored.
+		for _, how := range []aispamNotConfiguredHow{aispamProviderValueEmpty, aispamSwitchOff} {
+			withAISpamNotConfigured(t, how)
+			e.sendIn(e.chat, e.admin, "/aispam on")
+			if reply := e.lastReply(); !strings.Contains(reply, staffMarker(aispamRefusalKey())) {
+				t.Errorf("/aispam on answered %q, want %s", reply, aispamRefusalKey())
+			}
+			e.tap(msgID, on)
+			if answer, alert := e.lastAnswer(); !alert || !strings.Contains(answer, staffMarker("settings_sw_ai_unavailable")) {
+				t.Errorf("the page's On answered %q (alert %v), want the unavailable alert", answer, alert)
+			}
+			if _, has := settingsSwAIRow(t, e.chat.Id); has {
+				t.Fatal("a refused On stored an ai_spam_settings row")
+			}
+		}
+
+		// Available again, the page's On is what the filter reads.
+		withAISpamConfigured(t)
+		_, keyboard = e.openPage(settingsPageSwitches)
+		e.tap(msgID, e.buttonFor(keyboard, "a", "tg", "t", settingsSwAIKey, "v", "1"))
+		dbcache.ResetLocalForTest()
+		if !aispam.IsAISpamEnabled(e.chat.Id) {
+			t.Error("the filter reads off after the page turned it on")
+		}
+	})
+
+	t.Run("anonymous admins", func(t *testing.T) {
+		e := newPhase18E2E(t, func(e *phase18E2E) { LoadWarns(e.dispatcher) })
+		settingsAnonCleanup(t, e.chat.Id)
+		// A mode-on anonymous sender skips the cached admin list, so the bot's own record is what the
+		// gates read: it can restrict, as it must to warn at all.
+		e.setBot(lockdownBotAdminJSON(true, true, false))
+		target := e.member("Target")
+		warnCmd := fmt.Sprintf("/warn %d spam", target.Id)
+
+		// Mode off: the anonymous admin gets the proof prompt and the command does not run.
+		e.sendAnonymous(warnCmd)
+		if n := e.repliesWith("chat_status_anon_confirm"); n != 1 {
+			t.Fatalf("an anonymous admin got %d proof prompts, want 1", n)
+		}
+		if got := e.warnCount(target.Id); got != 0 {
+			t.Fatalf("the command ran before the proof: %d warns", got)
+		}
+
+		// A non-owner administrator's press changes nothing.
+		adminMenu := e.openMenu(e.admin)
+		_, main := e.lastEdit(e.chat.Id, adminMenu)
+		button, ok := settingsPageButton(t, main, settingsPageAnon)
+		if !ok {
+			t.Fatal("Main has no Anonymous admins button")
+		}
+		e.pressRaw(e.chat, e.admin, adminMenu, button.CallbackData)
+		_, adminPage := e.lastEdit(e.chat.Id, adminMenu)
+		toggle, _ := settingsAnonToggleOf(t, adminPage)
+		e.pressRaw(e.chat, e.admin, adminMenu, toggle.CallbackData)
+		if on, err := settingsAnonRead(context.Background(), e.chat.Id); err != nil || on {
+			t.Fatalf("anonymous-admin mode = %v (%v) after a non-owner's press, want off", on, err)
+		}
+		if answer, _ := e.lastAnswer(); !strings.Contains(answer, staffMarker("chat_status_owner_button_error")) {
+			t.Errorf("the non-owner's press was answered %q, want the owner-only alert", answer)
+		}
+
+		// The creator turns the mode on from the page and the same command runs without the proof.
+		msgID, keyboard := e.openPage(settingsPageAnon)
+		toggle, _ = settingsAnonToggleOf(t, keyboard)
+		e.tap(msgID, toggle)
+		dbcache.ResetLocalForTest()
+		if on, err := settingsAnonRead(context.Background(), e.chat.Id); err != nil || !on {
+			t.Fatalf("anonymous-admin mode = %v (%v) after the owner's press, want on", on, err)
+		}
+		e.sendAnonymous(warnCmd)
+		if n := e.repliesWith("chat_status_anon_confirm"); n != 1 {
+			t.Errorf("with the mode on the bot sent %d proof prompts in all, want still 1", n)
+		}
+		if got := e.warnCount(target.Id); got != 1 {
+			t.Errorf("the anonymous admin's /warn stored %d warns, want 1", got)
 		}
 	})
 }
