@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 19
 current_phase_name: Blacklist, Filter and Note Pages
 status: executing
-stopped_at: Completed 19-11-PLAN.md
-last_updated: "2026-11-13T18:48:47.188Z"
+stopped_at: Completed 19-12-PLAN.md
+last_updated: "2026-11-13T19:31:06.430Z"
 last_activity: 2026-11-13
 last_activity_desc: Planned Phase 19 (12 plans), UI-SPEC approved
-state_head: 6ce9f7a83f52256e025f07cfd0c03354107f4c1c
+state_head: 3f0c90fd0a360e464b9747cc778662fa84b2408c
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 126
-  completed_plans: 124
+  completed_plans: 125
   percent: 0
 ---
 
@@ -29,10 +29,10 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 
 ## Current Position
 
-Phase: 19 (Blacklist, Filter and Note Pages) — plans 1 to 5 of 12 executed, ready to execute plan 6. Phase 18 (Remaining Settings Pages) is closed to `human_needed`: all 15 plans executed, the phase gate passed, `18-SECURITY.md` (51 of 51 closed, two small findings fixed), `18-VERIFICATION.md` (14 of 14 after the language callback was wired onto `applyGroupLanguage`, `99f796e`), `18-SPIKE.md` holds the 25 live checks
-Plan: 12 of 12 (19-01 to 19-11 complete; 19-12 next (the closing plan: rulebook read whole, README and docs, 19-SPIKE.md, the phase gate and the PAGE-07 to PAGE-09 ticks); the end-to-end proof of 19-11 is TestSettingsPhase19EndToEnd in settings_phase19_e2e_test.go (subtests blacklist, filters, notes, staff group, no redis, two replicas; about 2.3 s; the whole fuku/modules run under the CI environment passed in 1971 s with 1841 top-level PASS); the cross-page sweeps of 19-10 are in settings_phase19_test.go and settings_list_privacy_test.go (the registry holds 17 list action codes and the ten apply functions are covered by the log sweep; TestSettingsGateAllDoors has one column for the two list doors); the Notes page (page e, Order 72, codes eg ex ey ea ec, right settingsRightChangeInfoBotAdmin) is the third list table and the second on the two-step engine, hooks only; Main is at its final 18 grid cells (s|l / c|f / n|k / b|i / w|g / r|e / m|d / t|u / o|y, then Access, 11 rows for the owner and 10 for an administrator, 19 entries) and 452 settings_ keys exist in 8 locales; resolveNotePrivateConflict is shared by /save and the page; a Notes test uses a live creator (settingsFiltersOwner) and the settingsNotesFlow wrapper; settingsMainShapeGroup, settingsMainShapePrivate, settingsMainTitleKeys, TestSettingsPhase18Codes and the 19-entry count of TestSettingsPhase18Cost already hold the final shape; CONTEXT defaults A19-2, A19-3, A19-4 and A19-6 and the fail-closed /filter and /save lookups are provisional owner confirmations, each in its own revertable commit; the sandbox disk is tight, trim the Go build cache entries older than 10 hours if a link fails)
-Status: Phase 18 closed to `human_needed` (live checks deferred, see Deferred Items); Phase 19 is executing (19-06 done: the generic two-step add engine of the door's list branch, four strings (424 settings_ keys), a swap-and-restore test page; 19-05 done: the filter commands behind apply functions and a golden, the typed-content extraction, the A19-2 refusal and the fail-closed lookups of /filter in their own commits, the fresh filter readers). Phases 10 to 18 are not marked Complete in ROADMAP
-Last activity: 2026-11-13 — Completed 19-05 (filter apply functions behind a golden, ExtractTypedNoteOrFilter, A19-2 for filters, fail-closed /filter lookups, fresh filter readers)
+Phase: 19 (Blacklist, Filter and Note Pages) — all 12 plans executed (19-01 to 19-12), the phase gate passed with the documented sandbox fallbacks; awaiting the security audit and verification (run by the orchestrator). Phase 18 (Remaining Settings Pages) is closed to `human_needed`: all 15 plans executed, the phase gate passed, `18-SECURITY.md` (51 of 51 closed, two small findings fixed), `18-VERIFICATION.md` (14 of 14 after the language callback was wired onto `applyGroupLanguage`, `99f796e`), `18-SPIKE.md` holds the 25 live checks
+Plan: 12 of 12 (19-01 to 19-12 complete; the phase is executed and awaits the security audit and verification; 19-12 checked AGENTS.md against the code, wrote README, callbacks.md, permissions.md and 19-SPIKE.md (the 15 owner checks, the six owner-visible command changes A19-2 x2, A19-3, A19-4 and the fail-closed /filter and /save lookups each with its commit, the C-16 migration), ran the gate (fuku/modules ok 1897 s under the CI environment, 68 other packages ok, the 100 Phase 19 test names bare and CI, the PostgreSQL integrity list on a throwaway cluster, go.mod unchanged, only the one migration changed under migrations, models, main.go and CI) and ticked PAGE-07, PAGE-08 and PAGE-09; the end-to-end proof is TestSettingsPhase19EndToEnd; the phase added about 62 s to the fuku/modules run against the D-12 budget of about 40 s; Main has its final 18 grid cells, 452 settings_ keys exist in 8 locales, 17 list action codes and ten apply functions)
+Status: Phase 19 executed (all 12 plans; PAGE-07 to PAGE-09 complete), awaiting security audit and verification, not marked Complete in ROADMAP; Phase 18 closed to `human_needed` (live checks deferred, see Deferred Items). Phases 10 to 19 are not marked Complete in ROADMAP
+Last activity: 2026-11-13 — Completed 19-12 (the closing plan: rulebook, README and docs, 19-SPIKE.md, the phase gate and PAGE-07 to PAGE-09)
 
 Progress: [░░░░░░░░░░] 0% (v1.1)
 
@@ -194,6 +194,7 @@ Progress: [░░░░░░░░░░] 0% (v1.1)
 | Phase 19 P08 | 70min | 3 tasks | 16 files |
 | Phase 19 P09 | about 2h | 3 tasks | 18 files |
 | Phase 19 P10 | 135min | 3 tasks | 5 files |
+| Phase 19 P12 | about 55min (gate runs) | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -384,8 +385,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-13T18:01:44.910Z
-Stopped at: Completed 19-10-PLAN.md
+Last session: 2026-11-13T19:31:03.090Z
+Stopped at: Completed 19-12-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
