@@ -3243,6 +3243,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   re-recorded). The page reads `locks.GetChatLocksCachedContext`, which already returns its error. `locks_map` is cached for
   one hour and is not in `skipLocal`: another replica can lag until the key is dropped or expires, exactly as after the
   commands.
+  `settingsLockRows` (`settings_locks.go`) is the one table of the 22 locks the Locks page is drawn from: the two-letter
+  control code a button carries (never the lock's name, never the pager's `kg` or a core action code), the kind, the name key
+  and the page (12 on page 1, 10 on page 2). `TestSettingsLocksTableMatchesCommand` holds it equal to `/locktypes` in both
+  directions (a lock added to `lockMap` or `restrMap` needs a row, and the reverse) and `TestSettingsLocksKeysExist`
+  holds every name key, the Locks words, the six Phase 18 page titles and the six log category names in all 8 languages,
+  because `make check-translations` cannot see table fields. The table has no registered page yet.
 - Rules message (`rules.go`): `/rules` (in the group and in a private chat connected to it), the private rules message the
   `/start rules_<chat id>` deep link opens and the Rules page's Full preview are built by
   `buildRulesMessage` and sent by `sendRulesMessage`. The builder has two forms, the group form (`rulesFormGroup`: heading
