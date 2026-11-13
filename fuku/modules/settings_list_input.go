@@ -369,6 +369,11 @@ func (r *settingsInputReply) listStepOne(def settingsListDef, part settingsListP
 		return
 	}
 	norm := ts.Normalise(r.msg.Text)
+	if norm == "" {
+		// Blank after normalising (the ideographic space U+3000 alone is blank to strings.Fields): never a keyword.
+		r.refuse(r.text("settings_entries_refuse_blank"))
+		return
+	}
 	refusal, ok := r.listStepCheck(ts, norm)
 	if !ok {
 		return

@@ -3,11 +3,13 @@
 package modules
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
@@ -184,4 +186,270 @@ func settingsListRegistryKeys(snap settingsListRegistry) map[string]bool {
 		keys["action "+code] = has
 	}
 	return keys
+}
+
+// reset ends whatever wait the previous case left (the wait, its marker) and gives the test page a fresh store, so the
+// cases of one environment do not see each other.
+func (e *settingsListTwoStepEnv) reset() {
+	e.t.Helper()
+	e.redis.Del(settingsInputKey(e.user.Id))
+	e.redis.Del(settingsInputDoneKey(e.user.Id))
+	*e.store = settingsListTestStore{}
+}
+
+// advance runs step 1 with keyword and returns the menu, the keyword message's ID and the step-2 prompt the bot sent.
+func (e *settingsListTwoStepEnv) advance(keyword string) (*settingsBlacklistMenu, int64, staffSentMessage) {
+	e.t.Helper()
+	m := e.begin()
+	before := e.sent()
+	id := e.say(keyword)
+	prompt := e.reply(before, "settings_entries_wait_content_limits")
+	if e.field("t") != "y" {
+		e.t.Fatalf("after step 1 the wait is for part %q, want y", e.field("t"))
+	}
+	return m, id, prompt
+}
+
+// sayAgain delivers text once more as the private message with the given ID, as Telegram can redeliver an update.
+func (e *settingsListTwoStepEnv) sayAgain(text string, id int64) {
+	e.t.Helper()
+	msg := gotgbot.Message{Text: text, MessageId: id, Date: 1, Chat: settingsPrivateChat(e.user), From: &e.user}
+	if err := e.dispatcher.ProcessUpdate(e.bot, &gotgbot.Update{UpdateId: e.updateID(), Message: &msg}, nil); err != nil {
+		e.t.Fatalf("redelivery of message %d: %v", id, err)
+	}
+}
+
+// cancelFields is the fields of the one Cancel button of a reply's keyboard, with its fields.
+func (e *settingsListTwoStepEnv) cancelFields(sent staffSentMessage) map[string]string {
+	e.t.Helper()
+	keyboard := staffKeyboardOf(sent.Params["reply_markup"])
+	if len(keyboard) != 1 || len(keyboard[0]) != 1 || !containsMarker(keyboard[0][0].Text, "settings_btn_edit_cancel") {
+		e.t.Fatalf("the reply keyboard = %+v, want one row with Cancel", keyboard)
+	}
+	return settingsButtonFields(e.t, keyboard[0][0])
+}
+
+// waitStays fails the test unless the wait still exists at part, holding no claim.
+func (e *settingsListTwoStepEnv) waitStays(part, keyword string) {
+	e.t.Helper()
+	settingsEditWaitKept(e.t, e.settingsEnv, e.user)
+	if e.field("t") != part || e.field("w") != keyword {
+		e.t.Errorf("the wait is t=%q w=%q, want t=%q w=%q", e.field("t"), e.field("w"), part, keyword)
+	}
+}
+
+func TestSettingsListTwoStepBranches(t *testing.T) {
+	e := newSettingsListTwoStepEnv(t)
+
+	t.Run("step 1 refusals keep the wait at step 1 and the next text is read as a keyword", func(t *testing.T) {
+		e.reset()
+		e.begin()
+		nonce := e.field("n")
+		e.redis.FastForward(2 * time.Second)
+		ttl := e.redis.TTL(settingsInputKey(e.user.Id))
+
+		refusals := []struct {
+			name  string
+			send  func()
+			keys  []string
+			setup func()
+			words string
+		}{
+			{"a photo", func() { sendPrivateMessage(e.settingsEnv, e.user, settingsMediaItem("photo")) }, []string{"settings_edit_refuse_need_text"}, func() {}, ""},
+			{"U+3000 alone", func() { e.say("\u3000") }, []string{"settings_entries_refuse_blank"}, func() {}, ""},
+			{"a refusal of Check", func() { e.say("Taken Word") }, nil, func() { e.store.checkRefusal = "check-says-no" }, "check-says-no"},
+		}
+		for _, c := range refusals {
+			c.setup()
+			checks, before := e.store.checkCalls, e.sent()
+			c.send()
+			reply := e.reply(before, append(c.keys, "settings_edit_still_waiting")...)
+			if fields := e.cancelFields(reply); fields["a"] != "zc" || fields["t"] != "k" || len(fields) != 3 {
+				t.Errorf("%s: Cancel carries %v, want zc, t=k and c", c.name, fields)
+			}
+			if reply.Params["reply_parameters"] == nil {
+				t.Errorf("%s: the refusal is not a reply to the message", c.name)
+			}
+			if text := fmt.Sprint(reply.Params["text"]); !strings.Contains(text, c.words) {
+				t.Errorf("%s: the reply lacks %q: %s", c.name, c.words, text)
+			}
+			e.waitStays("k", "")
+			if e.field("n") != nonce || e.field("q") != "" || e.redis.TTL(settingsInputKey(e.user.Id)) != ttl {
+				t.Errorf("%s: the refusal moved or extended the wait", c.name)
+			}
+			if c.name != "a refusal of Check" && e.store.checkCalls != checks {
+				t.Errorf("%s: Check was called for a message the engine refuses first", c.name)
+			}
+		}
+		e.store.checkRefusal = ""
+		before := e.sent()
+		e.say("Fresh Word")
+		e.reply(before, "settings_entries_wait_content_limits")
+		e.waitStays("y", "fresh word")
+	})
+
+	t.Run("an error of Check keeps the wait", func(t *testing.T) {
+		e.reset()
+		e.begin()
+		e.store.checkErr = errors.New("database is down")
+		before := e.sent()
+		e.say("word")
+		e.reply(before, "settings_check_failed")
+		e.waitStays("k", "")
+	})
+
+	t.Run("a page's Add gate draws its screen and creates no wait", func(t *testing.T) {
+		e.reset()
+		e.store.gate = "the-gate-screen"
+		m := &settingsBlacklistMenu{env: e.settingsListEnv, chat: e.chat, user: e.user, msgID: e.updateID()}
+		m.press("a", settingsActOpen, "p", "i")
+		add, _ := m.markedButton("settings_btn_bl_add")
+		m.tap(add)
+		if text, _ := m.last(); text != "the-gate-screen" {
+			t.Errorf("Add drew %q, want the gate's screen", text)
+		}
+		if keys := settingsEditInputKeys(e.settingsEnv); len(keys) != 0 {
+			t.Errorf("a gated Add created %v", keys)
+		}
+	})
+
+	t.Run("a redelivered keyword message is ignored at step 2", func(t *testing.T) {
+		e.reset()
+		_, keywordID, _ := e.advance("Price List")
+		before := e.sent()
+		e.sayAgain("Price List", keywordID)
+		if texts := settingsListDoorTexts(e.settingsListEnv, e.user, before); len(texts) != 0 {
+			t.Errorf("the redelivery was answered: %q", texts)
+		}
+		e.waitStays("y", "price list")
+		if len(e.store.applies) != 0 {
+			t.Errorf("the redelivery was stored: %+v", e.store.applies)
+		}
+	})
+
+	t.Run("a poll is refused with the extraction's words and keeps part y and w", func(t *testing.T) {
+		e.reset()
+		e.advance("Price List")
+		before := e.sent()
+		sendPrivateMessage(e.settingsEnv, e.user, settingsMediaItem("poll"))
+		reply := e.reply(before, "content_need_filter_content", "settings_edit_still_waiting")
+		if fields := e.cancelFields(reply); fields["a"] != "zc" || fields["t"] != "y" {
+			t.Errorf("the refusal's Cancel carries %v, want zc and t=y", fields)
+		}
+		e.waitStays("y", "price list")
+		if len(e.store.applies) != 0 {
+			t.Errorf("a poll was stored")
+		}
+	})
+
+	t.Run("a Check that now refuses ends the wait with its text", func(t *testing.T) {
+		e.reset()
+		e.advance("Price List")
+		e.store.checkRefusal = "taken-between"
+		before := e.sent()
+		e.say("the reply")
+		reply := e.reply(before, "settings_edit_wait_stopped")
+		if text := fmt.Sprint(reply.Params["text"]); !strings.Contains(text, "taken-between") {
+			t.Errorf("the end lacks the refusal's text: %s", text)
+		}
+		settingsEditWaitGone(t, e.settingsEnv, e.user)
+		if len(e.store.applies) != 0 {
+			t.Errorf("an entry refused at step 2 was stored")
+		}
+	})
+
+	t.Run("an Apply that answers taken ends the wait with its text", func(t *testing.T) {
+		e.reset()
+		e.advance("Price List")
+		e.store.applyOutcome, e.store.applyText = settingsListApplyTaken, "lost-the-race"
+		before := e.sent()
+		e.say("the reply")
+		reply := e.reply(before, "settings_edit_wait_stopped")
+		if text := fmt.Sprint(reply.Params["text"]); !strings.Contains(text, "lost-the-race") {
+			t.Errorf("the end lacks the taken text: %s", text)
+		}
+		settingsEditWaitGone(t, e.settingsEnv, e.user)
+	})
+
+	t.Run("an Apply that fails releases the claim and the next reply is applied", func(t *testing.T) {
+		e.reset()
+		e.advance("Price List")
+		e.store.applyOutcome = settingsListApplyFailed
+		before := e.sent()
+		e.say("the reply")
+		reply := e.reply(before, "common_settings_save_failed", "settings_edit_still_waiting")
+		if fields := e.cancelFields(reply); fields["t"] != "y" {
+			t.Errorf("the refusal's Cancel carries %v, want t=y", fields)
+		}
+		e.waitStays("y", "price list")
+
+		e.store.applyOutcome = settingsListApplySaved
+		before = e.sent()
+		e.say("the reply again")
+		e.reply(before, "settings_page_blacklist")
+		settingsEditWaitGone(t, e.settingsEnv, e.user)
+		if len(e.store.applies) != 2 || len(e.store.entries) != 1 || e.store.entries[0].Text != "price list" {
+			t.Errorf("applies %d, entries %+v, want two calls and one stored entry", len(e.store.applies), e.store.entries)
+		}
+	})
+
+	t.Run("an album is applied once from its first item and the notice says so", func(t *testing.T) {
+		e.reset()
+		e.advance("Price List")
+		const group = "9100456"
+		first, second := settingsMediaItemID("photo", "album-1"), settingsMediaItemID("photo", "album-2")
+		first.Caption = "first caption"
+		first.MediaGroupId, second.MediaGroupId = group, group
+		e.store.applyNotice = "page-extra-line"
+		before := e.sent()
+		sendPrivateMessage(e.settingsEnv, e.user, first)
+		sendPrivateMessage(e.settingsEnv, e.user, second)
+		reply := e.reply(before, "settings_edit_album_cut")
+		if text := fmt.Sprint(reply.Params["text"]); !strings.Contains(text, "page-extra-line") {
+			t.Errorf("the saved page lacks the page's own notice line: %s", text)
+		}
+		if len(e.store.applies) != 1 || e.store.applies[0].Ex.FileID != "album-1" {
+			t.Errorf("applies %+v, want one call from the first item", e.store.applies)
+		}
+	})
+
+	t.Run("Add at step 2 restarts at step 1 with the replaced note", func(t *testing.T) {
+		e.reset()
+		e.advance("Price List")
+		m := e.begin()
+		if text, _ := m.last(); !strings.Contains(text, staffMarker("settings_edit_replaced_note")) {
+			t.Errorf("the new prompt lacks the replaced note:\n%s", text)
+		}
+		e.waitStays("k", "")
+		if e.field("q") != "" {
+			t.Errorf("the restarted wait still holds q=%q", e.field("q"))
+		}
+	})
+
+	t.Run("a reply after the ten minutes names the reply part once", func(t *testing.T) {
+		e.reset()
+		e.advance("Price List")
+		e.redis.FastForward(settingsInputTTL + time.Second)
+		before := e.sent()
+		e.say("too late")
+		e.reply(before, "settings_entries_wait_ended_note", "settings_entries_part_reply")
+		settingsEditWaitGone(t, e.settingsEnv, e.user)
+		if len(e.store.applies) != 0 {
+			t.Errorf("a late reply was stored")
+		}
+	})
+
+	t.Run("/cancel at step 2 deletes the wait and its w", func(t *testing.T) {
+		e.reset()
+		e.advance("Price List")
+		before := e.sent()
+		sendPrivateMessage(e.settingsEnv, e.user, gotgbot.Message{
+			Text: "/cancel", Entities: []gotgbot.MessageEntity{{Type: "bot_command", Offset: 0, Length: 7}},
+		})
+		e.reply(before, "settings_edit_cancelled")
+		settingsEditWaitGone(t, e.settingsEnv, e.user)
+		if e.redis.Exists(settingsInputKey(e.user.Id)) || e.field("w") != "" {
+			t.Errorf("the cancelled wait still holds w")
+		}
+	})
 }
