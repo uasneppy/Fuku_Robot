@@ -33,8 +33,8 @@ func settingsMainStateLine(text, titleKey string) (string, bool) {
 // private shape ends with the Groups and Close row; the hand-built subtests of
 // TestSettingsMainGrid keep their own literals.
 const (
-	settingsMainShapeGroup   = "s|l / c|f / n|k / w|g / r|m / d|t / u|o / y / a / close"
-	settingsMainShapePrivate = "s|l / c|f / n|k / w|g / r|m / d|t / u|o / y / a / groups|close"
+	settingsMainShapeGroup   = "s|l / c|f / n|k / b|w / g|r / m|d / t|u / o|y / a / close"
+	settingsMainShapePrivate = "s|l / c|f / n|k / b|w / g|r / m|d / t|u / o|y / a / groups|close"
 	settingsMainOwnerRows    = 10
 )
 
@@ -388,6 +388,10 @@ func settingsMainWorstState(tr *i18n.Translator) string {
 		settingsText(tr, "settings_state_locks_on", i18n.TranslationParams{"n": len(settingsLockRows)}),
 		settingsText(tr, "common_status_on"),
 		settingsText(tr, "common_status_off"),
+		// Phase 19: a list page's fixed state in a group menu and its largest private count (a capped list
+		// reads n/150, digits only, so five digits is the widest).
+		settingsText(tr, "settings_state_private_only"),
+		"99999",
 	}
 	for _, mode := range settingsWarnsStoredModes {
 		candidates = append(candidates, settingsText(tr, "settings_state_warns", i18n.TranslationParams{
@@ -546,11 +550,11 @@ func settingsMainLines(text string) []string {
 	return lines
 }
 
-// settingsMainTitleKeys are the title keys of the sixteen pages in the order Main draws them for the
-// owner: the fifteen grid pages in grid order, then Access.
+// settingsMainTitleKeys are the title keys of the seventeen pages in the order Main draws them for the
+// owner: the sixteen grid pages in grid order, then Access.
 var settingsMainTitleKeys = []string{
 	"settings_page_staff", "settings_page_lockdown", "settings_page_captcha", "settings_page_antiflood",
-	"settings_page_warns", "settings_page_locks", "settings_page_welcome", "settings_page_goodbye",
+	"settings_page_warns", "settings_page_locks", "settings_page_blacklist", "settings_page_welcome", "settings_page_goodbye",
 	"settings_page_rules", "settings_page_mreq", "settings_page_del", "settings_page_switches",
 	"settings_page_lang", "settings_page_log", "settings_page_anon", "settings_page_access",
 }

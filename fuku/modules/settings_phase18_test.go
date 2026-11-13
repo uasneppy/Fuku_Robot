@@ -163,8 +163,8 @@ func TestSettingsPhase18Codes(t *testing.T) {
 				t.Errorf("Phase 18 page %q is not registered", key)
 			}
 		}
-		// The sixteen pages of the final menu and no other.
-		want := []string{"s", "l", "c", "f", "n", "k", "w", "g", "r", "m", "d", "t", "u", "o", "y", "a"}
+		// The sixteen pages of Phase 18 and the Blacklist page of Phase 19, and no other.
+		want := []string{"s", "l", "c", "f", "n", "k", "b", "w", "g", "r", "m", "d", "t", "u", "o", "y", "a"}
 		if got := slices.Sorted(maps.Keys(seen)); !slices.Equal(got, slices.Sorted(slices.Values(want))) {
 			t.Errorf("registered pages = %v, want %v", got, slices.Sorted(slices.Values(want)))
 		}
@@ -399,8 +399,8 @@ func TestSettingsPhase18Cost(t *testing.T) {
 	t.Run("Main makes no Telegram call of its own", func(t *testing.T) {
 		before := settingsPhase18Calls(env.settingsEnv)
 		entries := settingsMainEntries(env.bot, i18n.MustNewTranslator("en"), &env.chat, true, true)
-		if len(entries) != 16 {
-			t.Fatalf("Main has %d entries, want 16", len(entries))
+		if len(entries) != 17 {
+			t.Fatalf("Main has %d entries, want 17", len(entries))
 		}
 		if delta := settingsPhase18CallsSince(env.settingsEnv, before); len(delta) != 0 {
 			t.Errorf("the Main states made Telegram calls %v, want none", delta)

@@ -545,8 +545,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   outcome, and a log line carries chat, user and hold IDs only.
 - The `settings|v1` namespace is the settings menu (`settings_menu.go`, `settings_pages.go`). Fields: `a` action, `c` the
   group's chat ID (a menu opened in private), `u` the opener's user ID (a menu opened in the group), `p` page (`s` staff,
-  `l` lockdown, `c` captcha, `f` antiflood, `w` welcome, `g` goodbye, `r` rules, `m` member requirements, `d` deletion, `n` warnings, `t` switches, `u` language, `o` log channel, `y` anonymous admins, `k` locks, `a` access), `t` control, `v` the absolute target value (the Locks page's pager is its own
-  action code `kg`, with `v` the absolute page); `e` (confirm expiry), `r`
+  `l` lockdown, `c` captcha, `f` antiflood, `w` welcome, `g` goodbye, `r` rules, `m` member requirements, `d` deletion, `n` warnings, `t` switches, `u` language, `o` log channel, `y` anonymous admins, `k` locks, `b` blacklist, `a` access), `t` control, `v` the absolute target value (the Locks page's pager is its own
+  action code `kg`, with `v` the absolute page, and the Blacklist page's is `bg`, with `v` the absolute page of at most four digits); `e` (confirm expiry), `r`
   (the lockdown row ID of a Lift card), `l` (the link row ID of an Unlink card) and `s` (Staff Group row ID) arrive with
   the confirm cards and the Link pick. Core action codes: `oh` open here (the choice
   message becomes the Main page), `op` open page `p` (also Refresh and a stepper's value button), `bk` Back to Main, `cl`
@@ -599,9 +599,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   at most 16 bytes, which `settingsHubCallback` answers by redrawing the list at page 1 in the same message; the page the
   user came from is not remembered) and Close, a group Main with Close alone, and every other page, Access included, with
   Back and Close. A page added by a later phase joins the grid by its `Order` with no edit to the renderer. After Phase 18
-  the final Main has fifteen grid cells (`s|l / c|f / n|k / w|g / r|m / d|t / u|o / y`, the Anonymous admins cell alone),
-  then Access for the live owner and the navigation row, so ten rows for the owner and nine for an administrator, and
-  sixteen state lines in the grid's order with Access last. It is the one screen over the content-page row budget (eight
+  Main had fifteen grid cells and, after Phase 19 plan 19-03 added the Blacklist page (`Order` 46, between Locks and Welcome), has
+  sixteen (`s|l / c|f / n|k / b|w / g|r / m|d / t|u / o|y`, eight full rows and no lone cell), then Access for the live owner and the
+  navigation row, so ten rows for the owner and nine for an administrator, and seventeen state lines in the grid's order with
+  Access last (Filters and Notes, plans 19-05 and 19-08, take it to 17 and 18 cells). It is the one screen over the content-page row budget (eight
   rows private, nine in a group): in a private menu by two rows for the owner and one for an administrator, in a group menu
   by one row for the owner and none for an administrator, because Main has the same ten and nine rows in both. That budget
   is for pages that carry controls and a body, Main carries navigation only, and Telegram's own limits (100 buttons, 8 to a row) are met by
@@ -609,7 +610,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   The Main states of the six Phase 18 pages are database reads only, a failed read is the unknown mark on that page's line
   alone, and drawing Main makes no Telegram call of its own (`TestSettingsMainPhase18`); `settingsMainWorstState` holds
   the length test to the longest of them in every language (the Warnings line at limit 100 with the longest action word,
-  Switches at 3, Locks at 22, the longest language name with its flag).
+  Switches at 3, Locks at 22, the longest language name with its flag, and since Phase 19 `In private` and a five-digit
+  list count). The Blacklist line is the fresh count of the chat's words in digits in a private menu, the unknown mark when
+  the count failed and `In private` in a group menu, where `MainState` is not called (`PrivateOnly`).
 - The private group list and the pick (`settings_hub.go`, MENU-09, MENU-13). The list is a message in the bot's private
   chat: the header with the Groups page name, `settings_list_intro`, `settings_list_hint` (it names `/admincache` and
   `/settings` in the group, the two repair paths), a `Page N/M` line only when there is more than one page, one
@@ -1120,6 +1123,26 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `/lock` or `/unlock` leave the same rows and `locks_map` state, and `/locks` lists the stored value),
   `TestSettingsLocksPager`, `TestSettingsLocksRightLine`, `TestSettingsLocksForged` and `TestSettingsLocksFailedWrite`
   (`settings_locks_test.go`).
+- The list engine and the Blacklist page (`settings_list.go`, `settings_blacklist.go`, Phase 19, plan 19-03). The three list pages
+  (Blacklist `b`, Filters `i`, Notes `e`) are one engine and three tables: a `settingsListDef` names the page's key, `Order`, icon,
+  codes (pager, delete ask, delete Yes), right, strings and the seams that read, count and delete its entries, and `settingsListPage`
+  builds the ordinary `settingsPage` from it (pure; `registerSettingsList` registers it and records the table in `settingsLists`, so
+  `TestSettingsListKeysExist` can prove every key a table reads through a field in 8 languages). No renderer, validator or gate asks
+  which page it serves. Every list page is `PrivateOnly` (D-01), so a group menu shows only the framework note and never runs this
+  code, and every list action requires the owner field `c` in its `Validate`, so the same press of a group menu is an invalid
+  request in step 1 with no `getChatMember` and no read. A draw reads the chat's list fresh, chat-scoped and with the error
+  returned (`settingsBlacklistRead`, which adapts `blacklists.ListBlacklistEntriesFresh`; the command's hiding getter
+  `GetBlacklistSettingsContext` is never called by a page), creates nothing and caches nothing, sorts it by the lower-cased text in
+  code point order with ties by row ID (`settingsListSort`) and cuts the page in Go: eight entries a page, each a numbered body line
+  `N. <code>text</code>` whose number is the global position (never a button label, M44), the text stripped of bidirectional controls,
+  collapsed, cut at 32 code points with an ellipsis and then HTML-escaped (`settingsListLabel`). The pager is the page's `bg` action
+  with exactly `c` and `v` (1 to 4 digits, clamped to 1..pages when drawn, `0` is page 1), Prev only after page 1 and Next only before
+  the last page, each carrying the absolute page; a page line `Page N/M` shows only with more than one page. An empty list draws the
+  intro and the empty line only. A failed read is the cannot-open edit, a failed count the unknown mark on Main. The page's `Open`
+  chooses its screen from the press (the framework's notice refusal redraws through `Open`): page 1 for `op`, the ask's page for the
+  delete ask, the page holding the entry for the Yes, and a table's `Redraw` entry for an action it names. `settings_bl_*` strings
+  are plain, with the word and the action line spliced after translation; the Blacklist page's action line says one action only when
+  every word has it and `Mixed` otherwise (C-02).
 - The message editor's pages (`settings_edit.go`, pages `w` Welcome, `g` Goodbye and `r` Rules, orders 50, 60 and 70, each
   registered from that file's `init` through `registerSettingsPage` so `settings_pages.go` is never edited) show which
   parts of a message are set, one line per part from one parts table (`settingsEditPageDef.Parts`): Welcome and Goodbye
@@ -1159,7 +1182,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   write redraws the freshly loaded page with `common_settings_save_failed` and the old state. A menu opened in the group has an Open in private URL row (the
   existing `/start settings_<chat id>` deep link, left out and logged when the bot has no username) above the navigation
   row, a private menu has none; a private page has at most 8 rows and a group-menu page at most 9, and every page ends
-  with Back and Close. Main lists the pages after Antiflood (the final grid `s|l / c|f / n|k / w|g / r|m / d|t / u|o / y`, then Access for the owner, so ten rows in a private and in a group menu for the owner and nine for an administrator; `n` is the Warnings page, `k` the Locks page, `m` the Member requirements page, `d` the Deletion page, `t` the Switches page, `u` the Language page, `o` the Log channel page and `y` the Anonymous admins page, 15 cells in all) with
+  with Back and Close. Main lists the pages after Antiflood (the grid after plan 19-03 `s|l / c|f / n|k / b|w / g|r / m|d / t|u / o|y`, then Access for the owner, so ten rows in a private and in a group menu for the owner and nine for an administrator; `n` is the Warnings page, `k` the Locks page, `m` the Member requirements page, `d` the Deletion page, `t` the Switches page, `u` the Language page, `o` the Log channel page, `y` the Anonymous admins page and `b` the Blacklist page, 16 cells in all) with
   `common_status_on` or `common_status_off` for Welcome and Goodbye and `settings_state_set` or `settings_state_not_set`
   for Rules. The Deletion line reads `Off` or `{n} on`, and `n` counts the three member rules too (at most 20 rules).
   Each part has its row right after the body (`settingsEditPartRows`): `[Set]` while the part is not set and
@@ -3836,8 +3859,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   goroutines uses Mute or Kick and never Warn (the warn module's SQLite transaction); a test that joins, rejoins or sends with
   a date takes the date before the message and at least 2 s apart; and a test never `t.Skip`s (CI's
   `scripts/check_test_results` fails on an unexpected skip, so a case that cannot run in a menu kind is not registered
-  there). The locale files now hold 387 `settings_` keys and 31 `mreq_` keys, each `settings_` key one row of the limits table
-  of `fuku/i18n/settings_locale_test.go` (Phase 19 plan 19-02 added two, `settings_state_private_only` and `settings_entries_group_note`) and each `mreq_` key one row of `memberReqLocaleLimits`. Phase 18 added 55 `settings_`
+  there). The locale files now hold 394 `settings_` keys and 31 `mreq_` keys, each `settings_` key one row of the limits table
+  of `fuku/i18n/settings_locale_test.go` (Phase 19 plan 19-02 added two, `settings_state_private_only` and `settings_entries_group_note`, and plan 19-03 task 1 seven for the Blacklist page; the list toolkit is `settings_list_env_test.go`: `newSettingsListEnv`, `settingsListSeedBlacklist`, `settingsListCleanup`, `settingsListOpenPrivate`, `settingsListSentinel`) and each `mreq_` key one row of `memberReqLocaleLimits`. Phase 18 added 55 `settings_`
   keys (four of them, the Warnings page's, in plan 18-01 and 51 in plan 18-02: the six page names, three Main state words,
   the Warnings, Switches, Language, Log channel and Anonymous admins lines, and the Locks intro, two state words and 22 lock
   names), each one row of `settingsLocaleLimits` (`settings_sw_ai_unavailable` also in `settingsAlertKeys`, being the alert of

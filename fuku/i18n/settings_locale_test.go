@@ -462,6 +462,15 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	// Phase 19 (plan 19-02), the list pages' group-menu strings (UI-SPEC rows 1 and 2).
 	"settings_state_private_only": {16, 20},
 	"settings_entries_group_note": {140, 200},
+
+	// Phase 19 (plan 19-03, task 1), the Blacklist page (UI-SPEC rows 15 to 20 and 27).
+	"settings_page_blacklist":  {18, 18},
+	"settings_bl_intro":        {230, 320},
+	"settings_bl_count":        {16, 24},
+	"settings_bl_empty":        {110, 170},
+	"settings_bl_action_line":  {30, 40},
+	"settings_bl_action_mixed": {12, 16},
+	"settings_bl_opt_none":     {15, 15},
 }
 
 // settingsAlertKeys are shown as answerCallbackQuery alerts: plain text, no tag, at most
@@ -681,6 +690,7 @@ func TestSettingsLabelLengths(t *testing.T) {
 		{"🧾", "settings_page_log"},
 		{"🎭", "settings_page_anon"},
 		{"🔐", "settings_page_locks"},
+		{"🔤", "settings_page_blacklist"},
 	}
 	options := []string{
 		"settings_opt_math", "settings_opt_text", "settings_opt_turnstile",
@@ -893,6 +903,15 @@ func TestSettingsLabelLengths(t *testing.T) {
 				rendered := strings.ReplaceAll(settingsLocaleString(t, lang, data, state.key), "{n}", state.n)
 				if runes := utf8.RuneCountInString(rendered); runes > state.max {
 					t.Errorf("%s: state word %q (%s) has %d characters, ceiling %d", lang, rendered, state.key, runes, state.max)
+				}
+			}
+
+			// The Blacklist page's choice cell (Phase 19, UI-SPEC check C19-2): the check mark and "Delete only"
+			// share a half-width cell, so at most 20 code points.
+			for _, key := range []string{"settings_bl_opt_none"} {
+				label := "✅ " + settingsLocaleString(t, lang, data, key)
+				if runes := utf8.RuneCountInString(label); runes > gridMax {
+					t.Errorf("%s: choice button %q (%s) has %d characters, ceiling %d", lang, label, key, runes, gridMax)
 				}
 			}
 
