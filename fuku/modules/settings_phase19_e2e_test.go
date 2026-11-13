@@ -196,4 +196,74 @@ func TestSettingsPhase19EndToEnd(t *testing.T) {
 		e.wantDeleted(e.post(member, "spam again"), 0, "a message after the word was deleted")
 	})
 
+	t.Run("filters", func(t *testing.T) {
+		e := newPhase19E2E(t)
+		member := e.member("Member")
+
+		m := e.openList(settingsPageFilters)
+		e.tap(m, "settings_btn_flt_add")
+		e.typeInPrivate("price")
+		e.typeInPrivate("Our price list\n[Shop](buttonurl://https://example.com)")
+		if got := settingsFiltersStored(t, e.chat.Id); len(got) != 1 {
+			t.Fatalf("stored filters = %v, want the one", got)
+		}
+
+		e.post(member, "what are the Prices?")
+		if got := e.sentTo("Our price list"); got != 1 {
+			t.Fatalf("the filter answered %d times, want once", got)
+		}
+		reply, _ := e.lastSentTo("Our price list")
+		var labels []string
+		for _, button := range settingsAllButtons(staffKeyboardOf(reply.Params["reply_markup"])) {
+			labels = append(labels, button.Text)
+		}
+		if len(labels) != 1 || labels[0] != "Shop" {
+			t.Errorf("the answer's buttons = %v, want the one Shop button", labels)
+		}
+
+		e.deleteEntry(e.openList(settingsPageFilters), "🗑 1")
+		if got := settingsFiltersStored(t, e.chat.Id); len(got) != 0 {
+			t.Fatalf("stored filters after the delete = %v, want none", got)
+		}
+		e.post(member, "prices?")
+		if got := e.sentTo("Our price list"); got != 1 {
+			t.Errorf("after the delete the filter answered again: %d answers in all, want 1", got)
+		}
+	})
+
+	t.Run("notes", func(t *testing.T) {
+		e := newPhase19E2E(t)
+		member := e.member("Member")
+
+		m := e.openList(settingsPageNotes)
+		e.tap(m, "settings_btn_notes_add")
+		e.typeInPrivate("rules")
+		e.typeInPrivate("Read the rules")
+		if got := settingsNotesStored(t, e.chat.Id); len(got) != 1 {
+			t.Fatalf("stored notes = %v, want the one", got)
+		}
+
+		e.post(member, "#rules")
+		if got := e.sentTo("Read the rules"); got != 1 {
+			t.Fatalf("#rules sent the note %d times, want once", got)
+		}
+		e.post(member, "/get rules")
+		if got := e.sentTo("Read the rules"); got != 2 {
+			t.Fatalf("/get rules brought the note to %d sends in all, want 2", got)
+		}
+
+		e.deleteEntry(e.openList(settingsPageNotes), "🗑 1")
+		if got := settingsNotesStored(t, e.chat.Id); len(got) != 0 {
+			t.Fatalf("stored notes after the delete = %v, want none", got)
+		}
+		e.post(member, "/get rules")
+		if got := e.sentTo(staffMarker("notes_does_not_exist")); got != 1 {
+			t.Errorf("/get rules after the delete answered notes_does_not_exist %d times, want 1", got)
+		}
+		e.post(member, "#rules")
+		if got := e.sentTo("Read the rules"); got != 2 {
+			t.Errorf("#rules after the delete sent the note again: %d sends in all, want 2", got)
+		}
+	})
+
 }
