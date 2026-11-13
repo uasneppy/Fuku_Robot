@@ -16,3 +16,4 @@
   already saved for that user instead of inserting a duplicate. The same flake had also hit `TestLockdownBanSurvivesLift`
   in the wave 8 `make test` gate. `TestLockdownBanRaces`, `TestLockdownResponseBanOne` and
   `TestLockdownBanSurvivesLift` then passed 15 runs in a row under `-race`.
+  status: acknowledged

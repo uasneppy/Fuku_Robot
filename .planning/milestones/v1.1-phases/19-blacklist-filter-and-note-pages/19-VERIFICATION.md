@@ -111,6 +111,10 @@ human_verification:
   - test: "Run the full fuku/modules package in CI (or accept the executor's reported run) and watch the per-package time"
     expected: "the package stays under the 40 minute limit with margin; the executor measured 1897 s"
     why_human: "CI runner timing; the phase's own D-12 budget (about 40 s added) was exceeded (see warnings)"
+audit_acknowledged:
+  milestone: v1.1
+  at: 2026-11-13
+  status: human_needed
 ---
 
 # Phase 19: Blacklist, Filter and Note Pages Verification Report

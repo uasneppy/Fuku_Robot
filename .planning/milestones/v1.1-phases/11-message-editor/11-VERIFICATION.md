@@ -100,6 +100,10 @@ human_verification:
   - test: "Owner review of the judgment-tier prohibitions in the plans' must_haves (see 'Prohibitions' in the report body), and of the two follow-ups in 11-SPIKE.md: the pre-existing /rules double escaping, and Goodbye being On by default for a group with no greetings row."
     expected: "The owner accepts the verifier's non-authoritative verdict (all nine prohibitions hold, each backed by a passing test) and decides whether each follow-up becomes its own change."
     why_human: "Judgment-tier prohibitions are never passed silently by an autonomous verifier. The follow-ups are product decisions the phase left open on purpose."
+audit_acknowledged:
+  milestone: v1.1
+  at: 2026-11-13
+  status: human_needed
 ---
 
 # Phase 11: Message Editor Verification Report

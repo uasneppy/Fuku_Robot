@@ -15,3 +15,4 @@
   fix needs that test's expectation reviewed or a narrower fallback.
   **RESOLVED by quick task 261008-j3a:** `verifyAnonymousAdmin` now rebuilds the update as the cached command's message
   update with `EffectiveChat` set to its chat; `extractChatFromContext` is unchanged, and the lockdown workaround stays.
+  status: acknowledged

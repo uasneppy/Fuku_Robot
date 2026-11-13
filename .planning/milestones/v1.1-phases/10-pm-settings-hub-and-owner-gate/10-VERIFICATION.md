@@ -53,6 +53,10 @@ human_verification:
   - test: "CI-only items: `make lint` (golangci-lint on Go 1.26), `make test-postgres-integrity` (TestAdminIndexReplaceConcurrent, TestMenuAccessUpsert, and the migration list) and a native-speaker read of the 19 new strings."
     expected: "All green; strings read naturally in es, fr, hi, id, pt, ru, uk."
     why_human: "They need a PostgreSQL server, a lint toolchain or a native reader, none of which exist in this verification environment."
+audit_acknowledged:
+  milestone: v1.1
+  at: 2026-11-13
+  status: human_needed
 ---
 
 # Phase 10: PM Settings Hub and Owner Gate Verification Report

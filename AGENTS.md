@@ -1461,7 +1461,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   "Deleted Account" with neither looks gone, and with the switch off every administrator is then let in. The failure
   direction is that administrators are allowed in, never that the owner is locked out (a live creator is in before the
   owner state is read), and the owner fixes it by adding a username or a last name. The owner's live check A1 in
-  `.planning/phases/10-pm-settings-hub-and-owner-gate/10-SPIKE.md` confirms what the API returns for a deleted owner. Unknown always
+  `.planning/milestones/v1.1-phases/10-pm-settings-hub-and-owner-gate/10-SPIKE.md` confirms what the API returns for a deleted owner. Unknown always
   refuses with `settings_check_failed`, never with the owner-only text, and no refusal names the Staff Group, a group
   title, a chat ID or the switch. `isTelegramClientError` (a Telegram 4xx other than 429, also wrapped) is the one
   client-error classifier of the settings doors. The in-group setting commands (`/captchamode`, `/setflood`,
@@ -2322,7 +2322,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   then keeps the rule unknown): an administrator's `/unmute` is the fallback, and the 330 day marker mute is the worst case.
   Two facts rest on live Telegram behaviour that no fake proves (a member who hides their photo reads as a total of zero,
   what a bot that is not a channel's administrator is answered, and whether `getChat` of a group reaches a plain-member bot
-  with `linked_chat_id`); `.planning/phases/14-profile-photo-and-channel-rules/14-SPIKE.md` lists the owner's checks, and the
+  with `linked_chat_id`); `.planning/milestones/v1.1-phases/14-profile-photo-and-channel-rules/14-SPIKE.md` lists the owner's checks, and the
   code is safe under every outcome (an unknown never punishes, D-22 makes a status answer to a non-administrator bot inert).
 - Member requirements, the rule table (`memberreq_rules.go`): `memberReqRules` has eight rows in the order of
   `memberreq.Rules` (`ln un ru ar zh ph ch ai`, bits 1 to 128; the next free bit is 256). The five name rows have a pure `Broken`
@@ -3820,7 +3820,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   unchanged. It is tested against `httptest` with no real provider
   (`TestRunNamesMode`, `TestNamesFileParse`, `TestNamesSummaryAtBar`, `TestNamesRepeatStability`,
   `TestNamesModeKeyNeverPrinted`, `TestNamesModeExclusiveFlags`). The tool imports only the `claude` and `namecanon`
-  packages of the repository. `.planning/phases/15-ai-spam-name-check/15-SPIKE.md` is the owner's non-blocking checklist
+  packages of the repository. `.planning/milestones/v1.1-phases/15-ai-spam-name-check/15-SPIKE.md` is the owner's non-blocking checklist
   for the live Haiku spike and the test-group walk-through.
 - Assert observable behavior (reply sent, row persisted, cache invalidated, gate enforced). Never assert literals,
   source substrings, or test-double internals.

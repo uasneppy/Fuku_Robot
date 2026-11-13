@@ -1,5 +1,25 @@
 # Milestones
 
+## v1.1 PM Settings Hub & Member Screening (Shipped: 2026-11-13)
+
+**Phases completed:** 10 phases, 126 plans, 81 tasks
+
+**Delivered:** every group setting configurable from the bot's private chat behind buttons and gated by the group's owner, member screening on join and on every message, message deletion, and list pages for blacklists, filters and notes.
+
+**Stats:** 10 phases (10 to 19), 126 plans, 81 tasks, 53 requirements; about 93,500 lines of Go in production code and 201,000 in tests; 2026-11-02 to 2026-11-13, about 1,030 commits. The per-plan one-liners are in the archived summaries (`milestones/v1.1-phases/*/NN-NN-SUMMARY.md`).
+
+**Key accomplishments:**
+- **PM settings hub and owner gate (Phase 10):** `/settings` in the private chat lists the groups the user may manage from the bot's own admin roster; every press and every pick re-checks the user live; the owner decides whether regular admins may configure, at every door.
+- **Message editor (Phases 11 and 12):** Welcome, Goodbye and Rules are edited by sending messages in private (text, one media, URL buttons, previews, media under text); Welcome gains greet once and delete last; Rules gain media and buttons. One typed-reply door at handler group 1 reads the next private message from a Redis wait.
+- **Member requirements (Phases 13 to 15):** last-name, username, Russian, Arabic and Chinese name rules, a profile-photo rule, a linked-channel subscription rule and an AI spam-name rule (Claude Haiku, names only), each with its own punishment, one notice per episode and an "I fixed it" button for muted members; punishments happen once across replicas and an unknown answer never punishes.
+- **Message deletion (Phases 16 and 17):** a durable queue deletes service messages and the bot's own messages after a delay, plus members' commands, edited messages and self-destructing messages, never in a Staff Group, with a Deletion page and its shutdown drains.
+- **Remaining pages (Phase 18):** warnings, switches, language, log channel, anonymous admins and locks, each written through its command's apply function and proven equal to the command by golden, parity, drift and authority tests.
+- **List pages (Phase 19):** blacklist, filters and notes are browsed, deleted behind a two-tap card and added by typing in the private chat, on one list engine and a generic two-step add; six owner-visible command changes (a one-character word or keyword is refused, a new blacklist word takes the shared action, `/save` refuses an unfetchable name, `/filter` and `/save` fail closed on a failed lookup) and one migration (`/blacklistaction none` now works on a chain-built database) await the owner's confirmation.
+
+**Known verification overrides:** 12 newly acknowledged, 0 carried forward from a prior close (see STATE.md Deferred Items). All ten phase verifications read `human_needed` because the owner's live Telegram checks were deferred on purpose; each phase's checklist is its `NN-SPIKE.md`. The milestone audit (`milestones/v1.1-MILESTONE-AUDIT.md`) is `tech_debt` with no blocker: 53 of 53 requirements, 21 of 22 integration points (one documentation drift), 5 of 5 end-to-end flows on the faked-Telegram harness.
+
+---
+
 ## v1.0 Staff Group, Raid Protection, Web Captcha & Settings Menu (Shipped: 2026-11-02)
 
 **Phases completed:** 9 phases, 106 plans, 170 tasks

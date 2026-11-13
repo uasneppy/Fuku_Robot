@@ -78,6 +78,10 @@ human_verification:
   - test: "Owner review of the 12 judgment-tier prohibitions of plans 14-01 to 14-12 (see 'Prohibitions' below), the two small deviations from plan wording (the channel-level cna fact; WR-02's deferral), the PLAT-06 tick (see Requirements Coverage), and the deferred review and security items IN-01, IN-02, IN-04, IN-05, NEW-01 to NEW-03, SEC-01 and SEC-04."
     expected: "The owner accepts the verifier's non-authoritative verdict (every prohibition holds, each backed by a passing test or a direct code read), decides whether PLAT-06 stays ticked now or only when Phases 15 to 17 add their work, and chooses which follow-ups become their own changes."
     why_human: "An autonomous verifier never passes a judgment-tier prohibition silently. The follow-ups are product decisions the phase left open on purpose."
+audit_acknowledged:
+  milestone: v1.1
+  at: 2026-11-13
+  status: human_needed
 ---
 
 # Phase 14: Profile Photo and Channel Rules Verification Report

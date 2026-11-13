@@ -88,6 +88,10 @@ human_verification:
   - test: "SPIKE 19: read the CI run of the pushed head (make lint, make test, make test-postgres-integrity)."
     expected: "All green, including the four names added to the Makefile list: TestScheduleBatchKeepsEarliest, TestScheduleBatchDuplicateKey, TestCountPending, TestDropPendingMessage."
     why_human: "make lint and the PostgreSQL run cannot run in this sandbox and CI results are not visible here. The last whole-package fuku/modules runs recorded by the executors were ok (1521 s, 1615 s, 1585 s)."
+audit_acknowledged:
+  milestone: v1.1
+  at: 2026-11-13
+  status: human_needed
 ---
 
 # Phase 17: Command, Edit and Self-Destruct Deletion Verification Report

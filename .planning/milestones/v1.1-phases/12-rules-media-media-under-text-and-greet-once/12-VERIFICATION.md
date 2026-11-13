@@ -108,6 +108,10 @@ human_verification:
   - test: "Owner review of the judgment-tier prohibitions of plans 12-01 to 12-16 (see 'Prohibitions' below), and of the follow-ups in 12-SPIKE.md: UI-SPEC A1 (Rules set by any part), A2 (the right of Media under text), A3 (resets leave the switches), A4 (icon-only switch cells), A12 (the Rules Full preview language), 429 as a definite refusal, the member-path text fallback that deviates from D-03, IN-02 (/setrules accepts a text too long for the stored rules media), NEW-03 (the backup import skips the editor's checks), the Delete-last race of the dropped plan 12-15, and a chat migration re-welcoming members once."
     expected: "The owner accepts the verifier's non-authoritative verdict (every prohibition holds, each backed by a passing test or a direct code read) and decides which follow-ups become their own changes."
     why_human: "An autonomous verifier never passes a judgment-tier prohibition silently. The follow-ups are product decisions the phase left open on purpose."
+audit_acknowledged:
+  milestone: v1.1
+  at: 2026-11-13
+  status: human_needed
 ---
 
 # Phase 12: Rules Media, Media Under Text and Greet Once Verification Report

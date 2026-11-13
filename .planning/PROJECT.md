@@ -2,23 +2,26 @@
 
 ## What This Is
 
-Fuku Robot is a fork of Fuku Robot, a Go Telegram group-management bot. It runs only for my own communities, and the goal is to make it work more like GroupHelp. v1.0 shipped a **Staff Group** (one Telegram group of trusted admins that bans, mutes or kicks someone in every linked group with one command), durable raid lockdowns with automatic triggers, a Turnstile web captcha and a first button settings menu. v1.1 moves every group setting into the bot's private chat behind buttons, owner-gated, and adds member screening and message deletion.
+Fuku Robot is a fork of Fuku Robot, a Go Telegram group-management bot. It runs only for my own communities, and the goal is to make it work more like GroupHelp. v1.0 shipped a **Staff Group** (one Telegram group of trusted admins that bans, mutes or kicks someone in every linked group with one command), durable raid lockdowns with automatic triggers, a Turnstile web captcha and a first button settings menu. v1.1 (shipped 2026-11-13) moved every group setting into the bot's private chat behind buttons, owner-gated, and added member screening (name, profile photo, channel and AI spam-name rules with per-rule punishments), message deletion (service messages, the bot's own messages, commands, edits, self-destruct) and list pages for blacklists, filters and notes.
 
 ## Core Value
 
 My trusted staff can protect every one of my communities from one place. We act on a bad actor across all groups at once, and the bot never lets anyone act in a group where they aren't an admin.
 
-## Current Milestone: v1.1 PM Settings Hub & Member Screening
+## Current State
 
-**Goal:** Configure everything for a group from the bot's private chat with buttons, like GroupHelp, and screen members automatically on join and on every message.
+**Shipped: v1.1 PM Settings Hub & Member Screening (2026-11-13).** Ten phases (10 to 19), 126 plans, 53 requirements. About 93,500 lines of Go in production code and 201,000 in tests. Every phase is code-verified and security-audited with no open threat (`.planning/milestones/v1.1-phases/*/NN-VERIFICATION.md` and `NN-SECURITY.md`), and every one of the 53 requirements is satisfied in code and tests. The owner's live Telegram checks were deferred on purpose: each phase's verification reads `human_needed` and each carries its checklist (`NN-SPIKE.md`, one per phase, indexed in STATE.md under Deferred Items). `v1.1-MILESTONE-AUDIT.md` (status `tech_debt`, no blocker) records the audit.
 
-**Target features (in priority order):**
-- **PM settings hub:** `/settings` in the bot's private chat lists the groups the user can manage; picking one opens that group's main menu.
-- **Owner gate:** by default only a group's owner sees and changes its settings (PM list, in-group `/settings`, deep link). An owner-only toggle lets regular admins in. In-group setting commands are unchanged.
-- **Message editor for Rules, Welcome and Goodbye:** text, one media, URL buttons, preview, "media under text"; Welcome also gets "greet once" and "delete last welcome". Rules gain media and buttons.
-- **Member requirements:** last name, username, profile photo, and subscription to the linked channel (comment groups), plus name blocks (AI spam names through Claude Haiku, Russian, Arabic and Chinese names). Each rule has its own punishment (off, warn, kick, ban, mute), "check on join" and "delete their messages" toggles, a notice in the group, and an "I fixed it" button that re-checks a muted member before unmuting.
-- **Message deletion:** Telegram service messages per type (immediately or after N seconds), the bot's own messages after N minutes (welcome, goodbye, rules, automatic and manual punishments), members' commands, edited messages, and self-destruct of every member message after N minutes.
-- **Remaining pages:** warnings, reports, language, log channel and its categories, anonymous-admin mode, locks, and lists (blacklists, filters, notes: browse, delete, add by typing in PM).
+What v1.1 delivered:
+- **PM settings hub and owner gate:** `/settings` in the bot's private chat lists the groups the user may manage; the owner decides whether regular admins may configure (Phase 10).
+- **Message editor:** Welcome, Goodbye and Rules edited by sending messages in private: text, one media, URL buttons, previews, media under text, greet once, delete last welcome (Phases 11 and 12).
+- **Member requirements:** last name, username, Russian, Arabic and Chinese name blocks, profile photo, linked-channel subscription and an AI spam-name check, each with its own punishment, a notice and an "I fixed it" button for muted members (Phases 13 to 15).
+- **Message deletion:** a durable queue for service messages and the bot's own messages, members' commands, edited messages and self-destruct, with a Deletion page (Phases 16 and 17).
+- **Remaining pages:** warnings, switches, language, log channel, anonymous admins, locks (Phase 18), and the private-chat list pages for blacklist, filters and notes on one list engine (Phase 19).
+
+## Next Milestone Goals
+
+Not yet chosen. Candidates are in STATE.md (Deferred Items and the per-phase SPIKE follow-ups): the owner's live-check results and confirmations (notably the six owner-visible command changes of Phase 19), the stale `settings_help_msg`, a per-chat cap for blacklist and note words (SEC-19-01), the Phase 12 Delete-last race, and the "Future Requirements" in the archived v1.1 requirements. Start with `/gsd-new-milestone`.
 
 ## Requirements
 
@@ -72,21 +75,22 @@ My trusted staff can protect every one of my communities from one place. We act 
 - ✓ `/settings` in a group asks the admin to open the menu in the group or in private (a deep link `/start settings_<chat id>`). A menu opened in the group answers only its opener; a private menu manages the group it was opened from. One message is edited in place with Back and Close on every page, and every press re-checks live that the presser is still a creator or administrator of that group (anonymous admins re-enter through the proof tap) — Phase 9
 - ✓ The menu has a Staff Group page (the `/staff` panel read-only inside a Staff Group; Link and Unlink for the owner of both groups, with a two-tap card bound to the object it showed), a Lockdown page (state, a Lift card, an on/off switch and a stepper for each of the join, flood and AI triggers), a Captcha page (switch, mode, time limit, failure action) and an Antiflood page (limit, action, delete switch) — Phase 9
 - ✓ A setting changed in the menu is the same code path as the command: one apply function per setting holds the validation, the refusals, the write and its cache invalidation, and parity, drift and authority-parity tests prove the stored row, the cache and the refusals match. A menu opened in the group, or in private by an admin who is not the group's creator, never names the Staff Group — Phase 9
+- ✓ `/settings` in the bot's private chat lists every group where the user may manage settings and opens that group's main menu; the list comes from the bot's own admin roster and every pick is checked live — v1.1 (Phase 10)
+- ✓ Only a group's owner sees and changes its settings by default; an owner-only switch ("Admins can change settings") lets regular admins in, at every door (private list, in-group `/settings`, deep link, button press, typed reply); in-group setting commands are unchanged — v1.1 (Phase 10)
+- ✓ Rules, Welcome and Goodbye are edited from the private chat: text, one media, URL buttons, previews, media under text; Welcome also has greet once and delete last welcome; Rules gain media and buttons — v1.1 (Phases 11 and 12)
+- ✓ Member requirements: last name, username, Russian, Arabic and Chinese name blocks, profile photo, linked-channel subscription and an AI spam-name check (Claude Haiku, names only), each with its own punishment (off, warn, kick, ban, mute), "check on join" and "delete messages" switches, one notice per episode and an "I fixed it" button that re-checks and frees a muted member — v1.1 (Phases 13 to 15)
+- ✓ Message deletion: service messages per type and the bot's own messages after a delay through a durable queue, members' commands, edited messages after a grace and self-destruct of every member message, never in a Staff Group — v1.1 (Phases 16 and 17)
+- ✓ Menu pages for warnings, switches (reports, AI spam, auto-approve), language, log channel, anonymous admins and locks (Phase 18) and for blacklists, filters and notes, each browsed in pages, deleted from behind a two-tap card and added by typing in the private chat (Phase 19), every one writing through its command's apply function — v1.1
+
+(Live Telegram checks of v1.1 are deferred; the code is verified and the checklists are in STATE.md Deferred Items.)
 
 ### Active
 
 <!-- Current scope. Hypotheses until shipped and validated. Order reflects priority. -->
 
-Milestone v1.1 (scoped REQ-IDs live in REQUIREMENTS.md):
+None yet; the next milestone defines them (`/gsd-new-milestone`).
 
-- [ ] `/settings` in the bot's PM lists every group where the user may manage settings and opens that group's main menu
-- [ ] Only a group's owner sees and changes its settings by default; an owner-only toggle lets regular admins in (in-group setting commands unchanged)
-- [ ] Rules, Welcome and Goodbye are edited from PM: text, one media, URL buttons, preview, media under text; greet once and delete last welcome
-- [ ] Member requirements (last name, username, profile photo, linked-channel subscription) and name blocks (AI spam names, Russian, Arabic, Chinese) with a per-rule punishment, checked on join and on every message, with an "I fixed it" re-check for muted members
-- [ ] Message deletion: service messages per type with a delay, scheduled deletion of the bot's own messages, members' commands, edited messages, self-destruct
-- [ ] Menu pages for warnings, reports, language, log channel, anonymous-admin mode, locks, blacklists, filters and notes
-
-v1.0 follow-ups and deferred live checks remain in STATE.md.
+v1.0 and v1.1 follow-ups and deferred live checks remain in STATE.md.
 
 ### Out of Scope
 
@@ -205,10 +209,18 @@ v1.0 follow-ups and deferred live checks remain in STATE.md.
 | Two-tap cards (Lift, Unlink) carry the object they were drawn for and an expiry, with no timer and no Redis key | A stale Yes can never lift a newer lockdown or unlink a newer link | ✓ Good — Phase 9 (D-33, from review WR-01) |
 | A group menu, and a private menu of an admin who is not the group's creator, never show the Staff Group's title or ID | Phase 1's rule that nothing about a link reaches the linked group's members, since a private menu is shown to every live admin | ✓ Good — Phase 9 (D-21 refined by D-32, from review WR-02) |
 | The antiflood first-write side effect (a first action or delete press stores limit 5 and turns antiflood on) is kept in the repository and announced in the menu | Fixing the repository would change `/setfloodmode` and `/delflood` too | ⚠️ Revisit — Phase 9 (D-27, D-34); the repository fix is a separate follow-up |
-| v1.1: settings are owner-only by default; an owner-only toggle lets regular admins in, and a regular admin without it does not see the group in `/settings` at all; in-group setting commands stay open to admins | Owner's call: the owner decides who configures the bot, and hiding beats a read-only view | — Pending |
-| v1.1: every command-only setting gets a menu page (doc order: hub and gate, editor, member requirements, deletion, then the remaining pages) | Owner wants GroupHelp-style configuration without typing commands in groups | — Pending |
-| v1.1: spam nicknames are judged by Claude Haiku (the raid image checks' Anthropic key), names only, on join or when a name changes | A name-specific instruction beats a message classifier; no key means the check is off | — Pending |
-| v1.1: only a mute gets the "I fixed it" button; kick lets the member rejoin and be checked again; ban waits for an admin; warn only warns | A banned member cannot see the group's button | — Pending |
+| v1.1: settings are owner-only by default; an owner-only toggle lets regular admins in, and a regular admin without it does not see the group in `/settings` at all; in-group setting commands stay open to admins | Owner's call: the owner decides who configures the bot, and hiding beats a read-only view | ✓ Shipped — Phase 10 (live checks pending) |
+| v1.1: every command-only setting gets a menu page (doc order: hub and gate, editor, member requirements, deletion, then the remaining pages) | Owner wants GroupHelp-style configuration without typing commands in groups | ✓ Shipped — Phases 10 to 19 |
+| v1.1: spam nicknames are judged by Claude Haiku (the raid image checks' Anthropic key), names only, on join or when a name changes | A name-specific instruction beats a message classifier; no key means the check is off | ✓ Shipped — Phase 15 (live Haiku spike pending; bar 0.9 untuned) |
+| v1.1: only a mute gets the "I fixed it" button; kick lets the member rejoin and be checked again; ban waits for an admin; warn only warns | A banned member cannot see the group's button | ✓ Shipped — Phase 13 |
+| v1.1: a typed reply in private is read by one door at handler group 1, from a Redis wait hash with a nonce, a claim and a ten-minute expiry; the door judges the sender like a button press (live `getChatMember`, owner gate, right) | Settings must be typed in private without a second authority path, and a lost or doubled delivery must store once | ✓ Good — Phases 11 and 19 (a two-step add for Filters and Notes on the same door) |
+| v1.1: the member requirements executor punishes only on a definite answer; an unknown (a failed lookup, a 429, a shed pacer, a paused AI breaker) never punishes; a hold row is both the once-only latch and the record of a mute the bot placed | A bot that punishes on a guess mass-mutes real members; a restart or a second replica must not punish twice | ✓ Good — Phases 13 to 15 |
+| v1.1: caches of lookups hold positives only (photo, subscription), plus one channel-level "bot is not an administrator" fact; a verdict about a member is never cached | A stale negative is the dangerous direction; the cost of a miss is one paced call | ✓ Good — Phase 14 (D-24 and WR-01) |
+| v1.1: the AI spam-name rule judges three canonical strings through one forced tool call, behind a verdict cache, its own breaker, a gate and three hourly budgets; an established member is judged only after a name change | Bounded cost and no re-roll of a model whose sampling cannot be fixed | ✓ Shipped — Phase 15 (live Haiku spike pending) |
+| v1.1: deletion is one decision point (`deletionAct`) over a durable queue; a Staff Group, a lockdown alert, a captcha challenge and a log post are never deleted; unknown never deletes | Phase 1's rule that the Staff Group is never written to, and a restart must resume every row | ✓ Good — Phases 16 and 17 |
+| v1.1: the menu's list pages (blacklist, filters, notes) are one engine and three tables, private-only; entries are numbered lines, deleted by a button that carries only the row ID behind a card, chat-scoped in the statement | A group menu is readable by every member; a forged row ID must never reach another chat | ✓ Good — Phase 19 |
+| v1.1: where a menu page and a command share a setting, each command gets a characterization golden committed alone before its extraction into an apply function; owner-visible command changes land in their own revertable commits | Parity must be provable and a provisional owner default must be revertable | ⚠️ Revisit — Phases 18 and 19 (the six Phase 19 changes await the owner; a plain revert now conflicts, see 19-SPIKE.md) |
+| v1.1: the autonomous run deferred every live Telegram check and closed the milestone with recorded verification overrides | The checks need the owner's real groups, keys and clients; code and tests were verified phase by phase | ⚠️ Revisit — close-out (10 phases `human_needed`; results to be recorded in each SPIKE file) |
 
 ## Evolution
 
@@ -228,4 +240,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-11-02 at the start of milestone v1.1 (PM Settings Hub & Member Screening)*
+*Last updated: 2026-11-13 after the v1.1 milestone (PM Settings Hub & Member Screening)*

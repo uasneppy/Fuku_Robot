@@ -101,6 +101,10 @@ human_verification:
   - test: "Owner review of the 13 judgment-tier and backstop prohibitions of plans 15-01 to 15-11 (see Prohibitions below), the accepted limits AR-01 to AR-18 (15-SECURITY.md), IN-01, IN-02, IN-04 and NEW-01 to NEW-03 (15-REVIEW-DISPOSITION.md), the four Info wording slips under Anti-Patterns Found (already corrected after this verification, wording only, see the note there), and the follow-up decisions of 15-SPIKE.md (D-22 sticky unknowns, D-23 no re-roll, A15-A4 hourly-budget wording on I fixed it, A15-A6 silent Redis outage, A15-A9 public phrase)."
     expected: "The owner accepts the verifier's non-authoritative prohibition verdicts, confirms the accepted limits, and chooses which follow-ups become their own changes."
     why_human: "An autonomous verifier never passes a judgment-tier prohibition silently, and two prohibitions of plan 15-11 are backstop-tier (they name facts only the live checks can settle). The follow-ups are product decisions the phase left open on purpose."
+audit_acknowledged:
+  milestone: v1.1
+  at: 2026-11-13
+  status: human_needed
 ---
 
 # Phase 15: AI Spam-Name Check Verification Report

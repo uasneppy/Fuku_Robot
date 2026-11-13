@@ -110,6 +110,10 @@ human_verification:
   - test: "Stale /settings help and the owner confirmations (checks 20 to 25)"
     expected: "decide whether settings_help_msg (and the generated docs page) should name the Deletion page and the six new pages; confirm or change A18-1 to A18-9, the flagged UI points and the four deviation notes; confirm CI lint and the full run"
     why_human: "owner decisions and a CI-only linter"
+audit_acknowledged:
+  milestone: v1.1
+  at: 2026-11-13
+  status: human_needed
 ---
 
 # Phase 18: Remaining Settings Pages Verification Report

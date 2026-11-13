@@ -100,6 +100,10 @@ human_verification:
   - test: "Owner review of the judgment-tier prohibitions of plans 13-01 to 13-14 (see 'Prohibitions' below) and of the follow-ups and deferred items: UI-SPEC A1, A4, A8, A14, A15, A17, A18, the deferred review items IN-01 to IN-06, NEW-02 to NEW-04 and the deferred security items SEC-NEW-03 to SEC-NEW-06 (AR-10, AR-15, AR-16, AR-17)."
     expected: "The owner accepts the verifier's non-authoritative verdict (every prohibition holds, each backed by a passing test or a direct code read) and decides which follow-ups become their own changes."
     why_human: "An autonomous verifier never passes a judgment-tier prohibition silently. The follow-ups are product decisions the phase left open on purpose."
+audit_acknowledged:
+  milestone: v1.1
+  at: 2026-11-13
+  status: human_needed
 ---
 
 # Phase 13: Member Requirements Verification Report

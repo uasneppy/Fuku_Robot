@@ -111,6 +111,10 @@ human_verification:
   - test: "SPIKE check 14: read the CI run of the pushed head: make lint, make test and make test-postgres-integrity."
     expected: "All green, including the Phase 16 PostgreSQL names TestScheduleKeepsEarliest, TestClaimBatchOneWinner, TestScheduledDeletionMigrationDefaults, and the review-fix names TestReleaseStaleClaims, TestDeleteRules, TestApplyJoinLeftRule."
     why_human: "make lint cannot run in this sandbox and the fuku/modules harness does not run on PostgreSQL. CI of head 6e02f16 passed, and CI of head 76163a0 was still running when this report was written. The three PostgreSQL names added after 6e02f16 (commit 5fe0e8a) have no completed CI run yet."
+audit_acknowledged:
+  milestone: v1.1
+  at: 2026-11-13
+  status: human_needed
 ---
 
 # Phase 16: Scheduled Deletion of Service and Bot Messages Verification Report
