@@ -108,6 +108,19 @@ func settingsBlacklistActionLine(v settingsView, entries []settingsListEntry) []
 	return []string{settingsText(v.Tr, "settings_bl_action_line", i18n.TranslationParams{"action": word})}
 }
 
+// settingsBlacklistRemove deletes one word by its row ID through applyBlacklistRemoveByID, the function the
+// delete of the command's rows shares with the page: one conditional DELETE by (id, chat) and the cache drop.
+func settingsBlacklistRemove(ctx context.Context, chatID, id int64) settingsListRemoval {
+	result := applyBlacklistRemoveByID(ctx, chatID, id)
+	switch result.Outcome {
+	case blacklistRemovedByID:
+		return settingsListRemoval{Outcome: settingsListRemoved, Text: result.Word}
+	case blacklistRemoveGone:
+		return settingsListRemoval{Outcome: settingsListRemoveGone}
+	}
+	return settingsListRemoval{Outcome: settingsListRemoveFailed}
+}
+
 // settingsBlacklistDef is the table of the Blacklist page.
 func settingsBlacklistDef() settingsListDef {
 	return settingsListDef{
@@ -116,6 +129,14 @@ func settingsBlacklistDef() settingsListDef {
 		Icon:      "🔤",
 		TitleKey:  "settings_page_blacklist",
 		PagerCode: "bg",
+		AskCode:   "bx",
+		YesCode:   "by",
+		// Every blacklist write declares the right /addblacklist asks for (D-03, M42).
+		Right:        settingsRightRestrictBotRestrict,
+		Remove:       settingsBlacklistRemove,
+		DeleteAskKey: "settings_bl_delete_ask",
+		RemovedKey:   "settings_bl_removed",
+		EntryParam:   "word",
 		Read: func(ctx context.Context, chatID int64) ([]settingsListEntry, error) {
 			return settingsBlacklistRead(ctx, chatID)
 		},

@@ -471,6 +471,11 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_bl_action_line":  {30, 40},
 	"settings_bl_action_mixed": {12, 16},
 	"settings_bl_opt_none":     {15, 15},
+
+	// Phase 19 (plan 19-03, task 2), the delete card and its notices (UI-SPEC rows 3, 32 and 33).
+	"settings_entries_already_removed": {70, 110},
+	"settings_bl_delete_ask":           {120, 180},
+	"settings_bl_removed":              {64, 100},
 }
 
 // settingsAlertKeys are shown as answerCallbackQuery alerts: plain text, no tag, at most

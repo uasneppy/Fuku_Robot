@@ -30,6 +30,7 @@ type settingsListEnv struct {
 func newSettingsListEnv(t *testing.T) *settingsListEnv {
 	t.Helper()
 	env := &settingsListEnv{settingsEnv: newSettingsEnv(t)}
+	env.fake.setBotRole(env.chat.Id, staffRoleAdmin)
 	LoadBlacklists(env.dispatcher)
 	settingsListCleanup(t, env.chat.Id)
 	return env

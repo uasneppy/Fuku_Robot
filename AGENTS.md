@@ -546,7 +546,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - The `settings|v1` namespace is the settings menu (`settings_menu.go`, `settings_pages.go`). Fields: `a` action, `c` the
   group's chat ID (a menu opened in private), `u` the opener's user ID (a menu opened in the group), `p` page (`s` staff,
   `l` lockdown, `c` captcha, `f` antiflood, `w` welcome, `g` goodbye, `r` rules, `m` member requirements, `d` deletion, `n` warnings, `t` switches, `u` language, `o` log channel, `y` anonymous admins, `k` locks, `b` blacklist, `a` access), `t` control, `v` the absolute target value (the Locks page's pager is its own
-  action code `kg`, with `v` the absolute page, and the Blacklist page's is `bg`, with `v` the absolute page of at most four digits); `e` (confirm expiry), `r`
+  action code `kg`, with `v` the absolute page, and the Blacklist page's is `bg`, with `v` the absolute page of at most four digits, `bx` its delete ask with `r` the row ID of 1 to 17 digits and `v` the page, and `by` the delete Yes with `r` and `e`, exactly 64 bytes at a 14-character chat ID and a 17-digit row ID, which is why `r` is bounded at 17 digits, U-5); `e` (confirm expiry), `r`
   (the lockdown row ID of a Lift card), `l` (the link row ID of an Unlink card) and `s` (Staff Group row ID) arrive with
   the confirm cards and the Link pick. Core action codes: `oh` open here (the choice
   message becomes the Main page), `op` open page `p` (also Refresh and a stepper's value button), `bk` Back to Main, `cl`
@@ -1143,6 +1143,20 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   delete ask, the page holding the entry for the Yes, and a table's `Redraw` entry for an action it names. `settings_bl_*` strings
   are plain, with the word and the action line spliced after translation; the Blacklist page's action line says one action only when
   every word has it and `Mixed` otherwise (C-02).
+  Deleting an entry (D-05, D-06): a numbered button `🗑 N` carries only the entry's row ID `r` and the page `v` (`bx`, an `r` of 1 to
+  17 digits with no sign or leading zero and a `v` of at most 4, both checked in step 1) and the press runs the whole pipeline with
+  the table's right, so a presser without it never sees the card; the entry is then read fresh by `(id, chat_id)`, a gone or foreign
+  row (which answer alike, so there is no oracle) redraws page `v` with `settings_entries_already_removed` and no card, else the
+  shared card of `settingsCardRowsTo` names the entry (cut at 100 code points, escaped, spliced after translation), Yes `by` carrying
+  `r` and `e` (the expiry minute) and No `bg` carrying the ask's page, so a cancelled delete returns where the owner was. The Yes
+  runs the whole pipeline again on a fresh member record (a demotion between the taps is refused), then `settingsCardExpired` (an
+  expired Yes redraws the page holding `r` with `settings_card_expired` and deletes nothing), then the table's `Remove`, which for the
+  Blacklist page is `applyBlacklistRemoveByID`: one conditional `DELETE ... WHERE id = ? AND chat_id = ?` and the `blacklist:<chat>`
+  drop. A Yes whose row went (another admin, or the word deleted and added again, which is a new row ID) deletes nothing and answers
+  the already-removed notice; a removed row redraws the page where its text sorts among the remaining entries with
+  `settings_bl_removed`; a failed delete redraws the page holding `r` with `common_settings_save_failed`. Every blacklist write
+  declares `settingsRightRestrictBotRestrict`, so a bot that cannot restrict answers the notice `chat_status_bot_restrict_error` and
+  draws no card (`TestSettingsBlacklistDelete`, `TestSettingsListForged`, `TestSettingsParityBlacklistRemove`).
 - The message editor's pages (`settings_edit.go`, pages `w` Welcome, `g` Goodbye and `r` Rules, orders 50, 60 and 70, each
   registered from that file's `init` through `registerSettingsPage` so `settings_pages.go` is never edited) show which
   parts of a message are set, one line per part from one parts table (`settingsEditPageDef.Parts`): Welcome and Goodbye
@@ -3859,8 +3873,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   goroutines uses Mute or Kick and never Warn (the warn module's SQLite transaction); a test that joins, rejoins or sends with
   a date takes the date before the message and at least 2 s apart; and a test never `t.Skip`s (CI's
   `scripts/check_test_results` fails on an unexpected skip, so a case that cannot run in a menu kind is not registered
-  there). The locale files now hold 394 `settings_` keys and 31 `mreq_` keys, each `settings_` key one row of the limits table
-  of `fuku/i18n/settings_locale_test.go` (Phase 19 plan 19-02 added two, `settings_state_private_only` and `settings_entries_group_note`, and plan 19-03 task 1 seven for the Blacklist page; the list toolkit is `settings_list_env_test.go`: `newSettingsListEnv`, `settingsListSeedBlacklist`, `settingsListCleanup`, `settingsListOpenPrivate`, `settingsListSentinel`) and each `mreq_` key one row of `memberReqLocaleLimits`. Phase 18 added 55 `settings_`
+  there). The locale files now hold 397 `settings_` keys and 31 `mreq_` keys, each `settings_` key one row of the limits table
+  of `fuku/i18n/settings_locale_test.go` (Phase 19 plan 19-02 added two, `settings_state_private_only` and `settings_entries_group_note`, and plan 19-03 seven for the Blacklist page in task 1 and three for its delete card in task 2; the list toolkit is `settings_list_env_test.go`: `newSettingsListEnv`, `settingsListSeedBlacklist`, `settingsListCleanup`, `settingsListOpenPrivate`, `settingsListSentinel`) and each `mreq_` key one row of `memberReqLocaleLimits`. Phase 18 added 55 `settings_`
   keys (four of them, the Warnings page's, in plan 18-01 and 51 in plan 18-02: the six page names, three Main state words,
   the Warnings, Switches, Language, Log channel and Anonymous admins lines, and the Locks intro, two state words and 22 lock
   names), each one row of `settingsLocaleLimits` (`settings_sw_ai_unavailable` also in `settingsAlertKeys`, being the alert of
