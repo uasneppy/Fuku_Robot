@@ -202,6 +202,48 @@ func TestApplyFilter(t *testing.T) {
 		}
 	})
 
+	t.Run("remove by ID is chat-scoped", func(t *testing.T) {
+		chatID, other := filterApplyChat(t), filterApplyChat(t)
+		filterApplySeed(t, chatID, "hello", "keep")
+		filterApplySeed(t, other, "foreign")
+		var own, foreign models.ChatFilters
+		if err := db.DB.Where("chat_id = ? AND keyword = ?", chatID, "hello").Take(&own).Error; err != nil {
+			t.Fatalf("read own row: %v", err)
+		}
+		if err := db.DB.Where("chat_id = ?", other).Take(&foreign).Error; err != nil {
+			t.Fatalf("read foreign row: %v", err)
+		}
+		if got := applyFilterRemoveByID(ctx, chatID, int64(foreign.ID)); got.Outcome != filterRemoveByIDGone {
+			t.Errorf("another chat's ID = %+v, want gone", got)
+		}
+		if !filters.DoesFilterExists(other, "foreign") {
+			t.Error("another chat's filter was deleted")
+		}
+		got := applyFilterRemoveByID(ctx, chatID, int64(own.ID))
+		if got.Outcome != filterRemovedByID || got.Keyword != "hello" || got.Err != nil {
+			t.Errorf("own ID = %+v, want removed with the keyword", got)
+		}
+		if got := applyFilterRemoveByID(ctx, chatID, int64(own.ID)); got.Outcome != filterRemoveByIDGone {
+			t.Errorf("second delete = %+v, want gone", got)
+		}
+		if list := filters.GetFiltersList(chatID); len(list) != 1 || list[0] != "keep" {
+			t.Errorf("filter_list after the delete = %v", list)
+		}
+	})
+
+	t.Run("remove by ID save failed", func(t *testing.T) {
+		chatID := filterApplyChat(t)
+		boom := errors.New("database is down")
+		seams := filterWrites
+		seams.RemoveByID = func(context.Context, int64, int64) (string, bool, error) { return "", false, boom }
+		filterApplySeams(t, seams)
+		got := applyFilterRemoveByID(ctx, chatID, 7)
+		if got.Outcome != filterRemoveByIDSaveFailed || !errors.Is(got.Err, boom) {
+			t.Errorf("failing remove by ID = %+v", got)
+		}
+		assertNoKeywordLogged(t)
+	})
+
 	t.Run("remove save failed", func(t *testing.T) {
 		chatID := filterApplyChat(t)
 		boom := errors.New("database is down")

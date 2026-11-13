@@ -62,16 +62,19 @@ type filterWriteSeams struct {
 	// Add stores one filter and reports whether a row was inserted (false: the keyword was already there).
 	Add    func(ctx context.Context, chatID int64, keyword, reply, fileID string, buttons []db.Button, dataType int) (bool, error)
 	Remove func(ctx context.Context, chatID int64, keyword string) error
-	Count  func(ctx context.Context, chatID int64) (int64, error)
-	Exists func(ctx context.Context, chatID int64, keyword string) (bool, error)
+	// RemoveByID deletes one row by ID only when it belongs to the chat and returns its keyword.
+	RemoveByID func(ctx context.Context, chatID, id int64) (keyword string, removed bool, err error)
+	Count      func(ctx context.Context, chatID int64) (int64, error)
+	Exists     func(ctx context.Context, chatID int64, keyword string) (bool, error)
 }
 
 // filterWrites is the one place the filter commands reach the repository through.
 var filterWrites = filterWriteSeams{
-	Add:    db_filters.AddFilterContext,
-	Remove: db_filters.RemoveFilterContext,
-	Count:  db_filters.CountFiltersContext,
-	Exists: db_filters.FilterExistsContext,
+	Add:        db_filters.AddFilterContext,
+	Remove:     db_filters.RemoveFilterContext,
+	RemoveByID: db_filters.RemoveFilterByID,
+	Count:      db_filters.CountFiltersContext,
+	Exists:     db_filters.FilterExistsContext,
 }
 
 // filterAddOutcome is what applyFilterAdd did; its zero value is a stored filter.
@@ -129,6 +132,26 @@ type filterRemoveResult struct {
 	Err     error
 }
 
+// filterRemoveByIDOutcome is what applyFilterRemoveByID did; its zero value is a removed filter.
+type filterRemoveByIDOutcome int
+
+const (
+	// filterRemovedByID means the row went.
+	filterRemovedByID filterRemoveByIDOutcome = iota
+	// filterRemoveByIDGone means no row of this chat has that ID (already removed, or another chat's).
+	filterRemoveByIDGone
+	// filterRemoveByIDSaveFailed means the delete failed.
+	filterRemoveByIDSaveFailed
+)
+
+// filterRemoveByIDResult is what applyFilterRemoveByID returns.
+type filterRemoveByIDResult struct {
+	Outcome filterRemoveByIDOutcome
+	// Keyword is the stored keyword of the removed filter.
+	Keyword string
+	Err     error
+}
+
 // checkFilterKeyword runs the checks every filter add shares, in order: a blank keyword, one over
 // listKeywordMaxRunes, one that would match almost every message, a keyword the chat already has, and the
 // chat's cap. It returns a result whose
@@ -181,6 +204,21 @@ func applyFilterAdd(ctx context.Context, chatID int64, in filterAddInput) filter
 		return filterAddResult{Outcome: filterRaced}
 	}
 	return filterAddResult{}
+}
+
+// applyFilterRemoveByID deletes one filter by its row ID, only when the row belongs to the chat, so an ID of
+// another chat deletes nothing. It judges no person's rights and logs the chat ID and the error only, never
+// the keyword.
+func applyFilterRemoveByID(ctx context.Context, chatID, id int64) filterRemoveByIDResult {
+	keyword, removed, err := filterWrites.RemoveByID(ctx, chatID, id)
+	if err != nil {
+		log.Errorf("[Filters] RemoveFilterByID failed for chat %d: %v", chatID, err)
+		return filterRemoveByIDResult{Outcome: filterRemoveByIDSaveFailed, Err: err}
+	}
+	if !removed {
+		return filterRemoveByIDResult{Outcome: filterRemoveByIDGone}
+	}
+	return filterRemoveByIDResult{Outcome: filterRemovedByID, Keyword: keyword}
 }
 
 // applyFilterRemove deletes the chat's filter with this keyword (lower-cased here). It logs the chat ID

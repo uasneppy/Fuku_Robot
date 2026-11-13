@@ -159,6 +159,50 @@ func RemoveFilterContext(ctx context.Context, chatID int64, keyWord string) erro
 	return nil
 }
 
+// ListFilterEntriesFresh reads the chat's filter rows (ID and keyword) with one query, oldest first. It is
+// fresh, chat-scoped and uncached, returns its error, and creates nothing; it fills neither the filter list
+// nor the optimized filter cache.
+func ListFilterEntriesFresh(ctx context.Context, chatID int64) ([]models.ChatFilters, error) {
+	var rows []models.ChatFilters
+	err := db.DB.WithContext(ctx).Select("id", "keyword").Where("chat_id = ?", chatID).Order("id").Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+// GetFilterEntryFresh reads one filter row by its ID, only when it belongs to the chat: a missing ID and the
+// ID of another chat's row both return nil and a nil error. It is fresh, chat-scoped and uncached, returns its
+// read error, and creates nothing.
+func GetFilterEntryFresh(ctx context.Context, chatID, id int64) (*models.ChatFilters, error) {
+	var row models.ChatFilters
+	err := db.DB.WithContext(ctx).Where("id = ? AND chat_id = ?", id, chatID).Take(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+// RemoveFilterByID deletes one filter by its ID, only when it belongs to the chat, in one conditional
+// statement, and returns the stored keyword of the row that went. A missing ID and the ID of another chat's
+// row delete nothing and return removed false. The chat's filter caches are dropped only when a row went.
+func RemoveFilterByID(ctx context.Context, chatID, id int64) (keyword string, removed bool, err error) {
+	var rows []models.ChatFilters
+	result := db.DB.WithContext(ctx).Clauses(clause.Returning{}).Where("id = ? AND chat_id = ?", id, chatID).Delete(&rows)
+	if result.Error != nil {
+		log.Errorf("[Database][RemoveFilterByID]: %d - %v", chatID, result.Error)
+		return "", false, result.Error
+	}
+	if len(rows) != 1 {
+		return "", false, nil
+	}
+	invalidateFilterCaches(chatID)
+	return rows[0].KeyWord, true, nil
+}
+
 func RemoveAllFilters(chatID int64) error {
 	err := db.DB.Where("chat_id = ?", chatID).Delete(&models.ChatFilters{}).Error
 	if err != nil {

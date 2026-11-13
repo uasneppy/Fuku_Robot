@@ -3483,6 +3483,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   not found and 0) and added the filter. This is the provisional owner confirmation of `19-SPIKE.md` that follows AGENTS "never
   discard a DB error on a state-changing path", also in its own commit and reverted alone to restore the old behaviour; the
   command's own cap pre-check (`CountFilters`, `filters_limit_exceeded` before the argument checks) keeps its old hiding read.
+  The Filters page (plans 19-06 and 19-07) reads through `filters.ListFilterEntriesFresh`, `GetFilterEntryFresh`, `CountFiltersContext`
+  and `FilterExistsContext` (fresh, chat-scoped, error-returning, creating nothing and filling neither `filter_list` nor
+  `filters_optimized`) and deletes one filter through `applyFilterRemoveByID` (`filters.RemoveFilterByID`: one `DELETE ... WHERE id = ?
+  AND chat_id = ? RETURNING`, both caches dropped only when a row went, so an ID of another chat deletes nothing).
 - Rules message (`rules.go`): `/rules` (in the group and in a private chat connected to it), the private rules message the
   `/start rules_<chat id>` deep link opens and the Rules page's Full preview are built by
   `buildRulesMessage` and sent by `sendRulesMessage`. The builder has two forms, the group form (`rulesFormGroup`: heading
