@@ -3944,6 +3944,22 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   because a notice only adds its own length: the `fuku/modules` binary is close to its time limit and every plan adds to it.
   A test that reads `config.AppConfig` (the enabled languages, the AI provider) sets what it needs and restores it in
   `t.Cleanup` (`settingsLangWithCodes`, `withAISpamNotConfigured`), and must pass both bare and with a full configuration.
+  `TestSettingsPhase18EndToEnd` (`settings_phase18_e2e_test.go`, plan 18-14) is the phase's end-to-end proof that each page
+  changes what the bot does and not only a stored row, through the real dispatcher with only Telegram faked, one environment
+  per subtest on the toolkit `phase18E2E` (the Deletion settings environment, the module the subtest needs, `member`,
+  `openPage`, `buttonFor`, `tap`, `post`, `report`, and counters of the fake's requests; every press is a real button of the
+  drawn page). Its subtests: `warnings` (the limit 2 and Ban, Mute and Kick set from the page are applied by `/warn` at the
+  limit and clear the warns, a hand-written `tban` applies nothing and keeps them), `locks` (a lock set on page 1 deletes a
+  member's link and spares an administrator's and an approved member's, `/locks` lists `url` as the page shows it, unlocking
+  stops it), `ai spam` (a stale On press and `/aispam on` refuse the same way for both causes and store nothing, available the
+  page's On is what `aispam.IsAISpamEnabled` reads), `anonymous admins` (an anonymous admin's `/warn` gets the proof prompt
+  and does not run with the mode off, a non-owner administrator's press changes nothing, the creator's press lifts the prompt),
+  `language` (the next `/rules` in the group is in the language the page chose and the owner's own language is untouched),
+  `log channel` (a report posts `#REPORT` only while its category is on and the page's change is audited with `#SETTINGS`
+  only while that category is on), `reports` (`/report` and `/reports` follow the switch) and `auto approve` (a join request is
+  approved once with the switch on and not with it off). The anonymous-admin subtest sets the bot's own record to one that can
+  restrict, because a mode-on anonymous sender skips the cached admin list and the gates then read that record. The test adds
+  about 5 seconds to the whole-package run.
 
 ## Commits
 

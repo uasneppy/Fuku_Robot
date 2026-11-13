@@ -16,6 +16,7 @@ import (
 	dbcache "github.com/uasneppy/fuku_robot/fuku/db/cache"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/db/warns"
+	"github.com/uasneppy/fuku_robot/fuku/i18n"
 )
 
 // phase18E2E is the toolkit of TestSettingsPhase18EndToEnd: the Deletion settings environment (a
@@ -154,6 +155,33 @@ func (e *phase18E2E) repliesWith(key string) int {
 // linkEntity marks the first URL of a text that starts with "see ".
 func linkEntity(url string) gotgbot.MessageEntity {
 	return gotgbot.MessageEntity{Type: "url", Offset: 4, Length: int64(len(url))}
+}
+
+// report runs /report by from in reply to a message of target, through the real dispatcher.
+func (e *phase18E2E) report(from, target gotgbot.User) {
+	e.t.Helper()
+	id := e.updateID()
+	update := &gotgbot.Update{
+		UpdateId: id,
+		Message: &gotgbot.Message{
+			MessageId: id, Date: 1, Chat: e.chat, From: &from, Text: "/report",
+			ReplyToMessage: &gotgbot.Message{MessageId: id - 1, Date: 1, Chat: e.chat, From: &target, Text: "spam"},
+		},
+	}
+	if err := e.dispatcher.ProcessUpdate(e.bot, update, nil); err != nil {
+		e.t.Fatalf("ProcessUpdate(%d) error = %v", id, err)
+	}
+}
+
+// logPostsWith counts the posts in the log channel that contain text.
+func (e *phase18E2E) logPostsWith(channelID int64, text string) int {
+	count := 0
+	for _, post := range settingsLogPosts(e.settingsEnv, channelID) {
+		if strings.Contains(post, text) {
+			count++
+		}
+	}
+	return count
 }
 
 func TestSettingsPhase18EndToEnd(t *testing.T) {
@@ -387,6 +415,162 @@ func TestSettingsPhase18EndToEnd(t *testing.T) {
 		}
 		if got := e.warnCount(target.Id); got != 1 {
 			t.Errorf("the anonymous admin's /warn stored %d warns, want 1", got)
+		}
+	})
+
+	t.Run("language", func(t *testing.T) {
+		settingsLangWithCodes(t, settingsLangDefaultCodes)
+		e := newPhase18E2E(t, func(e *phase18E2E) { LoadRules(e.dispatcher) })
+		withRealLocales(t)
+		settingsLangCleanup(t, []int64{e.chat.Id}, []int64{e.owner.Id})
+		member := e.member("Member")
+		say := func(code string) string {
+			words, err := i18n.MustNewTranslator(code).GetString("rules_no_rules_set")
+			if err != nil || words == "" {
+				t.Fatalf("the %s locale has no rules_no_rules_set: %v", code, err)
+			}
+			return words
+		}
+		if say("es") == say("en") || say("es") == say("uk") {
+			t.Fatal("the locales to compare are not different")
+		}
+
+		e.post(member, "/rules")
+		before := e.lastReply()
+		if !strings.Contains(before, say("uk")) {
+			t.Fatalf("before the change /rules answered %q, want the default language's text", before)
+		}
+
+		msgID, keyboard := e.openPage(settingsPageLang)
+		e.tap(msgID, e.buttonFor(keyboard, "a", "st", "t", settingsLangControlKey, "v", "es"))
+		dbcache.ResetLocalForTest()
+		e.post(member, "/rules")
+		if after := e.lastReply(); !strings.Contains(after, say("es")) {
+			t.Errorf("after the page chose es /rules answered %q, want %q", after, say("es"))
+		}
+		if got, _ := settingsLangStored(t, e.chat.Id); got != "es" {
+			t.Errorf("the group's stored language = %q, want es", got)
+		}
+		if got, has := settingsLangUserLanguage(t, e.owner.Id); has && got == "es" {
+			t.Error("the page wrote the owner's own language")
+		}
+	})
+
+	t.Run("log channel", func(t *testing.T) {
+		e := newPhase18E2E(t, func(e *phase18E2E) { LoadReports(e.dispatcher) })
+		settingsSwCleanup(t, e.chat.Id)
+		channelID := settingsLogLink(t, e.chat)
+		reporter, target := e.member("Reporter"), e.member("Target")
+		msgID, keyboard := e.openPage(settingsPageLog)
+		toggle := func(name, v string) {
+			t.Helper()
+			code := settingsLogCell(t, keyboard, name)
+			fields := settingsButtonFields(t, code)
+			fields["v"] = v
+			data := encodeCallbackData(settingsCallbackNamespace, fields)
+			e.pressRaw(e.chat, e.owner, msgID, data)
+			_, keyboard = e.lastEdit(e.chat.Id, msgID)
+			dbcache.ResetLocalForTest()
+		}
+		counts := func(reportPosts, settingsPosts int, when string) {
+			t.Helper()
+			if got := e.logPostsWith(channelID, "#REPORT"); got != reportPosts {
+				t.Errorf("%s: %d #REPORT posts in the log channel, want %d", when, got, reportPosts)
+			}
+			if got := e.logPostsWith(channelID, "#SETTINGS"); got != settingsPosts {
+				t.Errorf("%s: %d #SETTINGS posts in the log channel, want %d", when, got, settingsPosts)
+			}
+		}
+
+		e.report(reporter, target)
+		counts(1, 0, "a report with every category on")
+
+		toggle("reports", "0")
+		counts(1, 1, "after the page turned the reports category off")
+		e.report(reporter, target)
+		counts(1, 1, "a report with the reports category off")
+		if n := e.repliesWith("reports_message_template"); n != 2 {
+			t.Errorf("the group saw %d report replies, want 2: the category only gates the log post", n)
+		}
+
+		toggle("settings", "0")
+		toggle("reports", "1")
+		counts(1, 1, "with the settings category off, a change is not audited")
+		e.report(reporter, target)
+		counts(2, 1, "a report with the reports category back on")
+
+		toggle("settings", "1")
+		toggle("reports", "0")
+		counts(2, 3, "with the settings category back on, the next change is audited")
+	})
+
+	t.Run("reports", func(t *testing.T) {
+		e := newPhase18E2E(t, func(e *phase18E2E) { LoadReports(e.dispatcher) })
+		settingsSwCleanup(t, e.chat.Id)
+		reporter, target := e.member("Reporter"), e.member("Target")
+		msgID, keyboard := e.openPage(settingsPageSwitches)
+		reportsStatus := func() string {
+			t.Helper()
+			e.send(e.admin, "/reports")
+			return e.lastReply()
+		}
+
+		e.report(reporter, target)
+		if n := e.repliesWith("reports_message_template"); n != 1 {
+			t.Fatalf("a report with the default settings made %d report messages, want 1", n)
+		}
+
+		keyboard = e.tap(msgID, e.buttonFor(keyboard, "a", "tg", "t", settingsSwReportsKey, "v", "0"))
+		e.report(reporter, target)
+		if n := e.repliesWith("reports_message_template"); n != 1 {
+			t.Errorf("a report with Reports off made a report message (%d in all, want still 1)", n)
+		}
+		if status := reportsStatus(); !strings.Contains(status, staffMarker("reports_status_disabled_group")) {
+			t.Errorf("/reports answered %q after the page turned reports off, want the disabled status", status)
+		}
+
+		e.tap(msgID, e.buttonFor(keyboard, "a", "tg", "t", settingsSwReportsKey, "v", "1"))
+		e.report(reporter, target)
+		if n := e.repliesWith("reports_message_template"); n != 2 {
+			t.Errorf("a report with Reports back on made %d report messages in all, want 2", n)
+		}
+		if status := reportsStatus(); !strings.Contains(status, staffMarker("reports_status_enabled_group")) {
+			t.Errorf("/reports answered %q after the page turned reports on, want the enabled status", status)
+		}
+	})
+
+	t.Run("auto approve", func(t *testing.T) {
+		e := newPhase18E2E(t)
+		settingsSwCleanup(t, e.chat.Id)
+		approves := func(userID int64) int {
+			count := 0
+			for _, call := range callsToChat(e.fake.staffBotClient, "approveChatJoinRequest", e.chat.Id) {
+				if staffParamInt(call.Params, "user_id") == userID {
+					count++
+				}
+			}
+			return count
+		}
+		first, second, third := e.member("First"), e.member("Second"), e.member("Third")
+
+		e.joinRequest(first, "")
+		if approves(first.Id) != 0 {
+			t.Fatal("a join request was approved with Auto-approve off")
+		}
+
+		msgID, keyboard := e.openPage(settingsPageSwitches)
+		keyboard = e.tap(msgID, e.buttonFor(keyboard, "a", "tg", "t", settingsSwApproveKey, "v", "1"))
+		dbcache.ResetLocalForTest()
+		e.joinRequest(second, "")
+		if n := approves(second.Id); n != 1 {
+			t.Errorf("a join request with Auto-approve on was approved %d times, want once", n)
+		}
+
+		e.tap(msgID, e.buttonFor(keyboard, "a", "tg", "t", settingsSwApproveKey, "v", "0"))
+		dbcache.ResetLocalForTest()
+		e.joinRequest(third, "")
+		if approves(third.Id) != 0 {
+			t.Error("a join request was approved after the page turned Auto-approve off")
 		}
 	})
 }
