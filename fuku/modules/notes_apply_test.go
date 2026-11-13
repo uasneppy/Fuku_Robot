@@ -157,15 +157,18 @@ func TestApplyNote(t *testing.T) {
 		assertNoNameLogged(t)
 	})
 
-	t.Run("a failed existence lookup reads as not found", func(t *testing.T) {
+	t.Run("a failed existence lookup stores nothing", func(t *testing.T) {
 		chatID := noteApplyChat(t)
 		boom := errors.New("lookup failed")
 		seams := noteWrites
 		seams.Exists = func(context.Context, int64, string) (bool, error) { return false, boom }
 		noteApplySeams(t, seams)
 		got := applyNoteAdd(ctx, chatID, noteApplyInput(secretName))
-		if got.Outcome != noteAdded || got.Err != nil {
-			t.Errorf("failing lookup = %+v, want the note added as the command always did", got)
+		if got.Outcome != noteSaveFailed || !errors.Is(got.Err, boom) {
+			t.Errorf("failing lookup = %+v, want save failed with the error", got)
+		}
+		if notes.DoesNoteExists(chatID, secretName) {
+			t.Error("a note was stored although the lookup failed")
 		}
 		assertNoNameLogged(t)
 	})
@@ -291,5 +294,31 @@ func TestApplyNoteNameRule(t *testing.T) {
 	}
 	if !notes.DoesNoteExists(chatID, "rules") {
 		t.Error("a plain name was not stored")
+	}
+}
+
+// TestNoteCommandRefusesWhenLookupFails is the command half of the fail-closed lookup: /save answers
+// notes_save_failed and stores nothing when its existence read fails (before, it added the note).
+func TestNoteCommandRefusesWhenLookupFails(t *testing.T) {
+	withRealLocales(t)
+	chatID := noteApplyChat(t)
+	seams := noteWrites
+	seams.Exists = func(context.Context, int64, string) (bool, error) { return false, errors.New("lookup failed") }
+	noteApplySeams(t, seams)
+
+	client := newModuleBotClient()
+	bot := newModuleTestBot(client)
+	chat := gotgbot.Chat{Id: chatID, Type: "supergroup", Title: "Notes Chat"}
+	admin := gotgbot.User{Id: 777000, FirstName: "Telegram"}
+	if err := notesModule.addNote(bot, newModuleMessageContext(bot, chat, admin, "/save price tag")); err != ext.EndGroups {
+		t.Fatalf("addNote error = %v, want EndGroups", err)
+	}
+	want, _ := i18n.MustNewTranslator("uk").GetString("notes_save_failed")
+	calls := client.callsFor("sendMessage")
+	if want == "" || len(calls) != 1 || calls[0].Params["text"] != want {
+		t.Errorf("replies = %v, want one notes_save_failed", calls)
+	}
+	if notes.DoesNoteExists(chatID, "price") {
+		t.Error("a note was stored although the lookup failed")
 	}
 }

@@ -3562,6 +3562,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   and before the existence read, outcome `noteNameBadShape`): `#name` and `/get` take the first space-separated token, so such a
   name could never be fetched. This is the provisional owner confirmation A19-4 of `19-SPIKE.md`, in its own commit, so declining
   it is a revert of that commit (the locale key goes with it); `/clear` is not touched and still strips a leading `#`.
+  A failed existence read inside `checkNoteName` is `noteSaveFailed`: `/save` answers `notes_save_failed` and stores nothing, where
+  before it hid the error (read as not found) and added the note. This is the provisional owner confirmation of `19-SPIKE.md` that
+  follows AGENTS "never discard a DB error on a state-changing path", also in its own commit and reverted alone to restore the old
+  behaviour. `/clear` keeps its cached list read for its existence check.
 - Rules message (`rules.go`): `/rules` (in the group and in a private chat connected to it), the private rules message the
   `/start rules_<chat id>` deep link opens and the Rules page's Full preview are built by
   `buildRulesMessage` and sent by `sendRulesMessage`. The builder has two forms, the group form (`rulesFormGroup`: heading

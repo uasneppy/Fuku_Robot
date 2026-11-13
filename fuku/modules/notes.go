@@ -122,8 +122,9 @@ type noteRemoveResult struct {
 }
 
 // checkNoteName runs the checks every note add shares, in order: a blank name, a name that could never be
-// fetched (noteNameInvalid), then a name the chat already has. It returns a result whose outcome is noteAdded when nothing refuses the name. A failed existence
-// lookup is logged by chat ID and read as "not found", as the command always did. It never logs the name.
+// fetched (noteNameInvalid), then a name the chat already has. It returns a result whose outcome is noteAdded
+// when nothing refuses the name; a lookup that fails refuses it as noteSaveFailed (nothing is stored on a
+// guess). It logs the chat ID and the error only, never the name.
 func checkNoteName(ctx context.Context, chatID int64, name string) noteAddResult {
 	if strings.TrimSpace(name) == "" {
 		return noteAddResult{Outcome: noteNameBlank}
@@ -134,6 +135,7 @@ func checkNoteName(ctx context.Context, chatID int64, name string) noteAddResult
 	exists, err := noteWrites.Exists(ctx, chatID, name)
 	if err != nil {
 		log.Errorf("[Notes] Existing name lookup failed for chat %d: %v", chatID, err)
+		return noteAddResult{Outcome: noteSaveFailed, Err: err}
 	}
 	if exists {
 		return noteAddResult{Outcome: noteExists}
