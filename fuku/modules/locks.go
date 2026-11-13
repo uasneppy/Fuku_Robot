@@ -1,6 +1,8 @@
 package modules
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"slices"
@@ -181,6 +183,78 @@ func (m moduleStruct) locks(b *gotgbot.Bot, ctx *ext.Context) error {
 	return ext.EndGroups
 }
 
+// lockWrites holds the lock repository write the apply function calls. It is a variable only
+// so a test can make the write fail.
+var lockWrites = struct {
+	Update func(chatID int64, kind string, on bool) error
+}{
+	Update: locks.UpdateLock,
+}
+
+// errLockUnknownType is the error of a lock kind that /lock and /unlock do not know.
+var errLockUnknownType = errors.New("unknown lock type")
+
+// lockApplyOutcome is the result of applyLock. The zero value is a stored write.
+type lockApplyOutcome int
+
+const (
+	lockApplied lockApplyOutcome = iota
+	lockUnknownType
+	lockSaveFailed
+)
+
+// lockApplyResult is what applyLock returns: the outcome, the chat's lock map read back after
+// the write (nil when the outcome is not lockApplied or the read-back failed, because the write
+// itself succeeded) and the error of a refused kind or a failed write.
+type lockApplyResult struct {
+	Outcome lockApplyOutcome
+	Locks   map[string]bool
+	Err     error
+}
+
+// applyLock stores one lock of a chat: kind is a name of /locktypes (a lock or a restriction)
+// and on is the absolute value, so a repeated call stores the same row. It is the one write path
+// of /lock, /unlock and the Locks page. A kind outside /locktypes is refused before any write.
+// The write is one upsert whose repository function drops locks_map:<chat>, and it makes no
+// Telegram call, because a lock is a row the watchers read at the next message.
+func applyLock(ctx context.Context, chatID int64, kind string, on bool) lockApplyResult {
+	if !slices.Contains(locksModule.getLockMapAsArray(), kind) {
+		return lockApplyResult{Outcome: lockUnknownType, Err: errLockUnknownType}
+	}
+	if err := lockWrites.Update(chatID, kind, on); err != nil {
+		// locks.UpdateLock has already logged the failure.
+		return lockApplyResult{Outcome: lockSaveFailed, Err: err}
+	}
+	readCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), greetingApplyTimeout)
+	defer cancel()
+	stored, err := locks.GetChatLocksCachedContext(readCtx, chatID)
+	if err != nil {
+		log.Warnf("[Locks] read back locks of chat %d: %v", chatID, err)
+		return lockApplyResult{Outcome: lockApplied}
+	}
+	return lockApplyResult{Outcome: lockApplied, Locks: stored}
+}
+
+// applyLockList writes each kind through applyLock and returns the kinds whose write did not
+// land, in the order given. /lock and /unlock validate every name before calling it, so a
+// kind that fails here is a failed save.
+func applyLockList(chatID int64, kinds []string, on bool) []string {
+	verb := "unlock"
+	if on {
+		verb = "lock"
+	}
+	applyCtx, cancel := greetingApplyContext()
+	defer cancel()
+	failed := make([]string, 0, len(kinds))
+	for _, kind := range kinds {
+		if res := applyLock(applyCtx, chatID, kind, on); res.Outcome != lockApplied {
+			log.Warnf("[Locks] Failed to %s %s in chat %d: %v", verb, kind, chatID, res.Err)
+			failed = append(failed, kind)
+		}
+	}
+	return failed
+}
+
 //nolint:dupl // lockPerm has symmetric logic with unlockPerm
 func (m moduleStruct) lockPerm(b *gotgbot.Bot, ctx *ext.Context) error {
 	msg := ctx.EffectiveMessage
@@ -233,13 +307,7 @@ func (m moduleStruct) lockPerm(b *gotgbot.Bot, ctx *ext.Context) error {
 		toLock = append(toLock, perm)
 	}
 
-	failedLocks := make([]string, 0, len(toLock))
-	for _, perm := range toLock {
-		if err := locks.UpdateLock(chat.Id, perm, true); err != nil {
-			log.Warnf("[Locks] Failed to lock %s in chat %d: %v", perm, chat.Id, err)
-			failedLocks = append(failedLocks, perm)
-		}
-	}
+	failedLocks := applyLockList(chat.Id, toLock, true)
 
 	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 	if len(failedLocks) > 0 {
@@ -314,13 +382,7 @@ func (m moduleStruct) unlockPerm(b *gotgbot.Bot, ctx *ext.Context) error {
 		toUnlock = append(toUnlock, perm)
 	}
 
-	failedLocks := make([]string, 0, len(toUnlock))
-	for _, perm := range toUnlock {
-		if err := locks.UpdateLock(chat.Id, perm, false); err != nil {
-			log.Warnf("[Locks] Failed to unlock %s in chat %d: %v", perm, chat.Id, err)
-			failedLocks = append(failedLocks, perm)
-		}
-	}
+	failedLocks := applyLockList(chat.Id, toUnlock, false)
 
 	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 	if len(failedLocks) > 0 {

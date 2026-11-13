@@ -3230,6 +3230,19 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   and its replies, and maps its two write branches onto the function (`TestLegacyAnonAdminRequests` pins every request and
   stored row, never to be re-recorded). The `admin` table is not cached, so no write drops a key and no replica can lag. The
   reader `admin.LoadAnonAdminContext` is one plain `SELECT`, returns its error, creates no row and reads a missing row as off.
+  Locks (Phase 18) are written by `applyLock(ctx, chatID, kind, on)` in `locks.go`, through the `lockWrites` seam (default
+  `locks.UpdateLock`, one upsert that drops `locks_map:<chat>`). It handles exactly one kind: a name outside `/locktypes`
+  (`getLockMapAsArray`, the union of `lockMap` and `restrMap`, case-sensitive) is `lockUnknownType` with no write, a failed
+  write `lockSaveFailed`, otherwise `lockApplied` (the zero value) with the chat's map read back through
+  `locks.GetChatLocksCachedContext` (nil when only the read-back failed: the write still landed). A lock is a row the watchers
+  read at the next message, so a lock write makes no Telegram call and judges no person's rights. `/lock` and `/unlock` keep
+  their gates, their all-or-nothing pre-validation (an unknown name refuses the whole call before any write) and their
+  replies, and write the validated names in order through `applyLockList`, which calls `applyLock` once per name and collects
+  the ones that did not land into the failure list (a failed save is logged and the loop goes on, so the earlier names stay
+  stored; `TestLegacyLockRequests` pins every request and stored row of both commands, `/locks` and `/locktypes`, never to be
+  re-recorded). The page reads `locks.GetChatLocksCachedContext`, which already returns its error. `locks_map` is cached for
+  one hour and is not in `skipLocal`: another replica can lag until the key is dropped or expires, exactly as after the
+  commands.
 - Rules message (`rules.go`): `/rules` (in the group and in a private chat connected to it), the private rules message the
   `/start rules_<chat id>` deep link opens and the Rules page's Full preview are built by
   `buildRulesMessage` and sent by `sendRulesMessage`. The builder has two forms, the group form (`rulesFormGroup`: heading
