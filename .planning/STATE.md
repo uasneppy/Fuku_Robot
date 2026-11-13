@@ -5,16 +5,16 @@ milestone_name: PM Settings Hub & Member Screening
 current_phase: 19
 current_phase_name: Blacklist, Filter and Note Pages
 status: executing
-stopped_at: Completed 19-10-PLAN.md
-last_updated: "2026-11-13T18:01:48.365Z"
+stopped_at: Completed 19-11-PLAN.md
+last_updated: "2026-11-13T18:48:47.188Z"
 last_activity: 2026-11-13
 last_activity_desc: Planned Phase 19 (12 plans), UI-SPEC approved
-state_head: fdd4e11ae277e2edc4a762b73535653079288c2f
+state_head: 6ce9f7a83f52256e025f07cfd0c03354107f4c1c
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 126
-  completed_plans: 123
+  completed_plans: 124
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-11-02)
 ## Current Position
 
 Phase: 19 (Blacklist, Filter and Note Pages) — plans 1 to 5 of 12 executed, ready to execute plan 6. Phase 18 (Remaining Settings Pages) is closed to `human_needed`: all 15 plans executed, the phase gate passed, `18-SECURITY.md` (51 of 51 closed, two small findings fixed), `18-VERIFICATION.md` (14 of 14 after the language callback was wired onto `applyGroupLanguage`, `99f796e`), `18-SPIKE.md` holds the 25 live checks
-Plan: 11 of 12 (19-01 to 19-10 complete; 19-11 next (the end-to-end proof); the cross-page sweeps of 19-10 are in settings_phase19_test.go and settings_list_privacy_test.go (the registry holds 17 list action codes and the ten apply functions are covered by the log sweep; TestSettingsGateAllDoors has one column for the two list doors); the Notes page (page e, Order 72, codes eg ex ey ea ec, right settingsRightChangeInfoBotAdmin) is the third list table and the second on the two-step engine, hooks only; Main is at its final 18 grid cells (s|l / c|f / n|k / b|i / w|g / r|e / m|d / t|u / o|y, then Access, 11 rows for the owner and 10 for an administrator, 19 entries) and 452 settings_ keys exist in 8 locales; resolveNotePrivateConflict is shared by /save and the page; a Notes test uses a live creator (settingsFiltersOwner) and the settingsNotesFlow wrapper; settingsMainShapeGroup, settingsMainShapePrivate, settingsMainTitleKeys, TestSettingsPhase18Codes and the 19-entry count of TestSettingsPhase18Cost already hold the final shape; CONTEXT defaults A19-2, A19-3, A19-4 and A19-6 and the fail-closed /filter and /save lookups are provisional owner confirmations, each in its own revertable commit; the sandbox disk is tight, trim the Go build cache entries older than 10 hours if a link fails)
+Plan: 12 of 12 (19-01 to 19-11 complete; 19-12 next (the closing plan: rulebook read whole, README and docs, 19-SPIKE.md, the phase gate and the PAGE-07 to PAGE-09 ticks); the end-to-end proof of 19-11 is TestSettingsPhase19EndToEnd in settings_phase19_e2e_test.go (subtests blacklist, filters, notes, staff group, no redis, two replicas; about 2.3 s; the whole fuku/modules run under the CI environment passed in 1971 s with 1841 top-level PASS); the cross-page sweeps of 19-10 are in settings_phase19_test.go and settings_list_privacy_test.go (the registry holds 17 list action codes and the ten apply functions are covered by the log sweep; TestSettingsGateAllDoors has one column for the two list doors); the Notes page (page e, Order 72, codes eg ex ey ea ec, right settingsRightChangeInfoBotAdmin) is the third list table and the second on the two-step engine, hooks only; Main is at its final 18 grid cells (s|l / c|f / n|k / b|i / w|g / r|e / m|d / t|u / o|y, then Access, 11 rows for the owner and 10 for an administrator, 19 entries) and 452 settings_ keys exist in 8 locales; resolveNotePrivateConflict is shared by /save and the page; a Notes test uses a live creator (settingsFiltersOwner) and the settingsNotesFlow wrapper; settingsMainShapeGroup, settingsMainShapePrivate, settingsMainTitleKeys, TestSettingsPhase18Codes and the 19-entry count of TestSettingsPhase18Cost already hold the final shape; CONTEXT defaults A19-2, A19-3, A19-4 and A19-6 and the fail-closed /filter and /save lookups are provisional owner confirmations, each in its own revertable commit; the sandbox disk is tight, trim the Go build cache entries older than 10 hours if a link fails)
 Status: Phase 18 closed to `human_needed` (live checks deferred, see Deferred Items); Phase 19 is executing (19-06 done: the generic two-step add engine of the door's list branch, four strings (424 settings_ keys), a swap-and-restore test page; 19-05 done: the filter commands behind apply functions and a golden, the typed-content extraction, the A19-2 refusal and the fail-closed lookups of /filter in their own commits, the fresh filter readers). Phases 10 to 18 are not marked Complete in ROADMAP
 Last activity: 2026-11-13 — Completed 19-05 (filter apply functions behind a golden, ExtractTypedNoteOrFilter, A19-2 for filters, fail-closed /filter lookups, fresh filter readers)
 
