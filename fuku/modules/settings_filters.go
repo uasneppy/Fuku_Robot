@@ -29,34 +29,14 @@ const (
 )
 
 // The reads of the page, variables only so a test can count or fail them. Each adapts the repository's row to
-// the engine's entry.
+// the engine's entry through the engine's own adapters.
 var (
 	// settingsFiltersRead lists the chat's filters (ID and keyword).
-	settingsFiltersRead = func(ctx context.Context, chatID int64) ([]settingsListEntry, error) {
-		rows, err := db_filters.ListFilterEntriesFresh(ctx, chatID)
-		if err != nil {
-			return nil, err
-		}
-		entries := make([]settingsListEntry, 0, len(rows))
-		for _, row := range rows {
-			entries = append(entries, settingsFiltersEntryOf(row))
-		}
-		return entries, nil
-	}
+	settingsFiltersRead = settingsListReader(db_filters.ListFilterEntriesFresh, settingsFiltersEntryOf)
 	// settingsFiltersEntry reads one filter by ID, only when it belongs to the chat.
-	settingsFiltersEntry = func(ctx context.Context, chatID, id int64) (*settingsListEntry, error) {
-		row, err := db_filters.GetFilterEntryFresh(ctx, chatID, id)
-		if err != nil || row == nil {
-			return nil, err
-		}
-		entry := settingsFiltersEntryOf(*row)
-		return &entry, nil
-	}
+	settingsFiltersEntry = settingsListEntryReader(db_filters.GetFilterEntryFresh, settingsFiltersEntryOf)
 	// settingsFiltersCount counts the chat's filters.
-	settingsFiltersCount = func(ctx context.Context, chatID int64) (int, error) {
-		n, err := db_filters.CountFiltersContext(ctx, chatID)
-		return int(n), err
-	}
+	settingsFiltersCount = settingsListCounter(db_filters.CountFiltersContext)
 )
 
 // settingsFiltersEntryOf is the engine's entry of a stored filter.

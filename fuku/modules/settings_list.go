@@ -139,6 +139,42 @@ func registerSettingsList(def settingsListDef) {
 	settingsLists[def.Key] = def
 }
 
+// settingsListReader adapts a repository's fresh, chat-scoped list read to the engine's Read: each stored row becomes an
+// entry through entryOf, and the read error is returned as it is.
+func settingsListReader[R any](list func(ctx context.Context, chatID int64) ([]R, error), entryOf func(R) settingsListEntry) func(context.Context, int64) ([]settingsListEntry, error) {
+	return func(ctx context.Context, chatID int64) ([]settingsListEntry, error) {
+		rows, err := list(ctx, chatID)
+		if err != nil {
+			return nil, err
+		}
+		entries := make([]settingsListEntry, 0, len(rows))
+		for _, row := range rows {
+			entries = append(entries, entryOf(row))
+		}
+		return entries, nil
+	}
+}
+
+// settingsListEntryReader adapts a repository's one-row read (a nil row for a missing or foreign ID) to the engine's Entry.
+func settingsListEntryReader[R any](get func(ctx context.Context, chatID, id int64) (*R, error), entryOf func(R) settingsListEntry) func(context.Context, int64, int64) (*settingsListEntry, error) {
+	return func(ctx context.Context, chatID, id int64) (*settingsListEntry, error) {
+		row, err := get(ctx, chatID, id)
+		if err != nil || row == nil {
+			return nil, err
+		}
+		entry := entryOf(*row)
+		return &entry, nil
+	}
+}
+
+// settingsListCounter adapts a repository's fresh count to the engine's Count.
+func settingsListCounter(count func(ctx context.Context, chatID int64) (int64, error)) func(context.Context, int64) (int, error) {
+	return func(ctx context.Context, chatID int64) (int, error) {
+		n, err := count(ctx, chatID)
+		return int(n), err
+	}
+}
+
 // settingsListSortKey is what an entry is ordered by: its lower-cased text.
 func settingsListSortKey(e settingsListEntry) string {
 	return strings.ToLower(e.Text)

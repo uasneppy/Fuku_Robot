@@ -1252,7 +1252,19 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   cannot be read is the cannot-open edit. A filter is deleted behind the engine's two-tap card: `settingsFiltersRemove` calls
   `applyFilterRemoveByID`, one conditional `DELETE ... WHERE id = ? AND chat_id = ?` that drops `filter_list:<chat>` and
   `filters_optimized:<chat>` only when a row went, so another chat's ID deletes nothing; the card names the keyword
-  (`settings_flt_delete_ask`) and the removed notice `settings_flt_removed`.
+  (`settings_flt_delete_ask`) and the removed notice `settings_flt_removed`. The three read seams are built by the engine's generic
+  adapters (`settingsListReader`, `settingsListEntryReader`, `settingsListCounter`), so a table that reads a repository gives its row
+  type and one `entryOf` function. Every write is judged like a press on every step (the live `getChatMember`, the owner gate,
+  `settingsRightChangeInfo`, the live `getChat`), and a typed step whose member lost the right ends the wait with
+  `settings_no_change_info` and `settings_edit_wait_stopped`. There is no bot check, as `/filter` has none. The owner-gate
+  carve-out stands: a non-owner administrator with the switch off is refused by the menu and not by the command. Parity with
+  the commands is proved by `TestSettingsParityFilterAdd` (a text with entities and newlines, a photo with a caption, a sticker and
+  a text with markdown buttons including a `javascript:` link: the page and `/filter K` replying to the same message leave the same
+  row and drop the same keys), `TestSettingsParityFilterRemove` (a delete by row ID and `/stop K`), `TestSettingsDriftFilters` and
+  `TestSettingsAuthorityParityFilters`, and the limits by `TestSettingsListFiltersCallbackBytes` (the Yes is exactly 64 bytes at a
+  17-digit ID; pager 40, ask 60, Add 33, Cancel 37), `TestSettingsListFiltersPageFitsEveryLocale` (3800 UTF-16 units in 8 languages,
+  rows `{4,4,2,1,2}` for a full middle page) and `TestSettingsFiltersReadsCreateNothing`; the forged presses of the page's codes are
+  held by `TestSettingsListForged`.
 - The message editor's pages (`settings_edit.go`, pages `w` Welcome, `g` Goodbye and `r` Rules, orders 50, 60 and 70, each
   registered from that file's `init` through `registerSettingsPage` so `settings_pages.go` is never edited) show which
   parts of a message are set, one line per part from one parts table (`settingsEditPageDef.Parts`): Welcome and Goodbye
