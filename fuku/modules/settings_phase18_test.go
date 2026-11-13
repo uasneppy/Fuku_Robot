@@ -399,8 +399,8 @@ func TestSettingsPhase18Cost(t *testing.T) {
 	t.Run("Main makes no Telegram call of its own", func(t *testing.T) {
 		before := settingsPhase18Calls(env.settingsEnv)
 		entries := settingsMainEntries(env.bot, i18n.MustNewTranslator("en"), &env.chat, true, true)
-		if len(entries) != 17 {
-			t.Fatalf("Main has %d entries, want 17", len(entries))
+		if len(entries) != 18 {
+			t.Fatalf("Main has %d entries, want 18", len(entries))
 		}
 		if delta := settingsPhase18CallsSince(env.settingsEnv, before); len(delta) != 0 {
 			t.Errorf("the Main states made Telegram calls %v, want none", delta)
