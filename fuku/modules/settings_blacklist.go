@@ -17,7 +17,7 @@ import (
 // (settings_list.go) plus the action screen. It lists the chat's blacklisted words eight a page, deletes one
 // behind a two-tap card that binds the row, and sets the action every word carries through
 // applyBlacklistAction, the function /blacklistaction uses. It reads through the fresh, chat-scoped,
-// non-creating readers of the blacklists repository, never through GetBlacklistSettingsContext, which hides
+// non-creating readers of the blacklists repository, never through the command's cached getter, which hides
 // its read error. It is private-only: a menu opened in the group shows only the framework's note.
 
 const (
