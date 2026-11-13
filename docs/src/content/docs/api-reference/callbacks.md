@@ -418,6 +418,29 @@ the absolute page (one or two digits, clamped to 1 to 2): Next is drawn only on 
 states once whether the bot can delete messages. The largest button of the page is 46 bytes in a private menu and 42 in a group
 menu (the pager 37 and 33).
 
+The three list pages, `b` (Blacklist), `i` (Filters) and `e` (Notes), are one engine with three tables. They exist only in the
+bot's private menu: every one of their actions carries the owner field `c` and none carries `u`, so a press of a menu opened in
+the group is an invalid request before any lookup, and a group menu shows only a note that points to the private chat. No
+callback carries a word, keyword, note name or reply; an entry is named by its numeric row ID `r` (1 to 17 digits, checked against
+the pressed menu's chat before anything is deleted) and the pager cursor `v` is at most four digits.
+
+| Action | Blacklist | Filters | Notes | Fields | Right |
+|--------|-----------|---------|-------|--------|-------|
+| Pager (absolute page, clamped) | `bp` | `ig` | `eg` | `c`, `v` | Admin |
+| Delete ask (draws the card) | `bx` | `ix` | `ex` | `c`, `r`, `v` the page to return to | the page's write right |
+| Delete Yes | `by` | `iy` | `ey` | `c`, `r`, `e` expiry in unix minutes | the page's write right, judged again |
+| Add (waits for a typed reply) | `bn` | `ia` | `ea` | `c` | the page's write right |
+| Cancel the wait | `bc` | `ic` | `ec` | `c`, `t` a part code of the page | Admin |
+| Action screen (Blacklist only) | `bo` | | | `c` | Admin |
+| Set action (Blacklist only) | `bs` | | | `c`, `v` one of `warn`, `mute`, `kick`, `ban`, `none` | the page's write right |
+
+The part codes (`t`) of the typed add are `w` (the words) for Blacklist, `k` (keyword) then `y` (reply) for Filters and `n` (name)
+then `c` (content) for Notes. Each press runs the whole pipeline of the menu, so the right is judged live on a fresh member record
+at the ask and again at the Yes. The write rights are `settingsRightRestrictBotRestrict` for the Blacklist (the commands'
+`/addblacklist`, `/rmblacklist` and `/blacklistaction`), `settingsRightChangeInfo` for Filters (`/filter`, `/stop`) and
+`settingsRightChangeInfoBotAdmin` for Notes (`/save`, `/clear`). The largest button of the pages is the delete Yes at exactly 64
+bytes (a 14-character chat ID and a 17-digit row ID); the pager is 40, the ask 60, Add 33 and Cancel 37.
+
 ### Warns
 
 #### `rmAllChatWarns`

@@ -438,6 +438,12 @@ mirrors, and a control the presser lacks the right for is still drawn and its pr
 | Anonymous admins: the mode on or off | Creator, and the bot an admin; any admin may view, also while the bot is not an admin (looser than the command's view) | `/anonadmin` |
 | Lockdown Lift, trigger switches and thresholds | Creator, or an admin who can restrict members | `/unlockdown`, `/autolockdown` |
 | Staff Group link and unlink | Live creator of both groups | `/linkstaff`, `/unlinkstaff` |
+| Blacklist: open the page, page through it, open the action screen (private menu only) | Admin (and the owner gate above) | no command |
+| Blacklist: delete a word, Add words, set the action | Creator, or an admin who can restrict members, and the bot an admin who can restrict members (judged at the ask and again at the Yes; a typed reply is judged again at each step) | `/rmblacklist`, `/addblacklist`, `/blacklistaction` |
+| Filters: open the page and page through it (private menu only) | Admin (and the owner gate above) | no command |
+| Filters: delete a filter, Add (keyword, then reply) | Creator, or an admin who can change info | `/stop`, `/filter` |
+| Notes: open the page and page through it (private menu only) | Admin (and the owner gate above) | no command |
+| Notes: delete a note, Add (name, then content) | Creator, or an admin who can change info, and the bot an admin | `/clear`, `/save` |
 | Welcome and Goodbye: Set text, media or buttons, Remove, Delete last | Creator, or an admin who can change info | `/setwelcome`, `/setgoodbye`, `/resetwelcome`, `/resetgoodbye`, `/cleanwelcome`, `/cleangoodbye` |
 | Rules: Set and Remove of the text, the media and the buttons | Admin, and the bot an admin | `/setrules`, `/clearrules` |
 | Media under text: Welcome and Goodbye | Creator, or an admin who can change info | no command |
@@ -461,6 +467,11 @@ check that you are still the creator or an administrator of the group, the owner
 the table, and a live look at the group. If you lost access in between, the wait ends and the bot says so; if the bot
 cannot tell, it says the check failed and keeps waiting. Nothing is saved on a guess. `/cancel` in the bot's private chat
 ends the wait.
+
+The typed adds of the Blacklist, Filters and Notes pages are judged the same way at every step, with the right of the page from
+the table. Filters and Notes take two messages (the keyword or name, then the reply or content): the first is kept in the wait
+for at most its ten minutes, never logged, and the second is checked again against a fresh read, so a keyword or name another
+admin stored in between is refused and nothing is overwritten.
 
 ### Who can open the menu
 

@@ -576,7 +576,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - The `settings|v1` namespace is the settings menu (`settings_menu.go`, `settings_pages.go`). Fields: `a` action, `c` the
   group's chat ID (a menu opened in private), `u` the opener's user ID (a menu opened in the group), `p` page (`s` staff,
   `l` lockdown, `c` captcha, `f` antiflood, `w` welcome, `g` goodbye, `r` rules, `m` member requirements, `d` deletion, `n` warnings, `t` switches, `u` language, `o` log channel, `y` anonymous admins, `k` locks, `b` blacklist, `i` filters, `e` notes, `a` access), `t` control, `v` the absolute target value (the Locks page's pager is its own
-  action code `kg`, with `v` the absolute page, and the Blacklist page's is `bp` (not `bg`, which is the Deletion page's Bot goodbye row code and is held apart by `TestSettingsDeletionMemberCodesUnique`; the Deletion page's bot row codes `bw bg br ba bm` also rule out `ba` for the Blacklist's Add), with `v` the absolute page of at most four digits, `bx` its delete ask with `r` the row ID of 1 to 17 digits and `v` the page, and `by` the delete Yes with `r` and `e`, exactly 64 bytes at a 14-character chat ID and a 17-digit row ID, which is why `r` is bounded at 17 digits, U-5); `e` (confirm expiry), `r`
+  action code `kg`, with `v` the absolute page, and the Blacklist page's is `bp` (not `bg`, which is the Deletion page's Bot goodbye row code and is held apart by `TestSettingsDeletionMemberCodesUnique`; the Deletion page's bot row codes `bw bg br ba bm` also rule out `ba` for the Blacklist's Add), with `v` the absolute page of at most four digits, `bx` its delete ask with `r` the row ID of 1 to 17 digits and `v` the page, and `by` the delete Yes with `r` and `e`, exactly 64 bytes at a 14-character chat ID and a 17-digit row ID, which is why `r` is bounded at 17 digits, U-5; Add is `bn` and Cancel `bc` with `t`, the action screen `bo` and `bs`, so the Blacklist page has the seven codes `bp bx by bo bs bn bc`; the Filters page has `ig ix iy ia ic` and the Notes page `eg ex ey ea ec` with the same fields, 17 list codes in all, every one with the owner field `c`); `e` (confirm expiry), `r`
   (the lockdown row ID of a Lift card), `l` (the link row ID of an Unlink card) and `s` (Staff Group row ID) arrive with
   the confirm cards and the Link pick. Core action codes: `oh` open here (the choice
   message becomes the Main page), `op` open page `p` (also Refresh and a stepper's value button), `bk` Back to Main, `cl`
@@ -639,7 +639,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   rows private, nine in a group): in a private menu by two rows for the owner and one for an administrator, in a group menu
   by one row for the owner and none for an administrator, because Main has the same eleven and ten rows in both. That budget
   is for pages that carry controls and a body, Main carries navigation only, and Telegram's own limits (100 buttons, 8 to a row) are met by
-  a wide margin. The second hub the UI-SPEC kept as a fallback (A18-A1) is not built, because nothing forced it (D-23).
+  a wide margin. Neither fallback hub the UI-SPECs kept is built, because nothing forced one: the Phase 18 "More" hub (A18-A1,
+  D-23) and the Phase 19 `📚 Lists` hub that would put the three list pages under one cell (A19-A1); the owner's phone check of
+  Main at 11 rows is a live check in `19-SPIKE.md`.
   The Main states of the six Phase 18 pages are database reads only, a failed read is the unknown mark on that page's line
   alone, and drawing Main makes no Telegram call of its own (`TestSettingsMainPhase18`); `settingsMainWorstState` holds
   the length test to the longest of them in every language (the Warnings line at limit 100 with the longest action word,
@@ -1489,7 +1491,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `/cleangoodbye` refuse through `CanUserChangeInfo`); it also gates every choice of the Deletion page (`/cleanservice` asks for it too), the three Member messages rows (`mc`, `me`, `ms`, Off included) and the Self-destruct card's Yes (`dy`), each judged on the press's fresh member record, so a Yes after the presser lost the right is refused with nothing written, while opening the section, a list and a row screen needs only the admin check every press makes (`TestSettingsAuthorityDeletionMember`; the owner gate's carve-out applies: a non-owner administrator with the switch off is refused at step 4b). `settingsRightRefusalFor` is the one pure judgement of a right's
   member-record part, shared by a button press and a typed reply, so the two can never judge a right differently.
   Two composite rights (Phase 18, the only framework edit of that phase, appended after `settingsRightChangeInfo` so the zero value
-  stays `settingsRightAdmin`, which makes eight rights in all) judge the bot part first, as the commands they mirror do, then the member part:
+  stays `settingsRightAdmin`, which made eight rights at the end of Phase 18; Phase 19 adds a ninth, below) judge the bot part first, as the commands they mirror do, then the member part:
   `settingsRightChangeInfoBotAdmin` (`/autoapprove`: `IsUserConnected` with its bot check runs before `CanUserChangeInfo`) refuses a bot
   that `chat_status.IsUserAdmin` does not find an administrator with the notice `connections_is_user_connected_bot_not_admin`, then
   answers what `settingsRightChangeInfo` answers (the alert `settings_no_change_info`); `settingsRightOwnerBotAdmin` (`/anonadmin`:
@@ -1512,9 +1514,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   right) and `settingsRightBotAfter(b, group, right, typed)` (`/captcha`'s `IsBotAdmin`, `/setflood`'s `IsUserAdmin` of the bot, moved
   unchanged, and the ninth right's `CanBotRestrict`), and `settingsRightRefusal` runs bot first, member part, bot after, so every older
   right answers the same keys in the same order. Both read the commands' cached predicates and a false can be a stale cache, so the
-  typed-reply door of plan 19-04 classifies such a false with one live `getChatMember` before it refuses. No page declares the ninth
-  right until the Blacklist page of plan 19-03 does and the door first uses it (typed) in 19-04. `TestSettingsRights` "mirrors
-  /addblacklist", `TestSettingsRightRefusalForParity` and `TestSettingsRightBotHalves` hold it.
+  typed-reply door of plan 19-04 classifies such a false with one live `getChatMember` before it refuses. The Blacklist page (plan 19-03)
+  declares the ninth right for every write and the door uses it typed (plan 19-04). The other two list pages declare rights that already
+  existed: Filters `settingsRightChangeInfo` (`/filter` and `/stop` ask for `can_change_info` and no bot check) and Notes
+  `settingsRightChangeInfoBotAdmin` (`/save` and `/clear` ask for the bot as an administrator, then `can_change_info`); on all three pages
+  viewing, paging and Cancel need only `settingsRightAdmin`. `TestSettingsRights` "mirrors /addblacklist",
+  `TestSettingsRightRefusalForParity` and `TestSettingsRightBotHalves` hold it.
   The Switches page declares three rights: Reports `settingsRightAdminFloodBot` (`/reports`), the AI spam filter `settingsRightAdmin`
   (`/aispam`, no bot check) and Auto-approve `settingsRightChangeInfoBotAdmin` (`/autoapprove`), each judged on every press
   (`TestSettingsAuthorityParitySwitches`).
@@ -3606,6 +3611,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   readers) and deletes one note through `applyNoteRemoveByID` (`notes.RemoveNoteByID`: one `DELETE ... WHERE id = ? AND chat_id = ?
   RETURNING`, `notes_list` dropped only when a row went, so an ID of another chat deletes nothing). `notes.GetNotes` and
   `getNotesSettings` create a `notes_settings` row on read and are never called by a page.
+  Phase 19 in all: ten apply functions with a write seam (`applyBlacklistAdd`, `applyBlacklistRemove`, `applyBlacklistRemoveByID`,
+  `applyBlacklistAction`, `applyFilterAdd`, `applyFilterRemove`, `applyFilterRemoveByID`, `applyNoteAdd`, `applyNoteRemove`,
+  `applyNoteRemoveByID`), each behind a golden committed before the extraction, and the four caches `blacklist`, `filter_list`,
+  `filters_optimized` and `notes_list` all outside `skipLocal`. The command behaviour the phase changed on purpose is six items, each
+  in its own commit and recorded with its revert commit in `19-SPIKE.md`: A19-2 for `/addblacklist` and for `/filter` (a one-character
+  word or keyword is refused), A19-3 (a new blacklist word takes the shared action), A19-4 (`/save` refuses a name that could never be
+  fetched) and the fail-closed lookups of `/filter` (`common_settings_save_failed`) and `/save` (`notes_save_failed`). Every other
+  request and reply byte of the ten commands (the three of each list and the three listings) is pinned unchanged, quirks included.
 - Rules message (`rules.go`): `/rules` (in the group and in a private chat connected to it), the private rules message the
   `/start rules_<chat id>` deep link opens and the Rules page's Full preview are built by
   `buildRulesMessage` and sent by `sendRulesMessage`. The builder has two forms, the group form (`rulesFormGroup`: heading
