@@ -405,6 +405,8 @@ func LoadStaff(dispatcher *ext.Dispatcher) {
 	helpers.WrapCommand(dispatcher, fwdBlockListDesc, staffModule.fwdBlockList)
 	helpers.WrapCommand(dispatcher, fwdBlockActionDesc, staffModule.fwdBlockAction)
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("staff|"), staffModule.staffCallback))
+	// The forward blocklist watcher is the only handler of group -9 and never ends an update.
+	dispatcher.AddHandlerToGroup(handlers.NewMessage(forwardBlockFilter, staffModule.forwardBlockWatcher), staffForwardBlockGroup)
 }
 
 func init() {

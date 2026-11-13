@@ -138,7 +138,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 
 ## Handlers
 
-- Group numbers are execution order: `-10` captcha sweeper · `-8` member deletion (two handlers: the edit handler and the self-destruct watcher, a `handlers.NewMessage(message.All, ...)` with no setter; neither ends an update, see the `MemberDeletion` bullet) · `-7` lockdown join guard (it also counts the join surge
+- Group numbers are execution order: `-10` captcha sweeper · `-9` forward blocklist watcher (the only handler of the group, never ends an update; see the `StaffForwardBlock` bullet) · `-8` member deletion (two handlers: the edit handler and the self-destruct watcher, a `handlers.NewMessage(message.All, ...)` with no setter; neither ends an update, see the `MemberDeletion` bullet) · `-7` lockdown join guard (it also counts the join surge
   before it reads the lockdown) · `-6` fed-ban · `-5` service message deletion watcher (the only handler of the group, never ends an update, `SetAllowBot`; a deletable service type is deleted now or queued by the group's stored rule) · `-4` raid flood counter (counts everything but slash-prefixed texts, never ends an update; there is no
   antiraid handler any more) · `-3` staff watchers (chat-migration re-key; later ownership and bot health) · `-2` admin-cache (`my_chat_member` only) and the member requirements watcher (supergroup messages only, the only message handler of the group, `ext.ContinueGroups` on every path; never add another message handler to group -2) ·
   `-1` users tracker · `0` commands/help/greetings · `1` settings typed-reply door (private messages only;
@@ -170,6 +170,49 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `ext.ContinueGroups` with no reply, write or Telegram call. They are a documented exception to the `WrapCommand`
   rule, because `BuildCommandContext` replies to sender-less updates, and they have no anonymous-admin re-entry.
 - Handler methods use value receivers on `moduleStruct`.
+- The forward blocklist watcher (`staff_forwardblock_watch.go`, quick task 261113-tjj) is registered by `LoadStaff` at group
+  `-9` (`staffForwardBlockGroup`, the only free group below 12) through `handlers.NewMessage(forwardBlockFilter, ...)` with no
+  setter (new messages only: no edits, channel posts or bot senders), and is the only handler of that group, so never add a
+  second one there. `forwardBlockFilter` is the nil check `msg.ForwardOrigin != nil`. The watcher is a value-receiver method
+  of `moduleStruct` whose result is a named value preset to `ext.ContinueGroups` with `defer error_handling.RecoverFromPanic`
+  first, so no path and no recovered panic returns `nil` or ends an update: the raid flood counter, the users tracker, later
+  groups and the blacklist watcher still see the message (a forward that a blacklist word also matches can be acted on by
+  both). It starts no goroutine, writes nothing to Redis and adds no shutdown drain. The order is cheapest first, each step
+  returning before the next: the chat type (group or supergroup); `forwardBlockSourceOf` (pure: the chat ID of a `channel`
+  origin's `Chat`, or of a `chat` origin's `SenderChat` when that is a message an anonymous administrator of a group posted,
+  only for type channel, supergroup or group with a negative ID; a `user` or `hidden_user` origin has no chat and stops here,
+  so a plain member's message forwarded from a group can never match); `staff.GetLinkOfGroup` (the cached gate, the first I/O,
+  one Redis `GET` because its key is in `skipLocal`; an unlinked group and the Staff Group itself have no link and stop here);
+  `staff.GetForwardBlockRules` of the link's Staff Group (one cached read; an error logs through a gate and acts on nothing,
+  a source not in the list stops); the pure sender shape (`raidFloodSenderCounts`: no `sender_chat`, so anonymous admins,
+  channel identities and the group itself are out, no automatic forward, no Telegram service account, not the bot, plus
+  `IsBot`); `memberDeletionExempt` (approved, creator or administrator, and an approvals or admin read that cannot be
+  answered are all exempt: unknown never acts; its failure lines carry the MemberDeletion label, accepted; never
+  `IsUserAdminForUpdate`, `IsApprovedForUpdate` or `chat_status.IsUserAdmin`, which read a failed lookup as negative);
+  `chat_status.IsBotAdmin` (a bot that is not an administrator does nothing and logs one gated line); the live authority step
+  `forwardBlockAuthorized`; then `forwardBlockEnforce`. The authority step reads `staff.GetLinkOfGroupFresh` and requires a
+  link that still names the cached link's Staff Group, then consults the memo (`forwardBlockAuthMemo`, per group, holding the
+  link row ID, the Staff Group ID and an expiry of `deletionNow()` plus `forwardBlockAuthMemoTTL`, 60 s) and on a miss runs
+  `recheckLink` with a fresh `newStaffOwnerPass()` (a live `CheckOwner` of both chats): only `staffRecheckOK` acts and only it
+  is remembered, so a failed fresh read, a link of another Staff Group, a link whose maker no longer owns both groups
+  (`staffRecheckRemoved`, which also unlinks), a link already gone and an unknown answer delete and punish nothing, and a link
+  row that was removed and made again (a new ID) is asked about again. The memo and the latch below are in-process,
+  mutex-guarded tables bounded at `forwardBlockStateMax` (10,000): a full table forgets its expired entries and, when none can
+  be forgotten, records nothing (the memo then re-asks, the latch then refuses the punishment, the safe direction). The
+  enforcement deletes first through `helpers.DeleteMessageWithErrorHandling` when the cached `CanBotDelete` holds, then
+  applies the list's action only when the cached restrict right holds for mute, kick and ban (warn needs none) and the
+  per-member latch (`forwardBlockPunished`, key (group, member), `forwardBlockPunishWindow`, 60 s, claimed in one
+  check-and-set) grants it, so an album of blocked forwards deletes every item and punishes the member once, and a later
+  forward after the window punishes again. The actions: `none` is the delete alone, `warn` is `warnsModule.warnThisUser` with
+  `warnSourceAuto` (the sentinels `ext.EndGroups` and `ext.ContinueGroups` ignored, as `blacklistWatcher` does), `mute` is
+  `RestrictChatMember` with `MutedPermissions` and no end date, `kick` is `kickMember`, `ban` is `BanChatMember` with no end
+  date; after mute, kick and ban the notice is the existing `blacklists_bl_watcher_{muted,kicked,banned}_user` template spliced
+  with `formatting.MentionHtml` and the reason `staff_fwdblock_reason`, in the group's language, then queued through
+  `scheduleBotMessage(sent, deletion.KindBotAuto)` (`forwardBlockNotice`, in `forwardblock_notice.go` and not in a `staff*` file,
+  because the notice is a linked group's own message and `TestMemberDeletionExcludedMessages` forbids any deletion producer in a
+  staff file); the reason and the notices name neither the source nor the Staff Group.
+  A sender_chat channel identity or an anonymous admin posting a blocked forward is exempt: a stated limit. The two action
+  vocabularies are one set (`TestForwardBlockVocabulary`); `blacklistWatcher`'s own inline switch is not edited.
 - The `ServiceDeletion` module (priority 242, `deletion_service.go`) registers the service message deletion watcher
   at group `-5` (`serviceDeleteGroup`) through `handlers.NewMessage` with `SetAllowBot(true)`, the only handler of that
   group, so never add a second message handler there that ends an update. The watcher's result is a named value preset to
@@ -3414,6 +3457,25 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   title (at most 40, then a more-line). `rmfwdblock` takes the source chat ID the list shows. `TestForwardBlockCommands`,
   `TestForwardBlockCommandRefusals`, `TestApplyForwardBlockAdd`, `TestApplyForwardBlockRemove` and
   `TestApplyForwardBlockAction` hold it.
+- The forward blocklist watcher's failures (`forwardBlockWarnGates`, one `memberDeleteWarnGate` per kind: cannot act, list
+  unreadable, authority unknown, delete failed, punishment failed; each logs one line per chat per hour through
+  `forwardBlockWarnf`, so a busy group in an incident writes five lines an hour at most). Every line carries the chat and user
+  IDs and the Telegram error code or class (`forwardBlockErrClass`, never the error text, which for a wrapped delete holds a
+  message ID) and never a title, text, message ID or source. A bot that is not an administrator logs the cannot-act line and
+  acts on nothing; a missing delete right still punishes and a missing restrict right still deletes, each with its own line;
+  a refused delete or punishment is logged and never retried, and the cached bot-right predicates stop calls into a chat the
+  bot cannot act in, so there is no loop and no new latch (the Staff Group sees the same fact in the `/staff` panel's link
+  health). Accepted limits, stated and not tested as wanted behaviour: the punishment latch and the authority memo are per
+  replica, so two replicas can each punish an album's member once and each ask the owner check once a minute; a forward that
+  the blacklist watcher also matches can be acted on by both because this watcher never ends an update; a forward from a
+  user or hidden user is never matched; a message posted as a channel (`sender_chat`) is never acted on; and the list is
+  one action for every source with no timed duration. `TestForwardBlockWatcherDeletes` (the end-to-end tracer through the
+  real dispatcher), `TestForwardBlockWatcherPunishments`, `TestForwardBlockWatcherSpares`,
+  `TestForwardBlockWatcherUnknownNeverActs`, `TestForwardBlockWatcherAuthority`, `TestForwardBlockWatcherBotRights`,
+  `TestForwardBlockWatcherNeverEndsUpdate`, `TestForwardBlockWatcherCost`, `TestForwardBlockSourceOf` and
+  `TestForwardBlockWatcherGroup` hold it (`staff_forwardblock_watch_test.go`; toolkit `staff_forwardblock_env_test.go`:
+  `newFwdWatchEnv` on the staff action environment with one linked group, a settable `deletionNow` through `fwdClock`, and
+  `fwdWatchClient` to take the bot's delete right away).
 - StaffActions (staff `/ban` across linked groups): per-group authority is only the live `getChatMember(group, issuer)`
   answer, creator or administrator with `can_restrict_members`, never the cached admin predicates. The link owner is
   rechecked through `recheckLink`. No write ever targets the Staff Group and nothing is posted into a linked group's own
@@ -4393,6 +4455,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   Staff Group's own private menu, name no Staff Group, and a word added there is acted on), `no redis` (Add is the alert while the
   list, the action and the delete Yes work and the watcher follows) and `two replicas` (a wait made on one replica is completed by a
   typed message on another, and after the local cache layer has expired the word is acted on there).
+- The forward blocklist watcher's tests (quick task 261113-tjj, `fuku/modules/staff_forwardblock_watch_test.go`) run the real
+  dispatcher with `LoadStaff` through `newFwdWatchEnv` (the staff action environment with one linked group, the source listed
+  and the action set; fresh IDs from `uniqueModuleChatID` and `uniqueLinkOwnerID`, `memberReqCleanup` and `staffCleanup` for
+  the rows, `resetForwardBlockState` for the memo, latch and log gates, and `deletionNow` swapped for an `fwdClock`). Seams
+  (`forwardBlockLinkLookup`, `forwardBlockFreshLink`, `forwardBlockRulesLookup`, `forwardBlockRecheck`) are swapped through
+  `mreqSwap`; a subtest that fails must use its own `t` for the check helpers (`wantUntouched(t, ...)`), because the
+  environment's `t` is the parent's. The families are `TestForwardBlockWatcher*`, `TestForwardBlockSourceOf`; keep a new case
+  light, because `fuku/modules` is near its CI time limit.
 
 ## Commits
 
