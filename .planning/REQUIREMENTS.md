@@ -70,9 +70,9 @@ Requirements for this milestone. Each maps to one roadmap phase.
 - [x] **PAGE-04**: A Log channel page shows the group's log channel and turns each log category on or off. Linking a new channel stays a command.
 - [x] **PAGE-05**: An Anonymous admins page sets the anonymous-admin mode with the same rights `/anonadmin` needs.
 - [x] **PAGE-06**: A Locks page turns each lock type on or off, paged.
-- [ ] **PAGE-07**: A Blacklist page lists the group's blacklisted words (paged), deletes one, adds one by typing it in PM, and sets the blacklist action.
-- [ ] **PAGE-08**: A Filters page lists filters (paged), deletes one, and adds one by typing the keyword and then the reply in PM.
-- [ ] **PAGE-09**: A Notes page lists notes (paged), deletes one, and adds one by typing the name and then the content in PM.
+- [x] **PAGE-07**: A Blacklist page lists the group's blacklisted words (paged), deletes one, adds one by typing it in PM, and sets the blacklist action.
+- [x] **PAGE-08**: A Filters page lists filters (paged), deletes one, and adds one by typing the keyword and then the reply in PM.
+- [x] **PAGE-09**: A Notes page lists notes (paged), deletes one, and adds one by typing the name and then the content in PM.
 - [x] **PAGE-10**: Every setting changed on these pages is stored, cached and refused exactly as by its command, as v1.0 required for the first menu pages (MENU-08).
 
 ### Platform
@@ -180,9 +180,9 @@ Which phases cover which requirements. Each v1.1 requirement maps to exactly one
 | PAGE-04 | Phase 18 | Complete |
 | PAGE-05 | Phase 18 | Complete |
 | PAGE-06 | Phase 18 | Complete |
-| PAGE-07 | Phase 19 | Pending |
-| PAGE-08 | Phase 19 | Pending |
-| PAGE-09 | Phase 19 | Pending |
+| PAGE-07 | Phase 19 | Complete |
+| PAGE-08 | Phase 19 | Complete |
+| PAGE-09 | Phase 19 | Complete |
 | PAGE-10 | Phase 18 | Complete |
 | PLAT-05 | Phase 10 | Complete |
 | PLAT-06 | Phase 14 | Complete |
