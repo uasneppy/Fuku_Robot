@@ -4303,6 +4303,18 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `TestSettingsGateAllDoors` gains one column for the two list doors, the Blacklist delete Yes (`by`) and the Blacklist typed reply
   (the list branch of the door), built in one world per fixture to keep the test light, so a list door decides like every other
   door over the four owner worlds.
+  Plan 19-11 adds the phase's end-to-end proof, `settings_phase19_e2e_test.go`: `TestSettingsPhase19EndToEnd` (about 2.4 s), one
+  environment per subtest on the toolkit `phase19E2E` (the list settings environment with the Blacklists, Filters, Notes and Warns
+  modules loaded and a live creator who works the private menu; `member`, `approvedMember`, `openList`, `tap`, `deleteEntry`,
+  `typeInPrivate`, `post`, `deleted`, `warned`, `sentTo`). Every press is a real button of the page the bot drew and every typed step
+  a private message through the real dispatcher, with only Telegram faked. Subtests: `blacklist` (a word added by Add and a typed
+  message is deleted and warned once at a member's next message while an admin's and an approved member's stay, Delete only on the
+  action screen deletes with no new warn, a page delete stops it), `filters` (two typed messages make the group-9 watcher answer a
+  member with the stored reply and its button, and the page delete stops it), `notes` (the note is sent by `#name` and `/get`, and
+  after the page delete `/get` answers `notes_does_not_exist` and `#name` sends nothing), `staff group` (the three pages open for a
+  Staff Group's own private menu, name no Staff Group, and a word added there is acted on), `no redis` (Add is the alert while the
+  list, the action and the delete Yes work and the watcher follows) and `two replicas` (a wait made on one replica is completed by a
+  typed message on another, and after the local cache layer has expired the word is acted on there).
 
 ## Commits
 

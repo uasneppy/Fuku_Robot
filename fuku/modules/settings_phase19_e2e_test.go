@@ -11,7 +11,9 @@ import (
 
 	"github.com/uasneppy/fuku_robot/fuku/db/approvals"
 	dbcache "github.com/uasneppy/fuku_robot/fuku/db/cache"
+	"github.com/uasneppy/fuku_robot/fuku/db/staff"
 	"github.com/uasneppy/fuku_robot/fuku/db/warns"
+	"github.com/uasneppy/fuku_robot/fuku/utils/cache"
 )
 
 // phase19E2E is the toolkit of TestSettingsPhase19EndToEnd: the list settings environment (a supergroup, the bot an
@@ -266,4 +268,114 @@ func TestSettingsPhase19EndToEnd(t *testing.T) {
 		}
 	})
 
+	t.Run("staff group", func(t *testing.T) {
+		e := newPhase19E2E(t)
+		member := e.member("Member")
+		const title = "OpsCrewZeta"
+		staffCleanup(t, e.chat.Id)
+		if _, err := staff.CreateStaffGroup(e.chat.Id, e.admin.Id, title); err != nil {
+			t.Fatalf("CreateStaffGroup error = %v", err)
+		}
+
+		// The three pages open for a Staff Group's own private menu and name no Staff Group.
+		for _, page := range []struct{ key, name string }{
+			{settingsPageBlacklist, "settings_page_blacklist"}, {settingsPageFilters, "settings_page_filters"}, {settingsPageNotes, "settings_page_notes"},
+		} {
+			text, _ := e.openList(page.key).last()
+			if !strings.Contains(text, staffMarker(page.name)) {
+				t.Errorf("page %s did not open for a Staff Group:\n%s", page.key, text)
+			}
+			if lower := strings.ToLower(text); strings.Contains(lower, "staff") || strings.Contains(text, title) {
+				t.Errorf("page %s names the Staff Group:\n%s", page.key, text)
+			}
+		}
+
+		// A word added from the page is acted on in that group.
+		e.addBlacklistWord("spam")
+		saved := e.fake.sentTo(e.owner.Id)
+		if text := fmt.Sprint(saved[len(saved)-1].Params["text"]); strings.Contains(strings.ToLower(text), "staff") || strings.Contains(text, title) {
+			t.Errorf("the saved page names the Staff Group:\n%s", text)
+		}
+		e.wantDeleted(e.post(member, "spam"), 1, "a member's message in a Staff Group")
+		if got := e.warned(member); got != 1 {
+			t.Errorf("the member has %d warns in the Staff Group, want 1", got)
+		}
+	})
+
+	t.Run("no redis", func(t *testing.T) {
+		e := newPhase19E2E(t)
+		member := e.member("Member")
+		settingsListSeedBlacklist(t, e.chat.Id, "alpha")
+		m := e.openList(settingsPageBlacklist)
+		edits := len(e.edits(e.owner.Id, m.msgID))
+
+		restore := cache.DisableRedisForTest()
+		defer restore()
+
+		answers := e.answerCount()
+		e.tap(m, "settings_btn_bl_add")
+		text, alert := e.lastAnswer()
+		if got := e.answerCount() - answers; got != 1 || !alert || !strings.Contains(text, staffMarker("settings_entries_add_unavailable")) {
+			t.Errorf("Add without Redis answered %q (alert %v, %d answers), want one alert settings_entries_add_unavailable", text, alert, got)
+		}
+		if got := len(e.edits(e.owner.Id, m.msgID)); got != edits {
+			t.Errorf("Add without Redis edited the menu %d times", got-edits)
+		}
+
+		// The list draws and the action screen sets the action; the watcher follows.
+		m = e.openList(settingsPageBlacklist)
+		if text, _ := m.last(); !strings.Contains(text, "1. <code>alpha</code>") {
+			t.Errorf("the list did not draw without Redis:\n%s", text)
+		}
+		e.tap(m, "settings_btn_bl_action")
+		m.tap(m.button(staffMarker("settings_bl_opt_none")))
+		if got := settingsBlacklistStored(t, e.chat.Id); got["alpha"] != "none" {
+			t.Fatalf("stored words = %v, want alpha on none", got)
+		}
+		e.wantDeleted(e.post(member, "alpha here"), 1, "a message before the delete, without Redis")
+
+		// The card's Yes deletes the word, and the next message stays.
+		e.deleteEntry(e.openList(settingsPageBlacklist), "🗑 1")
+		if got := settingsBlacklistStored(t, e.chat.Id); len(got) != 0 {
+			t.Fatalf("the delete without Redis left %v", got)
+		}
+		e.wantDeleted(e.post(member, "alpha again"), 0, "a message after the delete, without Redis")
+		restore()
+		if keys := settingsEditInputKeys(e.settingsEnv); len(keys) != 0 {
+			t.Errorf("Add without Redis left %v", keys)
+		}
+	})
+
+	t.Run("two replicas", func(t *testing.T) {
+		e := newPhase19E2E(t)
+		member := e.member("Member")
+
+		// Replica A takes the Add press and holds the wait in Redis.
+		m := e.openList(settingsPageBlacklist)
+		e.tap(m, "settings_btn_bl_add")
+
+		replica := e.otherReplica()
+		LoadBlacklists(replica.dispatcher)
+		replica.fake.setBotRole(e.chat.Id, staffRoleAdmin)
+		replica.fake.setMember(e.chat.Id, e.owner.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusCreator})
+		replica.fake.setCreator(e.chat.Id, e.owner.Id)
+		replica.fake.listAdministrator(e.chat.Id, e.admin.Id)
+		replica.fake.setProfile(member.Id, member.FirstName, "", "")
+
+		// Replica B completes the wait with the typed word.
+		sendPrivateMessage(replica, e.owner, gotgbot.Message{Text: "spam"})
+		if got := settingsBlacklistStored(t, e.chat.Id); len(got) != 1 || got["spam"] != "warn" {
+			t.Fatalf("stored words = %v, want spam typed on replica B", got)
+		}
+
+		// B's local cache layer has expired (the accepted CACHE_LOCAL_TTL skew), and a member's message on B is deleted.
+		dbcache.ResetLocalForTest()
+		id := sendGroupMessage(replica, e.chat, member, gotgbot.Message{Text: "some spam"})
+		if got := deletedIn(replica, e.chat.Id, id); got != 1 {
+			t.Errorf("replica B deleted the member's message %d times, want 1", got)
+		}
+		if got := deletedIn(e.settingsEnv, e.chat.Id, id); got != 0 {
+			t.Errorf("replica A deleted the message %d times, want 0", got)
+		}
+	})
 }
