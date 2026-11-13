@@ -87,6 +87,7 @@ data"; a Yes with an 18-digit ID is 65 bytes, with 17 digits 64, matching resear
 | U-9 | The bot-restrict refusal is `chat_status_bot_restrict_error` | **By update kind, as the command's responder picks it**: a press (callback) gets `chat_status_bot_restrict_error`, a typed reply (message) gets `chat_status_bot_restrict_group_error` | `NewPermissionResponder(...).Respond(ctx, "chat_status_bot_restrict_group_error", "chat_status_bot_restrict_error")` (`blacklists.go:60`) chooses by update kind; the door answers a message |
 | U-10 | Empty blacklist: the action screen draws no choices | **The Action button is not drawn on an empty list**; a stale or forged `bo` draws the screen with the no-words line and no choices, a stale `bs` answers the notice `settings_bl_action_no_words` | No button leads to a screen with nothing to press |
 | U-11 | Step-2 prompt's message ID recorded as `m` | Also record `q`, the step-1 message's ID (M41): at step 2 a candidate whose ID is not greater than `q` is ignored with no reply | A redelivered keyword message must not be stored as the filter's reply; a content message sent before the step-2 prompt arrived (ID between `q` and the prompt) is still read |
+| U-12 | Blacklist pager `bg`, Add `ba` | **Pager `bp`, Add `bn`** (found by plan 19-03) | The action codes share one uniqueness guard with the Deletion page's row codes (`TestSettingsDeletionMemberCodesUnique`): `bg` is Deletion's `Bot goodbye` and `ba` its `Bot auto`. `bp` and `bn` are free; the callback bytes are unchanged (two letters each) |
 
 ---
 
@@ -259,7 +260,7 @@ numbered button pointed to; it is drawn only in a private menu (every list actio
 
 ### Screen 5: the add prompts (the menu message is edited into the prompt)
 
-Blacklist, one step (`a=ba`):
+Blacklist, one step (`a=bn`):
 
 ```
 ⚙️ Settings · Blacklist
@@ -470,10 +471,10 @@ words, and every delete button's number matches a numbered body line.
 | Title key | `settings_page_blacklist` | `settings_page_filters` | `settings_page_notes` |
 | `PrivateOnly` (M39) | yes | yes | yes |
 | `Hidden` | none | none | none |
-| Pager (`v`) | `bg` | `ig` | `eg` |
+| Pager (`v`) | `bp` | `ig` | `eg` |
 | Delete ask (`r`, `v`) | `bx` | `ix` | `ex` |
 | Delete Yes (`r`, `e`) | `by` | `iy` | `ey` |
-| Add (no field) | `ba` | `ia` | `ea` |
+| Add (no field) | `bn` | `ia` | `ea` |
 | Cancel the wait (`t`) | `bc` (`t` = `w`) | `ic` (`t` ∈ `k y`) | `ec` (`t` ∈ `n c`) |
 | Action screen (no field) | `bo` | none | none |
 | Action set (`v`) | `bs` (`v` ∈ `warn mute kick ban none`) | none | none |
@@ -483,7 +484,7 @@ words, and every delete button's number matches a numbered body line.
 **Collision check (re-run 2026-11-13 against `settings_*.go`).** Page keys in use: `s l c f n k w g r m d t u o y a`; the
 three new ones `b i e` match none (free: `b e h i j p q v x z`). Action codes registered: the core `oh op bk cl tg st no pk`
 and the page codes `lk ua uy pg ls ly mo my ws wr wc wv wf gs gr gc gv gf rs rr rc rv rf ay dl dr dy kg`; **the sixteen new
-codes `bg bx by ba bc bo bs ig ix iy ia ic eg ex ey ea ec` match none** (`ba` and `bk` differ). The lock codes (`gf`, `ac`,
+codes `bp bx by bn bc bo bs ig ix iy ia ic eg ex ey ea ec` match none** (`bg` and `ba` are the Deletion page's `Bot goodbye` and `Bot auto` row codes and `bk` is Back, so the Blacklist's pager and Add are `bp` and `bn`, U-12). The lock codes (`gf`, `ac`,
 …) are control `t` values on page `k`, never action codes. No list page registers a control, so `tg` and `st` naming page
 `b`, `i` or `e` are invalid in step 1. The part codes `w k y n c` are values of the wait's `t`, scoped to their page
 (`settingsInputValidPart` accepts exactly `(b,w) (i,k) (i,y) (e,n) (e,c)` besides the editor's parts); the wait field named
@@ -497,10 +498,10 @@ codes `bg bx by ba bc bo bs ig ix iy ia ic eg ex ey ea ec` match none** (`ba` an
 
 | Action | Fields, exactly | Each value |
 |--------|-----------------|------------|
-| `bg ig eg` | `c`, `v` | `v`: 1 to 4 ASCII digits (`settingsParseNumber(v, 4)`, so a global entry number is at most 79,992 = 5 digits), clamped to 1..pages when drawn |
+| `bp ig eg` | `c`, `v` | `v`: 1 to 4 ASCII digits (`settingsParseNumber(v, 4)`, so a global entry number is at most 79,992 = 5 digits), clamped to 1..pages when drawn |
 | `bx ix ex` | `c`, `r`, `v` | `r`: 1 to 17 ASCII digits, no leading zero, positive (U-5); `v` as above |
 | `by iy ey` | `c`, `r`, `e` | `r` as above; `e`: digits only, positive, 63-bit (`settingsCardExpired`'s parse) |
-| `ba ia ea bo` | `c` | none |
+| `bn ia ea bo` | `c` | none |
 | `bc` / `ic` / `ec` | `c`, `t` | `t` one of that page's parts |
 | `bs` | `c`, `v` | `v` exactly one of `warn mute kick ban none` (lower case) |
 
@@ -528,11 +529,11 @@ codes `bg bx by ba bc bo bs ig ix iy ia ic eg ex ey ea ec` match none** (`ba` an
 
 | Step | What happens |
 |------|--------------|
-| Ask (`bx&r&v`) | the whole press pipeline with the page's delete right (section 4), so a presser without it never sees the card; then the entry is read fresh by `(id, chat_id)`; gone → page `v` with `settings_entries_already_removed`; else Screen 4, Yes `{a: by, r}` plus a fresh `e` (now + 5 minutes, `settingsCardLifetime`), No `{a: bg, v}` (M40) |
+| Ask (`bx&r&v`) | the whole press pipeline with the page's delete right (section 4), so a presser without it never sees the card; then the entry is read fresh by `(id, chat_id)`; gone → page `v` with `settings_entries_already_removed`; else Screen 4, Yes `{a: by, r}` plus a fresh `e` (now + 5 minutes, `settingsCardLifetime`), No `{a: bp, v}` (M40) |
 | Yes (`by&r&e`) | the whole pipeline again with the same right on a fresh member record (a demotion between the taps is refused); then `settingsCardExpired` (an expired minute: the list redrawn at the page holding entry `r`, or page 1 when it is gone, with `⚠️ settings_card_expired`, nothing deleted); then one `DELETE … WHERE id = ? AND chat_id = ? RETURNING` with the command's own cache drops (section 7) |
 | Deleted | the press is answered empty and the list is redrawn at the page where the removed entry stood (the count of remaining entries that sort before its returned text, divided by 8, plus 1, clamped), with `✅ settings_bl_removed` / `settings_flt_removed` / `settings_notes_removed` naming the returned text (escaped, cut at 100) |
 | Zero rows | another admin deleted it, a stale card, or a forged ID of another chat: page 1 with `⚠️ settings_entries_already_removed` |
-| No (`bg&v`) | an ordinary pager press: page `v`, no notice |
+| No (`bp&v`) | an ordinary pager press: page `v`, no notice |
 | Write error | page holding entry `r` (or page 1) with `⚠️ common_settings_save_failed`, nothing reported as deleted |
 
 A delete never matches by text: a card drawn for one row cannot delete a row re-added later with the same text (the D-33 rule
@@ -550,10 +551,10 @@ the member part, the shared bot half for the bot part).
 
 | Control | Command's checks (read from the code) | `settingsRight` | Refusals, in order (notice unless marked alert) |
 |---------|---------------------------------------|-----------------|--------------------------------------------------|
-| Blacklist `ba`, `bx`, `by`, `bs`; typed part `w` | `IsUserConnected(true, true)` (user admin, bot admin by `IsUserAdmin(b, chat, b.Id)`), `IsUserAdmin` (silent), `IsBotAdmin` (silent), `CanUserRestrict`, `CanBotRestrict`; `/blacklistaction` the same without the silent pair | **`settingsRightRestrictBotRestrict`** (M42) | `connections_is_user_connected_bot_not_admin`; `chat_status_bot_not_admin` (the command is silent here, the menu must say something); **alert** `settings_no_restrict`; `chat_status_bot_restrict_error` for a press, `chat_status_bot_restrict_group_error` for a typed reply (U-9) |
+| Blacklist `bn`, `bx`, `by`, `bs`; typed part `w` | `IsUserConnected(true, true)` (user admin, bot admin by `IsUserAdmin(b, chat, b.Id)`), `IsUserAdmin` (silent), `IsBotAdmin` (silent), `CanUserRestrict`, `CanBotRestrict`; `/blacklistaction` the same without the silent pair | **`settingsRightRestrictBotRestrict`** (M42) | `connections_is_user_connected_bot_not_admin`; `chat_status_bot_not_admin` (the command is silent here, the menu must say something); **alert** `settings_no_restrict`; `chat_status_bot_restrict_error` for a press, `chat_status_bot_restrict_group_error` for a typed reply (U-9) |
 | Filters `ia`, `ix`, `iy`; typed parts `k`, `y` | `IsUserConnected(true, false)` (no bot check), `CanUserChangeInfo` | `settingsRightChangeInfo` | **alert** `settings_no_change_info` |
 | Notes `ea`, `ex`, `ey`; typed parts `n`, `c` | `IsUserConnected(true, true)`, `CanUserChangeInfo` | `settingsRightChangeInfoBotAdmin` | `connections_is_user_connected_bot_not_admin`; **alert** `settings_no_change_info` |
-| `op`, `bg ig eg`, `bo`, `bc ic ec`, Back, Close | none beyond the pipeline | `settingsRightAdmin` | none |
+| `op`, `bp ig eg`, `bo`, `bc ic ec`, Back, Close | none beyond the pipeline | `settingsRightAdmin` | none |
 
 **A notice refusal answers empty and redraws with the warning line** (the list page at `v` for an ask, page 1 for Add, the
 page holding `r` for a Yes, the action screen for `bs`); **an alert refusal edits nothing** (Phase 9, unchanged). A control
@@ -724,11 +725,11 @@ Built only with `encodeCallbackData`. Worst case: `c` = `-1001234567890` (14 cha
 | Button | Data (private) | Bytes private | Bytes group |
 |--------|----------------|---------------|-------------|
 | Main cell of a list page | `settings\|v1\|a=op&c=-1001234567890&p=b` | 37 | 33 |
-| Pager (Prev, Next), card No | `settings\|v1\|a=bg&c=-1001234567890&v=9999` | 40 | private only |
+| Pager (Prev, Next), card No | `settings\|v1\|a=bp&c=-1001234567890&v=9999` | 40 | private only |
 | Delete ask `🗑 n` | `settings\|v1\|a=bx&c=-1001234567890&r=12345678901234567&v=9999` | 60 | private only |
 | **Delete Yes** | `settings\|v1\|a=by&c=-1001234567890&e=29412345&r=12345678901234567` | **64** | private only |
 | Delete Yes with an 18-digit ID (never drawn, U-5) | `…&r=123456789012345678` | 65, **over the cap** | — |
-| Add | `settings\|v1\|a=ba&c=-1001234567890` | 33 | private only |
+| Add | `settings\|v1\|a=bn&c=-1001234567890` | 33 | private only |
 | Cancel the wait | `settings\|v1\|a=ic&c=-1001234567890&t=y` | 37 | private only |
 | Action screen | `settings\|v1\|a=bo&c=-1001234567890` | 33 | private only |
 | Action choice (`warn`, `mute`, `kick`, `none`; `ban` is 39) | `settings\|v1\|a=bs&c=-1001234567890&v=none` | 40 | private only |
