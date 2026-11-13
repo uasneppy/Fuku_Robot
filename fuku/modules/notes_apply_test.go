@@ -5,6 +5,7 @@ package modules
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -362,5 +363,62 @@ func TestNoteCommandRefusesWhenLookupFails(t *testing.T) {
 	}
 	if notes.DoesNoteExists(chatID, "price") {
 		t.Error("a note was stored although the lookup failed")
+	}
+}
+
+// TestNoteApplyThenFetch proves research S-09 for notes at the module level: with notes_list filled by an
+// earlier /get (so a stale cache would hide a new note), a note applyNoteAdd stores is sent by #name and
+// /get at once, and after applyNoteRemoveByID /get answers notes_does_not_exist and #name sends nothing.
+func TestNoteApplyThenFetch(t *testing.T) {
+	withRealLocales(t)
+	ctx := context.Background()
+	chatID := noteApplyChat(t)
+	chat := gotgbot.Chat{Id: chatID, Type: "supergroup", Title: "Notes Chat"}
+	member := gotgbot.User{Id: 42, FirstName: "Member"}
+	missing, _ := i18n.MustNewTranslator("uk").GetString("notes_does_not_exist")
+	if missing == "" {
+		t.Fatal("notes_does_not_exist is missing")
+	}
+
+	// say runs one message through the handler and returns the texts the bot sent.
+	say := func(text string, handler func(*gotgbot.Bot, *ext.Context) error) []string {
+		client := newModuleBotClient()
+		bot := newModuleTestBot(client)
+		err := handler(bot, newModuleMessageContext(bot, chat, member, text))
+		if err != ext.EndGroups && err != ext.ContinueGroups {
+			t.Fatalf("%q error = %v", text, err)
+		}
+		var texts []string
+		for _, call := range client.callsFor("sendMessage") {
+			texts = append(texts, fmt.Sprint(call.Params["text"]))
+		}
+		return texts
+	}
+
+	if got := say("/get rules", notesModule.getNotes); len(got) != 1 || got[0] != missing {
+		t.Fatalf("first /get = %v, want notes_does_not_exist (this also fills notes_list)", got)
+	}
+	if got := applyNoteAdd(ctx, chatID, noteApplyInput("rules")); got.Outcome != noteAdded {
+		t.Fatalf("add = %+v", got)
+	}
+	if got := say("#rules", notesModule.notesWatcher); len(got) != 1 || got[0] != "body" {
+		t.Errorf("#rules after the add = %v, want the note", got)
+	}
+	if got := say("/get rules", notesModule.getNotes); len(got) != 1 || got[0] != "body" {
+		t.Errorf("/get rules after the add = %v, want the note", got)
+	}
+
+	var row models.Notes
+	if err := db.DB.Where("chat_id = ? AND note_name = ?", chatID, "rules").Take(&row).Error; err != nil {
+		t.Fatalf("stored row: %v", err)
+	}
+	if got := applyNoteRemoveByID(ctx, chatID, int64(row.ID)); got.Outcome != noteRemovedByID {
+		t.Fatalf("remove by ID = %+v", got)
+	}
+	if got := say("/get rules", notesModule.getNotes); len(got) != 1 || got[0] != missing {
+		t.Errorf("/get rules after the delete = %v, want notes_does_not_exist", got)
+	}
+	if got := say("#rules", notesModule.notesWatcher); len(got) != 0 {
+		t.Errorf("#rules after the delete sent %v, want nothing", got)
 	}
 }
