@@ -3323,6 +3323,17 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   holds every name key, the Locks words, the six Phase 18 page titles and the six log category names in all 8 languages,
   because `make check-translations` cannot see table fields. The page that draws the table is the Locks page (see the settings
   Callbacks bullets).
+  The blacklist (Phase 19) is written by four apply functions in `blacklists.go`, through the `blacklistWrites` seam (defaults
+  `blacklists.AddBlacklistContext`, `RemoveBlacklistContext` and `SetBlacklistActionContext`, each dropping `blacklist:<chat>`):
+  `applyBlacklistAdd` (the typed words sorted into added, already listed, too long and failed; a new word is stored lower-cased
+  with the warn action), `applyBlacklistRemove` (only words that are in the caller's read of the chat's words),
+  `applyBlacklistRemoveByID` (the menu's delete by row ID, chat-scoped) and `applyBlacklistAction` (only the values of
+  `blacklistActionValues`, `mute kick warn ban none`; the rows the update matched are returned). `/addblacklist` and its three
+  aliases, `/rmblacklist` and its aliases and `/blacklistaction` keep their gates and every reply byte and map the typed results
+  onto them, including `/blacklistaction ban` on a chat with no words, which writes nothing and still answers its success text
+  (research C-02, pinned, not fixed). `TestLegacyBlacklistRequests` pins every request and stored row of the four commands and is
+  never re-recorded. `blacklist:<chat>` is not in `skipLocal`: another replica can serve the old list for up to `CACHE_LOCAL_TTL`,
+  exactly as after the commands. The apply functions log the chat ID and the error only, never a word.
 - Rules message (`rules.go`): `/rules` (in the group and in a private chat connected to it), the private rules message the
   `/start rules_<chat id>` deep link opens and the Rules page's Full preview are built by
   `buildRulesMessage` and sent by `sendRulesMessage`. The builder has two forms, the group form (`rulesFormGroup`: heading
@@ -3945,7 +3956,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   commands the pages mirror, `TestLegacyWarnSettingsRequests`, `TestLegacyReportsRequests`, `TestLegacyAISpamRequests`,
   `TestLegacyAutoApproveRequests`, `TestLegacyLanguageRequests`, `TestLegacyLogCategoryRequests`,
   `TestLegacyAnonAdminRequests` and `TestLegacyLockRequests`, which record what each command sent and stored before its
-  extraction into an apply function and are never re-recorded or weakened. The tests across the six pages are
+  extraction into an apply function and are never re-recorded or weakened. Phase 19 adds `TestLegacyBlacklistRequests`
+  (`blacklists_legacy_request_test.go`, chats from `-1009919001101`) and every `TestLegacy*Requests` golden of Phase 19 joins
+  that rule: committed alone before the production change, never re-recorded or weakened. The tests across the six pages are
   `TestSettingsMainPhase18` and the fifteen-cell subtest of `TestSettingsMainGrid` (`settings_main_test.go`: the final
   grid, sixteen state lines in order with their defaults, the unknown mark on a page whose read fails with every other line
   unchanged, no Telegram call of its own, no row written, the earlier pages' cells unchanged, and

@@ -11,15 +11,23 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 )
 
+// AddBlacklist stores a word for the chat with the warn action. It is the wrapper
+// of AddBlacklistContext that the older callers use.
 func AddBlacklist(chatId int64, trigger string) error {
+	return AddBlacklistContext(context.Background(), chatId, trigger, "warn")
+}
+
+// AddBlacklistContext stores a lower-cased word for the chat with the given action and
+// drops the chat's cached blacklist after a successful insert.
+func AddBlacklistContext(ctx context.Context, chatId int64, trigger, action string) error {
 	blacklist := &models.BlacklistSettings{
 		ChatId: chatId,
 		Word:   strings.ToLower(trigger),
-		Action: "warn",
+		Action: action,
 		Reason: "Blacklisted word: '%s'",
 	}
 
-	err := db.CreateRecord(blacklist)
+	err := db.CreateRecordContext(ctx, blacklist)
 	if err != nil {
 		log.Errorf("[Database] AddBlacklist: %v - %d", err, chatId)
 		return err
@@ -29,8 +37,16 @@ func AddBlacklist(chatId int64, trigger string) error {
 	return nil
 }
 
+// RemoveBlacklist deletes one word of the chat. It is the wrapper of
+// RemoveBlacklistContext that the older callers use.
 func RemoveBlacklist(chatId int64, trigger string) error {
-	result := db.DB.Where("chat_id = ? AND word = ?", chatId, strings.ToLower(trigger)).Delete(&models.BlacklistSettings{})
+	return RemoveBlacklistContext(context.Background(), chatId, trigger)
+}
+
+// RemoveBlacklistContext deletes the lower-cased word of the chat and drops the chat's
+// cached blacklist only when a row went.
+func RemoveBlacklistContext(ctx context.Context, chatId int64, trigger string) error {
+	result := db.DB.WithContext(ctx).Where("chat_id = ? AND word = ?", chatId, strings.ToLower(trigger)).Delete(&models.BlacklistSettings{})
 	if result.Error != nil {
 		log.Errorf("[Database] RemoveBlacklist: %v - %d", result.Error, chatId)
 		return result.Error
@@ -53,15 +69,25 @@ func RemoveAllBlacklist(chatId int64) error {
 	return nil
 }
 
+// SetBlacklistAction sets the action of every word of the chat. It is the wrapper of
+// SetBlacklistActionContext that the older callers use.
 func SetBlacklistAction(chatId int64, action string) error {
-	err := db.DB.Model(&models.BlacklistSettings{}).Where("chat_id = ?", chatId).Update("action", strings.ToLower(action)).Error
-	if err != nil {
-		log.Errorf("[Database] SetBlacklistAction: %v - %d", err, chatId)
-		return err
+	_, err := SetBlacklistActionContext(context.Background(), chatId, action)
+	return err
+}
+
+// SetBlacklistActionContext sets the lower-cased action of every word of the chat, drops
+// the chat's cached blacklist after a successful update and returns how many rows the
+// update matched (zero for a chat with no words).
+func SetBlacklistActionContext(ctx context.Context, chatId int64, action string) (int64, error) {
+	result := db.DB.WithContext(ctx).Model(&models.BlacklistSettings{}).Where("chat_id = ?", chatId).Update("action", strings.ToLower(action))
+	if result.Error != nil {
+		log.Errorf("[Database] SetBlacklistAction: %v - %d", result.Error, chatId)
+		return 0, result.Error
 	}
 
 	cache.DeleteCache(cache.CacheKey("blacklist", chatId))
-	return nil
+	return result.RowsAffected, nil
 }
 
 func GetBlacklistSettings(chatId int64) models.BlacklistSettingsSlice {
