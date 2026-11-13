@@ -3,6 +3,8 @@
 package modules
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -11,6 +13,7 @@ import (
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
+	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
 )
 
@@ -163,6 +166,58 @@ func TestSettingsMainGrid(t *testing.T) {
 			}
 			if rows := len(screen.Keyboard.InlineKeyboard); rows != 7 {
 				t.Errorf("%s Main has %d rows, want 7", name, rows)
+			}
+		}
+	})
+
+	t.Run("fifteen grid cells keep eight rows, the odd last cell alone, in the UI-SPEC's order", func(t *testing.T) {
+		// The pages of the final menu by their real keys, in the order the contract fixes: eight
+		// rows of the grid (seven pairs and the Anonymous admins cell alone), Access, navigation.
+		order := []string{
+			settingsPageStaff, settingsPageLockdown, settingsPageCaptcha, settingsPageAntiflood,
+			settingsPageWarns, settingsPageLocks, settingsPageWelcome, settingsPageGoodbye,
+			settingsPageRules, settingsPageMreq, settingsPageDeletion, settingsPageSwitches,
+			settingsPageLang, settingsPageLog, settingsPageAnon,
+		}
+		var entries []settingsMainEntry
+		for _, key := range order {
+			pg, ok := settingsPageByKey(key)
+			if !ok {
+				t.Fatalf("page %q is not registered", key)
+			}
+			entries = append(entries, settingsMainTestEntry(tr, key, pg.Icon, pg.TitleKey, false))
+		}
+		entries = append(entries, accessE)
+		for name, view := range map[string]settingsView{"private": privateView, "group": groupView} {
+			screen := renderSettingsMain(view, entries, "")
+			nav := "close"
+			if view.Private {
+				nav = "groups|close"
+			}
+			if got, want := settingsMainShape(t, screen.Keyboard.InlineKeyboard), "s|l / c|f / n|k / w|g / r|m / d|t / u|o / y / a / "+nav; got != want {
+				t.Errorf("%s owner keyboard = %q, want %q", name, got, want)
+			}
+			if rows := len(screen.Keyboard.InlineKeyboard); rows != 10 {
+				t.Errorf("%s owner Main has %d rows, want 10", name, rows)
+			}
+			if got := strings.Count(screen.Text, staffMarker("settings_main_state_line")); got != 16 {
+				t.Errorf("%s owner Main has %d state lines, want 16", name, got)
+			}
+			if screen.Omitted != 0 {
+				t.Errorf("%s Main omitted %d buttons", name, screen.Omitted)
+			}
+			admin := renderSettingsMain(view, entries[:len(order)], "")
+			if rows := len(admin.Keyboard.InlineKeyboard); rows != 9 {
+				t.Errorf("%s admin Main has %d rows, want 9", name, rows)
+			}
+			if got := settingsMainShape(t, admin.Keyboard.InlineKeyboard); got != "s|l / c|f / n|k / w|g / r|m / d|t / u|o / y / "+nav {
+				t.Errorf("%s admin keyboard = %q", name, got)
+			}
+			// Telegram's own limits: at most 100 buttons and 8 to a row.
+			for _, row := range screen.Keyboard.InlineKeyboard {
+				if len(row) > 8 {
+					t.Errorf("%s has a row of %d buttons", name, len(row))
+				}
 			}
 		}
 	})
@@ -327,6 +382,21 @@ func settingsMainWorstState(tr *i18n.Translator) string {
 		settingsText(tr, "settings_state_not_set"),
 		settingsStateWord(tr, true),
 		settingsStateWord(tr, false),
+		// Phase 18: the Switches and Locks counts at their largest, the Anonymous admins and Log
+		// channel words, and every Warnings action at the largest limit.
+		settingsText(tr, "settings_state_sw_on", i18n.TranslationParams{"n": 3}),
+		settingsText(tr, "settings_state_locks_on", i18n.TranslationParams{"n": len(settingsLockRows)}),
+		settingsText(tr, "common_status_on"),
+		settingsText(tr, "common_status_off"),
+	}
+	for _, mode := range settingsWarnsStoredModes {
+		candidates = append(candidates, settingsText(tr, "settings_state_warns", i18n.TranslationParams{
+			"n": settingsWarnsMaxLimit, "action": settingsWarnsActionWord(tr, mode),
+		}))
+	}
+	// The Language line is the stored language by its own name and flag: the longest of the eight.
+	for _, code := range groupLanguageCodes {
+		candidates = append(candidates, settingsLangDisplay(code))
 	}
 	worst := ""
 	for _, c := range candidates {
@@ -463,4 +533,230 @@ func TestSettingsHubGroupsButton(t *testing.T) {
 			t.Errorf("a group menu's Main carries the hub button %q", button.CallbackData)
 		}
 	}
+}
+
+// settingsMainLines is the state lines of a Main page's text, in the order they are drawn.
+func settingsMainLines(text string) []string {
+	var lines []string
+	for _, line := range strings.Split(text, "\n") {
+		if strings.HasPrefix(line, staffMarker("settings_main_state_line")) {
+			lines = append(lines, line)
+		}
+	}
+	return lines
+}
+
+// settingsMainTitleKeys are the title keys of the sixteen pages in the order Main draws them for the
+// owner: the fifteen grid pages in grid order, then Access.
+var settingsMainTitleKeys = []string{
+	"settings_page_staff", "settings_page_lockdown", "settings_page_captcha", "settings_page_antiflood",
+	"settings_page_warns", "settings_page_locks", "settings_page_welcome", "settings_page_goodbye",
+	"settings_page_rules", "settings_page_mreq", "settings_page_del", "settings_page_switches",
+	"settings_page_lang", "settings_page_log", "settings_page_anon", "settings_page_access",
+}
+
+func TestSettingsMainPhase18(t *testing.T) {
+	tr := func() *i18n.Translator { return i18n.MustNewTranslator("en") }
+
+	// wantLine is the line Main draws for the page of the title key with the given state.
+	wantLine := func(titleKey, state string) string {
+		for _, pg := range settingsPagesInOrder() {
+			if pg.TitleKey == titleKey {
+				return settingsText(tr(), "settings_main_state_line", i18n.TranslationParams{
+					"icon": pg.Icon, "page": settingsText(tr(), titleKey), "state": state,
+				})
+			}
+		}
+		t.Fatalf("no page has the title key %s", titleKey)
+		return ""
+	}
+	// linesByTitle maps each title key to its line of a Main text.
+	linesByTitle := func(t *testing.T, text string) map[string]string {
+		t.Helper()
+		out := make(map[string]string)
+		for _, key := range settingsMainTitleKeys {
+			if line, ok := settingsMainStateLine(text, key); ok {
+				out[key] = line
+			}
+		}
+		return out
+	}
+
+	t.Run("the owner's Main in a group and in private: the final grid, sixteen lines in order, the defaults", func(t *testing.T) {
+		settingsDelMenus(t, func(t *testing.T, m *settingsDelMenu) {
+			shape := settingsMainShapeGroup
+			if m.private {
+				shape = settingsMainShapePrivate
+			}
+			if got := settingsMainShape(t, m.mainKeyboard); got != shape {
+				t.Errorf("Main = %q, want %q", got, shape)
+			}
+			if rows := len(m.mainKeyboard); rows != settingsMainOwnerRows {
+				t.Errorf("Main has %d rows, want %d", rows, settingsMainOwnerRows)
+			}
+			lines := settingsMainLines(m.mainText)
+			if len(lines) != len(settingsMainTitleKeys) {
+				t.Fatalf("Main has %d state lines, want %d:\n%s", len(lines), len(settingsMainTitleKeys), m.mainText)
+			}
+			for i, key := range settingsMainTitleKeys {
+				if !strings.Contains(lines[i], staffMarker(key)) {
+					t.Errorf("line %d = %q, want the line of %s", i+1, lines[i], key)
+				}
+				if strings.HasSuffix(lines[i], settingsUnknownState) {
+					t.Errorf("line %d (%s) is the unknown mark on a chat the bot can read", i+1, key)
+				}
+			}
+			// A chat with no rows reads each new page's default: the warn limit 3 with Mute, no lock,
+			// Reports on by its model default, the group language Ukrainian, no log channel, anonymous
+			// admins off.
+			got := linesByTitle(t, m.mainText)
+			for titleKey, state := range map[string]string{
+				"settings_page_warns": settingsText(tr(), "settings_state_warns", i18n.TranslationParams{
+					"n": 3, "action": settingsText(tr(), "settings_opt_mute"),
+				}),
+				"settings_page_locks":    settingsText(tr(), "settings_state_locks_on", i18n.TranslationParams{"n": 0}),
+				"settings_page_switches": settingsText(tr(), "settings_state_sw_on", i18n.TranslationParams{"n": 1}),
+				"settings_page_lang":     settingsLangDisplay("uk"),
+				"settings_page_log":      settingsText(tr(), "settings_state_not_linked"),
+				"settings_page_anon":     settingsText(tr(), "common_status_off"),
+			} {
+				if want := wantLine(titleKey, state); got[titleKey] != want {
+					t.Errorf("%s line = %q, want %q", titleKey, got[titleKey], want)
+				}
+			}
+		})
+	})
+
+	t.Run("an allowed administrator's Main has nine rows and no Access line", func(t *testing.T) {
+		env := newSettingsDelEnv(t)
+		m := env.groupMenuOf(env.admin)
+		want := strings.TrimSuffix(settingsMainShapeGroup, " / a / close") + " / close"
+		if got := settingsMainShape(t, m.mainKeyboard); got != want {
+			t.Errorf("admin Main = %q, want %q", got, want)
+		}
+		if rows := len(m.mainKeyboard); rows != settingsMainOwnerRows-1 {
+			t.Errorf("admin Main has %d rows, want %d", rows, settingsMainOwnerRows-1)
+		}
+		if lines := settingsMainLines(m.mainText); len(lines) != len(settingsMainTitleKeys)-1 {
+			t.Errorf("admin Main has %d state lines, want %d", len(lines), len(settingsMainTitleKeys)-1)
+		}
+		if _, ok := settingsMainStateLine(m.mainText, "settings_page_access"); ok {
+			t.Errorf("the admin's Main has an Access line: %q", m.mainText)
+		}
+	})
+
+	t.Run("the cells and data of the earlier pages are what they were before Phase 18", func(t *testing.T) {
+		env := newSettingsDelEnv(t)
+		m := env.groupMenu()
+		for _, want := range []struct{ key, icon, title string }{
+			{settingsPageStaff, "👥", "settings_page_staff"}, {settingsPageLockdown, "🔒", "settings_page_lockdown"},
+			{settingsPageCaptcha, "🧩", "settings_page_captcha"}, {settingsPageAntiflood, "🌊", "settings_page_antiflood"},
+			{settingsPageWelcome, "🎉", "settings_page_welcome"}, {settingsPageGoodbye, "👋", "settings_page_goodbye"},
+			{settingsPageRules, "📜", "settings_page_rules"}, {settingsPageMreq, "🛂", "settings_page_mreq"},
+			{settingsPageDeletion, "🧹", "settings_page_del"}, {settingsPageAccess, "🔑", "settings_page_access"},
+		} {
+			button, ok := settingsPageButton(t, m.mainKeyboard, want.key)
+			if !ok {
+				t.Errorf("Main has no cell for page %s", want.key)
+				continue
+			}
+			if label := want.icon + " " + settingsText(tr(), want.title); button.Text != label {
+				t.Errorf("page %s cell = %q, want %q", want.key, button.Text, label)
+			}
+			wantData := encodeCallbackData(settingsCallbackNamespace, env.groupFields(env.owner, "a", "op", "p", want.key))
+			if button.CallbackData != wantData {
+				t.Errorf("page %s data = %q, want %q", want.key, button.CallbackData, wantData)
+			}
+		}
+	})
+
+	t.Run("a page whose read fails shows the unknown mark and no other line changes", func(t *testing.T) {
+		env := newSettingsDelEnv(t)
+		draw := func() map[string]string {
+			entries := settingsMainEntries(env.bot, tr(), &env.chat, true)
+			if len(entries) != len(settingsMainTitleKeys) {
+				t.Fatalf("%d entries, want %d", len(entries), len(settingsMainTitleKeys))
+			}
+			view := settingsView{
+				Tr: tr(), OwnerKey: "u", OwnerValue: "9999999999",
+				GroupID: env.chat.Id, GroupTitle: "G", OpenerName: "Opener",
+			}
+			return linesByTitle(t, renderSettingsMain(view, entries, "").Text)
+		}
+		before := settingsLocksCallTotal(env.settingsEnv)
+		baseline := draw()
+		if len(baseline) != len(settingsMainTitleKeys) {
+			t.Fatalf("baseline has %d lines, want %d", len(baseline), len(settingsMainTitleKeys))
+		}
+		if got := settingsLocksCallTotal(env.settingsEnv) - before; got != 0 {
+			t.Errorf("drawing Main made %d Telegram calls of its own, want none", got)
+		}
+
+		failure := errors.New("database is gone")
+		for _, failing := range []struct {
+			titleKey string
+			swap     func(t *testing.T)
+		}{
+			{"settings_page_warns", func(t *testing.T) {
+				mreqSwap(t, &settingsWarnsRead, func(context.Context, int64) (*models.WarnSettings, error) { return nil, failure })
+			}},
+			{"settings_page_locks", func(t *testing.T) {
+				mreqSwap(t, &settingsLocksRead, func(context.Context, int64) (map[string]bool, error) { return nil, failure })
+			}},
+			{"settings_page_switches", func(t *testing.T) {
+				mreqSwap(t, &settingsSwReportsRead, func(context.Context, int64) (bool, error) { return false, failure })
+			}},
+			{"settings_page_lang", func(t *testing.T) {
+				mreqSwap(t, &settingsLangRead, func(context.Context, int64) (string, error) { return "", failure })
+			}},
+			{"settings_page_log", func(t *testing.T) {
+				mreqSwap(t, &settingsLogRead, func(context.Context, int64) (*models.LogChannel, error) { return nil, failure })
+			}},
+			{"settings_page_anon", func(t *testing.T) {
+				mreqSwap(t, &settingsAnonRead, func(context.Context, int64) (bool, error) { return false, failure })
+			}},
+		} {
+			t.Run(failing.titleKey, func(t *testing.T) {
+				failing.swap(t)
+				got := draw()
+				for key, line := range got {
+					if key == failing.titleKey {
+						if !strings.HasSuffix(line, settingsUnknownState) {
+							t.Errorf("the failing page's line = %q, want the unknown mark", line)
+						}
+						continue
+					}
+					if line != baseline[key] {
+						t.Errorf("%s changed to %q from %q while another page's read failed", key, line, baseline[key])
+					}
+				}
+			})
+		}
+	})
+
+	t.Run("redrawing Main costs the pipeline's calls only and writes no row", func(t *testing.T) {
+		env := newSettingsDelEnv(t)
+		m := env.groupMenu()
+		m.press("a", "op", "p", settingsPageLocks)
+		before := settingsMenuMarkOf(env.settingsEnv)
+		botReads := env.botReads(env.chat.Id)
+		calls := settingsLocksCallTotal(env.settingsEnv)
+		m.press("a", "bk")
+		after := settingsMenuMarkOf(env.settingsEnv)
+		if got := after.members - before.members; got != 1 {
+			t.Errorf("Back made %d getChatMember calls, want the presser's one", got)
+		}
+		if got := env.botReads(env.chat.Id) - botReads; got != 0 {
+			t.Errorf("Back read the bot %d times, want none", got)
+		}
+		if after.chats != before.chats || after.edits-before.edits != 1 || after.answers-before.answers != 1 {
+			t.Errorf("Back made %+v, want one edit, one answer and no getChat", after)
+		}
+		if got := settingsLocksCallTotal(env.settingsEnv) - calls; got != 3 {
+			t.Errorf("Back made %d Telegram calls, want 3 (the presser's record, the edit, the answer)", got)
+		}
+		if n := settingsPhase18RowCount(t, env.chat.Id); n != 0 {
+			t.Errorf("drawing Main left %d rows in the settings tables", n)
+		}
+	})
 }

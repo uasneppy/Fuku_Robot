@@ -597,7 +597,17 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `settingsKeyboard.navRow`: a private Main ends with Groups (`settingsHubGroupsButton`, the `shub|v1` press `a=lp&v=1`,
   at most 16 bytes, which `settingsHubCallback` answers by redrawing the list at page 1 in the same message; the page the
   user came from is not remembered) and Close, a group Main with Close alone, and every other page, Access included, with
-  Back and Close. A page added by a later phase joins the grid by its `Order` with no edit to the renderer.
+  Back and Close. A page added by a later phase joins the grid by its `Order` with no edit to the renderer. After Phase 18
+  the final Main has fifteen grid cells (`s|l / c|f / n|k / w|g / r|m / d|t / u|o / y`, the Anonymous admins cell alone),
+  then Access for the live owner and the navigation row, so ten rows for the owner and nine for an administrator, and
+  sixteen state lines in the grid's order with Access last. It is the one screen over the content-page row budget (eight
+  rows private, nine in a group) by two rows for the owner and one for an administrator: that budget is for pages that
+  carry controls and a body, Main carries navigation only, and Telegram's own limits (100 buttons, 8 to a row) are met by
+  a wide margin. The second hub the UI-SPEC kept as a fallback (A18-A1) is not built, because nothing forced it (D-23).
+  The Main states of the six Phase 18 pages are database reads only, a failed read is the unknown mark on that page's line
+  alone, and drawing Main makes no Telegram call of its own (`TestSettingsMainPhase18`); `settingsMainWorstState` holds
+  the length test to the longest of them in every language (the Warnings line at limit 100 with the longest action word,
+  Switches at 3, Locks at 22, the longest language name with its flag).
 - The private group list and the pick (`settings_hub.go`, MENU-09, MENU-13). The list is a message in the bot's private
   chat: the header with the Groups page name, `settings_list_intro`, `settings_list_hint` (it names `/admincache` and
   `/settings` in the group, the two repair paths), a `Page N/M` line only when there is more than one page, one
