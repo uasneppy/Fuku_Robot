@@ -3959,7 +3959,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   only while that category is on), `reports` (`/report` and `/reports` follow the switch) and `auto approve` (a join request is
   approved once with the switch on and not with it off). The anonymous-admin subtest sets the bot's own record to one that can
   restrict, because a mode-on anonymous sender skips the cached admin list and the gates then read that record. The test adds
-  about 5 seconds to the whole-package run.
+  about 4 seconds to the whole-package run.
 
 ## Commits
 
