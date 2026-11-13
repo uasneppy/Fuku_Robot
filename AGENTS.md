@@ -3917,6 +3917,33 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   are not the member-requirement helpers `withAIConfigured` and `withAINotConfigured`, which set the Anthropic key. The
   stand-in provider value is held in a constant named `...ProviderValue`, never one named with token, secret, password or
   key (gosec G101).
+- Phase 18 test families (the six pages Warnings `n`, Locks `k`, Switches `t`, Language `u`, Log channel `o` and Anonymous
+  admins `y`). Each page has its own files and names: `TestSettingsWarns*`, `TestSettingsSwitches*`, `TestSettingsLanguage*`,
+  `TestSettingsLogChannel*`, `TestSettingsAnonAdmin*` and `TestSettingsLocks*`, and for each setting the three families
+  every menu setting has, a parity test (`TestSettingsParity*`: the press and the command leave the same row and cache), a
+  drift test (`TestSettingsDrift*`) and an authority-parity test (`TestSettingsAuthorityParity*`), plus the goldens of the
+  commands the pages mirror, `TestLegacyWarnSettingsRequests`, `TestLegacyReportsRequests`, `TestLegacyAISpamRequests`,
+  `TestLegacyAutoApproveRequests`, `TestLegacyLanguageRequests`, `TestLegacyLogCategoryRequests`,
+  `TestLegacyAnonAdminRequests` and `TestLegacyLockRequests`, which record what each command sent and stored before its
+  extraction into an apply function and are never re-recorded or weakened. The tests across the six pages are
+  `TestSettingsMainPhase18` and the fifteen-cell subtest of `TestSettingsMainGrid` (`settings_main_test.go`: the final
+  grid, sixteen state lines in order with their defaults, the unknown mark on a page whose read fails with every other line
+  unchanged, no Telegram call of its own, no row written, the earlier pages' cells unchanged, and
+  `settingsMainWorstState` extended to the longest Phase 18 state of each language), `settingsPrivacyPhase18Run` and the
+  Phase 18 screens of `TestSettingsStaffPrivacy` (`settings_staff_privacy_test.go`: every screen of the six pages in 8
+  languages and the six pages driven end to end in a group menu and in the private menu of an administrator who is not the
+  creator, with permitted and refused presses, searched for the Staff Group, the log channel's title and ID and a member),
+  and `settings_phase18_test.go`: `TestSettingsPhase18InStaffGroup` (no Phase 18 page is `Hidden`: in a Staff Group all six
+  open and write like anywhere), `TestSettingsPhase18Codes` (page keys, action codes including `kg`, control keys and
+  every control's allow-list through `settingsControlFieldsValid`), `TestSettingsPhase18ReadsCreateNothing` (opening Main
+  and every page, both Locks pages included, on a chat with no rows leaves no row in the nine tables the readers touch,
+  `settingsPhase18Tables`, in a group menu and in a private one) and `TestSettingsPhase18Cost` (Main makes no Telegram call
+  of its own, the five pages without a right line cost the pipeline's calls only, Locks one more `getChatMember` of the bot,
+  a press refused in step 1 only its answer, and the same with Redis down). A sweep over languages, titles, states and
+  notices keeps the longest few of a notice or a right line and the full product only for what changes the keyboard,
+  because a notice only adds its own length: the `fuku/modules` binary is close to its time limit and every plan adds to it.
+  A test that reads `config.AppConfig` (the enabled languages, the AI provider) sets what it needs and restores it in
+  `t.Cleanup` (`settingsLangWithCodes`, `withAISpamNotConfigured`), and must pass both bare and with a full configuration.
 
 ## Commits
 
