@@ -4,6 +4,7 @@ package modules
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"slices"
@@ -12,8 +13,12 @@ import (
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
+	"github.com/uasneppy/fuku_robot/fuku/db"
+	dbcache "github.com/uasneppy/fuku_robot/fuku/db/cache"
 	"github.com/uasneppy/fuku_robot/fuku/db/locks"
+	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
+	"github.com/uasneppy/fuku_robot/fuku/utils/cache"
 )
 
 // settingsLocksPagerCode is the action code of the Locks page's pager, which a control code must
@@ -397,6 +402,354 @@ func TestSettingsParityLock(t *testing.T) {
 			if got := settingsLocksStored(t, id); got != "" {
 				t.Errorf("chat %d stored %q after a refusal, want nothing", id, got)
 			}
+		}
+	})
+}
+
+// settingsLocksWarmBotRight lists the bot as an administrator with the delete right and loads the
+// chat's admin cache while the bot reads so, so the right of a lock control (the bot as an
+// administrator, by the commands' cached predicate) is answered from the cache. A cold cache loads
+// through a getChatMember of the bot of its own, which a test that counts the right line's one read
+// must not see. The test sets the bot's record for the case it runs after this.
+func settingsLocksWarmBotRight(env *settingsDelEnv) {
+	env.listAdmin(env.chat.Id, staffTestBotID)
+	env.setBot(settingsDelBotJSON("administrator", true))
+	cache.InvalidateAdminCache(env.chat.Id)
+	cache.LoadAdminCache(env.bot, env.chat.Id)
+}
+
+// settingsLocksPageOf is the page number a draw of the Locks page says it is, read from its text.
+func settingsLocksPageOf(t *testing.T, text string) int {
+	t.Helper()
+	for page := 1; page <= settingsLocksPages; page++ {
+		rows := settingsLocksRowsOf(page)
+		if len(rows) > 0 && strings.Contains(text, staffMarker(rows[0].NameKey)) {
+			return page
+		}
+	}
+	t.Fatalf("the text shows no lock of any page: %q", text)
+	return 0
+}
+
+func TestSettingsLocksPager(t *testing.T) {
+	settingsLocksMenus(t, func(t *testing.T, m *settingsDelMenu) {
+		turn := func(kv ...string) (string, [][]gotgbot.InlineKeyboardButton) {
+			t.Helper()
+			m.press(kv...)
+			return m.last()
+		}
+		wantPage := func(name string, text string, keyboard [][]gotgbot.InlineKeyboardButton, page int, widths string, locked ...string) {
+			t.Helper()
+			if got := settingsLocksPageOf(t, text); got != page {
+				t.Errorf("%s drew page %d, want %d: %q", name, got, page, text)
+			}
+			settingsLocksWantLines(t, text, page, locked...)
+			for other := 1; other <= settingsLocksPages; other++ {
+				if other == page {
+					continue
+				}
+				for _, row := range settingsLocksRowsOf(other) {
+					if strings.Contains(text, staffMarker(row.NameKey)) {
+						t.Errorf("%s draws %s of page %d", name, row.Kind, other)
+					}
+				}
+			}
+			if got := fmt.Sprint(settingsDelWidths(keyboard)); got != widths {
+				t.Errorf("%s row widths = %s, want %s", name, got, widths)
+			}
+			next, hasNext := settingsButtonByMarker(keyboard, "staff_panel_next")
+			prev, hasPrev := settingsButtonByMarker(keyboard, "staff_panel_prev")
+			if wantNext := page < settingsLocksPages; hasNext != wantNext || hasPrev != (page > 1) {
+				t.Errorf("%s pager: Next %v, Prev %v on page %d of %d", name, hasNext, hasPrev, page, settingsLocksPages)
+			}
+			if hasNext {
+				if fields := settingsButtonFields(t, next); fields["a"] != settingsActLocksPage || fields["v"] != fmt.Sprint(page+1) {
+					t.Errorf("%s Next sends %v, want the absolute page %d", name, fields, page+1)
+				}
+			}
+			if hasPrev {
+				if fields := settingsButtonFields(t, prev); fields["a"] != settingsActLocksPage || fields["v"] != fmt.Sprint(page-1) {
+					t.Errorf("%s Prev sends %v, want the absolute page %d", name, fields, page-1)
+				}
+			}
+			if !containsMarker(text, "staff_panel_page") {
+				t.Errorf("%s has no page line: %q", name, text)
+			}
+		}
+		const page1, page2 = "[2 2 2 2 2 2 1 2]", "[2 2 2 2 2 1 2]"
+
+		text, keyboard := turn("a", "op", "p", settingsPageLocks)
+		wantPage("open", text, keyboard, 1, page1)
+		text, keyboard = turn("a", settingsActLocksPage, "v", "2")
+		wantPage("v=2", text, keyboard, 2, page2)
+		if n := len(settingsLocksRowsOf(2)); n != 10 {
+			t.Errorf("page 2 holds %d locks, want 10", n)
+		}
+		text, keyboard = turn("a", settingsActLocksPage, "v", "1")
+		wantPage("v=1", text, keyboard, 1, page1)
+		// A page past the end is the last page, and 0 is the first.
+		text, keyboard = turn("a", settingsActLocksPage, "v", "9")
+		wantPage("v=9", text, keyboard, 2, page2)
+		text, keyboard = turn("a", settingsActLocksPage, "v", "0")
+		wantPage("v=0", text, keyboard, 1, page1)
+
+		// A press of a lock of page 2 redraws page 2, with the state it stored.
+		turn("a", settingsActLocksPage, "v", "2")
+		text, keyboard = turn("a", "tg", "p", settingsPageLocks, "t", settingsLocksCode(t, "bots"), "v", "1")
+		wantPage("a toggle of page 2", text, keyboard, 2, page2, "bots")
+		// Refresh opens page 1; the stored lock is still on page 2.
+		text, keyboard = turn("a", "op", "p", settingsPageLocks)
+		wantPage("refresh", text, keyboard, 1, page1)
+		text, keyboard = turn("a", settingsActLocksPage, "v", "2")
+		wantPage("page 2 again", text, keyboard, 2, page2, "bots")
+	})
+}
+
+func TestSettingsLocksRightLine(t *testing.T) {
+	noRight, unknown := staffMarker("settings_del_no_right"), staffMarker("settings_del_right_unknown")
+	cases := []struct {
+		name string
+		raw  string
+		err  error
+		want string
+	}{
+		{name: "the bot can delete", raw: settingsDelBotJSON("administrator", true), want: "none"},
+		{name: "a member bot", raw: settingsDelBotJSON("member", false), want: "cannot"},
+		{name: "an administrator without the right", raw: settingsDelBotJSON("administrator", false), want: "cannot"},
+		{name: "a lookup that fails", err: staffFakeError(500, "Internal Server Error"), want: "unknown"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			settingsLocksMenus(t, func(t *testing.T, m *settingsDelMenu) {
+				env := m.env
+				settingsLocksWarmBotRight(env)
+				if tc.raw != "" {
+					env.setBot(tc.raw)
+				}
+				reads := env.scriptBot(false, tc.err)
+				draws := []struct {
+					name string
+					kv   []string
+				}{
+					{"open", []string{"a", "op", "p", settingsPageLocks}},
+					{"a toggle", []string{"a", "tg", "p", settingsPageLocks, "t", settingsLocksCode(t, "gif"), "v", "1"}},
+					{"a page turn", []string{"a", settingsActLocksPage, "v", "2"}},
+					{"a toggle of page 2", []string{"a", "tg", "p", settingsPageLocks, "t", settingsLocksCode(t, "bots"), "v", "1"}},
+				}
+				for _, draw := range draws {
+					answers, before := env.answerCount(), len(*reads)
+					m.press(draw.kv...)
+					text, keyboard := m.last()
+
+					wantNo, wantUnknown := 0, 0
+					switch tc.want {
+					case "cannot":
+						wantNo = 1
+					case "unknown":
+						wantUnknown = 1
+					}
+					if got := strings.Count(text, noRight); got != wantNo {
+						t.Errorf("%s: %d no-right lines, want %d: %q", draw.name, got, wantNo, text)
+					}
+					if got := strings.Count(text, unknown); got != wantUnknown {
+						t.Errorf("%s: %d unknown lines, want %d: %q", draw.name, got, wantUnknown, text)
+					}
+					if wantNo == 1 && !strings.Contains(text, "🚫 "+noRight) || wantUnknown == 1 && !strings.Contains(text, "❔ "+unknown) {
+						t.Errorf("%s: the right line has no icon prefix: %q", draw.name, text)
+					}
+					// The slot follows the page line and nothing is disabled or dropped by the line.
+					if wantNo+wantUnknown == 1 {
+						line := strings.Index(text, staffMarker("staff_panel_page"))
+						at := max(strings.Index(text, noRight), strings.Index(text, unknown))
+						if line < 0 || at < line {
+							t.Errorf("%s: the right line is not after the page line: %q", draw.name, text)
+						}
+					}
+					if containsMarker(text, "settings_cannot_open") || len(keyboard) == 0 {
+						t.Errorf("%s drew the cannot-open edit: %q", draw.name, text)
+					}
+					for _, button := range settingsAllButtons(keyboard) {
+						if button.CallbackData == "" {
+							t.Errorf("%s: a dead button %q", draw.name, button.Text)
+						}
+					}
+					if got := env.answerCount() - answers; got != 1 {
+						t.Errorf("%s answered %d times, want once", draw.name, got)
+					}
+					if got := len(*reads) - before; got != 1 {
+						t.Errorf("%s made %d reads of the bot, want exactly one", draw.name, got)
+					} else if at := (*reads)[before]; at != answers+1 {
+						t.Errorf("%s read the bot with %d answers made, want it answered first (%d)", draw.name, at, answers+1)
+					}
+				}
+				// The locks were stored with the line showing: nothing is refused for it.
+				if got := settingsLocksStored(t, env.chat.Id); got != "bots=true,gif=true" {
+					t.Errorf("with the line showing the page stored %q, want bots=true,gif=true", got)
+				}
+			})
+		})
+	}
+
+	// A refusal that is a notice (the bot is not an administrator by the list) redraws the page with the
+	// warning, like every page's, and the draw states the right too; nothing is written. The read count
+	// is not asserted here: the pipeline's own bot check of a cold admin cache reads the bot as well.
+	t.Run("a notice refusal redraws with the right line", func(t *testing.T) {
+		env := newSettingsLocksEnv(t)
+		env.fake.setBotRole(env.chat.Id, staffRoleMember)
+		env.setBot(settingsDelBotJSON("member", false))
+		cache.InvalidateAdminCache(env.chat.Id)
+		cache.LoadAdminCache(env.bot, env.chat.Id)
+		m := env.groupMenu()
+		m.press("a", "tg", "p", settingsPageLocks, "t", settingsLocksCode(t, "gif"), "v", "1")
+		text, _ := m.last()
+		if !containsMarker(text, "connections_is_user_connected_bot_not_admin") || !containsMarker(text, "settings_del_no_right") {
+			t.Errorf("the refusal drew %q, want the notice and the right line", text)
+		}
+		if got := settingsLocksStored(t, env.chat.Id); got != "" {
+			t.Errorf("a refused press stored %q", got)
+		}
+	})
+
+	t.Run("a refused press makes no read", func(t *testing.T) {
+		env := newSettingsLocksEnv(t)
+		settingsLocksWarmBotRight(env)
+		env.setBot(settingsDelBotJSON("member", false))
+		reads := env.scriptBot(false, nil)
+		gif := settingsLocksCode(t, "gif")
+		forged := env.groupFields(env.admin, "a", "st", "p", settingsPageLocks, "t", gif, "v", "1")
+		env.pressRaw(env.chat, env.admin, 7414, encodeCallbackData(settingsCallbackNamespace, forged))
+
+		member := gotgbot.User{Id: uniqueLinkOwnerID() + 46, FirstName: "Plain"}
+		t.Cleanup(func() {
+			db.DB.Where("user_id IN ?", []int64{member.Id}).Delete(&models.User{})
+			dbcache.DeleteCache(dbcache.CacheKey("user", member.Id))
+			dbcache.ResetLocalForTest()
+		})
+		env.fake.setMember(env.chat.Id, member.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+		env.pressPrivate(member, 7415, env.privateFields(env.chat.Id, "a", "tg", "p", settingsPageLocks, "t", gif, "v", "1"))
+		if answer, alert := env.lastAnswer(); !alert || !strings.Contains(answer, staffMarker("settings_not_admin")) {
+			t.Errorf("a plain member's press answered %q (alert %v), want settings_not_admin", answer, alert)
+		}
+		if len(*reads) != 0 {
+			t.Errorf("refused presses made %d reads of the bot, want none", len(*reads))
+		}
+		if got := settingsLocksStored(t, env.chat.Id); got != "" {
+			t.Errorf("refused presses stored %q", got)
+		}
+	})
+}
+
+func TestSettingsLocksForged(t *testing.T) {
+	const menuMsgID = 7515
+	type forgedCase struct {
+		name   string
+		fields []string
+		extra  map[string]string
+		both   bool
+	}
+	code := settingsLocksCode(t, "gif")
+	tg := func(control, v string) []string {
+		return []string{"a", "tg", "p", settingsPageLocks, "t", control, "v", v}
+	}
+	forged := []forgedCase{
+		{name: "st on a lock", fields: []string{"a", "st", "p", settingsPageLocks, "t", code, "v", "1"}},
+		{name: "v=2", fields: tg(code, "2")},
+		{name: "an empty v", fields: tg(code, "")},
+		{name: "an unknown code", fields: tg("zz", "1")},
+		{name: "the kind as the control", fields: tg("gif", "1")},
+		{name: "the pager as a control", fields: tg(settingsActLocksPage, "1")},
+		{name: "a lock with an extra key", fields: tg(code, "1"), extra: map[string]string{"x": "1"}},
+		{name: "c and u together on a lock", fields: tg(code, "1"), both: true},
+		{name: "kg with v=x", fields: []string{"a", settingsActLocksPage, "v", "x"}},
+		{name: "kg with a signed v", fields: []string{"a", settingsActLocksPage, "v", "-1"}},
+		{name: "kg with three digits", fields: []string{"a", settingsActLocksPage, "v", "100"}},
+		{name: "kg with no v", fields: []string{"a", settingsActLocksPage}},
+		{name: "kg with a second key", fields: []string{"a", settingsActLocksPage, "v", "1"}, extra: map[string]string{"t": code}},
+		{name: "kg with c and u together", fields: []string{"a", settingsActLocksPage, "v", "1"}, both: true},
+	}
+	for _, tc := range forged {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newSettingsLocksEnv(t)
+			reads := env.scriptBot(false, nil)
+			fields := env.groupFields(env.admin, tc.fields...)
+			for k, v := range tc.extra {
+				fields[k] = v
+			}
+			if tc.both {
+				fields["c"] = "-1001"
+			}
+			data := encodeCallbackData(settingsCallbackNamespace, fields)
+			if data == "" {
+				t.Fatalf("forged press %v did not encode", fields)
+			}
+			before := settingsMenuMarkOf(env.settingsEnv)
+			env.pressRaw(env.chat, env.admin, menuMsgID, data)
+			settingsMenuWantRefused(t, env.settingsEnv, before, "common_callback_invalid_request", true)
+			if len(*reads) != 0 {
+				t.Errorf("a forged press read the bot %d times, want none", len(*reads))
+			}
+			if got := settingsLocksStored(t, env.chat.Id); got != "" {
+				t.Errorf("a forged press stored %q", got)
+			}
+		})
+	}
+}
+
+func TestSettingsLocksFailedWrite(t *testing.T) {
+	for _, tc := range []struct {
+		name, kind, value, key string
+		seed                   bool
+		wantStored             string
+	}{
+		{name: "lock", kind: "bots", value: "1", key: "locks_lock_failed", wantStored: ""},
+		{name: "unlock", kind: "bots", value: "0", key: "locks_unlock_failed", seed: true, wantStored: "bots=true"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			settingsLocksMenus(t, func(t *testing.T, m *settingsDelMenu) {
+				env := m.env
+				if tc.seed {
+					settingsLocksSeed(t, env.chat.Id, tc.kind)
+				}
+				mreqSwap(t, &lockWrites.Update, func(int64, string, bool) error { return errors.New("disk is full") })
+				m.press("a", settingsActLocksPage, "v", "2")
+				answers := env.answerCount()
+				m.press("a", "tg", "p", settingsPageLocks, "t", settingsLocksCode(t, tc.kind), "v", tc.value)
+				if got := env.answerCount() - answers; got != 1 {
+					t.Errorf("the press answered %d times, want once", got)
+				}
+				text, keyboard := m.last()
+				if !strings.Contains(text, "⚠️ "+staffMarker(tc.key)) || !strings.Contains(text, staffMarker("settings_lock_bots")) {
+					t.Errorf("the page drew %q, want the notice %s naming the lock", text, tc.key)
+				}
+				var locked []string
+				if tc.seed {
+					locked = []string{tc.kind}
+				}
+				// The page the lock is on is redrawn with the stored state.
+				if settingsLocksPageOf(t, text) != 2 {
+					t.Errorf("a failed press redrew the wrong page: %q", text)
+				}
+				settingsLocksWantLines(t, text, 2, locked...)
+				if cell := settingsLocksCell(t, keyboard, tc.kind); !strings.HasPrefix(cell.Text, settingsLockIcon(tc.seed)+" ") {
+					t.Errorf("the cell reads %q, want the stored state", cell.Text)
+				}
+				if got := settingsLocksStored(t, env.chat.Id); got != tc.wantStored {
+					t.Errorf("stored %q after a failed save, want %q", got, tc.wantStored)
+				}
+			})
+		})
+	}
+
+	t.Run("the real texts name the lock, escaped", func(t *testing.T) {
+		withRealLocales(t)
+		p := &settingsPress{tr: i18n.MustNewTranslator("en")}
+		got := settingsLocksFailureNotice(p, "locks_lock_failed", settingsLockRow{NameKey: "settings_lock_bots"})
+		if want := "⚠️ Failed to lock: Bots. Please try again later."; got != want {
+			t.Errorf("lock notice = %q, want %q", got, want)
+		}
+		got = settingsLocksFailureNotice(p, "locks_unlock_failed", settingsLockRow{NameKey: "settings_lock_other"})
+		if want := "⚠️ Failed to unlock: Game/sticker/GIF. Please try again later."; got != want {
+			t.Errorf("unlock notice = %q, want %q", got, want)
 		}
 	})
 }

@@ -1076,6 +1076,24 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   edit, and a press refused in step 1 or by its right makes none. `🚫 ` and `settings_del_no_right` is a definite cannot, `❔ `
   and `settings_del_right_unknown` anything that could not be established, nothing when the bot can delete; no button is ever
   disabled, and no new pacer, key or shutdown handler exists. Main makes no call for the Locks line.
+  The pager is the page action `kg` (`settingsActLocksPage`, exactly the field `v`, one or two ASCII digits through
+  `settingsParseNumber`, right `settingsRightAdmin`; anything else, a missing `v` and an extra key included, is an invalid
+  request in step 1): `v` is the absolute page, clamped to 1..2 (`0` is page 1 and `9` page 2). Next (`staff_panel_next`) is
+  drawn only on page 1 and Prev (`staff_panel_prev`) only on page 2, each sending the absolute page, and the page line reuses
+  `staff_panel_page`, so no new key was needed and no button is dead. Page 1 is the rows `{2,2,2,2,2,2,1,2}` (the private
+  menu's row limit of 8, by design) and page 2 `{2,2,2,2,2,1,2}`; Refresh (`op`) opens page 1 and a toggle redraws the page its
+  lock is on. A failed write (`lockSaveFailed`) redraws the stored state with the command's own `locks_lock_failed` or
+  `locks_unlock_failed` naming the lock by its localized name (`NameKey`), escaped, because the locale text is the command's
+  printf template and the page is HTML. A press refused with a notice (the bot is not an administrator by the cached list,
+  `connections_is_user_connected_bot_not_admin`) redraws the page through the same open path as every page, so that draw
+  states the right too and nothing is written; a press refused with an alert (a plain member, a gated administrator) or in
+  step 1 (a forged field) makes no read of the bot. Cost: Main makes no Telegram call for the Locks line; a draw of the page
+  makes the pipeline's calls (the live `getChatMember` of the presser, plus the cached bot-administrator predicate of the
+  right, which loads the admin cache with one `getChatMember` of the bot only while it is cold) and the right line's one
+  read; the lock map is read once through the cache. Tests: `TestSettingsLocksOpens`, `TestSettingsParityLock` (a press and
+  `/lock` or `/unlock` leave the same rows and `locks_map` state, and `/locks` lists the stored value),
+  `TestSettingsLocksPager`, `TestSettingsLocksRightLine`, `TestSettingsLocksForged` and `TestSettingsLocksFailedWrite`
+  (`settings_locks_test.go`).
 - The message editor's pages (`settings_edit.go`, pages `w` Welcome, `g` Goodbye and `r` Rules, orders 50, 60 and 70, each
   registered from that file's `init` through `registerSettingsPage` so `settings_pages.go` is never edited) show which
   parts of a message are set, one line per part from one parts table (`settingsEditPageDef.Parts`): Welcome and Goodbye
