@@ -3466,6 +3466,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   A new word takes the action every word of the chat already shares (one of `mute kick warn ban none`), else warn, so a
   word added after `/blacklistaction ban` no longer acts with Warn (`blacklistSharedAction`, the command and the page alike):
   the provisional owner confirmation A19-3 of `19-SPIKE.md`; declining it is a revert of its commit.
+  The filters (Phase 19) are written by `applyFilterAdd`, `applyFilterRemove` and `checkFilterKeyword` in `filters.go`, through the
+  `filterWrites` seam (defaults `filters.AddFilterContext`, `RemoveFilterContext`, `CountFiltersContext` and `FilterExistsContext`;
+  `AddFilter`, `RemoveFilter`, `CountFilters` and `DoesFilterExists` stay as wrappers with their old hiding behaviour, and
+  `AddFilterContext` reports whether a row was inserted). `/filter` and `/stop` (and their aliases) keep their own gates, cap
+  pre-check, argument checks, extraction, overwrite card and replies, and map the typed result: an existing keyword is the overwrite
+  card (`offerFilterOverwrite`), a lost insert race (`filterRaced`) is replied as a success exactly as before, and the success splice
+  of the keyword stays unescaped. `UpdateFilter` (the overwrite callback), `RemoveAllFilters` (`/stopall`) and the backup import are
+  other writes and are not on the apply functions. `filter_list` and `filters_optimized` are not in `skipLocal`: another replica can
+  serve the old list for up to `CACHE_LOCAL_TTL`, exactly as after the commands. `TestLegacyFilterRequests` pins every request and
+  stored row of the three commands and is never re-recorded.
 - Rules message (`rules.go`): `/rules` (in the group and in a private chat connected to it), the private rules message the
   `/start rules_<chat id>` deep link opens and the Rules page's Full preview are built by
   `buildRulesMessage` and sent by `sendRulesMessage`. The builder has two forms, the group form (`rulesFormGroup`: heading
@@ -4093,7 +4103,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `TestLegacyAutoApproveRequests`, `TestLegacyLanguageRequests`, `TestLegacyLogCategoryRequests`,
   `TestLegacyAnonAdminRequests` and `TestLegacyLockRequests`, which record what each command sent and stored before its
   extraction into an apply function and are never re-recorded or weakened. Phase 19 adds `TestLegacyBlacklistRequests`
-  (`blacklists_legacy_request_test.go`, chats from `-1009919001101`) and every `TestLegacy*Requests` golden of Phase 19 joins
+  (`blacklists_legacy_request_test.go`, chats from `-1009919001101`), `TestLegacyFilterRequests` (`filters_legacy_request_test.go`,
+  chats from `-1009919001201`, the overwrite card's random token replaced by a fixed marker) and every `TestLegacy*Requests` golden of Phase 19 joins
   that rule: committed alone before the production change, never re-recorded or weakened. The tests across the six pages are
   `TestSettingsMainPhase18` and the fifteen-cell subtest of `TestSettingsMainGrid` (`settings_main_test.go`: the final
   grid, sixteen state lines in order with their defaults, the unknown mark on a page whose read fails with every other line

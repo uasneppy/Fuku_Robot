@@ -53,20 +53,43 @@ func GetFiltersListContext(ctx context.Context, chatID int64) (allFilterWords []
 	return result
 }
 
+// DoesFilterExists reports whether the chat has a filter with the keyword (compared without regard to
+// case). A failed read is logged and reads as false, which is the behaviour the callers that cannot
+// refuse rely on; use FilterExistsContext where the error matters.
 func DoesFilterExists(chatId int64, keyword string) bool {
-	var filter models.ChatFilters
-	err := db.DB.Where("chat_id = ? AND LOWER(keyword) = LOWER(?)", chatId, keyword).Take(&filter).Error
+	exists, err := FilterExistsContext(context.Background(), chatId, keyword)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return false
-		}
-		log.Errorf("[Database] DoesFilterExists: %v - %d", err, chatId)
 		return false
 	}
-	return true
+	return exists
 }
 
+// FilterExistsContext reports whether the chat has a filter with the keyword, compared without regard
+// to case, and returns the database error instead of hiding it.
+func FilterExistsContext(ctx context.Context, chatID int64, keyword string) (bool, error) {
+	var filter models.ChatFilters
+	err := db.DB.WithContext(ctx).Where("chat_id = ? AND LOWER(keyword) = LOWER(?)", chatID, keyword).Take(&filter).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return false, nil
+		}
+		log.Errorf("[Database] FilterExistsContext: %v - %d", err, chatID)
+		return false, err
+	}
+	return true, nil
+}
+
+// AddFilter stores a filter and reports only the error; a keyword the chat already has is left as it is.
 func AddFilter(chatID int64, keyWord, replyText, fileID string, buttons []models.Button, filtType int) error {
+	_, err := AddFilterContext(context.Background(), chatID, keyWord, replyText, fileID, buttons, filtType)
+	return err
+}
+
+// AddFilterContext stores a filter and reports whether a row was inserted: a keyword the chat already
+// has (the unique key is chat and keyword) inserts nothing and is not an error, so a caller can tell a
+// stored filter from one that lost a race. The chat's filter list and optimized caches are dropped only
+// when a row was inserted.
+func AddFilterContext(ctx context.Context, chatID int64, keyWord, replyText, fileID string, buttons []models.Button, filtType int) (inserted bool, err error) {
 	now := time.Now().UTC()
 	newFilter := map[string]any{
 		"chat_id":        chatID,
@@ -80,19 +103,20 @@ func AddFilter(chatID int64, keyWord, replyText, fileID string, buttons []models
 		"updated_at":     now,
 	}
 
-	result := db.DB.Model(&models.ChatFilters{}).Clauses(clause.OnConflict{
+	result := db.DB.WithContext(ctx).Model(&models.ChatFilters{}).Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "chat_id"}, {Name: "keyword"}},
 		DoNothing: true,
 	}).Create(newFilter)
 	if result.Error != nil {
 		log.Errorf("[Database][AddFilter]: %d - %v", chatID, result.Error)
-		return result.Error
+		return false, result.Error
 	}
 
 	if result.RowsAffected > 0 {
 		invalidateFilterCaches(chatID)
+		return true, nil
 	}
-	return nil
+	return false, nil
 }
 
 func UpdateFilter(chatID int64, keyWord, replyText, fileID string, buttons []models.Button, filtType int) (bool, error) {
@@ -115,8 +139,15 @@ func UpdateFilter(chatID int64, keyWord, replyText, fileID string, buttons []mod
 	return result.RowsAffected > 0, nil
 }
 
+// RemoveFilter deletes the chat's filter with exactly this keyword.
 func RemoveFilter(chatID int64, keyWord string) error {
-	result := db.DB.Where("chat_id = ? AND keyword = ?", chatID, keyWord).Delete(&models.ChatFilters{})
+	return RemoveFilterContext(context.Background(), chatID, keyWord)
+}
+
+// RemoveFilterContext deletes the chat's filter with exactly this keyword and drops the chat's filter
+// caches when a row went. A keyword that is not stored is not an error.
+func RemoveFilterContext(ctx context.Context, chatID int64, keyWord string) error {
+	result := db.DB.WithContext(ctx).Where("chat_id = ? AND keyword = ?", chatID, keyWord).Delete(&models.ChatFilters{})
 	if result.Error != nil {
 		log.Errorf("[Database][RemoveFilter]: %d - %v", chatID, result.Error)
 		return result.Error
@@ -139,12 +170,26 @@ func RemoveAllFilters(chatID int64) error {
 	return nil
 }
 
+// CountFilters returns how many filters the chat has. A failed read is logged and reads as 0; use
+// CountFiltersContext where the error matters.
 func CountFilters(chatID int64) (filtersNum int64) {
-	err := db.DB.Model(&models.ChatFilters{}).Where("chat_id = ?", chatID).Count(&filtersNum).Error
+	filtersNum, err := CountFiltersContext(context.Background(), chatID)
+	if err != nil {
+		return 0
+	}
+	return filtersNum
+}
+
+// CountFiltersContext returns how many filters the chat has and the database error instead of hiding
+// it. It creates nothing and uses no cache.
+func CountFiltersContext(ctx context.Context, chatID int64) (int64, error) {
+	var filtersNum int64
+	err := db.DB.WithContext(ctx).Model(&models.ChatFilters{}).Where("chat_id = ?", chatID).Count(&filtersNum).Error
 	if err != nil {
 		log.Errorf("[Database][CountFilters]: %d - %v", chatID, err)
+		return 0, err
 	}
-	return
+	return filtersNum, nil
 }
 
 func LoadFilterStats() (filtersNum, filtersUsingChats int64) {

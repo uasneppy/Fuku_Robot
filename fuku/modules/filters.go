@@ -1,10 +1,12 @@
 package modules
 
 import (
+	"context"
 	"fmt"
 	"html"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers/filters/callbackquery"
@@ -51,6 +53,209 @@ func deleteFilterOverwriteCache(token string) {
 	deleteOverwriteCache(filterOverwriteCacheKey(token))
 }
 
+// filtersCapMax is the most filters a chat may hold.
+const filtersCapMax = 150
+
+// filterWriteSeams are the repository calls the filter apply functions make, a variable so a test can
+// make one fail.
+type filterWriteSeams struct {
+	// Add stores one filter and reports whether a row was inserted (false: the keyword was already there).
+	Add    func(ctx context.Context, chatID int64, keyword, reply, fileID string, buttons []db.Button, dataType int) (bool, error)
+	Remove func(ctx context.Context, chatID int64, keyword string) error
+	Count  func(ctx context.Context, chatID int64) (int64, error)
+	Exists func(ctx context.Context, chatID int64, keyword string) (bool, error)
+}
+
+// filterWrites is the one place the filter commands reach the repository through.
+var filterWrites = filterWriteSeams{
+	Add:    db_filters.AddFilterContext,
+	Remove: db_filters.RemoveFilterContext,
+	Count:  db_filters.CountFiltersContext,
+	Exists: db_filters.FilterExistsContext,
+}
+
+// filterAddOutcome is what applyFilterAdd did; its zero value is a stored filter.
+type filterAddOutcome int
+
+const (
+	// filterAdded means the filter was stored (and, from checkFilterKeyword, that no check refused it).
+	filterAdded filterAddOutcome = iota
+	// filterKeywordBlank means the keyword is empty.
+	filterKeywordBlank
+	// filterKeywordTooLong means the keyword is over listKeywordMaxRunes.
+	filterKeywordTooLong
+	// filterExists means the chat already has a filter with this keyword; the command offers to overwrite it.
+	filterExists
+	// filterCapReached means the chat already holds filtersCapMax filters.
+	filterCapReached
+	// filterRaced means another writer stored the keyword between the check and the insert; /filter
+	// answers it like a stored filter, as it always did.
+	filterRaced
+	// filterSaveFailed means a database call failed and nothing was stored.
+	filterSaveFailed
+)
+
+// filterAddInput is the filter content applyFilterAdd stores.
+type filterAddInput struct {
+	Keyword  string
+	Text     string
+	FileID   string
+	Buttons  []db.Button
+	DataType int
+}
+
+// filterAddResult is what applyFilterAdd and checkFilterKeyword return for the caller to word.
+type filterAddResult struct {
+	Outcome filterAddOutcome
+	Err     error
+}
+
+// filterRemoveOutcome is what applyFilterRemove did; its zero value is a removed filter.
+type filterRemoveOutcome int
+
+const (
+	// filterRemoved means the delete ran (a keyword that is not stored is not an error).
+	filterRemoved filterRemoveOutcome = iota
+	// filterRemoveSaveFailed means the delete failed.
+	filterRemoveSaveFailed
+)
+
+// filterRemoveResult is what applyFilterRemove returns.
+type filterRemoveResult struct {
+	Outcome filterRemoveOutcome
+	Err     error
+}
+
+// checkFilterKeyword runs the checks every filter add shares, in order: a blank keyword, one over
+// listKeywordMaxRunes, a keyword the chat already has, and the chat's cap. It returns a result whose
+// outcome is filterAdded when nothing refuses the keyword. It logs the chat ID and the error only,
+// never the keyword.
+func checkFilterKeyword(ctx context.Context, chatID int64, keyword string) filterAddResult {
+	if strings.TrimSpace(keyword) == "" {
+		return filterAddResult{Outcome: filterKeywordBlank}
+	}
+	if utf8.RuneCountInString(keyword) > listKeywordMaxRunes {
+		return filterAddResult{Outcome: filterKeywordTooLong}
+	}
+	exists, err := filterWrites.Exists(ctx, chatID, keyword)
+	if err != nil {
+		log.Errorf("[Filters] Existing keyword lookup failed for chat %d: %v", chatID, err)
+	}
+	if exists {
+		return filterAddResult{Outcome: filterExists}
+	}
+	count, err := filterWrites.Count(ctx, chatID)
+	if err != nil {
+		log.Errorf("[Filters] Filter count lookup failed for chat %d: %v", chatID, err)
+	}
+	if count >= filtersCapMax {
+		return filterAddResult{Outcome: filterCapReached}
+	}
+	return filterAddResult{}
+}
+
+// applyFilterAdd stores one filter for the chat after checkFilterKeyword accepts the keyword. The
+// keyword is lower-cased here as the command always did. A keyword stored by another writer in the
+// meantime is filterRaced. It judges no person's rights and logs the chat ID and the error only.
+func applyFilterAdd(ctx context.Context, chatID int64, in filterAddInput) filterAddResult {
+	keyword := strings.ToLower(in.Keyword)
+	if refusal := checkFilterKeyword(ctx, chatID, keyword); refusal.Outcome != filterAdded {
+		return refusal
+	}
+	inserted, err := filterWrites.Add(ctx, chatID, keyword, in.Text, in.FileID, in.Buttons, in.DataType)
+	if err != nil {
+		log.Errorf("[Filters] AddFilter failed for chat %d: %v", chatID, err)
+		return filterAddResult{Outcome: filterSaveFailed, Err: err}
+	}
+	if !inserted {
+		return filterAddResult{Outcome: filterRaced}
+	}
+	return filterAddResult{}
+}
+
+// applyFilterRemove deletes the chat's filter with this keyword (lower-cased here). It logs the chat ID
+// and the error only.
+func applyFilterRemove(ctx context.Context, chatID int64, keyword string) filterRemoveResult {
+	if err := filterWrites.Remove(ctx, chatID, strings.ToLower(keyword)); err != nil {
+		log.Errorf("[Filters] RemoveFilter failed for chat %d: %v", chatID, err)
+		return filterRemoveResult{Outcome: filterRemoveSaveFailed, Err: err}
+	}
+	return filterRemoveResult{}
+}
+
+// replyFilterLimitExceeded answers that the chat holds the most filters it may.
+func replyFilterLimitExceeded(b *gotgbot.Bot, ctx *ext.Context) error {
+	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
+	text, _ := tr.GetString("filters_limit_exceeded")
+	_, err := ctx.EffectiveMessage.Reply(b, text, formatting.Shtml())
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+
+	return ext.EndGroups
+}
+
+// offerFilterOverwrite answers /filter for a keyword the chat already has with the overwrite card: the
+// new content is cached under a fresh token and the Yes and No buttons carry only that token.
+func offerFilterOverwrite(b *gotgbot.Bot, ctx *ext.Context, base overwriteBase) error {
+	msg := ctx.EffectiveMessage
+	token, tokenErr := newOverwriteToken()
+	if tokenErr != nil {
+		log.Errorf("[Filters] Failed to generate overwrite token: %v", tokenErr)
+		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
+		errorText, _ := tr.GetString("filters_overwrite_token_failed")
+		_, _ = msg.Reply(b, errorText, formatting.Shtml())
+		return ext.EndGroups
+	}
+
+	err := setFilterOverwriteCache(token, overwriteFilter{overwriteBase: base})
+	if err != nil {
+		log.Errorf("[Filters] Failed to cache overwrite data: %v", err)
+		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
+		errorText, _ := tr.GetString("filters_overwrite_token_failed")
+		_, _ = msg.Reply(b, errorText, formatting.Shtml())
+		return ext.EndGroups
+	}
+
+	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
+	confirmText, _ := tr.GetString("filters_overwrite_confirm")
+	yesText, _ := tr.GetString("common_yes")
+	noText, _ := tr.GetString("common_no")
+	_, err = msg.Reply(b,
+		confirmText,
+		&gotgbot.SendMessageOpts{
+			ParseMode: formatting.HTML,
+			ReplyMarkup: gotgbot.InlineKeyboardMarkup{
+				InlineKeyboard: [][]gotgbot.InlineKeyboardButton{
+					{
+						{
+							Text: yesText,
+							CallbackData: encodeCallbackData("filters_overwrite", map[string]string{
+								"a": "yes",
+								"t": token,
+							}),
+						},
+						{
+							Text: noText,
+							CallbackData: encodeCallbackData("filters_overwrite", map[string]string{
+								"a": "cancel",
+								"t": token,
+							}),
+						},
+					},
+				},
+			},
+		},
+	)
+	if err != nil {
+		deleteFilterOverwriteCache(token)
+		log.Error(err)
+		return err
+	}
+	return ext.EndGroups
+}
+
 //nolint:dupl // addFilter shares validation logic with notes module by design
 func (m moduleStruct) addFilter(b *gotgbot.Bot, ctx *ext.Context) error {
 	defer func() {
@@ -77,16 +282,8 @@ func (m moduleStruct) addFilter(b *gotgbot.Bot, ctx *ext.Context) error {
 	}
 
 	filtersNum := db_filters.CountFilters(chat.Id)
-	if filtersNum >= 150 {
-		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-		text, _ := tr.GetString("filters_limit_exceeded")
-		_, err := msg.Reply(b, text, formatting.Shtml())
-		if err != nil {
-			log.Error(err)
-			return err
-		}
-
-		return ext.EndGroups
+	if filtersNum >= filtersCapMax {
+		return replyFilterLimitExceeded(b, ctx)
 	}
 
 	if msg.ReplyToMessage != nil && len(args) <= 1 {
@@ -122,7 +319,16 @@ func (m moduleStruct) addFilter(b *gotgbot.Bot, ctx *ext.Context) error {
 
 	filterWord = strings.ToLower(filterWord)
 
-	if len([]rune(filterWord)) > 100 {
+	updateCtx := tracing.UpdateContext(ctx)
+	added := applyFilterAdd(updateCtx, chat.Id, filterAddInput{
+		Keyword:  filterWord,
+		Text:     text,
+		FileID:   fileid,
+		Buttons:  buttons,
+		DataType: dataType,
+	})
+	switch added.Outcome {
+	case filterKeywordTooLong:
 		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 		text, _ := tr.GetString("filters_keyword_too_long")
 		_, err := msg.Reply(b, text, formatting.Shtml())
@@ -131,77 +337,28 @@ func (m moduleStruct) addFilter(b *gotgbot.Bot, ctx *ext.Context) error {
 			return err
 		}
 		return ext.EndGroups
-	}
-
-	if db_filters.DoesFilterExists(chat.Id, filterWord) {
-		token, tokenErr := newOverwriteToken()
-		if tokenErr != nil {
-			log.Errorf("[Filters] Failed to generate overwrite token: %v", tokenErr)
-			tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-			errorText, _ := tr.GetString("filters_overwrite_token_failed")
-			_, _ = msg.Reply(b, errorText, formatting.Shtml())
-			return ext.EndGroups
-		}
-
-		err := setFilterOverwriteCache(token, overwriteFilter{
-			overwriteBase: overwriteBase{
-				ChatID:   chat.Id,
-				UserID:   user.Id,
-				ItemName: filterWord,
-				Text:     text,
-				FileID:   fileid,
-				Buttons:  buttons,
-				DataType: dataType,
-			},
-		})
-		if err != nil {
-			log.Errorf("[Filters] Failed to cache overwrite data: %v", err)
-			tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-			errorText, _ := tr.GetString("filters_overwrite_token_failed")
-			_, _ = msg.Reply(b, errorText, formatting.Shtml())
-			return ext.EndGroups
-		}
-
+	case filterKeywordBlank:
 		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-		confirmText, _ := tr.GetString("filters_overwrite_confirm")
-		yesText, _ := tr.GetString("common_yes")
-		noText, _ := tr.GetString("common_no")
-		_, err = msg.Reply(b,
-			confirmText,
-			&gotgbot.SendMessageOpts{
-				ParseMode: formatting.HTML,
-				ReplyMarkup: gotgbot.InlineKeyboardMarkup{
-					InlineKeyboard: [][]gotgbot.InlineKeyboardButton{
-						{
-							{
-								Text: yesText,
-								CallbackData: encodeCallbackData("filters_overwrite", map[string]string{
-									"a": "yes",
-									"t": token,
-								}),
-							},
-							{
-								Text: noText,
-								CallbackData: encodeCallbackData("filters_overwrite", map[string]string{
-									"a": "cancel",
-									"t": token,
-								}),
-							},
-						},
-					},
-				},
-			},
-		)
+		text, _ := tr.GetString("filters_keyword_required")
+		_, err := msg.Reply(b, text, formatting.Shtml())
 		if err != nil {
-			deleteFilterOverwriteCache(token)
 			log.Error(err)
 			return err
 		}
 		return ext.EndGroups
-	}
-
-	if err := db_filters.AddFilter(chat.Id, filterWord, text, fileid, buttons, dataType); err != nil {
-		log.Errorf("[Filters] AddFilter failed for chat %d: %v", chat.Id, err)
+	case filterCapReached:
+		return replyFilterLimitExceeded(b, ctx)
+	case filterExists:
+		return offerFilterOverwrite(b, ctx, overwriteBase{
+			ChatID:   chat.Id,
+			UserID:   user.Id,
+			ItemName: filterWord,
+			Text:     text,
+			FileID:   fileid,
+			Buttons:  buttons,
+			DataType: dataType,
+		})
+	case filterSaveFailed:
 		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 		errText, _ := tr.GetString("common_settings_save_failed")
 		_, _ = msg.Reply(b, errText, formatting.Shtml())
@@ -259,8 +416,7 @@ func (moduleStruct) rmFilter(b *gotgbot.Bot, ctx *ext.Context) error {
 				return err
 			}
 		} else {
-			if err := db_filters.RemoveFilter(chat.Id, strings.ToLower(filterWord)); err != nil {
-				log.Errorf("[Filters] RemoveFilter failed for chat %d: %v", chat.Id, err)
+			if removed := applyFilterRemove(tracing.UpdateContext(ctx), chat.Id, filterWord); removed.Outcome == filterRemoveSaveFailed {
 				errText, _ := tr.GetString("common_settings_save_failed")
 				_, _ = msg.Reply(b, errText, formatting.Shtml())
 				return ext.EndGroups
