@@ -429,6 +429,7 @@ mirrors, and a control the presser lacks the right for is still drawn and its pr
 | Captcha mode, time limit and failure action | Admin | `/captchamode`, `/captchatime`, `/captchaaction` |
 | Antiflood limit, action and delete switch | Admin, and the bot an admin | `/setflood`, `/setfloodmode`, `/delflood` |
 | Warnings: limit and action at the limit | Admin, and the bot an admin | `/setwarnlimit`, `/setwarnmode` |
+| Locks: each lock on or off | Admin, and the bot an admin | `/lock`, `/unlock` |
 | Switches: Reports | Admin, and the bot an admin | `/reports` |
 | Switches: AI spam filter | Admin | `/aispam` |
 | Switches: Auto-approve joins | Creator, or an admin who can change info, and the bot an admin | `/autoapprove` |

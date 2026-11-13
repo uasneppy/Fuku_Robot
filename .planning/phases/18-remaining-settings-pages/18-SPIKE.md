@@ -215,3 +215,39 @@ with one tap and the sentence beside the button says what it does (A18-A12, A18-
 **Steps:** read the page as the owner and press the toggle on.
 
 **Record:** one tap is acceptable, or a confirmation card (as the Access page has) should guard turning it on: one tap / card.
+
+### 17. The broad locks in a real group: `all`, `messages`, `url` and `bots`
+
+**Why:** a lock deletes a non-exempt member's message at once, and `all` and `messages` delete everything a member sends. The page
+toggles them with one tap, as `/lock all` does (A18-8), and says only that admins and approved members are exempt. The test
+fakes prove the stored rows and the watchers' reads, not what Telegram does to a live member's message.
+
+**Steps:** in a test supergroup with the bot an administrator (with the delete right), a plain member, an approved member and
+an administrator, open `/settings`, Locks, page 2 and lock `bots`, `messages` and `all` one after another (turn each off before
+the next); on page 1 lock `url` and, separately, `previews` (Link previews), and have each of the four send what the lock
+targets (a link, a message with a link preview, an added bot).
+
+**Record:** the plain member's message is deleted and the administrator's and the approved member's are kept for every one:
+yes / no. `url` and `previews` behave the same for a link, or differ in what they delete: same / differ (the page does not claim
+they differ). Unlocking restores sending at once: yes / no.
+
+### 18. The 22 cells on a narrow phone
+
+**Why:** page 1 has six rows of two cells, each cell an icon and a name of at most 20 code points, and the tallest page sits
+at the private row limit by design (A18-A11).
+
+**Steps:** open the Locks page in a private menu and in a group on a small phone and on a desktop client, in two languages with
+the longest names (for example French and Russian).
+
+**Record:** every cell label reads whole (no cut-off name) and both pages fit without scrolling past the keyboard: yes / no.
+The right line (the bot cannot delete) shows when the bot is made a plain member and goes away when it is an administrator with
+the delete right: yes / no.
+
+### 19. Whether `all` and `messages` should ask for a confirmation
+
+**Why:** parity with `/lock all` leaves a stray tap on `all` deleting every non-exempt member's messages until someone taps it
+again (T-18-42, accepted). The Access page's two-tap card is the pattern if you want one.
+
+**Steps:** read the intro and tap `All messages` and `Everything` as an administrator in a test group.
+
+**Record:** one tap is acceptable, or a confirmation card should guard `messages` and `all`: one tap / card.

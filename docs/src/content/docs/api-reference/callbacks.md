@@ -403,6 +403,21 @@ the bot is an administrator: another administrator is answered the alert `You ne
 an administrator the notice `I'm not admin!`, each with nothing written. Any admin the owner gate admits can open the
 page and read the mode. The largest button of the page is 45 bytes in a private menu and 41 in a group menu.
 
+The Locks page (`k`, between the Warnings and Welcome pages of Main) is drawn from one table of 22 locks, 12 on page 1 and 10 on
+page 2. Each lock has a two-letter control code (`t`), `tg` only (an `st` is an invalid request, refused before any lookup),
+with `v` exactly `0` or `1`, the absolute target (`1` locks, `0` unlocks):
+
+| Page | Codes (`t`) |
+|------|-------------|
+| 1 | `sk` sticker, `gf` gif, `ph` photo, `vd` video, `vn` videonote, `vo` voice, `au` audio, `dc` document, `ct` contact, `lc` location, `gm` game, `ur` url |
+| 2 | `fw` forward, `rt` rtl, `ac` anonchannel, `bt` bots, `ms` messages, `cm` comments, `md` media, `ot` other, `pv` previews, `al` all |
+
+A press writes exactly that lock through the function `/lock` and `/unlock` call and redraws the page the lock is on, so no page
+field travels with it; a lock with no stored row reads Unlocked. The pager is the page action `kg` with exactly one field, `v`,
+the absolute page (one or two digits, clamped to 1 to 2): Next is drawn only on page 1 and Prev only on page 2. Every draw
+states once whether the bot can delete messages. The largest button of the page is 46 bytes in a private menu and 42 in a group
+menu (the pager 37 and 33).
+
 ### Warns
 
 #### `rmAllChatWarns`
