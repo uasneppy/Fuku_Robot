@@ -25,8 +25,9 @@ func settingsListKeys(def settingsListDef) []string {
 func settingsListExtraKeys() []string {
 	keys := []string{
 		"settings_bl_wait", "settings_bl_wait_rules",
-		// The Filters page's two prompts (Phase 19, plan 19-07).
+		// The Filters page's two prompts, its two refusals and its cap notice (Phase 19, plan 19-07).
 		"settings_flt_wait_keyword", "settings_flt_wait_keyword_rules", "settings_flt_wait_reply",
+		"settings_flt_refuse_exists", "settings_flt_refuse_cap",
 	}
 	for _, part := range settingsListParts {
 		keys = append(keys, part.WordKey)

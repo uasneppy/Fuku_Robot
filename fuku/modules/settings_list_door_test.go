@@ -695,3 +695,143 @@ func TestSettingsListDoorTwoStep(t *testing.T) {
 		t.Errorf("Main's Filters line = %q, want it to end in 2/150", line)
 	}
 }
+
+func TestSettingsListDoorTwoStepRefusals(t *testing.T) {
+	env := newSettingsListEnv(t)
+	f := newSettingsFiltersFlow(env, env.chat)
+	settingsListSeedFilters(t, env.chat.Id, "alpha")
+
+	t.Run("step 1 refusals keep the wait at step 1 and the next text is read as a keyword", func(t *testing.T) {
+		f.begin()
+		nonce := f.field("n")
+		for _, c := range []struct {
+			name, text, key, words string
+		}{
+			{"the ideographic space alone", "\u3000", "settings_entries_refuse_blank", ""},
+			{"a keyword of 101 code points", strings.Repeat("k", 101), "filters_keyword_too_long", ""},
+			{"a single letter", "a", "filters_keyword_too_broad", ""},
+			{"an existing keyword", "Alpha", "settings_flt_refuse_exists", "alpha"},
+		} {
+			before := f.sent()
+			f.say(c.text)
+			reply := f.reply(before, c.key, "settings_edit_still_waiting")
+			if text := fmt.Sprint(reply.Params["text"]); !strings.Contains(text, c.words) {
+				t.Errorf("%s: the reply lacks %q: %s", c.name, c.words, text)
+			}
+			if fields := settingsButtonFields(t, staffKeyboardOf(reply.Params["reply_markup"])[0][0]); fields["a"] != "ic" || fields["t"] != "k" || len(fields) != 3 {
+				t.Errorf("%s: Cancel carries %v, want ic, t=k and c", c.name, fields)
+			}
+			f.waitIs("k", "")
+			if f.field("n") != nonce || f.field("q") != "" {
+				t.Errorf("%s: the refusal moved the wait", c.name)
+			}
+		}
+		before := f.sent()
+		f.say("Fresh Word")
+		f.reply(before, "settings_entries_wait_content_limits")
+		f.waitIs("y", "fresh word")
+	})
+
+	t.Run("step 2 refusals keep the wait at step 2 with the keyword", func(t *testing.T) {
+		f.endWait()
+		f.begin()
+		f.say("price")
+		for _, c := range []struct{ name, key string }{
+			{"a text over 4096", "content_text_too_long"},
+			{"a poll", "content_need_filter_content"},
+		} {
+			before := f.sent()
+			if c.key == "content_text_too_long" {
+				f.say(strings.Repeat("x", 4097))
+			} else {
+				sendPrivateMessage(env.settingsEnv, f.user, settingsMediaItemID("poll", ""))
+			}
+			reply := f.reply(before, c.key, "settings_edit_still_waiting")
+			if fields := settingsButtonFields(t, staffKeyboardOf(reply.Params["reply_markup"])[0][0]); fields["a"] != "ic" || fields["t"] != "y" {
+				t.Errorf("%s: Cancel carries %v, want ic and t=y", c.name, fields)
+			}
+			f.waitIs("y", "price")
+		}
+		if got := settingsFiltersStored(t, env.chat.Id); len(got) != 1 {
+			t.Errorf("a refused reply stored %v", got)
+		}
+	})
+
+	t.Run("a keyword another admin added between the steps ends the wait and is never overwritten", func(t *testing.T) {
+		f.endWait()
+		f.begin()
+		f.say("taken later")
+		settingsListSeedFilters(t, env.chat.Id, "taken later")
+		before := f.sent()
+		sendPrivateMessage(env.settingsEnv, f.user, gotgbot.Message{Text: "my own reply"})
+		f.reply(before, "settings_flt_refuse_exists", "settings_edit_wait_stopped")
+		settingsEditWaitGone(t, env.settingsEnv, f.user)
+		if row := settingsFiltersStored(t, env.chat.Id)["taken later"]; row.FilterReply != "reply taken later" {
+			t.Errorf("the page overwrote the filter: %+v", row)
+		}
+	})
+
+	t.Run("a reply after the ten minutes gets one wait-ended note naming the reply", func(t *testing.T) {
+		f.endWait()
+		f.begin()
+		f.say("late one")
+		env.redis.FastForward(settingsInputTTL + time.Second)
+		before := f.sent()
+		f.say("too late")
+		f.reply(before, "settings_entries_wait_ended_note", "settings_entries_part_reply")
+		if _, ok := settingsFiltersStored(t, env.chat.Id)["late one"]; ok {
+			t.Errorf("a late reply stored a filter")
+		}
+	})
+}
+
+func TestSettingsListDoorTwoStepCap(t *testing.T) {
+	env := newSettingsListEnv(t)
+	chat := env.addChat()
+	settingsListCleanup(t, chat.Id)
+	f := newSettingsFiltersFlow(env, chat)
+	settingsListSeedFilters(t, chat.Id, settingsListWords(filtersCapMax-1)...)
+
+	f.begin()
+	f.say("one more")
+	f.waitIs("y", "one more")
+	// The 150th filter is stored by another admin between the steps: the cap is reached.
+	settingsListSeedFilters(t, chat.Id, "the last one")
+	before := f.sent()
+	sendPrivateMessage(env.settingsEnv, f.user, gotgbot.Message{Text: "reply"})
+	f.reply(before, "settings_flt_refuse_cap", "settings_edit_wait_stopped")
+	settingsEditWaitGone(t, env.settingsEnv, f.user)
+	if got := settingsFiltersStored(t, chat.Id); len(got) != filtersCapMax {
+		t.Errorf("the chat holds %d filters after the refused add, want %d", len(got), filtersCapMax)
+	}
+
+	// Add at the cap redraws page 1 with the cap notice and creates no wait.
+	m := settingsListOpenMenuPage(env, chat, f.user, settingsPageFilters)
+	add, ok := m.markedButton("settings_btn_flt_add")
+	if !ok {
+		t.Fatalf("the page at the cap has no Add button")
+	}
+	m.tap(add)
+	text, keyboard := m.last()
+	if !strings.Contains(text, settingsNoticeWarnIcon+staffMarker("settings_flt_refuse_cap")+" 150") || !strings.Contains(text, staffMarker("settings_flt_count")+" 150 150") {
+		t.Errorf("Add at the cap drew:\n%s", text)
+	}
+	if got := settingsListRowWidths(keyboard); fmt.Sprint(got) != fmt.Sprint([]int{4, 4, 1, 1, 2}) {
+		t.Errorf("rows at the cap = %v, want {4,4,1,1,2}", got)
+	}
+	if keys := settingsEditInputKeys(env.settingsEnv); len(keys) != 0 {
+		t.Errorf("Add at the cap created %v", keys)
+	}
+
+	// An unreadable count is the cannot-open edit and creates no wait.
+	count := settingsFiltersCount
+	settingsFiltersCount = func(context.Context, int64) (int, error) { return 0, errors.New("count failed") }
+	t.Cleanup(func() { settingsFiltersCount = count })
+	m.tap(add)
+	if text, _ := m.last(); !strings.Contains(text, staffMarker("settings_cannot_open")) {
+		t.Errorf("Add with a failing count drew:\n%s", text)
+	}
+	if keys := settingsEditInputKeys(env.settingsEnv); len(keys) != 0 {
+		t.Errorf("Add with a failing count created %v", keys)
+	}
+}

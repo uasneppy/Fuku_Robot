@@ -616,6 +616,7 @@ func TestSettingsListForged(t *testing.T) {
 		}
 		return true
 	}
+	forged := settingsFiltersForgedPresses(valid)
 	for name, kv := range map[string][]string{
 		"bx with an 18-digit r":   {"a", "bx", "r", "123456789012345678", "v", "1"},
 		"bx with a leading zero":  {"a", "bx", "r", "012", "v", "1"},
@@ -643,12 +644,23 @@ func TestSettingsListForged(t *testing.T) {
 			refused(t, name, func() { m.press(kv...) })
 		}
 	}
+	// The Filters page's codes are refused the same way (plan 19-07).
+	for name, kv := range forged {
+		if !tooLong(t, name, kv) {
+			refused(t, name, func() { m.press(kv...) })
+		}
+	}
 
 	// The same press of a group menu (u instead of c) is refused for every list code.
 	for _, kv := range [][]string{
 		{"a", "bp", "v", "1"},
 		{"a", "bx", "r", "5", "v", "1"},
 		{"a", "by", "r", "5", "e", valid},
+		{"a", "ig", "v", "1"},
+		{"a", "ix", "r", "5", "v", "1"},
+		{"a", "iy", "r", "5", "e", valid},
+		{"a", "ia"},
+		{"a", "ic", "t", "k"},
 	} {
 		members := len(env.fake.callsFor("getChatMember"))
 		env.press(env.admin, groupMsg, env.groupFields(env.admin, kv...))

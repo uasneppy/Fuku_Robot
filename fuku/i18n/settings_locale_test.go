@@ -527,6 +527,12 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_flt_keyword_line":       {40, 50},
 	"settings_flt_wait_reply":         {300, 420},
 	"settings_flt_saved":              {96, 150},
+
+	// Phase 19 (plan 19-07, task 2), the Filters page's refusals, delete card and removed notice (UI-SPEC rows 49 to 52).
+	"settings_flt_refuse_exists": {120, 180},
+	"settings_flt_refuse_cap":    {100, 150},
+	"settings_flt_delete_ask":    {150, 220},
+	"settings_flt_removed":       {64, 100},
 }
 
 // settingsAlertKeys are shown as answerCallbackQuery alerts: plain text, no tag, at most
