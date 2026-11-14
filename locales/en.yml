@@ -104,40 +104,7 @@ blacklists_set_bl_action_current_mode: "Current blacklist mode of this chat: %s"
 blacklists_unblacklist_give_bl_word: "Give me a word to remove from the blacklist."
 blacklists_unblacklist_no_removed_bl: "None of the given words were on the blacklist. Nothing removed."
 blacklists_unblacklist_removed_bl: "Removed '%s' from the blacklisted words."
-captcha_help_msg:
-  "Protect your group from bots and spammers with CAPTCHA verification!
-
-
-  Force new members to prove they're human by solving a simple challenge before they
-  can send messages.
-
-
-  *Captcha Types:*
-
-  × Math: Solve simple arithmetic problems
-
-  × Text: Identify text shown in an image
-
-  × Turnstile: A Cloudflare check on a web page
-
-
-  *Admin Commands:*
-
-  × /captcha `<on/off>`: Enable or disable captcha verification
-
-  × /captchamode `<math/text/turnstile>`: Set captcha type (math problems or text recognition)
-
-  × /captchatime `<1-10>`: Set timeout in minutes (default: 2)
-
-  × /captchaaction `<kick/ban/mute>`: Set action for failed verification (default:
-  kick)
-
-  × /captchaattempts `<1-10>`: Set maximum verification attempts (default: 3)
-
-
-  When enabled, new members are automatically muted until they complete the captcha.
-
-  If they fail or timeout, the configured action is taken."
+captcha_help_msg: "Entry control for the facility. Protect your group from bots and spammers with CAPTCHA verification.\n\nNew members prove they are human by solving a simple challenge before they can send messages.\n\n*Captcha Types:*\n× Math: Solve simple arithmetic problems\n× Text: Identify text shown in an image\n× Turnstile: A Cloudflare check on a web page\n\n*Admin Commands:*\n× /captcha `<on/off>`: Enable or disable captcha verification\n× /captchamode `<math/text/turnstile>`: Set the captcha type\n× /captchatime `<1-10>`: Set the timeout in minutes (default: 2)\n× /captchaaction `<kick/ban/mute>`: Set the action for a failed verification (default: kick)\n× /captchaattempts `<1-10>`: Set the maximum verification attempts (default: 3)\n\nWhen enabled, new members are muted until they complete the captcha.\nIf they fail or time out, the configured action is taken."
 commonstrings_admin_cache_cache_reloaded: "Admin cache reloaded. Supervisor roster up to date."
 commonstrings_admin_cache_not_found: "Admin cache not found. Ask an admin to send /admincache to reload it."
 connections_allow_connect_currently_off: "User connections are currently <b>off</b>.\nUsers cannot connect this chat to their PMs."
@@ -194,44 +161,22 @@ warns_help_msg: "Violation notices keep residents in check before things get out
 users_help_msg: "Resident registry. An automatic background tracker of users and chats. This module has no commands: it quietly records every message sender and every chat the bot is active in.\n*What It Tracks:*\n× User IDs, usernames and display names of every message sender.\n× Chat IDs and names of every group the bot is in.\n× Channel IDs, names and usernames of linked channels.\n*Rate Limiting:*\n× User updates are limited to one per UserUpdateInterval.\n× Chat updates are limited to one per ChatUpdateInterval.\nOther modules, such as /info, depend on the data this module collects."
 
 # Captcha module strings
-captcha_enable_failed: Failed to enable captcha. Please try again.
-captcha_disable_failed: Failed to disable captcha. Please try again.
-captcha_usage: Please use <code>/captcha on</code> or <code>/captcha off</code>
-captcha_mode_specify: "Please specify a mode: <code>math</code>, <code>text</code> or <code>turnstile</code>"
+captcha_enable_failed: "Malfunction: could not enable captcha. Try again."
+captcha_disable_failed: "Malfunction: could not disable captcha. Try again."
+captcha_usage: "Use <code>/captcha on</code> or <code>/captcha off</code>"
+captcha_mode_specify: "Specify a mode: <code>math</code>, <code>text</code> or <code>turnstile</code>"
 captcha_mode_invalid: Invalid mode. Use <code>math</code>, <code>text</code> or <code>turnstile</code>
-captcha_mode_failed: Failed to set captcha mode. Please try again.
-captcha_timeout_specify: Please specify timeout in minutes (1-10)
-captcha_timeout_invalid: Invalid timeout. Please use a number between 1 and 10.
-captcha_timeout_failed: Failed to set timeout. Please try again.
-captcha_action_specify: "Please specify an action: <code>kick</code>, <code>ban</code>, or <code>mute</code>"
-captcha_action_invalid: Invalid action. Use <code>kick</code>, <code>ban</code>, or <code>mute</code>
-captcha_action_failed: Failed to set failure action. Please try again.
-captcha_welcome_math_image: |
-  👋 Welcome %s!
-
-  Please solve the problem shown in the image and select the correct answer:
-
-  ⏱ You have <b>%d minutes</b> to answer.
-captcha_welcome_text_image: |
-  👋 Welcome %s!
-
-  Please select the text shown in the image to verify you're human:
-
-  ⏱ You have <b>%d minutes</b> to answer.
-captcha_welcome_math_text: |
-  👋 Welcome %s!
-
-  Please solve this math problem to verify you're human:
-
-  <b>%s = ?</b>
-
-  ⏱ You have <b>%d minutes</b> to answer.
-captcha_web_welcome: |
-  👋 Welcome %s!
-
-  Tap the button below to verify you are human.
-
-  ⏱ You have <b>%d minutes</b> to finish.
+captcha_mode_failed: "Malfunction: could not set the captcha mode. Try again."
+captcha_timeout_specify: "Specify the timeout in minutes (1-10)"
+captcha_timeout_invalid: "Invalid timeout. Use a number between 1 and 10."
+captcha_timeout_failed: "Malfunction: could not set the timeout. Try again."
+captcha_action_specify: "Specify an action: <code>kick</code>, <code>ban</code> or <code>mute</code>"
+captcha_action_invalid: "Invalid action. Use <code>kick</code>, <code>ban</code> or <code>mute</code>"
+captcha_action_failed: "Malfunction: could not set the failure action. Try again."
+captcha_welcome_math_image: "👋 Welcome, %s.\n\nSolve the problem in the image and select the correct answer:\n\n⏱ You have <b>%d minutes</b> to answer.\n"
+captcha_welcome_text_image: "👋 Welcome, %s.\n\nSelect the text shown in the image to verify you are human:\n\n⏱ You have <b>%d minutes</b> to answer.\n"
+captcha_welcome_math_text: "👋 Welcome, %s.\n\nSolve this problem to verify you are human:\n\n<b>%s = ?</b>\n\n⏱ You have <b>%d minutes</b> to answer.\n"
+captcha_web_welcome: "👋 Welcome, %s.\n\nTap the button below to verify you are human.\n\n⏱ You have <b>%d minutes</b> to finish.\n"
 captcha_web_button: Verify with Turnstile
 captcha_web_page_title: Verification
 captcha_web_loading_title: Getting ready
@@ -262,10 +207,10 @@ captcha_web_close_button: Close
 captcha_web_refuse_not_configured: "Turnstile captcha is not set up on this bot yet. Ask the bot owner to finish the web captcha setup. Math and text captcha still work."
 captcha_web_refuse_no_redis: "Turnstile captcha is unavailable right now because the bot's shared storage is down. Try again later, or use math or text captcha."
 captcha_web_refuse_no_rights: "I need to be an admin with the Restrict members right to run the Turnstile captcha. Give me that right and try again."
-captcha_failed_verify: Failed to verify. Please contact an admin.
-captcha_wait_refresh: Please wait a few seconds before requesting a new image.
-captcha_failed_generate: Failed to generate new image, try again.
-captcha_failed_send: Failed to send new captcha image.
+captcha_failed_verify: "Verification malfunction. Contact an admin."
+captcha_wait_refresh: "Wait a few seconds before requesting a new image."
+captcha_failed_generate: "Malfunction: could not generate a new image. Try again."
+captcha_failed_send: "Malfunction: could not send a new captcha image."
 captcha_invalid_data: Invalid captcha data
 captcha_invalid_attempt: Invalid attempt ID
 captcha_invalid_user: Invalid user ID
@@ -274,11 +219,11 @@ captcha_invalid_refresh: Invalid refresh data
 
 # Captcha max attempts
 captcha_max_attempts_current: "Current maximum verification attempts: <b>%d</b>"
-captcha_max_attempts_invalid: "Invalid value. Please specify a number between 1 and 10."
+captcha_max_attempts_invalid: "Invalid value. Specify a number between 1 and 10."
 captcha_max_attempts_set: "Maximum verification attempts set to <b>%d</b>"
 
 # Captcha auto-unmute
-captcha_user_auto_unmute: "User %s will be automatically unmuted in 24 hours."
+captcha_user_auto_unmute: "User %s will be unmuted automatically in 24 hours."
 
 # Help module strings
 help_pm_questions: "Questions about how to use me? Message me in private."
@@ -626,41 +571,31 @@ greetings_auto_approve_enable: "Noted. I will try to auto-approve new join reque
 greetings_auto_approve_invalid_option: "Unrecognised input. I accept 'on/yes' or 'off/no' only."
 
 # Captcha module strings (additional)
-captcha_enabled_success: "✅ Captcha verification has been <b>enabled</b>. New members will need to complete a captcha to join."
-captcha_disabled_success: "❌ Captcha verification has been <b>disabled</b>."
+captcha_enabled_success: "✅ Captcha verification <b>enabled</b>. New members must complete a captcha to join."
+captcha_disabled_success: "❌ Captcha verification <b>disabled</b>."
 captcha_mode_set_success: "✅ Captcha mode set to <b>%s</b> (%s)"
 captcha_timeout_set_success: "✅ Captcha timeout set to <b>%d minutes</b>"
 captcha_action_set_success: "✅ Captcha failure action set to <b>%s</b>"
 captcha_refresh_button: "🔄 New Image"
-captcha_verified_success_msg: "✅ Verified successfully!"
-captcha_wrong_answer_final: "❌ Wrong answer! You have been %s."
-captcha_wrong_answer_remaining: "❌ Wrong answer! %d attempts remaining."
+captcha_verified_success_msg: "✅ Verified. Access granted."
+captcha_wrong_answer_final: "❌ Wrong answer. You have been %s."
+captcha_wrong_answer_remaining: "❌ Wrong answer. Attempts remaining: %d."
 captcha_action_kicked: "kicked"
 captcha_action_banned: "banned"
 captcha_action_muted: "muted permanently"
-captcha_refresh_success: "🔄 New captcha sent!"
-captcha_timeout_failure_kicked: "❌ %s failed to complete captcha verification and has been kicked."
-captcha_timeout_failure_banned: "❌ %s failed to complete captcha verification and has been banned."
-captcha_timeout_failure_muted: "❌ %s failed to complete captcha verification and has been muted."
-captcha_timeout_with_messages: "❌ %s failed to complete captcha verification and has been %s.\n\n📝 %d message(s) were attempted but deleted due to incomplete verification."
+captcha_refresh_success: "🔄 New captcha sent."
+captcha_timeout_failure_kicked: "❌ %s did not complete captcha verification and has been kicked."
+captcha_timeout_failure_banned: "❌ %s did not complete captcha verification and has been banned."
+captcha_timeout_failure_muted: "❌ %s did not complete captcha verification and has been muted."
+captcha_timeout_with_messages: "❌ %s did not complete captcha verification and has been %s.\n\n📝 %d message(s) were sent before verification and deleted."
 captcha_stored_messages_summary: "📝 %s tried to send %d message(s) (%s) before verification"
 captcha_pending_usage: "Usage: <code>/captchapending @user</code> or <code>/captchapending user_id</code>"
 captcha_no_pending_messages: "No pending messages found for this user."
 captcha_clear_usage: "Usage: <code>/captchaclear @user</code> or <code>/captchaclear user_id</code>"
-captcha_clear_failed: "Failed to clear stored messages. Please try again."
+captcha_clear_failed: "Malfunction: could not clear the stored messages. Try again."
 captcha_clear_success: "✅ Cleared all stored messages for user %d"
-captcha_refresh_time_remaining: |
-  👋 Welcome %s!
-
-  Please select the text shown in the image to verify you're human:
-
-  ⏱ You have <b>%d minutes</b> to answer.
-captcha_math_time_remaining: |
-  👋 Welcome %s!
-
-  Please solve the problem shown in the image and select the correct answer:
-
-  ⏱ You have <b>%d minutes</b> to answer.
+captcha_refresh_time_remaining: "👋 Welcome, %s.\n\nSelect the text shown in the image to verify you are human:\n\n⏱ You have <b>%d minutes</b> to answer.\n"
+captcha_math_time_remaining: "👋 Welcome, %s.\n\nSolve the problem in the image and select the correct answer:\n\n⏱ You have <b>%d minutes</b> to answer.\n"
 
 # Notes module strings
 notes_save_success: "Note <b>%s</b> filed.\nGet it with <code>#%s</code> or <code>/get %s</code>."
@@ -810,12 +745,12 @@ captcha_timeout_range_error: "timeout must be between 1 and 10 minutes"
 captcha_invalid_action_error: "invalid failure action: must be 'kick', 'ban', or 'mute'"
 captcha_attempts_range_error: "max attempts must be between 1 and 10"
 captcha_status_usage: "Use <code>/captcha on</code> or <code>/captcha off</code> to change status."
-captcha_not_for_you: "This captcha is not for you!"
+captcha_not_for_you: "This captcha is not for you."
 captcha_expired_or_not_found: "Captcha expired or not found"
 captcha_attempt_not_valid: "This captcha attempt is no longer valid."
 captcha_refresh_limit_reached: "Refresh limit reached for this captcha."
 captcha_internal_update_error: "Internal error updating captcha."
-captcha_internal_error: "An internal error occurred while updating captcha settings. Please try again."
+captcha_internal_error: "Malfunction while updating captcha settings. Try again."
 
 # Greetings additional strings
 greetings_goodbye_enable: "Departures desk open. I will say goodbye to residents from now on."
@@ -967,8 +902,8 @@ captcha_mode_math_desc: "mathematical problems"
 captcha_mode_text_desc: "text recognition from images"
 captcha_mode_turnstile_desc: "Cloudflare Turnstile web check"
 captcha_mode_set_formatted: "✅ Captcha mode set to <b>%s</b> (%s)"
-captcha_welcome_text_detailed: "👋 Welcome %s!\n\nPlease select the text shown in the image to verify you're human:\n\n⏱ You have <b>%d minutes</b> to answer."
-captcha_welcome_math_detailed: "👋 Welcome %s!\n\nPlease solve the problem shown in the image and select the correct answer:\n\n⏱ You have <b>%d minutes</b> to answer."
+captcha_welcome_text_detailed: "👋 Welcome, %s.\n\nSelect the text shown in the image to verify you are human:\n\n⏱ You have <b>%d minutes</b> to answer."
+captcha_welcome_math_detailed: "👋 Welcome, %s.\n\nSolve the problem in the image and select the correct answer:\n\n⏱ You have <b>%d minutes</b> to answer."
 captcha_pending_messages_header: "📋 <b>Pending messages from user %d:</b>\n\n"
 captcha_pending_message_type: "%d. Type: %s\n"
 captcha_pending_message_caption: "   Caption: %s\n"
@@ -1107,16 +1042,7 @@ captcha_extended_docs: |
 
   This helps identify potential spam attempts before users complete verification.
 
-captcha_permissions_docs: |
-  <b>Bot Requirements:</b>
-  • Ban users (for kick/ban actions)
-  • Restrict members (for muting during verification)
-  • Delete messages (for cleaning up captcha messages)
-
-  <b>Failure Actions:</b>
-  • <code>kick</code> - Remove the user while allowing them to rejoin
-  • <code>ban</code> - Permanently ban the user
-  • <code>mute</code> - Keep the user muted for 24 hours
+captcha_permissions_docs: "<b>Bot Requirements:</b>\n• Ban users (for kick/ban actions)\n• Restrict members (for muting during verification)\n• Delete messages (for cleaning up captcha messages)\n\n<b>Failure Actions:</b>\n• <code>kick</code> - Remove the user while allowing them to rejoin\n• <code>ban</code> - Permanently ban the user\n• <code>mute</code> - Keep the user muted for 24 hours\n"
 
 # Extended documentation locale keys - Blacklists module
 blacklists_extended_docs: "<b>Available Actions:</b>\nThese actions can be set with <code>/blaction</code>:\n• <code>none</code> - Only deletes the message, nothing else\n• <code>warn</code> - Deletes the message and warns the user (default)\n• <code>mute</code> - Deletes the message and mutes the user\n• <code>kick</code> - Deletes the message and kicks the user (they can rejoin)\n• <code>ban</code> - Deletes the message and permanently bans the user\n\n<b>Note:</b>\nThe default mode for Blacklist is <b>warn</b>, which deletes the message and warns the user.\n\n<b>Commands:</b>\n• <code>/addblacklist &lt;trigger&gt;</code> - Blacklists the word in the current chat\n• <code>/rmblacklist &lt;trigger&gt;</code> - Removes the word from the chat's blacklisted words\n• <code>/blaction &lt;mute/kick/ban/warn/none&gt;</code> - Sets the action the bot takes when a blacklisted word is detected\n• <code>/remallbl</code> - Removes all blacklisted words from chat (Owner Only)\n"

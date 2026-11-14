@@ -104,7 +104,7 @@ blacklists_set_bl_action_current_mode: "Поточний режим чорног
 blacklists_unblacklist_give_bl_word: "Вкажіть слово, яке треба прибрати з чорного списку."
 blacklists_unblacklist_no_removed_bl: "Жодного з цих слів немає в чорному списку. Нічого не прибрано."
 blacklists_unblacklist_removed_bl: "«%s» прибрано з чорного списку."
-captcha_help_msg: "Захистіть свою групу від ботів і спамерів за допомогою перевірки капчею!\n\n\nЗмусьте нових учасників довести, що вони люди, розв'язавши просте завдання, перш ніж вони зможуть писати повідомлення.\n\n\n*Типи капчі:*\n\n× Math: розв'язати простий арифметичний приклад\n\n× Text: розпізнати текст на зображенні\n\n× Turnstile: перевірка Cloudflare на вебсторінці\n\n\n*Команди для адмінів:*\n\n× /captcha `<on/off>`: увімкнути або вимкнути перевірку капчею\n\n× /captchamode `<math/text/turnstile>`: встановити тип капчі (математичні приклади або розпізнавання тексту)\n\n× /captchatime `<1-10>`: встановити тайм-аут у хвилинах (за замовчуванням: 2)\n\n× /captchaaction `<kick/ban/mute>`: встановити дію при невдалій перевірці (за замовчуванням: kick)\n\n× /captchaattempts `<1-10>`: встановити максимальну кількість спроб (за замовчуванням: 3)\n\n\nПісля вмикання нових учасників автоматично заглушують, доки вони не пройдуть капчу.\n\nЯкщо вони не пройдуть її або вичерпають час, буде виконано налаштовану дію."
+captcha_help_msg: "Контроль доступу на об'єкт. Захистіть групу від ботів і спамерів перевіркою CAPTCHA.\n\nНові учасники доводять, що вони люди, розв'язавши просте завдання, перш ніж зможуть писати.\n\n*Типи капчі:*\n× Math: Простий арифметичний приклад\n× Text: Розпізнати текст на зображенні\n× Turnstile: Перевірка Cloudflare на вебсторінці\n\n*Команди адмінів:*\n× /captcha `<on/off>`: Увімкнути або вимкнути капчу\n× /captchamode `<math/text/turnstile>`: Задати тип капчі\n× /captchatime `<1-10>`: Час на проходження в хвилинах (стандартно: 2)\n× /captchaaction `<kick/ban/mute>`: Дія, якщо перевірку не пройдено (стандартно: kick)\n× /captchaattempts `<1-10>`: Максимум спроб (стандартно: 3)\n\nКоли капчу увімкнено, нових учасників мутять, доки вони не пройдуть перевірку.\nЯкщо не пройдуть або час вийде, застосовується налаштована дія."
 commonstrings_admin_cache_cache_reloaded: "Кеш адмінів перезавантажено. Список наглядачів актуальний."
 commonstrings_admin_cache_not_found: "Кеш адмінів не знайдено. Попросіть адміна надіслати /admincache, щоб перезавантажити його."
 connections_allow_connect_currently_off: "Підключення користувачів зараз <b>вимкнено</b>.\nКористувачі не можуть підключити цей чат до своїх особистих."
@@ -159,22 +159,22 @@ utils_string_handling_extract_time_invalid_time_amount: "Некоректна т
 utils_string_handling_extract_time_invalid_time_type: "Некоректна одиниця часу. Очікувалося m, h або d, отримано: %s"
 warns_help_msg: "Попередження про порушення тримають мешканців у рамках, поки все не вийшло з-під контролю.\nПро автоматичні попередження читайте в модулі чорного списку.\n\n*Команди адмінів:*\n- /warn <reason>: Попередити користувача.\n- /dwarn <reason>: Попередити у відповідь на повідомлення і видалити його.\n- /swarn <reason>: Тихо попередити користувача і видалити вашу команду.\n- /warns: Переглянути попередження користувача.\n- /rmwarn: Зняти останнє попередження користувача.\n- /resetwarn: Скинути всі попередження користувача до 0.\n- /resetallwarns: Видалити всі попередження в чаті. У всіх стає 0.\n- /warnings: Налаштування попереджень чату.\n- /setwarnmode <ban/kick/mute>: Задати дію за попередження.\n- /setwarnlimit <number>: Скільки попереджень до покарання.\n\n*Приклади*\n- Попередити користувача.\n-> `/warn @user For disobeying the rules`"
 users_help_msg: "Реєстр мешканців. Автоматичний фоновий облік користувачів і чатів. Команд у модуля немає: він тихо записує кожного відправника повідомлень і кожен чат, де працює бот.\n*Що записується:*\n× ID, юзернейми та імена кожного відправника повідомлень.\n× ID і назви кожної групи, де є бот.\n× ID, назви та юзернейми пов'язаних каналів.\n*Обмеження частоти:*\n× Оновлення користувачів — не частіше одного за UserUpdateInterval.\n× Оновлення чатів — не частіше одного за ChatUpdateInterval.\nІнші модулі, як-от /info, залежать від даних цього модуля."
-captcha_enable_failed: "Не вдалося увімкнути капчу. Спробуйте ще раз."
-captcha_disable_failed: "Не вдалося вимкнути капчу. Спробуйте ще раз."
-captcha_usage: "Використовуйте <code>/captcha on</code> або <code>/captcha off</code>"
+captcha_enable_failed: "Збій: не вдалося увімкнути капчу. Спробуйте ще раз."
+captcha_disable_failed: "Збій: не вдалося вимкнути капчу. Спробуйте ще раз."
+captcha_usage: "Використайте <code>/captcha on</code> або <code>/captcha off</code>"
 captcha_mode_specify: "Вкажіть режим: <code>math</code>, <code>text</code> або <code>turnstile</code>"
 captcha_mode_invalid: "Некоректний режим. Використовуйте <code>math</code>, <code>text</code> або <code>turnstile</code>"
-captcha_mode_failed: "Не вдалося встановити режим капчі. Спробуйте ще раз."
-captcha_timeout_specify: "Вкажіть тайм-аут у хвилинах (1-10)"
-captcha_timeout_invalid: "Некоректний тайм-аут. Використовуйте число від 1 до 10."
-captcha_timeout_failed: "Не вдалося встановити тайм-аут. Спробуйте ще раз."
+captcha_mode_failed: "Збій: не вдалося задати режим капчі. Спробуйте ще раз."
+captcha_timeout_specify: "Вкажіть час у хвилинах (1-10)"
+captcha_timeout_invalid: "Некоректний час. Вкажіть число від 1 до 10."
+captcha_timeout_failed: "Збій: не вдалося задати час. Спробуйте ще раз."
 captcha_action_specify: "Вкажіть дію: <code>kick</code>, <code>ban</code> або <code>mute</code>"
-captcha_action_invalid: "Некоректна дія. Використовуйте <code>kick</code>, <code>ban</code> або <code>mute</code>"
-captcha_action_failed: "Не вдалося встановити дію при невдачі. Спробуйте ще раз."
-captcha_welcome_math_image: "👋 Ласкаво просимо, %s!\n\nРозв'яжіть задачу на зображенні та оберіть правильну відповідь:\n\n⏱ На відповідь у вас <b>%d хв</b>.\n"
-captcha_welcome_text_image: "👋 Ласкаво просимо, %s!\n\nОберіть текст, показаний на зображенні, щоб підтвердити, що ви людина:\n\n⏱ На відповідь у вас <b>%d хв</b>.\n"
-captcha_welcome_math_text: "👋 Ласкаво просимо, %s!\n\nРозв'яжіть цю математичну задачу, щоб підтвердити, що ви людина:\n\n<b>%s = ?</b>\n\n⏱ На відповідь у вас <b>%d хв</b>.\n"
-captcha_web_welcome: "👋 Ласкаво просимо, %s!\n\nНатисніть кнопку нижче, щоб підтвердити, що ви людина.\n\n⏱ На проходження у вас <b>%d хв</b>.\n"
+captcha_action_invalid: "Некоректна дія. Використайте <code>kick</code>, <code>ban</code> або <code>mute</code>"
+captcha_action_failed: "Збій: не вдалося задати дію при невдачі. Спробуйте ще раз."
+captcha_welcome_math_image: "👋 Вітаємо, %s.\n\nРозв'яжіть приклад на зображенні й оберіть правильну відповідь:\n\n⏱ На відповідь: <b>%d хв</b>.\n"
+captcha_welcome_text_image: "👋 Вітаємо, %s.\n\nОберіть текст із зображення, щоб підтвердити, що ви людина:\n\n⏱ На відповідь: <b>%d хв</b>.\n"
+captcha_welcome_math_text: "👋 Вітаємо, %s.\n\nРозв'яжіть приклад, щоб підтвердити, що ви людина:\n\n<b>%s = ?</b>\n\n⏱ На відповідь: <b>%d хв</b>.\n"
+captcha_web_welcome: "👋 Вітаємо, %s.\n\nНатисніть кнопку нижче, щоб підтвердити, що ви людина.\n\n⏱ На перевірку: <b>%d хв</b>.\n"
 captcha_web_button: "Підтвердити через Turnstile"
 captcha_web_page_title: "Перевірка"
 captcha_web_loading_title: "Підготовка"
@@ -187,13 +187,13 @@ captcha_web_verifying_body: "Зачекайте. Не закривайте цю 
 captcha_web_passed_title: "Вас підтверджено"
 captcha_web_passed_body: "Ласкаво просимо до групи. Ця сторінка закриється сама."
 captcha_web_failed_title: "Перевірку не пройдено"
-captcha_web_failed_body_kick: "Вас вилучено з групи. Ви можете приєднатися знову й спробувати ще раз."
-captcha_web_failed_body_ban: "Вас заблоковано в групі. Зверніться до адміна, якщо це помилка."
-captcha_web_failed_body_mute: "Вас залишено заглушеним у групі. Зверніться до адміна, якщо це помилка."
+captcha_web_failed_body_kick: "Вас вигнано з групи. Можна приєднатися знову й спробувати ще раз."
+captcha_web_failed_body_ban: "Вас забанено в групі. Зверніться до адміна, якщо це помилка."
+captcha_web_failed_body_mute: "Мут у групі залишається. Зверніться до адміна, якщо це помилка."
 captcha_web_expired_title: "Час вичерпано"
-captcha_web_expired_body_kick: "Ви не встигли вчасно. Вас вилучено з групи, і ви можете приєднатися знову й спробувати ще раз."
-captcha_web_expired_body_ban: "Ви не встигли вчасно. Вас заблоковано в групі. Зверніться до адміна, якщо це помилка."
-captcha_web_expired_body_mute: "Ви не встигли вчасно. Вас залишено заглушеним у групі. Зверніться до адміна, якщо це помилка."
+captcha_web_expired_body_kick: "Час вийшов. Вас вигнано з групи; можна приєднатися знову й спробувати ще раз."
+captcha_web_expired_body_ban: "Час вийшов. Вас забанено в групі. Зверніться до адміна, якщо це помилка."
+captcha_web_expired_body_mute: "Час вийшов. Мут у групі залишається. Зверніться до адміна, якщо це помилка."
 captcha_web_retry_title: "Щось пішло не так"
 captcha_web_retry_body: "Це була проблема зі з'єднанням, а не невдала перевірка. Спробуйте ще раз до завершення ліміту часу."
 captcha_web_retry_button: "Спробувати ще раз"
@@ -205,10 +205,10 @@ captcha_web_close_button: "Закрити"
 captcha_web_refuse_not_configured: "Капчу Turnstile ще не налаштовано для цього бота. Попросіть власника бота завершити налаштування веб-капчі. Математична й текстова капчі працюють."
 captcha_web_refuse_no_redis: "Капча Turnstile зараз недоступна, бо спільне сховище бота не працює. Спробуйте пізніше або скористайтеся математичною чи текстовою капчею."
 captcha_web_refuse_no_rights: "Щоб запустити капчу Turnstile, я маю бути адміністратором із правом обмежувати учасників. Надайте мені це право й спробуйте ще раз."
-captcha_failed_verify: "Не вдалося перевірити. Зверніться до адміністратора."
-captcha_wait_refresh: "Зачекайте кілька секунд, перш ніж запитувати нове зображення."
-captcha_failed_generate: "Не вдалося створити нове зображення, спробуйте ще раз."
-captcha_failed_send: "Не вдалося надіслати нове зображення капчі."
+captcha_failed_verify: "Збій перевірки. Зверніться до адміна."
+captcha_wait_refresh: "Зачекайте кілька секунд, перш ніж просити нове зображення."
+captcha_failed_generate: "Збій: не вдалося створити нове зображення. Спробуйте ще раз."
+captcha_failed_send: "Збій: не вдалося надіслати нове зображення капчі."
 captcha_invalid_data: "Недійсні дані капчі"
 captcha_invalid_attempt: "Недійсний ID спроби"
 captcha_invalid_user: "Недійсний ID користувача"
@@ -216,10 +216,10 @@ captcha_error_processing: "Помилка обробки відповіді"
 captcha_invalid_refresh: "Недійсні дані оновлення"
 
 captcha_max_attempts_current: "Поточна максимальна кількість спроб перевірки: <b>%d</b>"
-captcha_max_attempts_invalid: "Недійсне значення. Вкажіть число від 1 до 10."
+captcha_max_attempts_invalid: "Некоректне значення. Вкажіть число від 1 до 10."
 captcha_max_attempts_set: "Максимальну кількість спроб перевірки встановлено: <b>%d</b>"
 
-captcha_user_auto_unmute: "Користувача %s буде автоматично розблоковано від заглушення за 24 години."
+captcha_user_auto_unmute: "%s буде автоматично розмучено через 24 години."
 
 help_pm_questions: "Є питання, як мною користуватися? Напишіть мені в особисті."
 help_config_private_only: "Налаштування працює лише в особистому чаті."
@@ -537,41 +537,31 @@ greetings_auto_approve_enable: "Прийнято. Я намагатимуся а
 greetings_auto_approve_invalid_option: "Незрозумілий ввід. Я приймаю лише 'on/yes' або 'off/no'."
 
 # Captcha module strings (additional)
-captcha_enabled_success: "✅ Перевірку капчею <b>увімкнено</b>. Нові учасники мають пройти капчу, щоб приєднатися."
-captcha_disabled_success: "❌ Перевірку капчею <b>вимкнено</b>."
+captcha_enabled_success: "✅ Капчу <b>увімкнено</b>. Нові учасники мають пройти капчу, щоб приєднатися."
+captcha_disabled_success: "❌ Капчу <b>вимкнено</b>."
 captcha_mode_set_success: "✅ Режим капчі встановлено: <b>%s</b> (%s)"
 captcha_timeout_set_success: "✅ Тайм-аут капчі встановлено: <b>%d хв</b>"
 captcha_action_set_success: "✅ Дію при невдалій капчі встановлено: <b>%s</b>"
 captcha_refresh_button: "🔄 Нове зображення"
-captcha_verified_success_msg: "✅ Успішно підтверджено!"
-captcha_wrong_answer_final: "❌ Неправильна відповідь! Вас %s."
-captcha_wrong_answer_remaining: "❌ Неправильна відповідь! Залишилося спроб: %d."
-captcha_action_kicked: "вилучено"
-captcha_action_banned: "заблоковано"
-captcha_action_muted: "назавжди заглушено"
-captcha_refresh_success: "🔄 Надіслано нову капчу!"
-captcha_timeout_failure_kicked: "❌ %s не пройшов(-ла) перевірку капчею і був(-ла) вилучений(-а)."
-captcha_timeout_failure_banned: "❌ %s не пройшов(-ла) перевірку капчею і був(-ла) заблокований(-а)."
-captcha_timeout_failure_muted: "❌ %s не пройшов(-ла) перевірку капчею і був(-ла) заглушений(-а)."
-captcha_timeout_with_messages: "❌ %s не пройшов(-ла) перевірку капчею: %s.\n\n📝 Повідомлень, надісланих до перевірки, видалено: %d."
-captcha_stored_messages_summary: "📝 %s намагався(-лась) надіслати повідомлень: %d (%s) до проходження перевірки"
+captcha_verified_success_msg: "✅ Перевірку пройдено. Доступ надано."
+captcha_wrong_answer_final: "❌ Неправильна відповідь. Вас %s."
+captcha_wrong_answer_remaining: "❌ Неправильна відповідь. Залишилося спроб: %d."
+captcha_action_kicked: "вигнано"
+captcha_action_banned: "забанено"
+captcha_action_muted: "назавжди замучено"
+captcha_refresh_success: "🔄 Нову капчу надіслано."
+captcha_timeout_failure_kicked: "❌ %s: перевірку капчею не пройдено. Користувача вигнано."
+captcha_timeout_failure_banned: "❌ %s: перевірку капчею не пройдено. Користувача забанено."
+captcha_timeout_failure_muted: "❌ %s: перевірку капчею не пройдено. Користувача замучено."
+captcha_timeout_with_messages: "❌ %s: капчу не пройдено, результат — %s.\n\n📝 Повідомлень, надісланих до перевірки, видалено: %d."
+captcha_stored_messages_summary: "📝 %s: спроб надіслати повідомлення до перевірки — %d (%s)"
 captcha_pending_usage: "Використання: <code>/captchapending @user</code> або <code>/captchapending user_id</code>"
 captcha_no_pending_messages: "Для цього користувача немає повідомлень в очікуванні."
 captcha_clear_usage: "Використання: <code>/captchaclear @user</code> або <code>/captchaclear user_id</code>"
-captcha_clear_failed: "Не вдалося очистити збережені повідомлення. Спробуйте ще раз."
+captcha_clear_failed: "Збій: не вдалося очистити збережені повідомлення. Спробуйте ще раз."
 captcha_clear_success: "✅ Усі збережені повідомлення користувача %d очищено"
-captcha_refresh_time_remaining: |
-  👋 Ласкаво просимо, %s!
-
-  Виберіть текст із зображення, щоб підтвердити, що ви людина:
-
-  ⏱ На відповідь у вас є <b>%d хв</b>.
-captcha_math_time_remaining: |
-  👋 Ласкаво просимо, %s!
-
-  Розв'яжіть приклад із зображення та виберіть правильну відповідь:
-
-  ⏱ На відповідь у вас є <b>%d хв</b>.
+captcha_refresh_time_remaining: "👋 Вітаємо, %s.\n\nОберіть текст із зображення, щоб підтвердити, що ви людина:\n\n⏱ На відповідь: <b>%d хв</b>.\n"
+captcha_math_time_remaining: "👋 Вітаємо, %s.\n\nРозв'яжіть приклад на зображенні й оберіть правильну відповідь:\n\n⏱ На відповідь: <b>%d хв</b>.\n"
 
 # Notes module strings
 notes_save_success: "Нотатку <b>%s</b> внесено до картотеки.\nОтримати: <code>#%s</code> або <code>/get %s</code>."
@@ -721,12 +711,12 @@ captcha_timeout_range_error: "тайм-аут має бути від 1 до 10 �
 captcha_invalid_action_error: "недійсна дія при невдачі: має бути 'kick', 'ban' або 'mute'"
 captcha_attempts_range_error: "максимум спроб має бути від 1 до 10"
 captcha_status_usage: "Використайте <code>/captcha on</code> або <code>/captcha off</code>, щоб змінити стан."
-captcha_not_for_you: "Ця капча не для вас!"
+captcha_not_for_you: "Ця капча не для вас."
 captcha_expired_or_not_found: "Капча прострочена або не знайдена"
 captcha_attempt_not_valid: "Ця спроба проходження капчі вже недійсна."
 captcha_refresh_limit_reached: "Досягнуто ліміту оновлень для цієї капчі."
 captcha_internal_update_error: "Внутрішня помилка під час оновлення капчі."
-captcha_internal_error: "Під час оновлення налаштувань капчі сталася внутрішня помилка. Спробуйте ще раз."
+captcha_internal_error: "Збій під час оновлення налаштувань капчі. Спробуйте ще раз."
 
 # Greetings additional strings
 greetings_goodbye_enable: "Стійку відбуття відкрито. Відтепер я прощатимуся з мешканцями."
@@ -878,8 +868,8 @@ captcha_mode_math_desc: "математичні задачі"
 captcha_mode_text_desc: "розпізнавання тексту на зображеннях"
 captcha_mode_turnstile_desc: "вебперевірка Cloudflare Turnstile"
 captcha_mode_set_formatted: "✅ Режим капчі встановлено: <b>%s</b> (%s)"
-captcha_welcome_text_detailed: "👋 Ласкаво просимо, %s!\n\nВиберіть текст із зображення, щоб підтвердити, що ви людина:\n\n⏱ На відповідь у вас є <b>%d хв</b>."
-captcha_welcome_math_detailed: "👋 Ласкаво просимо, %s!\n\nРозв'яжіть задачу із зображення та виберіть правильну відповідь:\n\n⏱ На відповідь у вас є <b>%d хв</b>."
+captcha_welcome_text_detailed: "👋 Вітаємо, %s.\n\nОберіть текст із зображення, щоб підтвердити, що ви людина:\n\n⏱ На відповідь: <b>%d хв</b>."
+captcha_welcome_math_detailed: "👋 Вітаємо, %s.\n\nРозв'яжіть приклад на зображенні й оберіть правильну відповідь:\n\n⏱ На відповідь: <b>%d хв</b>."
 captcha_pending_messages_header: "📋 <b>Повідомлення користувача %d, що очікують:</b>\n\n"
 captcha_pending_message_type: "%d. Тип: %s\n"
 captcha_pending_message_caption: "   Підпис: %s\n"
@@ -1017,16 +1007,7 @@ captcha_extended_docs: |
 
   Це допомагає виявити можливий спам до завершення перевірки.
 
-captcha_permissions_docs: |
-  <b>Вимоги до бота:</b>
-  • Блокування користувачів (для дій kick/ban)
-  • Обмеження учасників (для муту під час перевірки)
-  • Видалення повідомлень (для прибирання повідомлень капчі)
-
-  <b>Дії при невдачі:</b>
-  • <code>kick</code> - вилучити користувача з можливістю повернутися
-  • <code>ban</code> - назавжди заблокувати користувача
-  • <code>mute</code> - тримати користувача в муті 24 години
+captcha_permissions_docs: "<b>Вимоги до бота:</b>\n• Бан користувачів (для дій kick/ban)\n• Обмеження учасників (для муту під час перевірки)\n• Видалення повідомлень (для прибирання повідомлень капчі)\n\n<b>Дії при невдачі:</b>\n• <code>kick</code> - вигнати користувача з можливістю повернутися\n• <code>ban</code> - назавжди забанити користувача\n• <code>mute</code> - тримати користувача в муті 24 години\n"
 
 # Extended documentation locale keys - Blacklists module
 blacklists_extended_docs: "<b>Доступні дії:</b>\nДію задає команда <code>/blaction</code>:\n• <code>none</code> - Лише видаляє повідомлення, нічого більше\n• <code>warn</code> - Видаляє повідомлення і попереджає користувача (стандартно)\n• <code>mute</code> - Видаляє повідомлення і мутить користувача\n• <code>kick</code> - Видаляє повідомлення і виганяє користувача (повернутися можна)\n• <code>ban</code> - Видаляє повідомлення і назавжди банить користувача\n\n<b>Примітка:</b>\nСтандартний режим чорного списку — <b>warn</b>: повідомлення видаляється, користувач отримує попередження.\n\n<b>Команди:</b>\n• <code>/addblacklist &lt;trigger&gt;</code> - Додає слово до чорного списку чату\n• <code>/rmblacklist &lt;trigger&gt;</code> - Прибирає слово з чорного списку чату\n• <code>/blaction &lt;mute/kick/ban/warn/none&gt;</code> - Дія бота, коли знайдено заборонене слово\n• <code>/remallbl</code> - Видаляє всі слова з чорного списку чату (лише власник)\n"
