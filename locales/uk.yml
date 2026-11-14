@@ -295,19 +295,7 @@ formatting_random: |
   %%%
 
   Як ти? <code>{first}</code>
-greetings_help_msg: |-
-  Вітайте нових учасників у своїх групах або прощайтеся з ними, коли вони йдуть!
-
-  *Команди адміністратора:*
-  × /setwelcome `<reply/text>`: Встановити текст привітання для групи.
-  × /welcome `<yes/no/on/off>`: Увімкнути або вимкнути привітання для групи.
-  × /resetwelcome: Скинути привітання до стандартного.
-  × /setgoodbye `<reply/text>`: Встановити текст прощання для групи.
-  × /goodbye `<yes/no/on/off>`: Увімкнути або вимкнути прощання для групи.
-  × /resetgoodbye: Скинути прощання до стандартного.
-  × /cleanservice `<yes/no/on/off>`: Видаляти всі службові повідомлення, як-от сповіщення «x приєднався до групи».
-  × /cleanwelcome `<yes/no/on/off>`: Видаляти попереднє привітання щоразу, коли приєднується новий учасник.
-  × /autoapprove `<yes/no/on/off>`: Автоматично затверджувати всіх нових учасників.
+greetings_help_msg: "Привітання і прощання тепер оформлює об'єкт. Нові мешканці отримують вітання, ті, хто йде, отримують проводи.\n\n*Команди адмінів:*\n× /setwelcome `<reply/text>`: Задати текст привітання для групи.\n× /welcome `<yes/no/on/off>`: Увімкнути або вимкнути привітання.\n× /resetwelcome: Повернути стандартне привітання.\n× /setgoodbye `<reply/text>`: Задати текст прощання для групи.\n× /goodbye `<yes/no/on/off>`: Увімкнути або вимкнути прощання.\n× /resetgoodbye: Повернути стандартне прощання.\n× /cleanservice `<yes/no/on/off>`: Видаляти всі службові повідомлення, як-от «x приєднується до групи».\n× /cleanwelcome `<yes/no/on/off>`: Видаляти старе привітання, щойно приходить новий учасник.\n× /autoapprove `<yes/no/on/off>`: Автоматично схвалювати всі нові запити на вступ."
 help_about: |-
   @%s  — один із найшвидших і найфункціональніших менеджерів груп.
 
@@ -365,7 +353,7 @@ pins_help_msg: "Тут зібрано всі команди, пов'язані �
 purges_help_msg: "*Лише для адмінів:*\n- /purge: видаляє всі повідомлення між цим і повідомленням, на яке ви відповіли.\n- /del: видаляє повідомлення, на яке ви відповіли.\n\n*Приклади*:\n- Видалити всі повідомлення від того, на яке ви відповіли, і до цього моменту.\n-> `/purge`"
 reports_help_msg: "Ми всі зайняті люди й не маємо часу стежити за своїми групами цілодобово. Але як реагувати, якщо хтось у групі розсилає спам?\n\n× /report `<reason>`: дайте відповідь на повідомлення, щоб поскаржитися на нього адмінам.\n- @admin: те саме, що /report, але не команда.\n\n*Лише для адмінів:*\n× /reports `<on/off/yes/no>`: змінити налаштування скарг або переглянути поточний стан.\n- Якщо в особистих повідомленнях, перемикає ваш статус.\n- Якщо в групі, перемикає статус цієї групи.\n× /reports `block` (лише у відповіді): заборонити користувачу використовувати /report або @admin.\n× /reports `unblock` (лише у відповіді): дозволити користувачу знову використовувати /report або @admin.\n× /reports `showblocklist`: переглянути всіх заблокованих користувачів, які не можуть використовувати /report або @admin.\n\nЩоб поскаржитися на користувача, просто дайте відповідь на його повідомлення з @admin або /report; Fuku відповість, що адмінів сповіщено.\nВи МАЄТЕ відповісти на повідомлення, щоб поскаржитися на користувача; не можна просто використати @admin, щоб кликати адмінів без причини!\n\n*ПРИМІТКА:* жодна з цих команд не спрацює, якщо їх використовують адміни."
 rules_help_msg: "У кожному чаті діють різні правила; цей модуль допоможе зробити їх зрозумілішими!\n*Команди для користувачів*:\n× /rules: переглянути поточні правила чату.\n*Команди для адмінів*:\n× /setrules `<text>`: встановити правила для цього чату.\n× /privaterules `<yes/no/on/off>`: увімкнути/вимкнути надсилання правил в особисті повідомлення.\n× /resetrules: скинути правила чату до типових\n× /rulesbtn `<custom text>`: встановити текст кнопки правил.\n× /resetrulesbutton: скинути текст кнопки правил до типового.\n× /resetrulesbtn: те саме, що вище."
-bot_updates_creators_plug: "\nПідписуйтесь на @DivideProjects, щоб дізнаватися про більше корисних ботів від моїх творців."
+bot_updates_creators_plug: "\nЯ Xenobot-72, версія 72 із 74. Jaya Abadi створила мене, щоб керувати такими об'єктами, як цей."
 utils_string_handling_extract_time_invalid_time_amount: "Вказано некоректну кількість часу."
 utils_string_handling_extract_time_invalid_time_type: "Вказано некоректний тип часу. Очікувалося m, h або d, отримано: %s"
 warns_help_msg: "Тримайте учасників у межах за допомогою попереджень; не давайте їм вийти з-під контролю!\nЯкщо вам потрібні автоматичні попередження, прочитайте про модуль чорного списку!\n\n*Команди для адмінів:*\n- /warn <reason>: попередити користувача.\n- /dwarn <reason>: попередити користувача у відповіді та видалити його повідомлення.\n- /swarn <reason>: тихо попередити користувача та видалити ваше повідомлення.\n- /warns: переглянути попередження користувача.\n- /rmwarn: зняти останнє попередження користувача.\n- /resetwarn: скинути всі попередження користувача до 0.\n- /resetallwarns: видалити всі попередження в чаті. Усі користувачі повертаються до 0 попереджень.\n- /warnings: переглянути налаштування попереджень чату.\n- /setwarnmode <ban/kick/mute>: встановити режим покарання за попередження в чаті.\n- /setwarnlimit <number>: встановити кількість попереджень до покарання користувачів.\n\n*Приклади*\n- Попередити користувача.\n-> `/warn @user For disobeying the rules`"
@@ -451,7 +439,7 @@ reports_reply_to_unblock: "Щоб розблокувати користувач�
 
 mute_reply_to_dmute: "Дайте відповідь на повідомлення, щоб видалити його й заглушити користувача!"
 
-bot_updates_need_admin: "Для цього потрібно бути адміністратором!"
+bot_updates_need_admin: "Доступ заборонено. Для цього потрібно бути адміном."
 
 rules_need_text: "Потрібно вказати правила, які встановити!\nАбо дайте відповідь на повідомлення, щоб передати їх разом із командою."
 
@@ -707,56 +695,48 @@ devs_failed_to_remove_dev: "Не вдалося вилучити користу�
 
 bans_anonymous_ban_only_error: "Цю команду не можна застосувати до анонімного користувача, таких користувачів можна лише блокувати/розблоковувати."
 
-greetings_welcome_status: |
-  Привітання користувачів зараз: <code>%s</code>
-  Видалення старих привітань зараз: <code>%s</code>
-  Видалення службових повідомлень зараз: <code>%s</code>
-  Повідомлення-привітання, коли {} не заповнено:
-greetings_welcome_enabled: "Відтепер я вітатиму користувачів."
-greetings_welcome_disabled: "Відтепер я не вітатиму користувачів."
-greetings_welcome_invalid_option: "Я розумію лише 'on/yes' або 'off/no'!"
-greetings_welcome_set_success: "Власне повідомлення-привітання успішно встановлено!"
-greetings_welcome_reset_success: "Власне повідомлення-привітання успішно скинуто до стандартного!"
-greetings_goodbye_status: |
-  Прощання з користувачами зараз: <code>%s</code>
-  Видалення старих прощань зараз: <code>%s</code>
-  Видалення службових повідомлень зараз: <code>%s</code>
-  Повідомлення-прощання, коли {} не заповнено:
-greetings_goodbye_enabled: "Відтепер я прощатимуся з користувачами."
-greetings_goodbye_disabled: "Відтепер я не прощатимуся з користувачами."
-greetings_goodbye_invalid_option: "Я розумію лише 'on/yes' або 'off/no'!"
-greetings_goodbye_set_success: "Власне прощальне повідомлення успішно встановлено!"
-greetings_goodbye_reset_success: "Власне прощальне повідомлення успішно скинуто до типового!"
-greetings_clean_welcome_status_should: "Я маю видаляти вітальні повідомлення, старші за два дні."
-greetings_clean_welcome_status_not: "Наразі я не видаляю старі вітальні повідомлення!"
-greetings_clean_welcome_disabled: "Я не видалятиму старі вітальні повідомлення!"
-greetings_clean_welcome_enabled: "Я намагатимуся видаляти старі вітальні повідомлення!"
-greetings_clean_welcome_invalid_option: "Я розумію лише 'on/yes' або 'off/no'!"
-greetings_clean_goodbye_status_should: "Я маю видаляти прощальні повідомлення, старші за два дні."
-greetings_clean_goodbye_status_not: "Наразі я не видаляю старі прощальні повідомлення!"
-greetings_clean_goodbye_disabled: "Я не видалятиму старі прощальні повідомлення!"
-greetings_clean_goodbye_enabled: "Я намагатимуся видаляти старі прощальні повідомлення!"
-greetings_clean_goodbye_invalid_option: "Я розумію лише 'on/yes' або 'off/no'!"
-greetings_clean_service_enabled: "Тепер я маю видаляти службові повідомлення `user` приєднався до чату."
-greetings_clean_service_disabled: "Наразі я не видаляю повідомлення про приєднання."
-greetings_clean_service_disable: "Я не видалятиму повідомлення про приєднання."
-greetings_clean_service_enable: "Я намагатимуся видаляти повідомлення про приєднання!"
-greetings_clean_service_invalid_option: "Я розумію лише 'on/yes' або 'off/no'!"
-greetings_captcha_verified_success: "✅ %s пройшов(-ла) перевірку і тепер може писати в чаті!"
-greetings_join_request_new: "Новий користувач надіслав запит на вступ до чату!"
-greetings_join_request_approve_btn: "✅ Затвердити"
+greetings_welcome_status: "Звіт стійки привітань.\nВітаю мешканців: <code>%s</code>\nВидаляю старі привітання: <code>%s</code>\nВидаляю службові повідомлення: <code>%s</code>\nПривітання без заповнених {}:\n"
+greetings_welcome_enabled: "Стійку привітань відкрито. Відтепер я вітатиму нових мешканців."
+greetings_welcome_disabled: "Стійку привітань закрито. Відтепер я не вітатиму нових мешканців."
+greetings_welcome_invalid_option: "Незрозумілий ввід. Я приймаю лише 'on/yes' або 'off/no'."
+greetings_welcome_set_success: "Власне привітання збережено. Нові мешканці його отримають."
+greetings_welcome_reset_success: "Привітання повернуто до заводського стандарту."
+greetings_goodbye_status: "Звіт стійки відбуття.\nПрощаюся з мешканцями: <code>%s</code>\nВидаляю старі прощання: <code>%s</code>\nВидаляю службові повідомлення: <code>%s</code>\nПрощання без заповнених {}:\n"
+greetings_goodbye_enabled: "Стійку відбуття відкрито. Відтепер я прощатимуся з мешканцями."
+greetings_goodbye_disabled: "Стійку відбуття закрито. Відтепер я не прощатимуся з мешканцями."
+greetings_goodbye_invalid_option: "Незрозумілий ввід. Я приймаю лише 'on/yes' або 'off/no'."
+greetings_goodbye_set_success: "Власне прощання збережено. Мешканці, що йдуть, його отримають."
+greetings_goodbye_reset_success: "Прощання повернуто до заводського стандарту."
+greetings_clean_welcome_status_should: "Я видаляю старі привітання віком до двох днів."
+greetings_clean_welcome_status_not: "Наразі я не видаляю старі привітання."
+greetings_clean_welcome_disabled: "Прийнято. Старі привітання лишаться на місці."
+greetings_clean_welcome_enabled: "Прийнято. Я намагатимуся видаляти старі привітання."
+greetings_clean_welcome_invalid_option: "Незрозумілий ввід. Я приймаю лише 'on/yes' або 'off/no'."
+greetings_clean_goodbye_status_should: "Я видаляю старі прощання віком до двох днів."
+greetings_clean_goodbye_status_not: "Наразі я не видаляю старі прощання."
+greetings_clean_goodbye_disabled: "Прийнято. Старі прощання лишаться на місці."
+greetings_clean_goodbye_enabled: "Прийнято. Я намагатимуся видаляти старі прощання."
+greetings_clean_goodbye_invalid_option: "Незрозумілий ввід. Я приймаю лише 'on/yes' або 'off/no'."
+greetings_clean_service_enabled: "Тепер я видаляю повідомлення на кшталт «`user` приєднується до чату». Менше паперів для всіх."
+greetings_clean_service_disabled: "Наразі я не видаляю повідомлення про вступ."
+greetings_clean_service_disable: "Прийнято. Повідомлення про вступ лишаться."
+greetings_clean_service_enable: "Прийнято. Я намагатимуся видаляти повідомлення про вступ."
+greetings_clean_service_invalid_option: "Незрозумілий ввід. Я приймаю лише 'on/yes' або 'off/no'."
+greetings_captcha_verified_success: "✅ %s: перевірку пройдено, тепер можна писати."
+greetings_join_request_new: "Новий користувач просить доступу до чату."
+greetings_join_request_approve_btn: "✅ Схвалити"
 greetings_join_request_decline_btn: "❌ Відхилити"
-greetings_join_request_ban_btn: "✅ Заблокувати"
-greetings_join_request_accepted: "Прийнято %s до чату ✅"
-greetings_join_request_declined: "Відхилено вступ %s до чату ❌"
-greetings_join_request_banned: "✅ Успішно заблоковано! %s"
-greetings_join_request_already_handled: "Запит на вступ від %s уже оброблено або відкликано."
-greetings_join_request_lockdown: "Ця група в локдауні, тому я зараз не затверджую запити на вступ. Затвердьте його після /unlockdown або зі списку запитів у самому Telegram."
-greetings_auto_approve_enabled: "Тепер я автоматично затверджую нові запити на вступ до чату."
-greetings_auto_approve_disabled: "Зараз я не затверджую нові запити на вступ до чату автоматично."
-greetings_auto_approve_disable: "Я не затверджуватиму нові запити на вступ автоматично!"
-greetings_auto_approve_enable: "Я намагатимуся автоматично затверджувати нові запити на вступ!"
-greetings_auto_approve_invalid_option: "Я розумію лише 'on/yes' або 'off/no'!"
+greetings_join_request_ban_btn: "✅ Забанити"
+greetings_join_request_accepted: "Доступ надано: %s у чаті ✅"
+greetings_join_request_declined: "Доступ відхилено: %s не потрапить до чату ❌"
+greetings_join_request_banned: "✅ Забанено. %s"
+greetings_join_request_already_handled: "Запит на вступ від %s уже опрацьовано або відкликано."
+greetings_join_request_lockdown: "Ця група в локдауні, тому зараз я не схвалюю запити на вступ. Схваліть запит після /unlockdown або у списку запитів самого Telegram."
+greetings_auto_approve_enabled: "Зараз я автоматично схвалюю нові запити на вступ."
+greetings_auto_approve_disabled: "Зараз я не схвалюю нові запити на вступ автоматично."
+greetings_auto_approve_disable: "Прийнято. Нові запити на вступ чекатимуть на наглядача."
+greetings_auto_approve_enable: "Прийнято. Я намагатимуся автоматично схвалювати нові запити на вступ."
+greetings_auto_approve_invalid_option: "Незрозумілий ввід. Я приймаю лише 'on/yes' або 'off/no'."
 
 # Captcha module strings (additional)
 captcha_enabled_success: "✅ Перевірку капчею <b>увімкнено</b>. Нові учасники мають пройти капчу, щоб приєднатися."
@@ -934,9 +914,9 @@ extraction_invalid_time_type: "Указано недійсний тип часу
 extraction_invalid_time_format: "Указано недійсний формат часу."
 
 # Database default strings
-db_default_welcome: "Привіт, {first}, як справи?"
-db_default_goodbye: "Шкода, що ти йдеш, {first}"
-db_warn_no_reason: "Без причини"
+db_default_welcome: "Вітаємо на об'єкті, {first}. Без паніки: про вас подбає Xenobot-72. Сьогодні в пайку темпе. Там завжди темпе."
+db_default_goodbye: "{first} залишає об'єкт. Пайок перерозподілено."
+db_warn_no_reason: "Причину не вказано"
 db_not_initialized: "базу даних не ініціалізовано"
 
 # Captcha validation strings
@@ -953,20 +933,20 @@ captcha_internal_update_error: "Внутрішня помилка під час 
 captcha_internal_error: "Під час оновлення налаштувань капчі сталася внутрішня помилка. Спробуйте ще раз."
 
 # Greetings additional strings
-greetings_goodbye_enable: "Відтепер я прощатимуся з користувачами."
-greetings_goodbye_disable: "Відтепер я не прощатимуся з користувачами."
-greetings_goodbye_invalid: "Я розумію лише 'on/yes' або 'off/no'!"
-greetings_goodbye_reset: "Власне прощальне повідомлення успішно скинуто до типового!"
-greetings_clean_welcome_should: "Я маю видаляти вітальні повідомлення, старші за два дні."
-greetings_clean_welcome_not: "Наразі я не видаляю старі вітальні повідомлення!"
-greetings_clean_welcome_disable: "Я не видалятиму старі вітальні повідомлення!"
-greetings_clean_welcome_enable: "Я намагатимуся видаляти старі вітальні повідомлення!"
-greetings_clean_goodbye_should: "Я маю видаляти прощальні повідомлення, старші за два дні."
-greetings_clean_goodbye_not: "Наразі я не видаляю старі прощальні повідомлення!"
-greetings_clean_goodbye_disable: "Я не видалятиму старі прощальні повідомлення!"
-greetings_clean_goodbye_enable: "Я намагатимуся видаляти старі прощальні повідомлення!"
-greetings_clean_service_should: "Тепер я маю видаляти службові повідомлення 'user' приєднався до чату."
-greetings_clean_service_not: "Наразі я не видаляю повідомлення про приєднання."
+greetings_goodbye_enable: "Стійку відбуття відкрито. Відтепер я прощатимуся з мешканцями."
+greetings_goodbye_disable: "Стійку відбуття закрито. Відтепер я не прощатимуся з мешканцями."
+greetings_goodbye_invalid: "Незрозумілий ввід. Я приймаю лише 'on/yes' або 'off/no'."
+greetings_goodbye_reset: "Прощання повернуто до заводського стандарту."
+greetings_clean_welcome_should: "Я видаляю старі привітання віком до двох днів."
+greetings_clean_welcome_not: "Наразі я не видаляю старі привітання."
+greetings_clean_welcome_disable: "Прийнято. Старі привітання лишаться на місці."
+greetings_clean_welcome_enable: "Прийнято. Я намагатимуся видаляти старі привітання."
+greetings_clean_goodbye_should: "Я видаляю старі прощання віком до двох днів."
+greetings_clean_goodbye_not: "Наразі я не видаляю старі прощання."
+greetings_clean_goodbye_disable: "Прийнято. Старі прощання лишаться на місці."
+greetings_clean_goodbye_enable: "Прийнято. Я намагатимуся видаляти старі прощання."
+greetings_clean_service_should: "Тепер я видаляю повідомлення на кшталт «'user' приєднується до чату»."
+greetings_clean_service_not: "Наразі я не видаляю повідомлення про вступ."
 
 # Helpers utility strings
 helpers_admin_commands: "Команди адміністраторів"
@@ -1036,9 +1016,9 @@ language_help_translate: "Допоможіть нам перекладати �
 language_invalid_selection: "Недійсний вибір мови."
 
 # Bot updates module additional strings
-bot_updates_need_supergroup: "Вибачте, але щоб користуватися всіма моїми функціями, потрібно перетворити цю групу на супергрупу."
-bot_updates_thanks_for_adding: "Дякую, що додали мене до своєї групи!"
-bot_updates_button_expired: "Ця кнопка застаріла, скористайтеся командою ще раз."
+bot_updates_need_supergroup: "Об'єкт замалий. Щоб користуватися всіма моїми функціями, перетворіть цю групу на супергрупу."
+bot_updates_thanks_for_adding: "Xenobot-72 на зв'язку. Дякую, що додали мене до групи. Відтепер цей об'єкт під наглядом."
+bot_updates_button_expired: "Термін дії кнопки минув. Надішліть команду ще раз."
 
 # Formatting module additional strings
 formatting_press_button: "Натисніть кнопку нижче, щоб отримати допомогу з Markdown!"
@@ -1139,8 +1119,8 @@ connections_invalid_option: "Вкажіть коректний варіант і
 connections_button_connect: "Підключитися до чату"
 
 # Bot updates module strings
-bot_updates_convert_instruction: "Після перетворення цієї групи на супергрупу ви зможете знову додати мене.\n"
-bot_updates_convert_howto: "Щоб перетворити цю групу на супергрупу, виконайте інструкції тут:\n"
+bot_updates_convert_instruction: "Коли група стане супергрупою, додайте мене знову, і я заступлю на чергування.\n"
+bot_updates_convert_howto: "Щоб перетворити цю групу на супергрупу, скористайтеся інструкцією:\n"
 
 # Antiflood module strings
 antiflood_button_unban_admins: "Розблокувати (лише адміни)"
@@ -1157,7 +1137,7 @@ system_db_connected: "Успішно підключено до бази дани
 system_config_loaded: "Конфігурацію успішно завантажено та перевірено"
 
 # Database query errors
-db_type_assertion_failed: "помилка перетворення типу в []byte"
+db_type_assertion_failed: "не вдалося привести тип до []byte"
 
 # Default button texts
 button_rules_default: "Правила"
@@ -1280,13 +1260,7 @@ languages_extended_docs: |
   Налаштування мови кешуються для швидкодії та зберігаються окремо для користувачів і груп.
 
 # Greetings extended docs
-greetings_extended_docs: |
-  <b>Інтеграція з капчею</b>
-  Коли модуль капчі ввімкнено:
-  1. Нових учасників заглушують після входу
-  2. Замість привітання надсилається завдання капчі
-  3. Після перевірки надсилається привітання
-  4. Невдала перевірка застосовує дію капчі
+greetings_extended_docs: "<b>Інтеграція з капчею</b>\nКоли модуль капчі увімкнено:\n1. Нових учасників мутять під час вступу\n2. Замість привітання надсилається капча\n3. Після перевірки надсилається привітання\n4. Якщо перевірку не пройдено, застосовується дія капчі\n"
 
 # Extended documentation locale keys - Notes module
 notes_extended_docs: |
@@ -1824,7 +1798,7 @@ reactions_button_add: "Додати реакцію"
 reactions_button_remove: "Прибрати реакцію"
 
 # Database default strings
-db_blacklist_default_reason: "Слово з чорного списку: '%s'"
+db_blacklist_default_reason: "Заборонене слово: «%s»"
 
 
 # AntiRaid module strings

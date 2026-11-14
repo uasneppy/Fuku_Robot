@@ -594,32 +594,7 @@ formatting_random: |
   %%%
 
   Sup? <code>{first}</code>
-greetings_help_msg:
-  "Welcome new members to your groups or say Goodbye after they
-  leave!
-
-
-  *Admin Commands:*
-
-  × /setwelcome `<reply/text>`: Sets welcome text for group.
-
-  × /welcome `<yes/no/on/off>`: Enables or Disables welcome setting for group.
-
-  × /resetwelcome: Resets the welcome message to default.
-
-  × /setgoodbye `<reply/text>`: Sets goodbye text for group.
-
-  × /goodbye `<yes/no/on/off>`: Enables or Disables goodbye setting for group.
-
-  × /resetgoodbye: Resets the goodbye message to default.
-
-  × /cleanservice `<yes/no/on/off>`: Delete all service messages such as 'x joined
-  the group' notification.
-
-  × /cleanwelcome `<yes/no/on/off>`: Delete the old welcome message, whenever a new
-  member joins.
-
-  × /autoapprove `<yes/no/on/off>`: Automatically approve all new members."
+greetings_help_msg: "Greetings and farewells, handled by the facility. New residents get a welcome, departing ones get a send-off.\n\n*Admin Commands:*\n× /setwelcome `<reply/text>`: Set the group's welcome text.\n× /welcome `<yes/no/on/off>`: Turn welcome messages on or off.\n× /resetwelcome: Reset the welcome message to the default.\n× /setgoodbye `<reply/text>`: Set the group's goodbye text.\n× /goodbye `<yes/no/on/off>`: Turn goodbye messages on or off.\n× /resetgoodbye: Reset the goodbye message to the default.\n× /cleanservice `<yes/no/on/off>`: Delete all service messages, such as the 'x joined the group' notification.\n× /cleanwelcome `<yes/no/on/off>`: Delete the old welcome message whenever a new member joins.\n× /autoapprove `<yes/no/on/off>`: Approve every new join request automatically."
 help_about: "@%s  is one of the fastest and most feature-filled group managers.
 
 
@@ -911,7 +886,7 @@ rules_help_msg:
   × /resetrulesbutton: Reset the text of the rules button to default.
 
   × /resetrulesbtn: Same as above."
-bot_updates_creators_plug: "\nFollow @DivideProjects for more useful bots from my creators."
+bot_updates_creators_plug: "\nI am Xenobot-72, version 72 of 74. Jaya Abadi built me to run facilities like this one."
 utils_string_handling_extract_time_invalid_time_amount: Invalid time amount specified.
 utils_string_handling_extract_time_invalid_time_type:
   "Invalid time type specified.
@@ -1085,7 +1060,7 @@ reports_reply_to_unblock: You must reply to a user to unblock them.
 mute_reply_to_dmute: You need to reply to a message to delete it and mute the user!
 
 # Bot updates module strings
-bot_updates_need_admin: You need to be an admin to do this!
+bot_updates_need_admin: "Access denied. You need to be an admin to do this."
 
 # Rules module strings
 rules_need_text: "You need to give me rules to set!\nEither reply to a message to provide them with command."
@@ -1363,56 +1338,48 @@ bans_anonymous_ban_only_error: This command cannot be used on anonymous user, th
 
 
 # Greetings module strings
-greetings_welcome_status: |
-  I am currently welcoming users: <code>%s</code>
-  I am currently deleting old welcomes: <code>%s</code>
-  I am currently deleting service messages: <code>%s</code>
-  The welcome message not filling the {} is:
-greetings_welcome_enabled: "I'll welcome users from now on."
-greetings_welcome_disabled: "I'll not welcome users from now on."
-greetings_welcome_invalid_option: "I understand 'on/yes' or 'off/no' only!"
-greetings_welcome_set_success: "Successfully set custom welcome message!"
-greetings_welcome_reset_success: "Successfully reset custom welcome message to default!"
-greetings_goodbye_status: |
-  I am currently goodbying users: <code>%s</code>
-  I am currently deleting old goodbyes: <code>%s</code>
-  I am currently deleting service messages: <code>%s</code>
-  The goodbye message not filling the {} is:
-greetings_goodbye_enabled: "I'll goodbye users from now on."
-greetings_goodbye_disabled: "I'll not goodbye users from now on."
-greetings_goodbye_invalid_option: "I understand 'on/yes' or 'off/no' only!"
-greetings_goodbye_set_success: "Successfully set custom goodbye message!"
-greetings_goodbye_reset_success: "Successfully reset custom goodbye message to default!"
-greetings_clean_welcome_status_should: "I should be deleting welcome messages up to two days old."
-greetings_clean_welcome_status_not: "I'm currently not deleting old welcome messages!"
-greetings_clean_welcome_disabled: "I'll not delete old welcome messages!"
-greetings_clean_welcome_enabled: "I'll try to delete old welcome messages!"
-greetings_clean_welcome_invalid_option: "I understand 'on/yes' or 'off/no' only!"
-greetings_clean_goodbye_status_should: "I should be deleting goodbye messages up to two days old."
-greetings_clean_goodbye_status_not: "I'm currently not deleting old goodbye messages!"
-greetings_clean_goodbye_disabled: "I'll not delete old goodbye messages!"
-greetings_clean_goodbye_enabled: "I'll try to delete old goodbye messages!"
-greetings_clean_goodbye_invalid_option: "I understand 'on/yes' or 'off/no' only!"
-greetings_clean_service_enabled: "I should be deleting `user` joined the chat messages now."
-greetings_clean_service_disabled: "I'm currently not deleting joined messages."
-greetings_clean_service_disable: "I won't delete joined messages."
-greetings_clean_service_enable: "I'll try to delete joined messages!"
-greetings_clean_service_invalid_option: "I understand 'on/yes' or 'off/no' only!"
-greetings_captcha_verified_success: "✅ %s has been verified and can now chat!"
-greetings_join_request_new: "A new user has requested to join chat!"
+greetings_welcome_status: "Welcome desk report.\nWelcoming residents: <code>%s</code>\nDeleting old welcomes: <code>%s</code>\nDeleting service messages: <code>%s</code>\nThe welcome message, with the {} not filled in:\n"
+greetings_welcome_enabled: "Welcome desk open. I will greet new residents from now on."
+greetings_welcome_disabled: "Welcome desk closed. I will not greet new residents from now on."
+greetings_welcome_invalid_option: "Unrecognised input. I accept 'on/yes' or 'off/no' only."
+greetings_welcome_set_success: "Custom welcome message saved. New residents will receive it."
+greetings_welcome_reset_success: "Welcome message reset to the factory default."
+greetings_goodbye_status: "Departures desk report.\nSaying goodbye to residents: <code>%s</code>\nDeleting old goodbyes: <code>%s</code>\nDeleting service messages: <code>%s</code>\nThe goodbye message, with the {} not filled in:\n"
+greetings_goodbye_enabled: "Departures desk open. I will say goodbye to residents from now on."
+greetings_goodbye_disabled: "Departures desk closed. I will not say goodbye to residents from now on."
+greetings_goodbye_invalid_option: "Unrecognised input. I accept 'on/yes' or 'off/no' only."
+greetings_goodbye_set_success: "Custom goodbye message saved. Departing residents will receive it."
+greetings_goodbye_reset_success: "Goodbye message reset to the factory default."
+greetings_clean_welcome_status_should: "I am deleting old welcome messages, up to two days old."
+greetings_clean_welcome_status_not: "I am not deleting old welcome messages at the moment."
+greetings_clean_welcome_disabled: "Noted. Old welcome messages will stay where they are."
+greetings_clean_welcome_enabled: "Noted. I will try to delete old welcome messages."
+greetings_clean_welcome_invalid_option: "Unrecognised input. I accept 'on/yes' or 'off/no' only."
+greetings_clean_goodbye_status_should: "I am deleting old goodbye messages, up to two days old."
+greetings_clean_goodbye_status_not: "I am not deleting old goodbye messages at the moment."
+greetings_clean_goodbye_disabled: "Noted. Old goodbye messages will stay where they are."
+greetings_clean_goodbye_enabled: "Noted. I will try to delete old goodbye messages."
+greetings_clean_goodbye_invalid_option: "Unrecognised input. I accept 'on/yes' or 'off/no' only."
+greetings_clean_service_enabled: "I am deleting the `user` joined the chat messages now. Less paperwork for everyone."
+greetings_clean_service_disabled: "I am not deleting join messages at the moment."
+greetings_clean_service_disable: "Noted. Join messages will stay."
+greetings_clean_service_enable: "Noted. I will try to delete join messages."
+greetings_clean_service_invalid_option: "Unrecognised input. I accept 'on/yes' or 'off/no' only."
+greetings_captcha_verified_success: "✅ %s has been verified and can now chat."
+greetings_join_request_new: "A new user has requested to join the chat."
 greetings_join_request_approve_btn: "✅ Approve"
 greetings_join_request_decline_btn: "❌ Decline"
 greetings_join_request_ban_btn: "✅ Ban"
-greetings_join_request_accepted: "Accepted %s in Chat ✅"
-greetings_join_request_declined: "Declined %s to join chat ❌"
-greetings_join_request_banned: "✅ Successfully Banned! %s"
+greetings_join_request_accepted: "Access granted: %s is in the chat ✅"
+greetings_join_request_declined: "Access denied: %s will not join the chat ❌"
+greetings_join_request_banned: "✅ Banned. %s"
 greetings_join_request_already_handled: "The join request from %s was already handled or withdrawn."
 greetings_join_request_lockdown: "This group is in lockdown, so I won't approve join requests now. Approve it after /unlockdown, or from Telegram's own request list."
-greetings_auto_approve_enabled: "I'm auto-approving new chat join requests now."
-greetings_auto_approve_disabled: "I'm not auto-approving new chat join requests now.."
-greetings_auto_approve_disable: "I won't auto-approve new join requests!"
-greetings_auto_approve_enable: "I'll try to auto-approve new join requests!"
-greetings_auto_approve_invalid_option: "I understand 'on/yes' or 'off/no' only!"
+greetings_auto_approve_enabled: "I am auto-approving new join requests now."
+greetings_auto_approve_disabled: "I am not auto-approving new join requests now."
+greetings_auto_approve_disable: "Noted. New join requests will wait for a supervisor."
+greetings_auto_approve_enable: "Noted. I will try to auto-approve new join requests."
+greetings_auto_approve_invalid_option: "Unrecognised input. I accept 'on/yes' or 'off/no' only."
 
 # Captcha module strings (additional)
 captcha_enabled_success: "✅ Captcha verification has been <b>enabled</b>. New members will need to complete a captcha to join."
@@ -1590,9 +1557,9 @@ extraction_invalid_time_type: "Invalid time type specified. Expected m, h, d or 
 extraction_invalid_time_format: "Invalid time format specified."
 
 # Database default strings
-db_default_welcome: "Hey {first}, how are you?"
-db_default_goodbye: "Sad to see you leaving {first}"
-db_warn_no_reason: "No Reason"
+db_default_welcome: "Welcome to the facility, {first}. No sweat, Xenobot-72 will look after you. Today's ration is tempe. It is always tempe."
+db_default_goodbye: "{first} has left the facility. Their ration has been reassigned."
+db_warn_no_reason: "No reason filed"
 db_not_initialized: "database not initialized"
 
 # Captcha validation strings
@@ -1609,20 +1576,20 @@ captcha_internal_update_error: "Internal error updating captcha."
 captcha_internal_error: "An internal error occurred while updating captcha settings. Please try again."
 
 # Greetings additional strings
-greetings_goodbye_enable: "I'll goodbye users from now on."
-greetings_goodbye_disable: "I'll not goodbye users from now on."
-greetings_goodbye_invalid: "I understand 'on/yes' or 'off/no' only!"
-greetings_goodbye_reset: "Successfully reset custom goodbye message to default!"
-greetings_clean_welcome_should: "I should be deleting welcome messages up to two days old."
-greetings_clean_welcome_not: "I'm currently not deleting old welcome messages!"
-greetings_clean_welcome_disable: "I'll not delete old welcome messages!"
-greetings_clean_welcome_enable: "I'll try to delete old welcome messages!"
-greetings_clean_goodbye_should: "I should be deleting goodbye messages up to two days old."
-greetings_clean_goodbye_not: "I'm currently not deleting old goodbye messages!"
-greetings_clean_goodbye_disable: "I'll not delete old goodbye messages!"
-greetings_clean_goodbye_enable: "I'll try to delete old goodbye messages!"
-greetings_clean_service_should: "I should be deleting 'user' joined the chat messages now."
-greetings_clean_service_not: "I'm currently not deleting joined messages."
+greetings_goodbye_enable: "Departures desk open. I will say goodbye to residents from now on."
+greetings_goodbye_disable: "Departures desk closed. I will not say goodbye to residents from now on."
+greetings_goodbye_invalid: "Unrecognised input. I accept 'on/yes' or 'off/no' only."
+greetings_goodbye_reset: "Goodbye message reset to the factory default."
+greetings_clean_welcome_should: "I am deleting old welcome messages, up to two days old."
+greetings_clean_welcome_not: "I am not deleting old welcome messages at the moment."
+greetings_clean_welcome_disable: "Noted. Old welcome messages will stay where they are."
+greetings_clean_welcome_enable: "Noted. I will try to delete old welcome messages."
+greetings_clean_goodbye_should: "I am deleting old goodbye messages, up to two days old."
+greetings_clean_goodbye_not: "I am not deleting old goodbye messages at the moment."
+greetings_clean_goodbye_disable: "Noted. Old goodbye messages will stay where they are."
+greetings_clean_goodbye_enable: "Noted. I will try to delete old goodbye messages."
+greetings_clean_service_should: "I am deleting the 'user' joined the chat messages now."
+greetings_clean_service_not: "I am not deleting join messages at the moment."
 
 # Helpers utility strings
 helpers_admin_commands: "Admin commands"
@@ -1692,9 +1659,9 @@ language_help_translate: "Help Us Translate 🌎"
 language_invalid_selection: "Invalid language selection."
 
 # Bot updates module additional strings
-bot_updates_need_supergroup: "Sorry, but to use my all my features, you need to convert this group to supergroup."
-bot_updates_thanks_for_adding: "Thanks for adding me in your group!"
-bot_updates_button_expired: "This button has expired, Please use the command again."
+bot_updates_need_supergroup: "Facility too small. To use all my features, convert this group to a supergroup."
+bot_updates_thanks_for_adding: "Xenobot-72 is online. Thank you for adding me to your group. This facility is now under management."
+bot_updates_button_expired: "This button has expired. Please send the command again."
 
 # Formatting module additional strings
 formatting_press_button: "Press the button below to get Markdown Help!"
@@ -1795,8 +1762,8 @@ connections_invalid_option: "Please give me a valid option from <yes/on/no/off>"
 connections_button_connect: "Connect to chat"
 
 # Bot updates module strings
-bot_updates_convert_instruction: "After converting this group to supergroup, you can add me again to use me.\n"
-bot_updates_convert_howto: "To convert this group to a supergroup, please follow the instructions here:\n"
+bot_updates_convert_instruction: "Once this group is a supergroup, add me again and I will report for duty.\n"
+bot_updates_convert_howto: "To convert this group to a supergroup, follow the instructions here:\n"
 
 # Antiflood module strings
 antiflood_button_unban_admins: "Unban (Admins Only)"
@@ -1936,13 +1903,7 @@ languages_extended_docs: |
   Language preferences are cached for performance and stored separately for users and groups.
 
 # Greetings extended docs
-greetings_extended_docs: |
-  <b>Captcha Integration</b>
-  When Captcha module is enabled:
-  1. New members are muted upon joining
-  2. Captcha challenge sent instead of welcome
-  3. After verification, welcome message is sent
-  4. Failed verification applies captcha action
+greetings_extended_docs: "<b>Captcha Integration</b>\nWhen the Captcha module is enabled:\n1. New members are muted when they join\n2. A captcha challenge is sent instead of the welcome\n3. After verification, the welcome message is sent\n4. A failed verification applies the captcha action\n"
 
 # Extended documentation locale keys - Notes module
 notes_extended_docs: |
