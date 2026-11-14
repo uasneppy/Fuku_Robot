@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
 milestone: v1.1
-milestone_name: PM Settings Hub & Member Screening
 status: Awaiting next milestone
 stopped_at: Completed 19-12-PLAN.md
-last_updated: "2026-11-13T20:10:50.848Z"
-last_activity: 2026-11-13
-last_activity_desc: Milestone v1.1 completed and archived
-state_head: 5e5ebda86f566b6854a1c2a0b668c56c7b10785a
+last_updated: "2026-11-14T00:07:58.585Z"
+last_activity: 2026-11-14
+last_activity_desc: Quick task 261113-tjj completed (Staff Group forward-source blocklist)
+state_head: b9070520711b96db1c1688807126bd5a2f52c9aa
 progress:
   total_phases: 10
   completed_phases: 10
   total_plans: 126
   completed_plans: 126
   percent: 100
+milestone_name: PM Settings Hub & Member Screening
 current_phase: 19
 current_phase_name: Blacklist, Filter and Note Pages
 ---
@@ -350,6 +350,7 @@ None yet.
 | 261008-j3d | Lockdown copy polish: no raw Telegram errors, warning markers, code-formatted help | 2026-10-08 | 924b5e6 | .planning/quick/261008-j3d-lockdown-copy-polish-from-planning-phases-04-manual-lockdown |
 | 261030-rig | Switch raid AI image checks from Gemini to Claude Haiku 5.5 through the Anthropic API | 2026-10-30 | d2b368f | [261030-rig-change-gemini-to-claude-haiku-5-5-via-th](./quick/261030-rig-change-gemini-to-claude-haiku-5-5-via-th/) |
 | 7 | Raise make test per-package timeout 10m to 15m (fuku/modules hit 600 s on a slow CI runner) | 2026-11-04 | ff87d62 | — |
+| 261113-tjj | Staff Group forward-source blocklist: delete forwards from listed channels in every linked group and punish the forwarder (commands, settings page, group -9 watcher) | 2026-11-14 | b907052 | [261113-tjj-staff-group-forward-source-blocklist-blo](./quick/261113-tjj-staff-group-forward-source-blocklist-blo/) |
 
 ## Deferred Items
 
@@ -357,6 +358,7 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 | Category | Item | Status | Deferred At | Milestone |
 |----------|------|--------|-------------|-----------|
+| verification | Quick task 261113-tjj (Staff Group forward-source blocklist) live Telegram checks (`quick/261113-tjj-staff-group-forward-source-blocklist-blo/261113-tjj-VERIFICATION.md`, status `human_needed`, code verified, no gaps): BEFORE the owner relies on it in a real group, forward a post of a listed channel into a linked group and see it deleted with the list's action applied once; resolve an `@username` and a negative ID with `/addfwdblock`; confirm a plain member's forward of a GROUP message cannot be matched (Telegram labels it a user or hidden-user origin, so only channels and an anonymous admin's group post can match); check the bot's delete and restrict rights and the notice wording; then decide whether writes should stay Staff Group creator only (the plan's deviation from creator or administrator, one right swap to relax). | deferred | 2026-11-14 | quick |
 | verification | Phase 19 live Telegram checks and owner review (`milestones/v1.1-phases/19-blacklist-filter-and-note-pages/19-SPIKE.md`, 15 numbered checks, `19-VERIFICATION.md` status `human_needed`, `19-SECURITY.md` verified, 59 of 59 threats closed): BEFORE the owner relies on the three list pages in a real group run checks 1 (the production `blacklists` CHECK constraints and `/blacklistaction none`), 2 (Main at 11 rows on a phone), 4 (the two-step add in a real client against `/filter K` and `/save K` as replies), 5 (the effect in the group) and 7 (the six changed commands in a real group), and answer the provisional confirmations A19-1 to A19-11: A19-2 (`/addblacklist` and `/filter` refuse a one-character word), A19-3 (a new blacklist word takes the shared action), A19-4 (`/save` refuses a name with whitespace, a leading `#` or over 100 code points) and the two fail-closed lookups of `/filter` and `/save`, each listed with its reply key and revert commit under 'Command behaviour this phase changed'; the native-speaker read of the 67 new strings (check 9) and the stale `settings_help_msg` (A19-A17) stay open | deferred | 2026-11-13 | v1.1 |
 | verification | Phase 18 live Telegram checks and owner review (`milestones/v1.1-phases/18-remaining-settings-pages/18-SPIKE.md`, 25 numbered checks, `18-VERIFICATION.md` status `human_needed`, `18-SECURITY.md` verified): BEFORE the owner relies on the six pages in a real group run checks 1 to 3 (the warn limit and each action at the limit, a hand-written `tban`, the `/reset warnings` empty-mode follow-up), 4 to 6 (the AI line with and without `TYPESAFE_API_KEY` and with `ENABLE_AISPAM=false`, Auto-approve's first press on PostgreSQL, `/report` against the Reports switch), 7 and 8 (the language redraw on two replicas within `CACHE_LOCAL_TTL` and from a private menu), 9 to 12 (the log categories with a real channel and the `#SETTINGS` line, the anonymous-admin flow before and after a toggle, the owner and non-owner refusals, the page opening while the bot is not an administrator), 13 to 15 (each lock live, `all`, `messages` and `url`), 16 to 19 (hi, ru and uk cells at phone width, the native-speaker read of the 55 new strings), 20 (the stale `settings_help_msg` and `/settings` docs page that name no page since Phase 16: A18-A15 and A16-A11) and 21 to 25 (the owner confirmations A18-1 to A18-9, the flagged UI points, the four deviation notes, `make lint` on a Go 1.26 golangci-lint; the CI Test Suite for `fuku/modules` took 1129 s to 1760 s of a limit that is now 2400 s, trim a heavy test before it grows) | deferred (owner's standing choice: defer live checks) | 2026-11-13 | v1.1 |
 | verification | Phase 17 live Telegram checks and owner review (`milestones/v1.1-phases/17-command-edit-and-self-destruct-deletion/17-SPIKE.md`, `17-VERIFICATION.md` status `human_needed`): BEFORE any group sets Delete commands, Delete edited messages or Self-destruct run SPIKE checks 1 (edited-message noise: how often a link preview or caption touch arrives as an edit), 2 (a bare `/word` in a group with another bot: is its reply lost when this bot deletes the command, A17-1), 3 and 4 (an anonymous admin's command after the proof tap, and in a group with the AnonAdmin setting on where the command stays, D-34/A17-2), 5 (the pinned message seen by the watcher live, the `/pin` hook, a pin by another bot), 6 (`deleteMessages` at busy-group volume: the 100 ms pacer against real flood control), 7 (a claimed batch at the moment Self-destruct is switched off), 10 (two replicas and a restart with queued rows), 11 to 13 (a plain-member bot, the delete-right line live, a cold admin cache, D-33); phone-width cells in hi, ru and uk, native-speaker read of the 18 new strings (the On/Off pairing, unit labels and "grace"); owner confirmations A17-1 to A17-8 and the amendments D-21 to D-34 (all provisional: the owner was interrupted before answering and asked the run to continue); decide what "1 minute by default" means for Edited messages (A17-4: there is no preselected default, 1 min is the second preset; a one-tap On at 1 min is a small change). CI on the final pushed head (lint, full test, PostgreSQL integrity) | deferred by the owner's choice in the autonomous run; code verified 10/10 with one warning (A17-4), security 48/48 closed, validation 4 gaps filled | 2026-11-12 | v1.1 |
