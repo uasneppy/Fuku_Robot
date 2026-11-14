@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -20,6 +19,7 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/utils/chat_status"
 	"github.com/uasneppy/fuku_robot/fuku/utils/extraction"
 	"github.com/uasneppy/fuku_robot/fuku/utils/formatting"
+	"github.com/uasneppy/fuku_robot/fuku/utils/helpers"
 )
 
 var devsModule = moduleStruct{moduleName: "Dev"}
@@ -414,15 +414,15 @@ func (moduleStruct) getStats(b *gotgbot.Bot, ctx *ext.Context) error {
 }
 
 func LoadDev(dispatcher *ext.Dispatcher) {
-	dispatcher.AddHandler(handlers.NewCommand("stats", devsModule.getStats))
-	dispatcher.AddHandler(handlers.NewCommand("addsudo", devsModule.addSudo))
-	dispatcher.AddHandler(handlers.NewCommand("adddev", devsModule.addDev))
-	dispatcher.AddHandler(handlers.NewCommand("remsudo", devsModule.remSudo))
-	dispatcher.AddHandler(handlers.NewCommand("remdev", devsModule.remDev))
-	dispatcher.AddHandler(handlers.NewCommand("teamusers", devsModule.listTeam))
-	dispatcher.AddHandler(handlers.NewCommand("chatinfo", devsModule.chatInfo))
-	dispatcher.AddHandler(handlers.NewCommand("chatlist", devsModule.chatList))
-	dispatcher.AddHandler(handlers.NewCommand("leavechat", devsModule.leaveChat))
+	dispatcher.AddHandler(helpers.NewBotCommand("stats", devsModule.getStats))
+	dispatcher.AddHandler(helpers.NewBotCommand("addsudo", devsModule.addSudo))
+	dispatcher.AddHandler(helpers.NewBotCommand("adddev", devsModule.addDev))
+	dispatcher.AddHandler(helpers.NewBotCommand("remsudo", devsModule.remSudo))
+	dispatcher.AddHandler(helpers.NewBotCommand("remdev", devsModule.remDev))
+	dispatcher.AddHandler(helpers.NewBotCommand("teamusers", devsModule.listTeam))
+	dispatcher.AddHandler(helpers.NewBotCommand("chatinfo", devsModule.chatInfo))
+	dispatcher.AddHandler(helpers.NewBotCommand("chatlist", devsModule.chatList))
+	dispatcher.AddHandler(helpers.NewBotCommand("leavechat", devsModule.leaveChat))
 }
 
 func init() {

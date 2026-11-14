@@ -11,7 +11,7 @@ This page provides a complete reference of all commands available in Fuku Robot.
 ## Overview
 
 - **Total Modules**: 30 (28 user-facing + 2 internal)
-- **Total Commands**: 159
+- **Total Commands**: 160
 
 ## Commands by Module
 
@@ -35,6 +35,7 @@ This page provides a complete reference of all commands available in Fuku Robot.
 | Command | Description | Permission | Disableable | Aliases |
 |---------|-------------|------------|-------------|---------|
 | `/settings` | Open the settings menu, here in the group or in private; every change is the same as the matching command | Admin | ❌ | — |
+| `/cancel` | Private chat only: end the settings editor's wait for your next message (the welcome, goodbye or rules you were about to type). Nothing happens in a group | Everyone | ❌ | — |
 
 ### Moderation
 
@@ -362,6 +363,7 @@ No commands — passive background tracker. See [module page](/commands/users/) 
 | `/blacklistaction` | Blacklists | Set the blacklist trigger action | Admin |
 | `/blacklists` | Blacklists | List all blacklisted words | Everyone |
 | `/blaction` | Blacklists | Set the blacklist trigger action | Admin |
+| `/cancel` | Settings | End the settings editor's wait (private chat only) | Everyone |
 | `/captcha` | Captcha | Toggle captcha verification | Admin |
 | `/captchaaction` | Captcha | Set the captcha failure action | Admin |
 | `/captchaclear` | Captcha | Clear pending captcha messages | Admin |

@@ -17,6 +17,7 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/db"
 	"github.com/uasneppy/fuku_robot/fuku/modules"
 	fukuerrors "github.com/uasneppy/fuku_robot/fuku/utils/errors"
+	"github.com/uasneppy/fuku_robot/fuku/utils/tracing"
 )
 
 type mainBotCall struct {
@@ -183,6 +184,18 @@ func TestNewDispatcherHandlesExpectedAndWrappedErrors(t *testing.T) {
 	action = dispatcher.Error(nil, ctx, fukuerrors.Wrap(assertErr{}, "wrapped failure"))
 	if action != ext.DispatcherActionNoop {
 		t.Fatalf("wrapped error action = %s, want noop", action)
+	}
+}
+
+// TestNewDispatcherWrapsCommandDeletion pins the production wiring: the command deletion wrapper
+// is the dispatcher's processor and the tracing processor sits inside it.
+func TestNewDispatcherWrapsCommandDeletion(t *testing.T) {
+	processor, ok := newConfiguredDispatcher(7).Processor.(modules.CommandDeletionProcessor)
+	if !ok {
+		t.Fatalf("dispatcher Processor = %T, want modules.CommandDeletionProcessor", newConfiguredDispatcher(7).Processor)
+	}
+	if processor.Inner != (tracing.TracingProcessor{}) {
+		t.Fatalf("wrapper Inner = %#v, want tracing.TracingProcessor{}", processor.Inner)
 	}
 }
 

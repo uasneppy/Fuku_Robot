@@ -13,6 +13,8 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
+	"github.com/uasneppy/fuku_robot/fuku/db/blacklists"
+	dbcache "github.com/uasneppy/fuku_robot/fuku/db/cache"
 	"github.com/uasneppy/fuku_robot/fuku/db/lang"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
@@ -300,6 +302,17 @@ func settingsMenuCaptchaButton(t *testing.T, keyboard [][]gotgbot.InlineKeyboard
 	return button.CallbackData
 }
 
+// settingsRightsCompositeCase is one row of the two composite-right mirror tests.
+type settingsRightsCompositeCase struct {
+	name    string
+	botRole string
+	// withRight is whether the presser holds the right the command asks of the member:
+	// can_change_info for /autoapprove, being the creator for /anonadmin.
+	withRight bool
+	wantKey   string
+	wantAlert bool
+}
+
 func TestSettingsRights(t *testing.T) {
 	env := newSettingsEnv(t)
 	pressFor := func(chat gotgbot.Chat, member gotgbot.MergedChatMember) *settingsPress {
@@ -433,6 +446,182 @@ func TestSettingsRights(t *testing.T) {
 			t.Errorf("the refused command wrote %d raid detection rows (err %v), want none", len(rows), err)
 		}
 	})
+
+	t.Run("settingsRightChangeInfoBotAdmin mirrors /autoapprove", func(t *testing.T) {
+		aenv := newSettingsEditEnv(t)
+		for _, tc := range []settingsRightsCompositeCase{
+			{"bot administrator, administrator with can_change_info", staffRoleAdmin, true, "", false},
+			{"bot administrator, administrator without it", staffRoleAdmin, false, "settings_no_change_info", true},
+			{"bot a member, administrator with can_change_info", staffRoleMember, true, "connections_is_user_connected_bot_not_admin", false},
+			{"bot a member, administrator without it (the bot part first)", staffRoleMember, false, "connections_is_user_connected_bot_not_admin", false},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				chat := aenv.addChat()
+				editCleanup(t, chat.Id)
+				aenv.fake.setBotRole(chat.Id, tc.botRole)
+				presser := gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: "Presser"}
+				listEditAdmin(aenv, chat, presser, tc.withRight)
+				member, err := lockdownLiveMember(aenv.bot, chat.Id, presser.Id)
+				if err != nil {
+					t.Fatalf("live member: %v", err)
+				}
+				key, alert := settingsRightRefusal(&settingsPress{b: aenv.bot, group: &chat, member: member}, settingsRightChangeInfoBotAdmin)
+				if key != tc.wantKey || alert != tc.wantAlert {
+					t.Errorf("menu refusal = (%q, alert %v), want (%q, alert %v)", key, alert, tc.wantKey, tc.wantAlert)
+				}
+
+				aenv.sendIn(chat, presser, "/autoapprove on")
+				row, ok := settingsEditStored(t, chat.Id)
+				wrote := ok && row.ShouldAutoApprove
+				if wrote != (tc.wantKey == "") {
+					t.Errorf("/autoapprove on wrote = %v, the menu refused with %q: they disagree", wrote, key)
+				}
+				botRefused := settingsAntifloodSentHas(aenv, chat.Id, staffMarker("connections_is_user_connected_bot_not_admin"))
+				infoRefused := settingsAntifloodSentHas(aenv, chat.Id, staffMarker("chat_status_change_info_cmd_error"))
+				switch tc.wantKey {
+				case "connections_is_user_connected_bot_not_admin":
+					if !botRefused || infoRefused {
+						t.Errorf("/autoapprove on refused for the bot = %v and for can_change_info = %v, want the bot refusal alone", botRefused, infoRefused)
+					}
+				case "settings_no_change_info":
+					if botRefused || !infoRefused {
+						t.Errorf("/autoapprove on refused for the bot = %v and for can_change_info = %v, want the can_change_info refusal alone", botRefused, infoRefused)
+					}
+				}
+			})
+		}
+	})
+
+	t.Run("settingsRightOwnerBotAdmin mirrors /anonadmin", func(t *testing.T) {
+		aenv := newSettingsEnv(t)
+		LoadAdmin(aenv.dispatcher)
+		for _, tc := range []settingsRightsCompositeCase{
+			{"bot administrator, the creator", staffRoleAdmin, true, "", false},
+			{"bot administrator, an administrator who is not the creator", staffRoleAdmin, false, "chat_status_owner_button_error", true},
+			{"bot a member, the creator", staffRoleMember, true, "chat_status_bot_not_admin", false},
+			{"bot a member, a non-owner (the bot part first)", staffRoleMember, false, "chat_status_bot_not_admin", false},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				chat := aenv.addChat()
+				aenv.fake.setBotRole(chat.Id, tc.botRole)
+				presser := gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: "Presser"}
+				status := gotgbot.ChatMemberStatusAdministrator
+				if tc.withRight {
+					status = gotgbot.ChatMemberStatusCreator
+				}
+				aenv.fake.setMember(chat.Id, presser.Id, staffFakeMember{Status: status})
+				t.Cleanup(func() { db.DB.Where("chat_id = ?", chat.Id).Delete(&models.AdminSettings{}) })
+				member, err := lockdownLiveMember(aenv.bot, chat.Id, presser.Id)
+				if err != nil {
+					t.Fatalf("live member: %v", err)
+				}
+				key, alert := settingsRightRefusal(&settingsPress{b: aenv.bot, group: &chat, member: member}, settingsRightOwnerBotAdmin)
+				if key != tc.wantKey || alert != tc.wantAlert {
+					t.Errorf("menu refusal = (%q, alert %v), want (%q, alert %v)", key, alert, tc.wantKey, tc.wantAlert)
+				}
+
+				aenv.sendIn(chat, presser, "/anonadmin on")
+				var row models.AdminSettings
+				wrote := db.DB.Where("chat_id = ?", chat.Id).First(&row).Error == nil && row.AnonAdmin
+				if wrote != (tc.wantKey == "") {
+					t.Errorf("/anonadmin on wrote = %v, the menu refused with %q: they disagree", wrote, key)
+				}
+				botRefused := settingsAntifloodSentHas(aenv, chat.Id, staffMarker("chat_status_bot_not_admin"))
+				ownerRefused := settingsAntifloodSentHas(aenv, chat.Id, staffMarker("chat_status_owner_cmd_error"))
+				switch tc.wantKey {
+				case "chat_status_bot_not_admin":
+					if !botRefused || ownerRefused {
+						t.Errorf("/anonadmin on refused for the bot = %v and for the owner = %v, want the bot refusal alone", botRefused, ownerRefused)
+					}
+				case "chat_status_owner_button_error":
+					if botRefused || !ownerRefused {
+						t.Errorf("/anonadmin on refused for the bot = %v and for the owner = %v, want the owner refusal alone", botRefused, ownerRefused)
+					}
+				}
+			})
+		}
+	})
+
+	t.Run("settingsRightRestrictBotRestrict mirrors /addblacklist", func(t *testing.T) {
+		aenv := newSettingsEnv(t)
+		LoadBlacklists(aenv.dispatcher)
+		noRestrict := gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: "NoRestrict"}
+		plain := gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: "Plain"}
+
+		newChat := func(t *testing.T, role string) gotgbot.Chat {
+			t.Helper()
+			chat := aenv.addChat()
+			aenv.fake.setBotRole(chat.Id, role)
+			aenv.fake.setMember(chat.Id, noRestrict.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusAdministrator})
+			aenv.fake.setMember(chat.Id, plain.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+			clean := func() {
+				db.DB.Where("chat_id = ?", chat.Id).Delete(&models.BlacklistSettings{})
+				dbcache.DeleteCache(dbcache.CacheKey("blacklist", chat.Id))
+				dbcache.ResetLocalForTest()
+			}
+			clean()
+			t.Cleanup(clean)
+			return chat
+		}
+		refusal := func(t *testing.T, chat gotgbot.Chat, user gotgbot.User) (string, bool) {
+			t.Helper()
+			member, err := lockdownLiveMember(aenv.bot, chat.Id, user.Id)
+			if err != nil {
+				t.Fatalf("live member: %v", err)
+			}
+			return settingsRightRefusal(&settingsPress{b: aenv.bot, group: &chat, member: member}, settingsRightRestrictBotRestrict)
+		}
+		stored := func(chat gotgbot.Chat) int {
+			rows, err := blacklists.ListBlacklistEntriesFresh(context.Background(), chat.Id)
+			if err != nil {
+				t.Fatalf("read the blacklist: %v", err)
+			}
+			return len(rows)
+		}
+
+		t.Run("the bot is a member: the first bot check, and the command writes nothing", func(t *testing.T) {
+			chat := newChat(t, staffRoleMember)
+			if key, alert := refusal(t, chat, aenv.admin); key != "connections_is_user_connected_bot_not_admin" || alert {
+				t.Errorf("menu refusal = (%q, alert %v), want the notice connections_is_user_connected_bot_not_admin", key, alert)
+			}
+			aenv.sendIn(chat, aenv.admin, "/addblacklist zzword")
+			if stored(chat) != 0 || !settingsAntifloodSentHas(aenv, chat.Id, staffMarker("connections_is_user_connected_bot_not_admin")) {
+				t.Errorf("/addblacklist by an administrator with a bot that is a member stored %d words, want none and the same refusal", stored(chat))
+			}
+		})
+
+		t.Run("the bot is an administrator without can_restrict_members: the press and the typed key differ", func(t *testing.T) {
+			chat := newChat(t, staffRoleAdminNoRestrict)
+			if key, alert := refusal(t, chat, aenv.admin); key != "chat_status_bot_restrict_error" || alert {
+				t.Errorf("menu refusal = (%q, alert %v), want the notice chat_status_bot_restrict_error", key, alert)
+			}
+			aenv.sendIn(chat, aenv.admin, "/addblacklist zzword")
+			if stored(chat) != 0 || !settingsAntifloodSentHas(aenv, chat.Id, staffMarker("chat_status_bot_restrict_group_error")) {
+				t.Errorf("/addblacklist with a bot that cannot restrict stored %d words, want none and chat_status_bot_restrict_group_error", stored(chat))
+			}
+		})
+
+		t.Run("an administrator without can_restrict_members and a plain member: the member part", func(t *testing.T) {
+			chat := newChat(t, staffRoleAdmin)
+			if key, alert := refusal(t, chat, noRestrict); key != "settings_no_restrict" || !alert {
+				t.Errorf("administrator without the right = (%q, alert %v), want the alert settings_no_restrict", key, alert)
+			}
+			if key, alert := refusal(t, chat, plain); key != "settings_not_admin" || !alert {
+				t.Errorf("plain member = (%q, alert %v), want the alert settings_not_admin", key, alert)
+			}
+		})
+
+		t.Run("every check held: no refusal, and the command stores the word", func(t *testing.T) {
+			chat := newChat(t, staffRoleAdmin)
+			if key, alert := refusal(t, chat, aenv.admin); key != "" || alert {
+				t.Errorf("menu refusal = (%q, alert %v), want none", key, alert)
+			}
+			aenv.sendIn(chat, aenv.admin, "/addblacklist zzword")
+			if stored(chat) != 1 {
+				t.Errorf("/addblacklist stored %d words, want 1", stored(chat))
+			}
+		})
+	})
 }
 
 func TestSettingsNavigation(t *testing.T) {
@@ -448,6 +637,76 @@ func TestSettingsNavigation(t *testing.T) {
 		text, _ := env.lastEdit(env.chat.Id, msgID)
 		if !strings.Contains(text, staffMarker("settings_header_main")) {
 			t.Errorf("Back drew %q, want the Main page", text)
+		}
+	})
+
+	// lastRow names the last keyboard row by the action codes of its buttons.
+	lastRow := func(t *testing.T, keyboard [][]gotgbot.InlineKeyboardButton) string {
+		t.Helper()
+		if len(keyboard) == 0 {
+			t.Fatal("the page has no keyboard")
+		}
+		var names []string
+		for _, button := range keyboard[len(keyboard)-1] {
+			if strings.HasPrefix(button.CallbackData, settingsHubNamespace+"|") {
+				names = append(names, "groups")
+				continue
+			}
+			names = append(names, settingsButtonFields(t, button)["a"])
+		}
+		return strings.Join(names, "|")
+	}
+
+	t.Run("every page ends with Back and Close in a group menu, Back draws Main", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		owner := env.newOwner(env.chat)
+		msgID := env.openMenu(owner)
+		if _, keyboard := env.lastEdit(env.chat.Id, msgID); lastRow(t, keyboard) != settingsActClose {
+			t.Fatalf("a group Main ends with %q, want Close alone", lastRow(t, keyboard))
+		}
+		for _, pg := range settingsPagesInOrder() {
+			// The Blocked sources page is hidden in this chat, which is not a Staff Group, and refuses to open.
+			if pg.Hidden != nil && pg.Hidden(&env.chat) {
+				continue
+			}
+			env.press(owner, msgID, env.groupFields(owner, "a", settingsActOpen, "p", pg.Key))
+			_, keyboard := env.lastEdit(env.chat.Id, msgID)
+			if got, want := lastRow(t, keyboard), settingsActBack+"|"+settingsActClose; got != want {
+				t.Errorf("page %q ends with %q, want %q", pg.Key, got, want)
+				continue
+			}
+			env.press(owner, msgID, env.groupFields(owner, "a", settingsActBack))
+			text, _ := env.lastEdit(env.chat.Id, msgID)
+			if !strings.Contains(text, staffMarker("settings_header_main")) {
+				t.Errorf("Back from page %q drew %q, want the Main page", pg.Key, text)
+			}
+		}
+	})
+
+	t.Run("every page ends with Back and Close in a private menu, Main with Groups and Close", func(t *testing.T) {
+		env := newSettingsEnv(t)
+		owner := env.newOwner(env.chat)
+		env.sendPrivate(owner, fmt.Sprintf("/start settings_%d", env.chat.Id))
+		sent := settingsPrivateOnlySent(t, env, owner)
+		if got, want := lastRow(t, staffKeyboardOf(sent.Params["reply_markup"])), "groups|"+settingsActClose; got != want {
+			t.Fatalf("a private Main ends with %q, want %q", got, want)
+		}
+		for _, pg := range settingsPagesInOrder() {
+			// The Blocked sources page is hidden in this chat, which is not a Staff Group, and refuses to open.
+			if pg.Hidden != nil && pg.Hidden(&env.chat) {
+				continue
+			}
+			env.pressPrivate(owner, sent.MessageID, env.privateFields(env.chat.Id, "a", settingsActOpen, "p", pg.Key))
+			_, keyboard := env.lastEdit(owner.Id, sent.MessageID)
+			if got, want := lastRow(t, keyboard), settingsActBack+"|"+settingsActClose; got != want {
+				t.Errorf("private page %q ends with %q, want %q", pg.Key, got, want)
+				continue
+			}
+			env.pressPrivate(owner, sent.MessageID, env.privateFields(env.chat.Id, "a", settingsActBack))
+			_, main := env.lastEdit(owner.Id, sent.MessageID)
+			if got, want := lastRow(t, main), "groups|"+settingsActClose; got != want {
+				t.Errorf("Back from private page %q draws a Main ending with %q, want %q", pg.Key, got, want)
+			}
 		}
 	})
 
@@ -521,6 +780,7 @@ func TestSettingsCallbackBytes(t *testing.T) {
 		{Key: "l", Icon: "🔒", Title: "Lockdown", State: "Not active", Known: true},
 		{Key: "c", Icon: "🧩", Title: "Captcha", State: "On", Known: true},
 		{Key: "f", Icon: "🌊", Title: "Antiflood", State: "Limit 100", Known: false},
+		{Key: "a", Icon: "🔑", Title: "Access", State: "Owner only", Known: true, OwnerOnly: true},
 	}
 	for _, variant := range []struct {
 		name string
@@ -531,6 +791,9 @@ func TestSettingsCallbackBytes(t *testing.T) {
 	} {
 		t.Run(variant.name, func(t *testing.T) {
 			check(t, "Main", renderSettingsMain(variant.view, entries, ""))
+			if groups, ok := settingsHubGroupsButton(tr); !ok || len(groups.CallbackData) > 16 {
+				t.Errorf("the Groups button is %q (ok %v), want at most 16 bytes", groups.CallbackData, ok)
+			}
 			for _, minutes := range []int{1, 5, 10} {
 				check(t, fmt.Sprintf("Captcha %d", minutes), renderSettingsCaptcha(variant.view, &models.CaptchaSettings{Timeout: minutes}, settingsCaptchaWeb{}, ""))
 			}
@@ -723,13 +986,13 @@ func TestSettingsCaptchaReadFailure(t *testing.T) {
 	t.Cleanup(func() { settingsCaptchaRead = previous })
 
 	msgID := env.openMenu(env.admin)
-	_, keyboard := env.lastEdit(env.chat.Id, msgID)
+	mainText, keyboard := env.lastEdit(env.chat.Id, msgID)
 	button, ok := settingsButtonByMarker(keyboard, "settings_page_captcha")
 	if !ok {
 		t.Fatal("no Captcha button on the Main page")
 	}
-	if !strings.HasSuffix(button.Text, " · ❔") {
-		t.Errorf("Captcha button %q does not end with the unreadable state ' · ❔'", button.Text)
+	if line, found := settingsMainStateLine(mainText, "settings_page_captcha"); !found || !strings.HasSuffix(line, settingsUnknownState) {
+		t.Errorf("Captcha status line %q (found %v) does not end with the unknown mark", line, found)
 	}
 
 	before := env.answerCount()

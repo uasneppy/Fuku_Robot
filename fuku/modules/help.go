@@ -19,6 +19,7 @@ import (
 
 	"github.com/uasneppy/fuku_robot/fuku/config"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
+	"github.com/uasneppy/fuku_robot/fuku/utils/helpers"
 )
 
 var (
@@ -615,12 +616,12 @@ func (moduleStruct) help(b *gotgbot.Bot, ctx *ext.Context) error {
 }
 
 func LoadHelp(dispatcher *ext.Dispatcher) {
-	dispatcher.AddHandler(handlers.NewCommand("start", DefaultHelpRegistry().start))
-	dispatcher.AddHandler(handlers.NewCommand("help", DefaultHelpRegistry().help))
+	dispatcher.AddHandler(helpers.NewBotCommand("start", DefaultHelpRegistry().start))
+	dispatcher.AddHandler(helpers.NewBotCommand("help", DefaultHelpRegistry().help))
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("helpq"), DefaultHelpRegistry().helpButtonHandler))
-	dispatcher.AddHandler(handlers.NewCommand("donate", DefaultHelpRegistry().donate))
+	dispatcher.AddHandler(helpers.NewBotCommand("donate", DefaultHelpRegistry().donate))
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("configuration"), DefaultHelpRegistry().botConfig))
-	dispatcher.AddHandler(handlers.NewCommand("about", DefaultHelpRegistry().about))
+	dispatcher.AddHandler(helpers.NewBotCommand("about", DefaultHelpRegistry().about))
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("about"), DefaultHelpRegistry().about))
 	initHelpButtons()
 }

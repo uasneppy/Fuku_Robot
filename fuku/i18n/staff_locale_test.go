@@ -62,7 +62,7 @@ func staffPlaceholders(text string) []string {
 	return names
 }
 
-// TestStaffLocaleKeys guards every staff_ key across all 7 locales: parity with
+// TestStaffLocaleKeys guards every staff_ key across all 8 locales: parity with
 // en.yml in both directions, non-empty values, and identical placeholder sets.
 // make check-translations only sees literal GetString keys, so it cannot catch
 // a staff_ key that is missing, empty or has a renamed placeholder.

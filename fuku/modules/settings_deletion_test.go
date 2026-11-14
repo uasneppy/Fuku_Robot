@@ -1,0 +1,1037 @@
+//go:build testtools
+
+package modules
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/PaulSonOfLars/gotgbot/v2"
+
+	"github.com/uasneppy/fuku_robot/fuku/db"
+	"github.com/uasneppy/fuku_robot/fuku/db/deletion"
+	"github.com/uasneppy/fuku_robot/fuku/db/models"
+	"github.com/uasneppy/fuku_robot/fuku/db/staff"
+	"github.com/uasneppy/fuku_robot/fuku/utils/cache"
+)
+
+// settingsDelCase is one row of a table the page draws, written out here so the tests do not read the
+// production tables they check.
+type settingsDelCase struct {
+	code, nameKey, descKey, kind string
+}
+
+var settingsDelServiceCases = []settingsDelCase{
+	{"sj", "settings_del_svc_joined", "settings_del_desc_joined", deletion.KindJoined},
+	{"sl", "settings_del_svc_left", "settings_del_desc_left", deletion.KindLeft},
+	{"sp", "settings_del_svc_photo", "settings_del_desc_photo", deletion.KindPhoto},
+	{"sh", "settings_del_svc_title", "settings_del_desc_title", deletion.KindTitle},
+	{"sn", "settings_del_svc_pinned", "settings_del_desc_pinned", deletion.KindPinned},
+	{"sv", "settings_del_svc_video", "settings_del_desc_video", deletion.KindVideo},
+	{"sf", "settings_del_svc_forum", "settings_del_desc_forum", deletion.KindForum},
+	{"sb", "settings_del_svc_boost", "settings_del_desc_boost", deletion.KindBoost},
+	{"sa", "settings_del_svc_timer", "settings_del_desc_timer", deletion.KindTimer},
+	{"sk", "settings_del_svc_background", "settings_del_desc_background", deletion.KindBackground},
+	{"sg", "settings_del_svc_gifts", "settings_del_desc_gifts", deletion.KindGiveaway},
+	{"so", "settings_del_svc_other", "settings_del_desc_other", deletion.KindOther},
+}
+
+var settingsDelBotCases = []settingsDelCase{
+	{"bw", "settings_del_bot_welcome", "settings_del_desc_welcome", deletion.KindBotWelcome},
+	{"bg", "settings_del_bot_goodbye", "settings_del_desc_goodbye", deletion.KindBotGoodbye},
+	{"br", "settings_del_bot_rules", "settings_del_desc_rules", deletion.KindBotRules},
+	{"ba", "settings_del_bot_auto", "settings_del_desc_auto", deletion.KindBotAuto},
+	{"bm", "settings_del_bot_manual", "settings_del_desc_manual", deletion.KindBotManual},
+}
+
+var settingsDelMemberCases = []settingsDelCase{
+	{"mc", "settings_del_mem_commands", "settings_del_desc_commands", deletion.KindMemberCommands},
+	{"me", "settings_del_mem_edited", "settings_del_desc_edited", deletion.KindMemberEdited},
+	{"ms", "settings_del_mem_self", "settings_del_desc_self", deletion.KindMemberSelfDestruct},
+}
+
+var (
+	settingsDelServicePresetValues = []string{"n", "0", "10", "60", "600", "3600", "21600", "86400"}
+	settingsDelBotPresetValues     = []string{"n", "60", "600", "3600", "21600", "86400"}
+)
+
+// settingsDelNoRows fails the test when the chat has a rule row, a greetings row or a queue row: the
+// page never creates one by being opened or drawn.
+func settingsDelNoRows(t *testing.T, chatID int64) {
+	t.Helper()
+	for name, model := range map[string]any{
+		"delete rule": &models.DeleteRule{}, "greetings": &models.GreetingSettings{},
+		"scheduled deletion": &models.ScheduledDeletion{},
+	} {
+		var count int64
+		if err := db.DB.Model(model).Where("chat_id = ?", chatID).Count(&count).Error; err != nil {
+			t.Fatalf("count %s rows: %v", name, err)
+		}
+		if count != 0 {
+			t.Errorf("the page left %d %s rows behind", count, name)
+		}
+	}
+}
+
+// settingsDelWantRowFields fails unless the button carries exactly a=action, t=code and the owner.
+func settingsDelWantRowFields(t *testing.T, button gotgbot.InlineKeyboardButton, action, code string) {
+	t.Helper()
+	fields := settingsButtonFields(t, button)
+	if fields["a"] != action || fields["t"] != code || len(fields) != 3 {
+		t.Errorf("button %q fields = %v, want exactly a=%s, t=%s and the owner", button.Text, fields, action, code)
+	}
+}
+
+// settingsDelWantBack fails unless the last row of the keyboard is Back with the given fields and Close.
+func settingsDelWantBack(t *testing.T, keyboard [][]gotgbot.InlineKeyboardButton, want map[string]string) {
+	t.Helper()
+	if len(keyboard) == 0 {
+		t.Fatal("empty keyboard")
+	}
+	nav := keyboard[len(keyboard)-1]
+	if len(nav) != 2 || !containsMarker(nav[0].Text, "settings_btn_back") || !containsMarker(nav[1].Text, "settings_btn_close") {
+		t.Fatalf("last row = %+v, want Back and Close", nav)
+	}
+	fields := settingsButtonFields(t, nav[0])
+	for key, value := range want {
+		if fields[key] != value {
+			t.Errorf("Back fields = %v, want %s=%s", fields, key, value)
+		}
+	}
+	if len(fields) != len(want)+1 {
+		t.Errorf("Back fields = %v, want exactly %v and the owner", fields, want)
+	}
+}
+
+func TestSettingsDeletionOpensFromMain(t *testing.T) {
+	settingsDelMenus(t, func(t *testing.T, m *settingsDelMenu) {
+		wantShape := settingsMainShapeGroup
+		if m.private {
+			wantShape = settingsMainShapePrivate
+		}
+		if got := settingsMainShape(t, m.mainKeyboard); got != wantShape {
+			t.Errorf("the owner's Main = %q, want %q", got, wantShape)
+		}
+		if rows := len(m.mainKeyboard); rows != settingsMainOwnerRows {
+			t.Errorf("Main has %d rows, want %d", rows, settingsMainOwnerRows)
+		}
+		settingsDelWantLine(t, m.mainText, "settings_page_del", "🧹", staffMarker("settings_state_off_plain"))
+		cell, ok := settingsPageButton(t, m.mainKeyboard, "d")
+		if !ok || !strings.HasPrefix(cell.Text, "🧹 ") || !containsMarker(cell.Text, "settings_page_del") {
+			t.Fatalf("Main has no 🧹 Deletion cell: %+v", m.mainKeyboard)
+		}
+
+		// The hub.
+		m.pressButton(cell)
+		text, keyboard := m.last()
+		if !containsMarker(text, "settings_del_intro") || !containsMarker(text, "settings_del_hint_time") {
+			t.Errorf("hub text = %q, want the intro and the time hint", text)
+		}
+		settingsDelWantLine(t, text, "settings_del_sec_service", "🔔", staffMarker("settings_state_off_plain"))
+		settingsDelWantLine(t, text, "settings_del_sec_bot", "🤖", staffMarker("settings_state_off_plain"))
+		if containsMarker(text, "settings_del_no_right") || containsMarker(text, "settings_del_right_unknown") {
+			t.Errorf("hub of a bot that can delete carries a right line: %q", text)
+		}
+		settingsDelWantLine(t, text, "settings_del_sec_member", "💬", staffMarker("settings_state_off_plain"))
+		if got := settingsDelWidths(keyboard); fmt.Sprint(got) != "[2 1 2]" {
+			t.Errorf("hub row widths = %v, want [2 1 2]", got)
+		}
+		for i, code := range []string{"s", "b"} {
+			settingsDelWantRowFields(t, keyboard[0][i], "dl", code)
+		}
+		settingsDelWantRowFields(t, keyboard[1][0], "dl", "m")
+		if fields := settingsButtonFields(t, keyboard[2][0]); fields["a"] != "bk" {
+			t.Errorf("the hub's Back = %v, want the core Back to Main", fields)
+		}
+
+		// The Service messages list.
+		text, keyboard = m.open("dl", "s")
+		if !containsMarker(text, "settings_del_list_svc") || !containsMarker(text, "settings_del_hint_cleanservice") ||
+			!containsMarker(text, "settings_del_hint_time") {
+			t.Errorf("service list text = %q, want its intro and both hints", text)
+		}
+		lastAt := -1
+		for _, tc := range settingsDelServiceCases {
+			settingsDelWantLine(t, text, tc.nameKey, "➖", staffMarker("settings_del_state_keep"))
+			at := strings.Index(text, staffMarker(tc.nameKey))
+			if at < lastAt {
+				t.Errorf("line of %s is out of table order", tc.code)
+			}
+			lastAt = at
+		}
+		if got := settingsDelWidths(keyboard); fmt.Sprint(got) != "[2 2 2 2 2 2 2]" {
+			t.Errorf("service list row widths = %v, want seven rows of two", got)
+		}
+		cells := settingsAllButtons(keyboard[:6])
+		for i, tc := range settingsDelServiceCases {
+			if !strings.HasPrefix(cells[i].Text, "➖ ") || !containsMarker(cells[i].Text, tc.nameKey) {
+				t.Errorf("cell %d = %q, want ➖ and %s", i, cells[i].Text, tc.nameKey)
+			}
+			settingsDelWantRowFields(t, cells[i], "dr", tc.code)
+		}
+		settingsDelWantBack(t, keyboard, map[string]string{"a": "op", "p": "d"})
+
+		// A row screen, and Back to its list.
+		text, keyboard = m.open("dr", "sn")
+		for _, key := range []string{"settings_del_svc_pinned", "settings_del_desc_pinned", "settings_del_currently", "settings_del_hint_time"} {
+			if !containsMarker(text, key) {
+				t.Errorf("pinned row screen lacks %s: %q", key, text)
+			}
+		}
+		if containsMarker(text, "settings_del_hint_cleanservice") {
+			t.Errorf("pinned row screen carries the /cleanservice hint: %q", text)
+		}
+		if !strings.Contains(text, "➖ "+staffMarker("settings_del_state_keep")) {
+			t.Errorf("pinned row screen Currently line is not ➖ Keep: %q", text)
+		}
+		if got := settingsDelWidths(keyboard); fmt.Sprint(got) != "[2 3 3 2]" {
+			t.Errorf("service row screen widths = %v, want [2 3 3 2]", got)
+		}
+		for i, button := range settingsAllButtons(keyboard[:3]) {
+			fields := settingsButtonFields(t, button)
+			if fields["a"] != "st" || fields["p"] != "d" || fields["t"] != "sn" || fields["v"] != settingsDelServicePresetValues[i] {
+				t.Errorf("choice %d fields = %v, want st on sn with v=%s", i, fields, settingsDelServicePresetValues[i])
+			}
+		}
+		if first := keyboard[0][0].Text; !strings.HasPrefix(first, settingsSelectedPrefix) {
+			t.Errorf("Keep is not marked on an unset row: %q", first)
+		}
+		settingsDelWantBack(t, keyboard, map[string]string{"a": "dl", "t": "s"})
+		m.pressButton(keyboard[len(keyboard)-1][0])
+		text, keyboard = m.last()
+		if !containsMarker(text, "settings_del_list_svc") {
+			t.Errorf("Back from a row screen did not draw the service list: %q", text)
+		}
+
+		// Back from the list is the hub, Back from the hub is Main.
+		m.pressButton(keyboard[len(keyboard)-1][0])
+		text, keyboard = m.last()
+		if !containsMarker(text, "settings_del_intro") {
+			t.Errorf("Back from the list did not draw the hub: %q", text)
+		}
+		m.pressButton(keyboard[len(keyboard)-1][0])
+		text, _ = m.last()
+		if !containsMarker(text, "settings_main_hint") {
+			t.Errorf("Back from the hub did not draw Main: %q", text)
+		}
+
+		// The Bot messages list and a bot row screen.
+		text, keyboard = m.open("dl", "b")
+		if !containsMarker(text, "settings_del_list_bot") || containsMarker(text, "settings_del_hint_cleanservice") {
+			t.Errorf("bot list text = %q, want its intro and no /cleanservice hint", text)
+		}
+		for _, tc := range settingsDelBotCases {
+			settingsDelWantLine(t, text, tc.nameKey, "➖", staffMarker("settings_state_off_plain"))
+		}
+		if got := settingsDelWidths(keyboard); fmt.Sprint(got) != "[2 2 1 2]" {
+			t.Errorf("bot list row widths = %v, want [2 2 1 2]", got)
+		}
+		text, keyboard = m.open("dr", "ba")
+		if !containsMarker(text, "settings_del_hint_punish_auto") || !containsMarker(text, "settings_del_desc_auto") {
+			t.Errorf("auto punishments screen = %q, want its description and its mute-notice hint", text)
+		}
+		if got := settingsDelWidths(keyboard); fmt.Sprint(got) != "[3 3 2]" {
+			t.Errorf("bot row screen widths = %v, want [3 3 2]", got)
+		}
+		for i, button := range settingsAllButtons(keyboard[:2]) {
+			if fields := settingsButtonFields(t, button); fields["v"] != settingsDelBotPresetValues[i] {
+				t.Errorf("bot choice %d v = %q, want %s", i, fields["v"], settingsDelBotPresetValues[i])
+			}
+		}
+		settingsDelWantBack(t, keyboard, map[string]string{"a": "dl", "t": "b"})
+		settingsDelNoRows(t, m.env.chat.Id)
+		if m.env.botReads(m.env.chat.Id) == 0 {
+			t.Error("the deletion screens never read the bot's right")
+		}
+	})
+}
+
+func TestSettingsDeletionMainState(t *testing.T) {
+	env := newSettingsDelEnv(t)
+	m := env.groupMenu()
+	readsBefore := env.botReads(env.chat.Id)
+	mainLine := func() string {
+		t.Helper()
+		m.press("a", "bk")
+		text, _ := m.last()
+		line, ok := settingsMainStateLine(text, "settings_page_del")
+		if !ok {
+			t.Fatalf("Main has no Deletion line: %q", text)
+		}
+		return line
+	}
+	wantOn := func(want int) {
+		t.Helper()
+		line := mainLine()
+		if !strings.Contains(line, staffMarker("settings_state_del_on")+" "+fmt.Sprint(want)) {
+			t.Errorf("Main line = %q, want %d on", line, want)
+		}
+	}
+
+	if line := mainLine(); !strings.Contains(line, staffMarker("settings_state_off_plain")) {
+		t.Errorf("no rule: line = %q, want the Off word", line)
+	}
+	env.setRule(deletion.KindPinned, 600)
+	env.setRule(deletion.KindPhoto, 0)
+	wantOn(2)
+	env.setRule(deletion.KindBotWelcome, 3600)
+	wantOn(3)
+	// The shared flag turns joined and left on together, each by its effective state.
+	env.setJoinLeft(deletion.KindJoined, deletion.JoinLeftState{Mode: deletion.JoinLeftNow})
+	wantOn(5)
+	env.setJoinLeft(deletion.KindJoined, deletion.JoinLeftState{Mode: deletion.JoinLeftAfter, DelaySecs: 60})
+	wantOn(5)
+	env.setJoinLeft(deletion.KindJoined, deletion.JoinLeftState{Mode: deletion.JoinLeftKeep})
+	wantOn(3)
+	// A stale delay row with the flag off is Keep, so it counts for nothing.
+	if err := deletion.SetRule(context.Background(), env.chat.Id, deletion.KindLeft, 60); err != nil {
+		t.Fatalf("SetRule(left) error = %v", err)
+	}
+	wantOn(3)
+
+	// The member rules count too, and the hub's Member line carries its own count.
+	env.setRule(deletion.KindMemberCommands, 0)
+	wantOn(4)
+	env.setRule(deletion.KindMemberEdited, 60)
+	wantOn(5)
+	env.setRule(deletion.KindMemberSelfDestruct, 600)
+	wantOn(6)
+	hubBefore := env.botReads(env.chat.Id)
+	hub, _ := m.openHub()
+	hubReads := env.botReads(env.chat.Id) - hubBefore
+	for key, want := range map[string]int{"settings_del_sec_service": 2, "settings_del_sec_bot": 1, "settings_del_sec_member": 3} {
+		settingsDelWantLine(t, hub, key, "", staffMarker("settings_state_del_on")+" "+fmt.Sprint(want))
+	}
+
+	for name, swap := range map[string]func(){
+		"rules": func() {
+			mreqSwap(t, &deletionRulesLookup, func(context.Context, int64) (*deletion.Rules, error) {
+				return nil, errors.New("rules read failed")
+			})
+		},
+		"flag": func() {
+			mreqSwap(t, &deletionFlagLookup, func(context.Context, int64) (*models.GreetingSettings, error) {
+				return nil, errors.New("flag read failed")
+			})
+		},
+	} {
+		swap()
+		if line := mainLine(); !strings.Contains(line, settingsUnknownState) || strings.Contains(line, staffMarker("settings_state_del_on")) {
+			t.Errorf("a failed %s read: line = %q, want the unknown mark", name, line)
+		}
+	}
+	if reads := env.botReads(env.chat.Id) - readsBefore - hubReads; reads != 0 {
+		t.Errorf("Main made %d getChatMember calls about the bot, want none", reads)
+	}
+}
+
+// settingsDelCounter wraps the real rule writes and counts the calls.
+type settingsDelCounter struct{ sets, removes int }
+
+func (c *settingsDelCounter) install(t *testing.T) {
+	t.Helper()
+	real := deletionRuleWrites
+	mreqSwap(t, &deletionRuleWrites, deletionRuleWriter{
+		Set: func(ctx context.Context, chatID int64, kind string, delay int) error {
+			c.sets++
+			return real.Set(ctx, chatID, kind, delay)
+		},
+		Remove: func(ctx context.Context, chatID int64, kind string) error {
+			c.removes++
+			return real.Remove(ctx, chatID, kind)
+		},
+	})
+}
+
+func TestSettingsDeletionWrites(t *testing.T) {
+	settingsDelMenus(t, func(t *testing.T, m *settingsDelMenu) {
+		env := m.env
+		var counter settingsDelCounter
+		counter.install(t)
+		m.openHub()
+		m.open("dl", "s")
+		m.open("dr", "sn")
+
+		// A preset stores, drops the cache key, and the screen shows the stored state with the choice marked.
+		m.choose("sn", "600")
+		if delay, ok := env.stored(deletion.KindPinned); !ok || delay != 600 {
+			t.Fatalf("stored pinned = %d (%v), want 600", delay, ok)
+		}
+		rules, err := deletion.GetRules(context.Background(), env.chat.Id)
+		if err != nil || rules.Delays[deletion.KindPinned] != 600 {
+			t.Errorf("a read through the cache shows %+v (%v), want 600 for pinned", rules, err)
+		}
+		text, keyboard := m.last()
+		if !strings.Contains(text, "⏳ "+staffMarker("settings_del_state_after")+" "+staffMarker("settings_del_delay_10m")) {
+			t.Errorf("after 10 min the Currently line = %q", text)
+		}
+		marked := 0
+		for _, button := range settingsAllButtons(keyboard) {
+			if strings.HasPrefix(button.Text, settingsSelectedPrefix) {
+				marked++
+				if !containsMarker(button.Text, "settings_del_delay_10m") {
+					t.Errorf("the marked choice is %q, want 10 min", button.Text)
+				}
+			}
+		}
+		if marked != 1 {
+			t.Errorf("%d choices are marked, want exactly one", marked)
+		}
+
+		// The stored state again writes nothing.
+		m.choose("sn", "600")
+		if counter.sets != 1 || counter.removes != 0 {
+			t.Errorf("writes after the repeated press: %d sets, %d removes, want 1 and 0", counter.sets, counter.removes)
+		}
+
+		// Delete now stores a Go 0, Keep removes the row.
+		m.choose("sn", "0")
+		if delay, ok := env.stored(deletion.KindPinned); !ok || delay != 0 {
+			t.Errorf("stored pinned after Delete now = %d (%v), want a stored 0", delay, ok)
+		}
+		text, _ = m.last()
+		if !strings.Contains(text, "🗑 "+staffMarker("settings_del_state_now")) {
+			t.Errorf("Delete now Currently line = %q", text)
+		}
+		m.choose("sn", "n")
+		if _, ok := env.stored(deletion.KindPinned); ok {
+			t.Error("Keep left the pinned row stored")
+		}
+		text, _ = m.last()
+		if !strings.Contains(text, "➖ "+staffMarker("settings_del_state_keep")) {
+			t.Errorf("Keep Currently line = %q", text)
+		}
+
+		// A bot row stores minutes and reads Off when removed.
+		m.open("dr", "bg")
+		m.choose("bg", "3600")
+		if delay, ok := env.stored(deletion.KindBotGoodbye); !ok || delay != 3600 {
+			t.Errorf("stored goodbye = %d (%v), want 3600", delay, ok)
+		}
+		m.choose("bg", "n")
+		if _, ok := env.stored(deletion.KindBotGoodbye); ok {
+			t.Error("Off left the goodbye row stored")
+		}
+
+		// Joined goes through the shared flag, as /cleanservice does.
+		m.open("dr", "sj")
+		m.choose("sj", "0")
+		settings, err := deletionFlagLookup(context.Background(), env.chat.Id)
+		if err != nil || !settings.ShouldCleanService {
+			t.Errorf("after joined Delete now the flag = %+v (%v), want on", settings, err)
+		}
+		if _, ok := env.stored(deletion.KindJoined); ok {
+			t.Error("joined Delete now left a delay row")
+		}
+		m.choose("sj", "600")
+		if delay, ok := env.stored(deletion.KindJoined); !ok || delay != 600 {
+			t.Errorf("stored joined = %d (%v), want 600", delay, ok)
+		}
+		m.choose("sj", "n")
+		settings, err = deletionFlagLookup(context.Background(), env.chat.Id)
+		if err != nil || settings.ShouldCleanService {
+			t.Errorf("after joined Keep the flag = %+v (%v), want off", settings, err)
+		}
+	})
+}
+
+func TestSettingsDeletionHidden(t *testing.T) {
+	t.Run("a Staff Group has no Deletion cell and no line", func(t *testing.T) {
+		env := newSettingsDelEnv(t)
+		env.makeStaff()
+		var lookups int
+		real := deletionStaffLookup
+		mreqSwap(t, &deletionStaffLookup, func(chatID int64) (*models.StaffGroup, error) {
+			lookups++
+			return real(chatID)
+		})
+		m := env.groupMenu()
+		if _, ok := settingsPageButton(t, m.mainKeyboard, "d"); ok {
+			t.Errorf("Main in a Staff Group has a Deletion cell: %+v", m.mainKeyboard)
+		}
+		if _, ok := settingsMainStateLine(m.mainText, "settings_page_del"); ok {
+			t.Errorf("Main in a Staff Group has a Deletion line: %q", m.mainText)
+		}
+		// Hidden read the Staff Group row once; MainState, which reads it too, never ran.
+		if lookups != 1 {
+			t.Errorf("the Main draw made %d Staff Group reads, want 1 (Hidden only, MainState skipped)", lookups)
+		}
+
+		// A forged open of the page is refused and edits nothing.
+		edits, botReads, answers := m.editCount(), env.botReads(env.chat.Id), env.answerCount()
+		m.press("a", "op", "p", "d")
+		if text, alert := env.lastAnswer(); text != staffMarker("common_callback_invalid_request") || !alert {
+			t.Errorf("a forged open answered %q alert=%v, want the invalid-request alert", text, alert)
+		}
+		if env.answerCount() != answers+1 {
+			t.Errorf("the forged open was answered %d times, want once", env.answerCount()-answers)
+		}
+		if m.editCount() != edits {
+			t.Error("a forged open of the page edited the menu")
+		}
+		if env.botReads(env.chat.Id) != botReads {
+			t.Error("a forged open made a getChatMember call about the bot")
+		}
+	})
+
+	t.Run("an ordinary group draws it and reads the Staff Group row twice", func(t *testing.T) {
+		env := newSettingsDelEnv(t)
+		var lookups int
+		real := deletionStaffLookup
+		mreqSwap(t, &deletionStaffLookup, func(chatID int64) (*models.StaffGroup, error) {
+			lookups++
+			return real(chatID)
+		})
+		m := env.groupMenu()
+		if _, ok := settingsPageButton(t, m.mainKeyboard, "d"); !ok {
+			t.Errorf("Main has no Deletion cell: %+v", m.mainKeyboard)
+		}
+		if lookups != 2 {
+			t.Errorf("the Main draw made %d Staff Group reads, want 2 (Hidden and MainState)", lookups)
+		}
+	})
+}
+
+// settingsDelForged are presses of the page's buttons that a Staff Group must refuse.
+var settingsDelForged = [][]string{
+	{"a", "dl", "t", "s"},
+	{"a", "dr", "t", "sn"},
+	{"a", "st", "p", "d", "t", "sn", "v", "600"},
+	{"a", "st", "p", "d", "t", "sj", "v", "0"},
+	{"a", "st", "p", "d", "t", "bw", "v", "n"},
+	{"a", "dl", "t", "m"},
+	{"a", "dr", "t", "me"},
+	{"a", "st", "p", "d", "t", "mc", "v", "0"},
+	{"a", "st", "p", "d", "t", "ms", "v", "600"},
+}
+
+func TestSettingsDeletionStaffGroup(t *testing.T) {
+	t.Run("a forged press in a Staff Group is invalid and writes nothing", func(t *testing.T) {
+		env := newSettingsDelEnv(t)
+		m := env.groupMenu()
+		env.makeStaff()
+		var counter settingsDelCounter
+		counter.install(t)
+		for _, kv := range settingsDelForged {
+			edits, reads, answers := m.editCount(), env.botReads(env.chat.Id), env.answerCount()
+			m.press(kv...)
+			if text, alert := env.lastAnswer(); text != staffMarker("common_callback_invalid_request") || !alert {
+				t.Errorf("%v answered %q alert=%v, want the invalid-request alert", kv, text, alert)
+			}
+			if got := env.answerCount() - answers; got != 1 {
+				t.Errorf("%v was answered %d times, want once", kv, got)
+			}
+			if m.editCount() != edits {
+				t.Errorf("%v edited the menu", kv)
+			}
+			if env.botReads(env.chat.Id) != reads {
+				t.Errorf("%v read the bot's right", kv)
+			}
+		}
+		if counter.sets != 0 || counter.removes != 0 {
+			t.Errorf("a Staff Group press wrote: %d sets, %d removes", counter.sets, counter.removes)
+		}
+		settingsDelNoRows(t, env.chat.Id)
+	})
+
+	t.Run("an unreadable Staff Group row is the cannot-open edit with no write", func(t *testing.T) {
+		env := newSettingsDelEnv(t)
+		m := env.groupMenu()
+		mreqSwap(t, &deletionStaffLookup, func(int64) (*models.StaffGroup, error) { return nil, errors.New("staff read failed") })
+		var counter settingsDelCounter
+		counter.install(t)
+		for _, kv := range append([][]string{{"a", "op", "p", "d"}}, settingsDelForged...) {
+			reads := env.botReads(env.chat.Id)
+			m.press(kv...)
+			text, keyboard := m.last()
+			if text != staffMarker("settings_cannot_open") || len(keyboard) != 0 {
+				t.Errorf("%v drew %q (%d rows), want the cannot-open edit", kv, text, len(keyboard))
+			}
+			if answer, alert := env.lastAnswer(); answer != staffMarker("settings_cannot_open_alert") || !alert {
+				t.Errorf("%v answered %q alert=%v, want the cannot-open alert", kv, answer, alert)
+			}
+			if env.botReads(env.chat.Id) != reads {
+				t.Errorf("%v read the bot's right", kv)
+			}
+		}
+		if counter.sets != 0 || counter.removes != 0 {
+			t.Errorf("an unreadable Staff Group row let a write through: %d sets, %d removes", counter.sets, counter.removes)
+		}
+		settingsDelNoRows(t, env.chat.Id)
+	})
+
+	t.Run("a group linked to a Staff Group draws the page and never names it", func(t *testing.T) {
+		env := newSettingsDelEnv(t)
+		staffChat := uniqueModuleChatID()
+		const staffTitle = "Zed Staff Title"
+		staffCleanup(t, staffChat, env.chat.Id)
+		if _, err := staff.CreateStaffGroup(staffChat, env.owner.Id, staffTitle); err != nil {
+			t.Fatalf("CreateStaffGroup error = %v", err)
+		}
+		if err := staff.CreateLink(&models.StaffGroupLink{
+			GroupChatID: env.chat.Id, StaffChatID: staffChat, OwnerUserID: env.owner.Id, GroupTitle: "Linked",
+		}); err != nil {
+			t.Fatalf("CreateLink error = %v", err)
+		}
+		m := env.groupMenu()
+		if _, ok := settingsPageButton(t, m.mainKeyboard, "d"); !ok {
+			t.Fatalf("a linked group's Main has no Deletion cell: %+v", m.mainKeyboard)
+		}
+		screens := []string{m.mainText}
+		hub, _ := m.openHub()
+		list, _ := m.open("dl", "s")
+		row, _ := m.open("dr", "sn")
+		botList, _ := m.open("dl", "b")
+		screens = append(screens, hub, list, row, botList)
+		for i, text := range screens {
+			if strings.Contains(text, staffTitle) || strings.Contains(text, fmt.Sprint(staffChat)) {
+				t.Errorf("screen %d names the Staff Group: %q", i, text)
+			}
+		}
+		for _, text := range screens[1:] {
+			if containsMarker(text, "settings_cannot_open") {
+				t.Errorf("a linked group could not open the page: %q", text)
+			}
+		}
+	})
+}
+
+func TestSettingsDeletionReadsAndWritesFail(t *testing.T) {
+	t.Run("a failed rules read is the cannot-open edit and creates no row", func(t *testing.T) {
+		env := newSettingsDelEnv(t)
+		m := env.groupMenu()
+		mreqSwap(t, &deletionRulesLookup, func(context.Context, int64) (*deletion.Rules, error) {
+			return nil, errors.New("rules read failed")
+		})
+		for _, kv := range [][]string{{"a", "op", "p", "d"}, {"a", "dl", "t", "s"}, {"a", "dl", "t", "b"}, {"a", "dr", "t", "sn"}, {"a", "dr", "t", "bw"}} {
+			m.press(kv...)
+			text, keyboard := m.last()
+			if text != staffMarker("settings_cannot_open") || len(keyboard) != 0 {
+				t.Errorf("%v drew %q (%d rows), want the cannot-open edit", kv, text, len(keyboard))
+			}
+		}
+		settingsDelNoRows(t, env.chat.Id)
+	})
+
+	t.Run("a failed flag read stops the screens that show joined and left only", func(t *testing.T) {
+		env := newSettingsDelEnv(t)
+		m := env.groupMenu()
+		mreqSwap(t, &deletionFlagLookup, func(context.Context, int64) (*models.GreetingSettings, error) {
+			return nil, errors.New("flag read failed")
+		})
+		for _, kv := range [][]string{{"a", "op", "p", "d"}, {"a", "dl", "t", "s"}, {"a", "dr", "t", "sj"}} {
+			m.press(kv...)
+			if text, _ := m.last(); text != staffMarker("settings_cannot_open") {
+				t.Errorf("%v drew %q, want the cannot-open edit", kv, text)
+			}
+		}
+		for _, kv := range [][]string{{"a", "dl", "t", "b"}, {"a", "dr", "t", "sn"}} {
+			m.press(kv...)
+			if text, _ := m.last(); containsMarker(text, "settings_cannot_open") {
+				t.Errorf("%v needs no flag but drew the cannot-open edit", kv)
+			}
+		}
+		settingsDelNoRows(t, env.chat.Id)
+	})
+
+	t.Run("a failed write redraws the stored state with the notice and answers once", func(t *testing.T) {
+		env := newSettingsDelEnv(t)
+		m := env.groupMenu()
+		m.open("dr", "sn")
+		mreqSwap(t, &deletionRuleWrites, deletionRuleWriter{
+			Set:    func(context.Context, int64, string, int) error { return errors.New("write failed") },
+			Remove: func(context.Context, int64, string) error { return errors.New("write failed") },
+		})
+		answers := env.answerCount()
+		m.choose("sn", "600")
+		text, _ := m.last()
+		if !strings.Contains(text, "⚠️ "+staffMarker("common_settings_save_failed")) {
+			t.Errorf("a failed write drew %q, want the save-failed notice", text)
+		}
+		if !strings.Contains(text, "➖ "+staffMarker("settings_del_state_keep")) {
+			t.Errorf("a failed write drew %q, want the old state (Keep)", text)
+		}
+		if got := env.answerCount() - answers; got != 1 {
+			t.Errorf("a failed write was answered %d times, want once", got)
+		}
+		if _, ok := env.stored(deletion.KindPinned); ok {
+			t.Error("a failed write stored a row")
+		}
+	})
+}
+
+func TestSettingsDeletionValidation(t *testing.T) {
+	env := newSettingsDelEnv(t)
+	m := env.groupMenu()
+	m.openHub()
+	row := func(kv ...string) map[string]string { return m.fields(kv...) }
+	both := row("a", "dr", "t", "sj")
+	both["c"] = fmt.Sprint(env.chat.Id)
+	neither := row("a", "dr", "t", "sj")
+	delete(neither, "u")
+	forged := []struct {
+		name   string
+		fields map[string]string
+	}{
+		{"dl with an unknown t", row("a", "dl", "t", "x")},
+		{"dl with a row code", row("a", "dl", "t", "sj")},
+		{"dl with no t", row("a", "dl")},
+		{"dl with an extra key", row("a", "dl", "t", "s", "v", "1")},
+		{"dr with a section code", row("a", "dr", "t", "s")},
+		{"dr with an unknown code", row("a", "dr", "t", "xx")},
+		{"dr with no t", row("a", "dr")},
+		{"dr with an extra key", row("a", "dr", "t", "sj", "p", "d")},
+		{"dr with both c and u", both},
+		{"dr with neither c nor u", neither},
+		{"a bot row with v=0", row("a", "st", "p", "d", "t", "bw", "v", "0")},
+		{"a bot row with v=10", row("a", "st", "p", "d", "t", "bw", "v", "10")},
+		{"v=5", row("a", "st", "p", "d", "t", "sn", "v", "5")},
+		{"v=05", row("a", "st", "p", "d", "t", "sn", "v", "05")},
+		{"v=00", row("a", "st", "p", "d", "t", "sn", "v", "00")},
+		{"v=86401", row("a", "st", "p", "d", "t", "sn", "v", "86401")},
+		{"v=-1", row("a", "st", "p", "d", "t", "sn", "v", "-1")},
+		{"v=+10", row("a", "st", "p", "d", "t", "sn", "v", "+10")},
+		{"v=an Arabic-Indic digit", row("a", "st", "p", "d", "t", "sn", "v", "\u0666\u0660")},
+		{"v=a leading space", row("a", "st", "p", "d", "t", "sn", "v", " 60")},
+		{"v=N", row("a", "st", "p", "d", "t", "sn", "v", "N")},
+		{"v empty", row("a", "st", "p", "d", "t", "sn", "v", "")},
+		{"an unknown t", row("a", "st", "p", "d", "t", "zz", "v", "n")},
+		{"a section code as t", row("a", "st", "p", "d", "t", "s", "v", "n")},
+		{"an extra key", row("a", "st", "p", "d", "t", "sn", "v", "60", "e", "1")},
+		{"tg naming a row", row("a", "tg", "p", "d", "t", "sn", "v", "1")},
+		{"tg with no rule", row("a", "tg", "p", "d", "t", "sn", "v", "n")},
+	}
+	forged = append(forged, settingsDelMemberForged(m)...)
+	for _, tc := range forged {
+		lookups, bots, edits, answers := env.memberLookupsOf(env.chat.Id, env.owner.Id), env.botReads(env.chat.Id), m.editCount(), env.answerCount()
+		data := encodeCallbackData(settingsCallbackNamespace, tc.fields)
+		if data == "" {
+			t.Errorf("%s: the data did not encode", tc.name)
+			continue
+		}
+		env.pressRaw(m.chat, env.owner, m.msgID, data)
+		if text, alert := env.lastAnswer(); text != staffMarker("common_callback_invalid_request") || !alert {
+			t.Errorf("%s: answered %q alert=%v, want the invalid-request alert", tc.name, text, alert)
+		}
+		if env.answerCount()-answers != 1 {
+			t.Errorf("%s: answered %d times, want once", tc.name, env.answerCount()-answers)
+		}
+		if env.memberLookupsOf(env.chat.Id, env.owner.Id) != lookups || env.botReads(env.chat.Id) != bots {
+			t.Errorf("%s: made a getChatMember call before refusing", tc.name)
+		}
+		if m.editCount() != edits {
+			t.Errorf("%s: edited the menu", tc.name)
+		}
+	}
+	settingsDelNoRows(t, env.chat.Id)
+
+	// The valid shapes pass.
+	m.open("dl", "s")
+	m.open("dr", "sj")
+	m.choose("sn", "600")
+	if delay, ok := env.stored(deletion.KindPinned); !ok || delay != 600 {
+		t.Errorf("a valid choice stored %d (%v), want 600", delay, ok)
+	}
+	m.choose("bw", "60")
+	if delay, ok := env.stored(deletion.KindBotWelcome); !ok || delay != 60 {
+		t.Errorf("a valid bot choice stored %d (%v), want 60", delay, ok)
+	}
+	m.choose("sn", "n")
+	if _, ok := env.stored(deletion.KindPinned); ok {
+		t.Error("n did not remove the row")
+	}
+
+	// The valid member shapes pass too, the Yes of a card included.
+	m.open("dl", "m")
+	m.choose("mc", "0")
+	m.choose("me", "900")
+	for kind, want := range map[string]int{deletion.KindMemberCommands: 0, deletion.KindMemberEdited: 900} {
+		if delay, ok := env.stored(kind); !ok || delay != want {
+			t.Errorf("a valid member choice stored %s = %d (%v), want %d", kind, delay, ok, want)
+		}
+	}
+	yes := row("a", "dy", "t", "ms", "v", "3600", "e", settingsCardExpiry(time.Now()))
+	env.pressRaw(m.chat, env.owner, m.msgID, encodeCallbackData(settingsCallbackNamespace, yes))
+	if delay, ok := env.stored(deletion.KindMemberSelfDestruct); !ok || delay != 3600 {
+		t.Errorf("a valid Yes stored %d (%v), want 3600", delay, ok)
+	}
+}
+
+// settingsDelMemberForged are the forged presses of the Member messages section (C17-3): each is
+// refused in step 1, before any getChatMember, with the invalid-request alert.
+func settingsDelMemberForged(m *settingsDelMenu) []struct {
+	name   string
+	fields map[string]string
+} {
+	row := func(kv ...string) map[string]string { return m.fields(kv...) }
+	yes := func(kv ...string) map[string]string {
+		return row(append([]string{"a", "dy", "t", "ms", "v", "600", "e", "29900000"}, kv...)...)
+	}
+	without := func(key string) map[string]string {
+		fields := yes()
+		delete(fields, key)
+		return fields
+	}
+	with := func(key, value string) map[string]string {
+		fields := yes()
+		fields[key] = value
+		return fields
+	}
+	// Small IDs keep the forged data inside the 64-byte cap, so it still encodes.
+	both := map[string]string{"a": "dy", "c": "-1", "u": "1", "t": "ms", "v": "600", "e": "29900000"}
+	neither := yes()
+	delete(neither, "u")
+	return []struct {
+		name   string
+		fields map[string]string
+	}{
+		{"dl with the member section and an extra key", row("a", "dl", "t", "m", "v", "1")},
+		{"dr with the member section code", row("a", "dr", "t", "m")},
+		{"Commands with v=60", row("a", "st", "p", "d", "t", "mc", "v", "60")},
+		{"Commands with v=1", row("a", "st", "p", "d", "t", "mc", "v", "1")},
+		{"Edited with v=0", row("a", "st", "p", "d", "t", "me", "v", "0")},
+		{"Edited with v=600", row("a", "st", "p", "d", "t", "me", "v", "600")},
+		{"Self-destruct with v=30", row("a", "st", "p", "d", "t", "ms", "v", "30")},
+		{"Self-destruct with v=0", row("a", "st", "p", "d", "t", "ms", "v", "0")},
+		{"Self-destruct with v=05", row("a", "st", "p", "d", "t", "ms", "v", "05")},
+		{"Self-destruct with v=86401", row("a", "st", "p", "d", "t", "ms", "v", "86401")},
+		{"tg naming Commands", row("a", "tg", "p", "d", "t", "mc", "v", "1")},
+		{"tg naming Edited", row("a", "tg", "p", "d", "t", "me", "v", "1")},
+		{"tg naming Self-destruct", row("a", "tg", "p", "d", "t", "ms", "v", "1")},
+		{"dy for Commands", with("t", "mc")},
+		{"dy for Edited", with("t", "me")},
+		{"dy for a Phase 16 row", with("t", "sn")},
+		{"dy for the section", with("t", "m")},
+		{"dy with v=n", with("v", "n")},
+		{"dy with v=30", with("v", "30")},
+		{"dy with v=0", with("v", "0")},
+		{"dy with v=05", with("v", "05")},
+		{"dy with no v", without("v")},
+		{"dy with no t", without("t")},
+		{"dy with no e", without("e")},
+		{"dy with e=x", with("e", "x")},
+		{"dy with e=0", with("e", "0")},
+		{"dy with e=-5", with("e", "-5")},
+		{"dy with e over 63 bits", with("e", "9223372036854775808")},
+		{"dy with an extra key", yes("p", "d")},
+		{"dy with both c and u", both},
+		{"dy with neither c nor u", neither},
+	}
+}
+
+func TestSettingsAuthorityDeletion(t *testing.T) {
+	env := newSettingsDelEnv(t)
+	admin := env.admin
+	listEditAdmin(env.settingsEnv, env.chat, admin, false)
+	m := env.groupMenuOf(admin)
+
+	// Opening needs only the admin check every press makes.
+	for _, kv := range [][]string{{"a", "op", "p", "d"}, {"a", "dl", "t", "s"}, {"a", "dr", "t", "sn"}} {
+		m.press(kv...)
+		if text, _ := m.last(); containsMarker(text, "settings_no_change_info") || containsMarker(text, "settings_cannot_open") {
+			t.Errorf("an administrator without can_change_info could not open %v: %q", kv, text)
+		}
+	}
+
+	// A change needs can_change_info on the press's fresh record.
+	edits, answers := m.editCount(), env.answerCount()
+	m.choose("sn", "600")
+	if text, alert := env.lastAnswer(); text != staffMarker("settings_no_change_info") || !alert {
+		t.Errorf("a change without the right answered %q alert=%v, want settings_no_change_info", text, alert)
+	}
+	if m.editCount() != edits || env.answerCount()-answers != 1 {
+		t.Error("a refused change edited the menu or was not answered exactly once")
+	}
+	if _, ok := env.stored(deletion.KindPinned); ok {
+		t.Error("a refused change was written")
+	}
+	env.sendIn(env.chat, admin, "/cleanservice on")
+	if settings, err := deletionFlagLookup(context.Background(), env.chat.Id); err != nil || settings.ShouldCleanService {
+		t.Errorf("the command let an administrator without the right turn /cleanservice on: %+v (%v)", settings, err)
+	}
+
+	listEditAdmin(env.settingsEnv, env.chat, admin, true)
+	cache.InvalidateAdminCache(env.chat.Id) // the command reads the cached administrator list
+	m.choose("sn", "600")
+	if delay, ok := env.stored(deletion.KindPinned); !ok || delay != 600 {
+		t.Errorf("an administrator with can_change_info stored %d (%v), want 600", delay, ok)
+	}
+	env.sendIn(env.chat, admin, "/cleanservice on")
+	if settings, err := deletionFlagLookup(context.Background(), env.chat.Id); err != nil || !settings.ShouldCleanService {
+		t.Errorf("where the menu allows the change the command refused it: %+v (%v)", settings, err)
+	}
+
+	// The creator passes without the flag.
+	owner := env.groupMenu()
+	owner.choose("sp", "0")
+	if delay, ok := env.stored(deletion.KindPhoto); !ok || delay != 0 {
+		t.Errorf("the creator stored %d (%v), want a stored 0", delay, ok)
+	}
+}
+
+// settingsDelSnapshot is the stored state a parity test compares: the shared flag, the delay rows
+// (fresh) and whether the cached reads agree with them.
+type settingsDelSnapshot struct {
+	Flag        bool
+	Delays      map[string]int
+	CacheAgrees bool
+}
+
+func (e *settingsDelEnv) snapshot() settingsDelSnapshot {
+	e.t.Helper()
+	ctx := context.Background()
+	settings, err := deletionFlagLookup(ctx, e.chat.Id)
+	if err != nil {
+		e.t.Fatalf("read the flag: %v", err)
+	}
+	fresh, err := deletion.GetRulesFresh(ctx, e.chat.Id)
+	if err != nil {
+		e.t.Fatalf("read the rules fresh: %v", err)
+	}
+	cached, err := deletion.GetRules(ctx, e.chat.Id)
+	if err != nil {
+		e.t.Fatalf("read the rules cached: %v", err)
+	}
+	return settingsDelSnapshot{Flag: settings.ShouldCleanService, Delays: fresh.Delays, CacheAgrees: fmt.Sprint(fresh.Delays) == fmt.Sprint(cached.Delays)}
+}
+
+func TestSettingsParityCleanService(t *testing.T) {
+	modes := []struct {
+		name, value string
+		state       deletion.JoinLeftState
+	}{
+		{"keep", "n", deletion.JoinLeftState{Mode: deletion.JoinLeftKeep}},
+		{"now", "0", deletion.JoinLeftState{Mode: deletion.JoinLeftNow}},
+		{"after 10 min", "600", deletion.JoinLeftState{Mode: deletion.JoinLeftAfter, DelaySecs: 600}},
+	}
+	for _, tc := range settingsDelServiceCases[:2] {
+		other := deletion.KindLeft
+		if tc.kind == deletion.KindLeft {
+			other = deletion.KindJoined
+		}
+		for _, mode := range modes {
+			t.Run(tc.code+" "+mode.name, func(t *testing.T) {
+				// The same earlier state in both: the flag on and a delay row on the other kind.
+				seed := func(env *settingsDelEnv) {
+					env.setJoinLeft(other, deletion.JoinLeftState{Mode: deletion.JoinLeftAfter, DelaySecs: 60})
+				}
+				menuEnv := newSettingsDelEnv(t)
+				seed(menuEnv)
+				m := menuEnv.groupMenu()
+				m.open("dr", tc.code)
+				m.choose(tc.code, mode.value)
+				viaMenu := menuEnv.snapshot()
+
+				applyEnv := newSettingsDelEnv(t)
+				seed(applyEnv)
+				applyEnv.setJoinLeft(tc.kind, mode.state)
+				viaApply := applyEnv.snapshot()
+				if fmt.Sprint(viaMenu) != fmt.Sprint(viaApply) || !viaMenu.CacheAgrees {
+					t.Errorf("menu left %+v, applyCleanServiceRule left %+v", viaMenu, viaApply)
+				}
+			})
+		}
+	}
+
+	t.Run("the command and the menu agree from a clean start", func(t *testing.T) {
+		for _, tc := range []struct{ command, value string }{{"/cleanservice on", "0"}, {"/cleanservice off", "n"}} {
+			menuEnv := newSettingsDelEnv(t)
+			m := menuEnv.groupMenu()
+			m.choose("sj", tc.value)
+			commandEnv := newSettingsDelEnv(t)
+			commandEnv.sendIn(commandEnv.chat, commandEnv.owner, tc.command)
+			if a, b := menuEnv.snapshot(), commandEnv.snapshot(); fmt.Sprint(a) != fmt.Sprint(b) {
+				t.Errorf("%s: the menu left %+v, the command %+v", tc.command, a, b)
+			}
+		}
+	})
+
+	t.Run("the command reads the same on the screens", func(t *testing.T) {
+		env := newSettingsDelEnv(t)
+		m := env.groupMenu()
+		for _, tc := range []struct{ command, icon, word string }{
+			{"/cleanservice on", "🗑", "settings_del_state_now"}, {"/cleanservice off", "➖", "settings_del_state_keep"},
+		} {
+			env.sendIn(env.chat, env.owner, tc.command)
+			text, _ := m.open("dl", "s")
+			for _, key := range []string{"settings_del_svc_joined", "settings_del_svc_left"} {
+				settingsDelWantLine(t, text, key, tc.icon, staffMarker(tc.word))
+			}
+		}
+	})
+}
+
+func TestSettingsDriftDeletion(t *testing.T) {
+	env := newSettingsDelEnv(t)
+	m := env.groupMenu()
+	configs := []struct {
+		name  string
+		setup func()
+	}{
+		{"flag off with a stale joined row", func() {
+			env.setJoinLeft(deletion.KindJoined, deletion.JoinLeftState{Mode: deletion.JoinLeftKeep})
+			if err := deletion.SetRule(context.Background(), env.chat.Id, deletion.KindJoined, 60); err != nil {
+				t.Fatalf("SetRule error = %v", err)
+			}
+			env.setRule(deletion.KindPinned, 600)
+			env.setRule(deletion.KindBotAuto, 3600)
+		}},
+		{"flag on with a left row and no joined row", func() {
+			env.setJoinLeft(deletion.KindLeft, deletion.JoinLeftState{Mode: deletion.JoinLeftAfter, DelaySecs: 21600})
+			env.setRule(deletion.KindPhoto, 0)
+		}},
+	}
+	for _, cfg := range configs {
+		cfg.setup()
+		for _, tc := range append(append([]settingsDelCase{}, settingsDelServiceCases...), settingsDelBotCases...) {
+			// What the watcher and the send sites act on.
+			delay, on, err := deletionRuleFor(context.Background(), env.chat.Id, tc.kind)
+			if err != nil {
+				t.Fatalf("%s: deletionRuleFor(%s) error = %v", cfg.name, tc.kind, err)
+			}
+			list := "s"
+			if tc.code[0] == 'b' {
+				list = "b"
+			}
+			text, _ := m.open("dl", list)
+			section, row, _ := settingsDelRowByCode(tc.code)
+			icon, words, _ := settingsDelWantState(settingsDelWantWordsFor(tc.code, section.NoneKey), row.Presets, delay, on)
+			settingsDelWantLine(t, text, tc.nameKey, icon, words...)
+		}
+	}
+}
+
+func TestSettingsDeletionStaleState(t *testing.T) {
+	env := newSettingsDelEnv(t)
+	m := env.groupMenu()
+	text, _ := m.open("dr", "sn")
+	if !strings.Contains(text, "➖ "+staffMarker("settings_del_state_keep")) {
+		t.Fatalf("the first draw = %q, want Keep", text)
+	}
+	// Another replica writes the rule: its repository call drops the shared cache key.
+	if err := deletion.SetRule(context.Background(), env.chat.Id, deletion.KindPinned, 600); err != nil {
+		t.Fatalf("SetRule error = %v", err)
+	}
+	if old, _ := m.last(); !strings.Contains(old, "➖ "+staffMarker("settings_del_state_keep")) {
+		t.Errorf("the drawn message changed without a press: %q", old)
+	}
+	text, _ = m.open("dr", "sn")
+	if !strings.Contains(text, "⏳ "+staffMarker("settings_del_state_after")+" "+staffMarker("settings_del_delay_10m")) {
+		t.Errorf("the next press drew %q, want the new state", text)
+	}
+
+	// A press after the bot lost its right still stores the rule and shows the warning once.
+	env.setBot(settingsDelBotJSON("member", false))
+	m.choose("sn", "60")
+	text, _ = m.last()
+	if delay, ok := env.stored(deletion.KindPinned); !ok || delay != 60 {
+		t.Errorf("stored pinned = %d (%v), want 60", delay, ok)
+	}
+	if strings.Count(text, staffMarker("settings_del_no_right")) != 1 {
+		t.Errorf("the redraw = %q, want the no-right line once", text)
+	}
+}

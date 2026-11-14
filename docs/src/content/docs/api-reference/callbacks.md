@@ -10,8 +10,8 @@ This page documents all inline button callback handlers in Fuku Robot.
 
 ## Overview
 
-- **Total Callbacks**: 26
-- **Modules with Callbacks**: 18
+- **Total Callbacks**: 27
+- **Modules with Callbacks**: 19
 
 ## Callback Data Format
 
@@ -54,12 +54,14 @@ versions, and legacy unversioned dot-notation payloads are rejected.
 | Help | `configuration` | botConfig |
 | Help | `helpq` | helpButtonHandler |
 | Languages | `change_language` | langBtnHandler |
+| Member requirements | `mreq` | memberReqFixedCallback |
 | Notes | `notes.overwrite` | noteOverWriteHandler |
 | Notes | `rmAllNotes` | notesButtonHandler |
 | Pins | `unpinallbtn` | unpinallCallback |
 | Purges | `deleteMsg` | deleteButtonHandler |
 | Reactions | `reactions_help` | reactionsHelpHandler |
 | Reports | `report` | markResolvedButtonHandler |
+| Settings | `settings` | settingsCallback |
 | Warns | `rmAllChatWarns` | warnsButtonHandler |
 | Warns | `rmWarn` | rmWarnButton |
 
@@ -189,6 +191,33 @@ Handles confirmation callback for removing all approved users.
 - **Handler**: `langBtnHandler`
 - **Source**: `language.go`
 
+### Member requirements
+
+#### `mreq`
+
+- **Handler**: `memberReqFixedCallback`
+- **Source**: `memberreq_fixed.go`
+
+The I fixed it button of a requirement mute notice. Fields: exactly `a=f`, `h` the hold row ID and `u` the held member,
+positive whole numbers of at most 19 digits; anything else is an invalid request, refused before any lookup. Only the
+member `u` may press it, and an administrator who presses it is refused (admins lift a mute with `/unmute`). The hold is
+matched by its ID, the chat and the member, the member's live record must carry the requirements' own mute marker (an
+admin's, staff, captcha, antiflood or warn-limit mute is never lifted), the live names are judged again against the
+group's current settings, and the member is unmuted with the group's own permissions (the stored pre-lockdown
+permissions during a lockdown). The query is answered exactly once, in the group's language.
+
+The order of a press is fixed and each step refuses before the next runs. After the live marker check (step 4) comes
+step 4b: the approvals are read, and an approved member is judged clean for every rule, so they are freed without a
+settings read or a lookup (an unreadable approval is a "could not check" answer and changes nothing). Otherwise step 5
+judges every enabled rule again: the name rules on the live record, and the profile photo and channel rules with fresh
+lookups that bypass the positive caches, under a 5 second budget of the press's 10 seconds. The AI rule is judged with
+the live names too but always answers from its verdict cache: for unchanged names the press gives the same answer every
+time with no request, and only a renamed member costs one request, through the rule's breaker, gate and hourly budgets. An
+AI that is not configured is inert, and an answer the AI cannot give is "could not check". A rule still broken beats a
+lookup that cannot be answered: one to four broken rules are named in the answer, five or more (up to eight) are counted,
+and with nothing broken an unknown lookup answers "could not check" and changes nothing. A channel lookup that cannot be answered
+for a bot that is definitely not an administrator of the channel makes the channel rule inert (not broken).
+
 ### Notes
 
 #### `notes.overwrite`
@@ -230,6 +259,187 @@ Displays help information for reaction commands.
 
 - **Handler**: `markResolvedButtonHandler`
 - **Source**: `reports.go`
+
+### Settings
+
+#### `settings`
+
+- **Handler**: `settingsCallback`
+- **Source**: `settings_menu.go`, `settings_pages.go`, `settings_edit.go`, `settings_edit_actions.go`, `settings_edit_preview.go`
+
+The settings menu's buttons. Fields: `a` the action, `c` the group's chat ID (a menu opened in private) or `u` the opener's
+user ID (a menu opened in the group), never both; `p` the page; `t` the control or the part; `v` the absolute target
+value. A press with an unknown field is refused before any lookup.
+
+The message editor's pages and codes:
+
+| Page (`p`) | Part codes (`t`) | Controls (`t`) | Set | Remove | Cancel | Preview | Full preview |
+|------------|------------------|----------------|-----|--------|--------|---------|--------------|
+| `w` Welcome | `x` text, `m` media, `b` buttons | `e` on/off, `d` delete last, `o` greet once, `u` media under text | `ws` | `wr` | `wc` | `wv` | `wf` |
+| `g` Goodbye | `x` text, `m` media, `b` buttons | `e` on/off, `d` delete last, `u` media under text | `gs` | `gr` | `gc` | `gv` | `gf` |
+| `r` Rules | `x` text, `m` media, `b` buttons | `u` media under text | `rs` | `rr` | `rc` | `rv` | `rf` |
+
+Set, Remove, Cancel and Preview carry exactly one field, `t`, a part code of the page (a missing, unknown or extra field is
+an invalid request); Full preview carries none. Set works only from a private menu and waits for the owner's next private
+message; in a menu opened in the group Set, Remove and Cancel write nothing and point to the private chat. A preview is
+always sent to the presser's own private chat.
+
+The Member requirements page (`m`, the Requirements page of the menu) has these controls and actions:
+
+| Item | Code | Fields | Notes |
+|------|------|--------|-------|
+| Rule screen | `a=mo` | `t` a rule code (`ln` last name, `un` username, `ru` Russian, `ar` Arabic, `zh` Chinese, `ph` profile photo, `ch` channel, `ai` AI spam name) | opens the screen of one rule |
+| Rule controls | `ln` `un` `ru` `ar` `zh` `ph` `ch` `ai` | `a=st`, `t`, `v` one digit `0` to `4` | `st` only (a `tg` on one is an invalid request); `0` Off, `1` Warn, `2` Kick, `3` Ban, `4` Mute |
+| Confirm card | `a=my` | `t`, `v` (`2` to `4`), `e` expiry in unix minutes | the Yes of the card a Kick, Ban or Mute press draws; Off and Warn are written at once |
+| Switches | `j` Check on join, `d` Delete messages | `a=tg` or `a=st`, `t`, `v` `0` or `1` | any other `v` is an invalid request |
+
+Each control declares the actions it accepts (the `Actions` allow-list of the control), and a press with any other code is
+refused before any lookup.
+
+The page has eight rule cells in four rows, a switch row and the navigation row. Its body ends with a status block, a
+list of lines saying when a rule cannot work in this group: a basic group (rules act on supergroups only), a channel rule
+with no linked channel, or a linked channel whose bot is not an administrator, and an AI rule while the AI is not
+configured (`ENABLE_AISPAM` off or no Anthropic key on the server); a check that could not be made shows the
+unknown mark and never an error. The channel rule's screen offers `Off` alone while the group has no linked channel. A
+punishing press of the channel rule (`a=st` with `v` `1` to `4`, and the card's Yes `a=my`) makes one live link check
+after every other step: a group with no linked channel answers an alert, writes nothing and redraws the Off-only screen, and
+a link that cannot be read answers a "could not check" alert and changes nothing. `Off` never makes the check.
+
+The AI rule (`ai`) has a gate of its own, a pure check of the server's configuration that runs after the same steps: while
+the AI is not configured its screen offers `Off` alone (with the AI line in the status slot and the stored value still
+shown), and a punishing press (`a=st` with `v` `1` to `4`, or the card's Yes `a=my`) is refused with an alert that names
+the rule, writes nothing and redraws the Off-only screen. `Off` is always accepted, so an administrator can clear a stored
+value. The AI card says its own consequence for Kick, Ban and Mute: the rule judges a member when they join or write for
+the first time and again after a name change, and members who are already in the group are judged only when they
+rename, so it does not claim to act on every member at their next message. Only the first name, last name and username
+are sent to Anthropic's Claude, never messages.
+
+The Deletion page (`d`, between the Requirements and Access pages of Main) has three levels, all built from two tables (three sections: Service messages, Bot messages and Member messages), and
+is not drawn or reachable in a Staff Group (a press there is answered as an invalid request and writes nothing):
+
+| Item | Code | Fields | Notes |
+|------|------|--------|-------|
+| Hub | `a=op`, `p=d` | none more | Service messages, Bot messages and Member messages; Back is Main |
+| Section list | `a=dl` | `t` `s` (Service messages), `b` (Bot messages) or `m` (Member messages) | one cell per row; Back is the hub |
+| Row screen | `a=dr` | `t` a row code | `sj` joined, `sl` left, `sp` photo, `sh` title, `sn` pinned, `sv` video chat, `sf` forum topic, `sb` boost, `sa` auto-delete timer, `sk` background, `sg` giveaway, `so` other (service); `bw` welcome, `bg` goodbye, `br` rules, `ba` automatic punishments, `bm` manual punishments (bot); `mc` Commands, `me` Edited messages, `ms` Self-destruct (member); Back is the row's list |
+| Choice | `a=st`, `p=d` | `t` a row code, `v` `n` or a preset | `n` is Keep on a service row and Off on a bot row; a service row's presets are `0` (Delete now), `10`, `60`, `600`, `3600`, `21600`, `86400` seconds, a bot row's `60`, `600`, `3600`, `21600`, `86400`; Commands `0` (On) only, Edited messages (the grace) `30`, `60`, `300`, `900`, `3600`, Self-destruct `60`, `300`, `600`, `3600`, `21600`, `86400`; `tg` is refused |
+| Self-destruct Yes | `a=dy`, `p=d` | `t` `ms`, `v` one of its presets (never `n`), `e` expiry in unix minutes | the Yes of the Self-destruct card |
+
+Every choice of the Service and Bot sections, and Commands and Edited messages, writes at once: there is no confirmation card and no `e` field. The one card is Self-destruct's: choosing a delay writes nothing and draws a two-tap card (`[Yes | No]`), its Yes `a=dy` writes after the whole press pipeline again (an expired Yes, or one from a presser who lost the change-info right, writes nothing), and Off is one tap with no card and cancels the waiting deletions. A stored delay a member rule does not accept reads as Off. `v` is the canonical decimal seconds of one of the
+row's own presets (no sign, space, non-ASCII digit or leading zero); anything else, a missing or extra field, is an invalid
+request refused before any lookup. A press of the stored value writes nothing. Joined and left share one flag with
+`/cleanservice`: Keep clears it and removes both delay rows, Delete now or After N turns it on. The largest button of the
+page is 57 bytes (the card's Yes; 53 in a group menu, every choice at most 50). Every deletion screen carries one line about the bot's right to delete (nothing when it can, a warning
+when it cannot, an unknown mark when that could not be read); the rule can still be set while the line shows.
+
+A switch is pressed with the toggle action `tg`: its `t` must be a control of the page (`e`, `d`, `o` or `u` as the table
+lists them) and its `v` the absolute target, `0` or `1`; anything else is an invalid request, refused before any lookup.
+Media under text (`u`) is drawn only while the stored media is a photo, a video or a GIF; a press on a switch that is no
+longer drawn writes nothing and redraws the page with a notice.
+
+The Warnings page (`n`, between the Antiflood and Welcome pages of Main) has two controls, both `st` only (a `tg` is an invalid
+request, refused before any lookup):
+
+| Control | Code (`t`) | `v` | Notes |
+|---------|------------|-----|-------|
+| Warn limit | `l` | 1 to 3 digits | the stepper sends the absolute target, clamped to 1 to 100; a step at 1 or 100 answers a toast and writes nothing; 0 and over 100 are refused with the command's own text |
+| Action at the limit | `m` | 1 to 10 lower-case letters | `ban`, `kick` or `mute`; any other word of that shape is refused with `/setwarnmode`'s own text as a notice and writes nothing |
+
+A stored `tban`, `tmute` or empty action is drawn as stored (or Not set) with a line saying the bot does not act on it and no
+choice marked; pressing Mute, Ban or Kick replaces it. The page writes through the same functions as `/setwarnlimit` and
+`/setwarnmode`. The largest button of the page is 48 bytes in a private menu and 44 in a group menu.
+
+The Switches page (`t`, between the Deletion and Access pages of Main) has three toggles, each `tg` only (an `st` is an
+invalid request, refused before any lookup) with `v` exactly `0` or `1`, the absolute target:
+
+| Control | Code (`t`) | `v` | Notes |
+|---------|------------|-----|-------|
+| Reports | `r` | `0` or `1` | writes through the function `/reports on` and `/reports off` call, the report status the report path reads |
+| AI spam filter | `a` | `0` or `1` | `1` is refused with an alert, writing nothing, while the filter cannot run on this bot; `0` always works; the toggle is not drawn while the filter is unavailable and off |
+| Auto-approve joins | `j` | `0` or `1` | writes through the function `/autoapprove on` and `off` call |
+
+Each press needs the right of its command (see the permissions reference) and is refused with that command's own text. The
+largest button of the page is 45 bytes in a private menu and 41 in a group menu.
+
+The Language page (`u`, between the Switches and Access pages of Main) has one control, `l`, `st` only (a `tg` is an invalid
+request, refused before any lookup):
+
+| Control | Code (`t`) | `v` | Notes |
+|---------|------------|-----|-------|
+| Group language | `l` | exactly two lower-case ASCII letters | one of `uk`, `en`, `es`, `fr`, `hi`, `ru`, `pt`, `id`; any other two-letter code is refused with `language_invalid_selection` as a notice and writes nothing; a press of the stored language writes nothing |
+
+The grid shows the enabled languages (`ENABLED_LOCALES`), two to a row, each in its own words, with the stored language marked
+by a check mark in place of its flag. The press writes through the function the language buttons of `/lang` use, and never
+touches the user's own language. In a menu opened in the group the page is redrawn in the new language; a menu opened in
+private stays in the opener's language. The largest button of the page is 46 bytes in a private menu and 42 in a group menu.
+
+The Log channel page (`o`, between the Language and Access pages of Main) has one toggle per log category, each `tg` only (an
+`st` is an invalid request, refused before any lookup) with `v` exactly `0` or `1`, the absolute target:
+
+| Category | Code (`t`) | `v` | Notes |
+|----------|------------|-----|-------|
+| Settings | `s` | `0` or `1` | the `#SETTINGS` audit post itself; turning it off posts nothing |
+| Admin actions | `a` | `0` or `1` | |
+| User actions | `u` | `0` or `1` | |
+| Automated | `m` | `0` or `1` | |
+| Reports | `r` | `0` or `1` | |
+| Other | `o` | `0` or `1` | |
+
+A press writes exactly that category through the function `/log` and `/nolog` call and then posts the same `#SETTINGS` line to
+the log channel; with no channel linked it is refused with the notice `No log channel is set for this chat.` and writes
+nothing. The page shows whether a channel is linked, never which one. The buttons are a two-column grid of "icon name" cells
+(`✅` on, `❌` off), each sending the opposite value. The largest button of the page is 45 bytes in a private menu and 41 in a
+group menu.
+
+The Anonymous admins page (`y`, between the Log channel and Access pages of Main) has one control, the toggle `m`, `tg` only
+(an `st` is an invalid request, refused before any lookup) with `v` exactly `0` or `1`, the absolute target:
+
+| Control | Code (`t`) | `v` | Notes |
+|---------|------------|-----|-------|
+| AnonAdmin mode | `m` | `0` or `1` | `1` turns the mode on, `0` off; a press of the stored value writes nothing |
+
+A press writes through the function `/anonadmin on` and `off` call. Only the group's live creator may press it, and only while
+the bot is an administrator: another administrator is answered the alert `You need to be the group creator to do this!` and a bot that is not
+an administrator the notice `I'm not admin!`, each with nothing written. Any admin the owner gate admits can open the
+page and read the mode. The largest button of the page is 45 bytes in a private menu and 41 in a group menu.
+
+The Locks page (`k`, between the Warnings and Welcome pages of Main) is drawn from one table of 22 locks, 12 on page 1 and 10 on
+page 2. Each lock has a two-letter control code (`t`), `tg` only (an `st` is an invalid request, refused before any lookup),
+with `v` exactly `0` or `1`, the absolute target (`1` locks, `0` unlocks):
+
+| Page | Codes (`t`) |
+|------|-------------|
+| 1 | `sk` sticker, `gf` gif, `ph` photo, `vd` video, `vn` videonote, `vo` voice, `au` audio, `dc` document, `ct` contact, `lc` location, `gm` game, `ur` url |
+| 2 | `fw` forward, `rt` rtl, `ac` anonchannel, `bt` bots, `ms` messages, `cm` comments, `md` media, `ot` other, `pv` previews, `al` all |
+
+A press writes exactly that lock through the function `/lock` and `/unlock` call and redraws the page the lock is on, so no page
+field travels with it; a lock with no stored row reads Unlocked. The pager is the page action `kg` with exactly one field, `v`,
+the absolute page (one or two digits, clamped to 1 to 2): Next is drawn only on page 1 and Prev only on page 2. Every draw
+states once whether the bot can delete messages. The largest button of the page is 46 bytes in a private menu and 42 in a group
+menu (the pager 37 and 33).
+
+The three list pages, `b` (Blacklist), `i` (Filters) and `e` (Notes), are one engine with three tables. They exist only in the
+bot's private menu: every one of their actions carries the owner field `c` and none carries `u`, so a press of a menu opened in
+the group is an invalid request before any lookup, and a group menu shows only a note that points to the private chat. No
+callback carries a word, keyword, note name or reply; an entry is named by its numeric row ID `r` (1 to 17 digits, checked against
+the pressed menu's chat before anything is deleted) and the pager cursor `v` is at most four digits.
+
+| Action | Blacklist | Filters | Notes | Fields | Right |
+|--------|-----------|---------|-------|--------|-------|
+| Pager (absolute page, clamped) | `bp` | `ig` | `eg` | `c`, `v` | Admin |
+| Delete ask (draws the card) | `bx` | `ix` | `ex` | `c`, `r`, `v` the page to return to | the page's write right |
+| Delete Yes | `by` | `iy` | `ey` | `c`, `r`, `e` expiry in unix minutes | the page's write right, judged again |
+| Add (waits for a typed reply) | `bn` | `ia` | `ea` | `c` | the page's write right |
+| Cancel the wait | `bc` | `ic` | `ec` | `c`, `t` a part code of the page | Admin |
+| Action screen (Blacklist only) | `bo` | | | `c` | Admin |
+| Set action (Blacklist only) | `bs` | | | `c`, `v` one of `warn`, `mute`, `kick`, `ban`, `none` | the page's write right |
+
+The part codes (`t`) of the typed add are `w` (the words) for Blacklist, `k` (keyword) then `y` (reply) for Filters and `n` (name)
+then `c` (content) for Notes. Each press runs the whole pipeline of the menu, so the right is judged live on a fresh member record
+at the ask and again at the Yes. The write rights are `settingsRightRestrictBotRestrict` for the Blacklist (the commands'
+`/addblacklist`, `/rmblacklist` and `/blacklistaction`), `settingsRightChangeInfo` for Filters (`/filter`, `/stop`) and
+`settingsRightChangeInfoBotAdmin` for Notes (`/save`, `/clear`). The largest button of the pages is the delete Yes at exactly 64
+bytes (a 14-character chat ID and a 17-digit row ID); the pager is 40, the ask 60, Add 33 and Cancel 37.
 
 ### Warns
 

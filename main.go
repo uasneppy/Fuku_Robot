@@ -206,6 +206,36 @@ func main() {
 		modules.StopStaffSweeper()
 		return nil
 	})
+	// Registered right after the staff sweeper's stop, so LIFO runs it after the staff
+	// actions drain below (it never takes from that drain's 31 s) and before the database
+	// closes. It cancels the sweep context and then waits on the sweep's WaitGroup, so it
+	// returns once the in-flight call ends: every Telegram call of a sweep derives from that
+	// cancelled context and the one roster write in flight is bounded by the database context
+	// it was started with. A database call that ignored cancellation would hold it until its
+	// own 10 s handler timeout.
+	shutdownManager.RegisterHandler(func() error {
+		log.Info("[Shutdown] Stopping admin index sweeper...")
+		modules.StopAdminIndexSweeper()
+		return nil
+	})
+	// Registered right after the admin index sweeper's stop and before the member requirements
+	// drain, so LIFO runs it after the staff actions drain and the member requirements drain and
+	// before the admin index sweeper stop and the database close. It cancels the deletion root
+	// context and waits at most 3 s; every Telegram call of a cycle and every inline delete
+	// derives from that cancelled root, so it returns as soon as the calls end. Every queued row
+	// resumes from the database: a cycle cut off leaves its rows pending, or claimed until the
+	// 2 minute stale release. The handler logs and returns nil.
+	shutdownManager.RegisterHandler(func() error {
+		log.Info("[Shutdown] Stopping deletion worker...")
+		modules.StopDeletionWorker()
+		return nil
+	})
+	// Registered right before the staff actions drain, so LIFO runs it after that drain and
+	// before the deletion worker stop and the database close: the enforcement jobs of the
+	// member requirements read and write holds, warns and notices. It cancels the jobs and
+	// waits at most 2 s, plus a grace period. Every hold resumes from the database: a job cut
+	// off leaves a pending hold that a reclaim retries.
+	modules.RegisterMemberReqDrain(shutdownManager)
 	// Also registered after the DB-close handler, so LIFO cancels the staff fan-outs
 	// and lets them deliver their final summaries before the database closes: their
 	// workers still write links through recheckLink while they wind down. It gets the
@@ -398,7 +428,7 @@ func resolveBotUsername(b *gotgbot.Bot) string {
 
 func newConfiguredDispatcher(maxRoutines int) *ext.Dispatcher {
 	return ext.NewDispatcher(&ext.DispatcherOpts{
-		Processor:   tracing.TracingProcessor{},
+		Processor:   modules.CommandDeletionProcessor{Inner: tracing.TracingProcessor{}},
 		Error:       dispatcherErrorHandler,
 		MaxRoutines: maxRoutines,
 	})
@@ -481,7 +511,9 @@ func postInit(b *gotgbot.Bot, d *ext.Dispatcher, username string, mode string) {
 		log.Fatalf("[Captcha] Failed to start lifecycle: %v", err)
 	}
 	modules.StartStaffSweeper(b)
+	modules.StartAdminIndexSweeper(b)
 	modules.StartLockdownWorker(b)
+	modules.StartDeletionWorker(b)
 	log.Infof("[Modules] Loaded modules: %s", fuku.ListModules())
 
 	config.AppConfig.WorkingMode = mode

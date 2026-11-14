@@ -333,6 +333,9 @@ func (moduleStruct) pin(c *helpers.CommandContext) error {
 	}
 
 	if pin {
+		// A pinned message stays: the bot's own pin service message is never seen by the
+		// self-destruct watcher (it never sees bot senders), so drop the row here (D-11).
+		memberDeletePinned(chat.Id, prevMessage.MessageId)
 		pinLink := chat_status.GetMessageLinkFromMessageId(chat, prevMessage.MessageId)
 		text := fmt.Sprintf(pinMsg, pinLink)
 		_, err = prevMessage.Reply(c.Bot, text, formatting.Shtml())
@@ -745,8 +748,8 @@ func LoadPin(dispatcher *ext.Dispatcher) {
 	helpers.WrapCommand(dispatcher, permaPinDesc, pinsModule.permaPin)
 	helpers.WrapCommand(dispatcher, pinnedDesc, pinsModule.pinned)
 
-	dispatcher.AddHandler(handlers.NewCommand("antichannelpin", pinsModule.antichannelpin))
-	dispatcher.AddHandler(handlers.NewCommand("cleanlinked", pinsModule.cleanlinked))
+	dispatcher.AddHandler(helpers.NewBotCommand("antichannelpin", pinsModule.antichannelpin))
+	dispatcher.AddHandler(helpers.NewBotCommand("cleanlinked", pinsModule.cleanlinked))
 
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("unpinallbtn"), pinsModule.unpinallCallback))
 	dispatcher.AddHandlerToGroup(

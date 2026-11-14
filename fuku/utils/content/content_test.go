@@ -254,6 +254,62 @@ func TestExtractMediaFromReply(t *testing.T) {
 	}
 }
 
+func TestExtractGreetingMediaAnimation(t *testing.T) {
+	t.Parallel()
+
+	gif := &gotgbot.Message{
+		Animation: &gotgbot.Animation{FileId: "anim"},
+		Document:  &gotgbot.Document{FileId: "doc"},
+	}
+	if id, typ := extractGreetingMedia(gif); id != "anim" || typ != db.ANIMATION {
+		t.Fatalf("extractGreetingMedia(GIF) = (%q, %d), want (anim, %d)", id, typ, db.ANIMATION)
+	}
+
+	same := map[string]*gotgbot.Message{
+		"sticker":    {Sticker: &gotgbot.Sticker{FileId: "st"}},
+		"document":   {Document: &gotgbot.Document{FileId: "doc"}},
+		"photo":      {Photo: []gotgbot.PhotoSize{{FileId: "small"}, {FileId: "large"}}},
+		"audio":      {Audio: &gotgbot.Audio{FileId: "au"}},
+		"voice":      {Voice: &gotgbot.Voice{FileId: "vo"}},
+		"video":      {Video: &gotgbot.Video{FileId: "vi"}},
+		"video note": {VideoNote: &gotgbot.VideoNote{FileId: "vn"}},
+		"text":       {Text: "words"},
+	}
+	for name, msg := range same {
+		gotID, gotType := extractGreetingMedia(msg)
+		wantID, wantType := extractMediaFromReply(msg)
+		if gotID != wantID || gotType != wantType {
+			t.Errorf("%s: extractGreetingMedia = (%q, %d), extractMediaFromReply = (%q, %d)", name, gotID, gotType, wantID, wantType)
+		}
+	}
+	if id, typ := extractGreetingMedia(nil); id != "" || typ != -1 {
+		t.Fatalf("extractGreetingMedia(nil) = (%q, %d), want empty and -1", id, typ)
+	}
+
+	welcome := ExtractWelcome(&gotgbot.Message{Text: "/setwelcome", ReplyToMessage: gif}, "welcome", "en")
+	if welcome.DataType != db.ANIMATION || welcome.FileID != "anim" {
+		t.Fatalf("ExtractWelcome of a reply to a GIF = (%q, %d), want (anim, %d)", welcome.FileID, welcome.DataType, db.ANIMATION)
+	}
+}
+
+func TestExtractNoteAndFilterGifStaysDocument(t *testing.T) {
+	t.Parallel()
+
+	gif := &gotgbot.Message{
+		Animation: &gotgbot.Animation{FileId: "anim"},
+		Document:  &gotgbot.Document{FileId: "doc"},
+	}
+	for _, isFilter := range []bool{false, true} {
+		result := ExtractNoteAndFilter(&gotgbot.Message{Text: "/save keyword", ReplyToMessage: gif}, isFilter, "en")
+		if result.DataType != db.DOCUMENT {
+			t.Errorf("isFilter=%v: a GIF is stored as type %d, want the document type %d", isFilter, result.DataType, db.DOCUMENT)
+		}
+	}
+	if _, typ := extractMediaFromReply(&gotgbot.Message{Animation: &gotgbot.Animation{FileId: "anim"}}); typ != db.DOCUMENT {
+		t.Fatalf("extractMediaFromReply(animation) type = %d, want the document type %d", typ, db.DOCUMENT)
+	}
+}
+
 func TestSetRawText(t *testing.T) {
 	tests := []struct {
 		name string

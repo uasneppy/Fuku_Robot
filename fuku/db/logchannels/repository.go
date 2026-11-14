@@ -45,14 +45,7 @@ func Get(chatID int64) *models.LogChannel {
 }
 
 func GetContext(ctx context.Context, chatID int64) *models.LogChannel {
-	result, err := cache.GetFromCacheOrLoad(ctx, cache.CacheKey(cachePrefix, chatID), cache.CacheTTLLogChannel, func(ctx context.Context) (models.LogChannel, error) {
-		var row models.LogChannel
-		err := db.GetRecordContext(ctx, &row, models.LogChannel{ChatID: chatID})
-		if err != nil {
-			return models.LogChannel{}, err
-		}
-		return row, nil
-	})
+	result, err := loadRow(ctx, chatID)
 	if err != nil {
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			log.Errorf("[LogChannels] Get: %v", err)
@@ -60,6 +53,35 @@ func GetContext(ctx context.Context, chatID int64) *models.LogChannel {
 		return nil
 	}
 	return &result
+}
+
+// LoadContext returns a chat's log channel row through the same cached log_channel:<chat> read
+// the commands make (GetContext), but tells a chat with no linked channel from a failed read: a
+// chat with no row is (nil, nil) and any other read error is returned. It creates no row and
+// caches only what GetContext's loader caches, so a miss leaves no entry behind. It is for the
+// settings menu's Log channel page, which must refuse "no log channel" and show the cannot-open
+// edit for "could not read" instead of guessing.
+func LoadContext(ctx context.Context, chatID int64) (*models.LogChannel, error) {
+	result, err := loadRow(ctx, chatID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &result, nil
+}
+
+// loadRow is the cached read both GetContext and LoadContext make, under one key, TTL and loader.
+func loadRow(ctx context.Context, chatID int64) (models.LogChannel, error) {
+	return cache.GetFromCacheOrLoad(ctx, cache.CacheKey(cachePrefix, chatID), cache.CacheTTLLogChannel, func(ctx context.Context) (models.LogChannel, error) {
+		var row models.LogChannel
+		err := db.GetRecordContext(ctx, &row, models.LogChannel{ChatID: chatID})
+		if err != nil {
+			return models.LogChannel{}, err
+		}
+		return row, nil
+	})
 }
 
 func Set(chatID int64, chatName string, logChannelID int64) error {

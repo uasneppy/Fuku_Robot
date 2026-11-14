@@ -1,8 +1,10 @@
 package modules
 
 import (
+	"context"
 	"fmt"
 	"html"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -13,7 +15,9 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers/filters/callbackquery"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/uasneppy/fuku_robot/fuku/db/deletion"
 	"github.com/uasneppy/fuku_robot/fuku/db/lang"
+	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/db/rules"
 	"github.com/uasneppy/fuku_robot/fuku/db/warns"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
@@ -33,6 +37,82 @@ var warnPunishShards [32]sync.Mutex
 
 func warnPunishLock(chatID, userID int64) *sync.Mutex {
 	return &warnPunishShards[uint64(chatID*31+userID)%uint64(len(warnPunishShards))]
+}
+
+// warnSettingsModes are the only actions /setwarnmode and the settings page may write. The
+// table's CHECK also allows tban, tmute and the empty string, which apply nothing at the
+// limit, so they are never written (D-17).
+var warnSettingsModes = []string{"ban", "kick", "mute"}
+
+// warnSettingsOutcome is what an apply function did with its input.
+type warnSettingsOutcome int
+
+const (
+	// warnSettingsApplied is the zero value: the value was valid and stored.
+	warnSettingsApplied warnSettingsOutcome = iota
+	// warnSettingsOutOfRange means the limit was outside 1..100; nothing was written.
+	warnSettingsOutOfRange
+	// warnSettingsUnknownMode means the action was not ban, kick or mute; nothing was written.
+	warnSettingsUnknownMode
+	// warnSettingsSaveFailed means the repository returned an error; Err holds it.
+	warnSettingsSaveFailed
+)
+
+// warnSettingsResult is the verdict of an apply function. Key is the locale key the command
+// replies with for that outcome. Stored is the row read back after a successful write (nil
+// otherwise, or when the read-back failed), so a caller shows what is stored and never what it
+// assumes.
+type warnSettingsResult struct {
+	Outcome warnSettingsOutcome
+	Key     string
+	Stored  *models.WarnSettings
+	Err     error
+}
+
+// warnSettingsWriter holds the two repository writes of the warn settings, so a test can make
+// one fail. Each write drops its own cache key.
+type warnSettingsWriter struct {
+	Limit func(chatID int64, limit int) error
+	Mode  func(chatID int64, mode string) error
+}
+
+// warnSettingsWrites is the write seam of the warn settings; production uses the repository.
+var warnSettingsWrites = warnSettingsWriter{Limit: warns.SetWarnLimit, Mode: warns.SetWarnMode}
+
+// warnReadBack reads the chat's warn settings after a write. A failed read-back is logged and
+// returns nil; the write already happened.
+func warnReadBack(ctx context.Context, chatID int64) *models.WarnSettings {
+	stored, err := warns.LoadWarnSettingsContext(ctx, chatID)
+	if err != nil {
+		log.Warnf("[Warns] read-back after write failed for chat %d: %v", chatID, err)
+		return nil
+	}
+	return stored
+}
+
+// applyWarnLimit validates and stores the warn limit: 1..100, anything else writes nothing.
+// The repository write invalidates its own cache key.
+func applyWarnLimit(ctx context.Context, chatID int64, limit int) warnSettingsResult {
+	if limit < 1 || limit > 100 {
+		return warnSettingsResult{Outcome: warnSettingsOutOfRange, Key: "warns_limit_range_error"}
+	}
+	if err := warnSettingsWrites.Limit(chatID, limit); err != nil {
+		return warnSettingsResult{Outcome: warnSettingsSaveFailed, Key: "common_settings_save_failed", Err: err}
+	}
+	return warnSettingsResult{Key: "warns_limit_updated", Stored: warnReadBack(ctx, chatID)}
+}
+
+// applyWarnMode validates and stores the action at the warn limit. Only ban, kick and mute are
+// accepted, exactly as spelled; the caller lower-cases user text first. The repository write
+// invalidates its own cache key.
+func applyWarnMode(ctx context.Context, chatID int64, mode string) warnSettingsResult {
+	if !slices.Contains(warnSettingsModes, mode) {
+		return warnSettingsResult{Outcome: warnSettingsUnknownMode, Key: "warns_mode_unknown"}
+	}
+	if err := warnSettingsWrites.Mode(chatID, mode); err != nil {
+		return warnSettingsResult{Outcome: warnSettingsSaveFailed, Key: "common_settings_save_failed", Err: err}
+	}
+	return warnSettingsResult{Key: "warns_mode_updated_" + mode, Stored: warnReadBack(ctx, chatID)}
 }
 
 func (moduleStruct) setWarnMode(b *gotgbot.Bot, ctx *ext.Context) error {
@@ -63,22 +143,18 @@ func (moduleStruct) setWarnMode(b *gotgbot.Bot, ctx *ext.Context) error {
 
 	if len(args) > 0 {
 		mode := strings.ToLower(args[0])
-		modeKeys := map[string]string{
-			"ban":  "warns_mode_updated_ban",
-			"kick": "warns_mode_updated_kick",
-			"mute": "warns_mode_updated_mute",
-		}
-		if key, ok := modeKeys[mode]; ok {
-			if err := warns.SetWarnMode(chat.Id, mode); err != nil {
-				log.Errorf("[Warns] SetWarnMode failed for chat %d: %v", chat.Id, err)
-				errText, _ := tr.GetString("common_settings_save_failed")
-				_, _ = msg.Reply(b, errText, formatting.Shtml())
-				return ext.EndGroups
-			}
-			replyText, _ = tr.GetString(key)
-		} else {
-			temp, _ := tr.GetString("warns_mode_unknown")
+		result := applyWarnMode(tracing.UpdateContext(ctx), chat.Id, mode)
+		switch result.Outcome {
+		case warnSettingsSaveFailed:
+			log.Errorf("[Warns] SetWarnMode failed for chat %d: %v", chat.Id, result.Err)
+			errText, _ := tr.GetString(result.Key)
+			_, _ = msg.Reply(b, errText, formatting.Shtml())
+			return ext.EndGroups
+		case warnSettingsUnknownMode:
+			temp, _ := tr.GetString(result.Key)
 			replyText = fmt.Sprintf(temp, args[0])
+		default:
+			replyText, _ = tr.GetString(result.Key)
 		}
 	} else {
 		replyText, _ = tr.GetString("warns_specify_action")
@@ -92,7 +168,112 @@ func (moduleStruct) setWarnMode(b *gotgbot.Bot, ctx *ext.Context) error {
 	return ext.EndGroups
 }
 
-func (moduleStruct) warnThisUser(b *gotgbot.Bot, ctx *ext.Context, userId int64, reason, warnType string) (err error) {
+// warnApplyResult is what applyWarn did, so a caller can say it without the warn module's reply.
+type warnApplyResult struct {
+	// Count is the member's stored warns after this one, Limit and Mode are the group's.
+	Count, Limit int
+	Mode         string
+	// LimitReached is true when Count reached Limit. LimitApplied is true only when the group's
+	// limit action took effect and the warns were reset; LimitErr is the action's error, in which
+	// case the warn stays counted and nothing is reset.
+	LimitReached, LimitApplied bool
+	LimitErr                   error
+	// Reasons are the stored reasons including this warn's, taken before any reset.
+	Reasons []string
+	// Recorded is true once the warn is stored, so a returned error with Recorded set is the
+	// reset's and one without it is the record's.
+	Recorded bool
+}
+
+// applyWarn records one warn for userID under warnPunishLock, runs afterRecord (when not nil)
+// inside the lock right after the warn is stored, and at the group's warn limit runs the limit
+// action (kick, the permanent mute or ban) and resets the member's warns only after the action
+// took effect. It never sends a message: the caller words what happened. An error is the warn
+// that could not be recorded or the reset that failed; a refused limit action is in LimitErr.
+func applyWarn(ctx context.Context, b *gotgbot.Bot, chat *gotgbot.Chat, userID int64, reason string, afterRecord func()) (warnApplyResult, error) {
+	var res warnApplyResult
+	mu := warnPunishLock(chat.Id, userID)
+	mu.Lock()
+	defer mu.Unlock()
+	settings := warns.GetWarnSettingContext(ctx, chat.Id)
+	numWarns, reasons, err := warns.WarnUser(userID, chat.Id, reason)
+	if err != nil {
+		return res, err
+	}
+	res = warnApplyResult{Count: numWarns, Limit: settings.WarnLimit, Mode: settings.WarnMode, Reasons: reasons, Recorded: true}
+	if afterRecord != nil {
+		afterRecord()
+	}
+	if numWarns < settings.WarnLimit {
+		return res, nil
+	}
+	res.LimitReached = true
+	punished, actionErr := applyWarnLimitAction(ctx, b, chat, userID, settings.WarnMode)
+	if actionErr != nil {
+		res.LimitErr = actionErr
+		return res, nil
+	}
+	if punished {
+		if _, resetErr := warns.ResetUserWarns(userID, chat.Id); resetErr != nil {
+			return res, resetErr
+		}
+		res.LimitApplied = true
+	}
+	return res, nil
+}
+
+// applyWarnLimitAction runs the group's limit action for mode. punished is false for a mode the
+// warn module does not know, which applies nothing.
+func applyWarnLimitAction(ctx context.Context, b *gotgbot.Bot, chat *gotgbot.Chat, userID int64, mode string) (punished bool, err error) {
+	switch mode {
+	case "kick":
+		err = kickMemberContext(ctx, b, chat.Id, userID)
+		if err != nil {
+			log.Errorf("[warn] warnlimit: kick (%d) - %s", userID, err)
+			return false, err
+		}
+	case "mute":
+		_, err = chat.RestrictMember(b, userID,
+			MutedPermissions,
+			nil,
+		)
+		if err != nil {
+			log.Errorf("[warn] warnlimit: mute (%d) - %s", userID, err)
+			return false, err
+		}
+	case "ban":
+		_, err = chat.BanMember(b, userID, nil)
+		if err != nil {
+			log.Errorf("[warn] warnlimit: ban (%d) - %s", userID, err)
+			return false, err
+		}
+	default:
+		log.Warnf("[Warns] Unknown warn mode: %s", mode)
+		return false, nil
+	}
+	return true, nil
+}
+
+// warnSource says who started a warn, so the deletion rules tell a moderator's /warn from an
+// automatic one (the blacklist's warn action): each is its own kind (D-13).
+type warnSource int
+
+const (
+	// warnSourceManual is a moderator's /warn, /dwarn or /swarn.
+	warnSourceManual warnSource = iota
+	// warnSourceAuto is a warn an automatic rule issued, such as the blacklist's warn action.
+	warnSourceAuto
+)
+
+// deletionKind is the bot kind the warn message of this source is queued under.
+func (s warnSource) deletionKind() string {
+	if s == warnSourceAuto {
+		return deletion.KindBotAuto
+	}
+	return deletion.KindBotManual
+}
+
+func (moduleStruct) warnThisUser(b *gotgbot.Bot, ctx *ext.Context, userId int64, reason, warnType string, source warnSource) (err error) {
 	var (
 		reply    string
 		keyboard gotgbot.InlineKeyboardMarkup
@@ -118,12 +299,23 @@ func (moduleStruct) warnThisUser(b *gotgbot.Bot, ctx *ext.Context, userId int64,
 	}
 
 	u := chatMember.MergeChatMember().User
-	mu := warnPunishLock(chat.Id, userId)
-	mu.Lock()
-	defer mu.Unlock()
-	warnrc := warns.GetWarnSettingContext(tracing.UpdateContext(ctx), chat.Id)
-	numWarns, reasons, err := warns.WarnUser(userId, chat.Id, reason)
+	res, err := applyWarn(tracing.UpdateContext(ctx), b, chat, userId, reason, func() {
+		switch warnType {
+		case "dwarn":
+			if msg.ReplyToMessage != nil {
+				if _, deleteErr := msg.ReplyToMessage.Delete(b, nil); deleteErr != nil {
+					log.Errorf("[Warns] Failed to delete message: %v", deleteErr)
+				}
+			}
+		case "swarn":
+			_ = helpers.DeleteMessageWithErrorHandling(b, chat.Id, msg.MessageId)
+		}
+	})
 	if err != nil {
+		if res.Recorded {
+			// The warn is stored and the limit action took effect, but the reset failed.
+			return err
+		}
 		text, _ := tr.GetString("common_settings_save_failed")
 		_, sendErr := msg.Reply(b, text, formatting.Shtml())
 		if sendErr != nil {
@@ -131,62 +323,23 @@ func (moduleStruct) warnThisUser(b *gotgbot.Bot, ctx *ext.Context, userId int64,
 		}
 		return ext.EndGroups
 	}
-
-	switch warnType {
-	case "dwarn":
-		if msg.ReplyToMessage != nil {
-			if _, deleteErr := msg.ReplyToMessage.Delete(b, nil); deleteErr != nil {
-				log.Errorf("[Warns] Failed to delete message: %v", deleteErr)
-			}
-		}
-	case "swarn":
-		_ = helpers.DeleteMessageWithErrorHandling(b, chat.Id, msg.MessageId)
+	if res.LimitErr != nil {
+		return res.LimitErr
 	}
 
-	if numWarns >= warnrc.WarnLimit {
-		punished := false
-		switch warnrc.WarnMode {
-		case "kick":
-			err = kickMember(b, chat.Id, userId)
-			temp, _ := tr.GetString("warns_limit_kicked")
-			reply = fmt.Sprintf(temp, numWarns, warnrc.WarnLimit, formatting.MentionHtml(u.Id, u.FirstName))
-			if err != nil {
-				log.Errorf("[warn] warnlimit: kick (%d) - %s", userId, err)
-				return err
-			}
-			punished = true
-		case "mute":
-			_, err = chat.RestrictMember(b, userId,
-				MutedPermissions,
-				nil,
-			)
-			temp, _ := tr.GetString("warns_limit_muted")
-			reply = fmt.Sprintf(temp, numWarns, warnrc.WarnLimit, formatting.MentionHtml(u.Id, u.FirstName))
-			if err != nil {
-				log.Errorf("[warn] warnlimit: mute (%d) - %s", userId, err)
-				return err
-			}
-			punished = true
-		case "ban":
-			_, err = chat.BanMember(b, userId, nil)
-			temp, _ := tr.GetString("warns_limit_banned")
-			reply = fmt.Sprintf(temp, numWarns, warnrc.WarnLimit, formatting.MentionHtml(u.Id, u.FirstName))
-			if err != nil {
-				log.Errorf("[warn] warnlimit: ban (%d) - %s", userId, err)
-				return err
-			}
-			punished = true
-		default:
-			log.Warnf("[Warns] Unknown warn mode: %s", warnrc.WarnMode)
+	numWarns := res.Count
+	if res.LimitReached {
+		limitKeys := map[string]string{
+			"kick": "warns_limit_kicked",
+			"mute": "warns_limit_muted",
+			"ban":  "warns_limit_banned",
 		}
-
-		if punished {
-			if _, resetErr := warns.ResetUserWarns(userId, chat.Id); resetErr != nil {
-				return resetErr
-			}
+		if key, ok := limitKeys[res.Mode]; ok {
+			temp, _ := tr.GetString(key)
+			reply = fmt.Sprintf(temp, numWarns, res.Limit, formatting.MentionHtml(u.Id, u.FirstName))
 		}
 		var sb strings.Builder
-		for _, warnReason := range reasons {
+		for _, warnReason := range res.Reasons {
 			fmt.Fprintf(&sb, "\n - %s", html.EscapeString(warnReason))
 		}
 		reply += sb.String()
@@ -221,14 +374,14 @@ func (moduleStruct) warnThisUser(b *gotgbot.Bot, ctx *ext.Context, userId int64,
 		}
 
 		temp, _ := tr.GetString("warns_user_warning")
-		reply = fmt.Sprintf(temp, formatting.MentionHtml(u.Id, u.FirstName), numWarns, warnrc.WarnLimit)
+		reply = fmt.Sprintf(temp, formatting.MentionHtml(u.Id, u.FirstName), numWarns, res.Limit)
 
 		if reason != "" {
 			temp, _ := tr.GetString("warns_warning_reason")
 			reply += fmt.Sprintf(temp, html.EscapeString(reason))
 		}
 	}
-	_, err = b.SendMessage(chat.Id, reply,
+	sent, err := b.SendMessage(chat.Id, reply,
 		&gotgbot.SendMessageOpts{
 			ParseMode: formatting.HTML,
 			LinkPreviewOptions: &gotgbot.LinkPreviewOptions{
@@ -245,6 +398,7 @@ func (moduleStruct) warnThisUser(b *gotgbot.Bot, ctx *ext.Context, userId int64,
 		log.Errorf("[warn] sendMessage (%d) - %s", userId, err)
 		return err
 	}
+	scheduleBotMessage(sent, source.deletionKind())
 
 	return ext.EndGroups
 }
@@ -293,7 +447,7 @@ func (m moduleStruct) dispatchWarn(b *gotgbot.Bot, ctx *ext.Context, warnType st
 		warnusr = userId
 	}
 
-	return m.warnThisUser(b, ctx, warnusr, reason, warnType)
+	return m.warnThisUser(b, ctx, warnusr, reason, warnType, warnSourceManual)
 }
 
 func (m moduleStruct) warnUser(b *gotgbot.Bot, ctx *ext.Context) error {
@@ -516,16 +670,17 @@ func (moduleStruct) setWarnLimit(b *gotgbot.Bot, ctx *ext.Context) error {
 			temp, _ := tr.GetString("warns_invalid_number")
 			replyText = fmt.Sprintf(temp, args[0])
 		} else {
-			if num < 1 || num > 100 {
-				replyText, _ = tr.GetString("warns_limit_range_error")
-			} else {
-				if err := warns.SetWarnLimit(chat.Id, num); err != nil {
-					log.Errorf("[Warns] SetWarnLimit failed for chat %d: %v", chat.Id, err)
-					errText, _ := tr.GetString("common_settings_save_failed")
-					_, _ = msg.Reply(b, errText, formatting.Smarkdown())
-					return ext.EndGroups
-				}
-				temp, _ := tr.GetString("warns_limit_updated")
+			result := applyWarnLimit(tracing.UpdateContext(ctx), chat.Id, num)
+			switch result.Outcome {
+			case warnSettingsSaveFailed:
+				log.Errorf("[Warns] SetWarnLimit failed for chat %d: %v", chat.Id, result.Err)
+				errText, _ := tr.GetString(result.Key)
+				_, _ = msg.Reply(b, errText, formatting.Smarkdown())
+				return ext.EndGroups
+			case warnSettingsOutOfRange:
+				replyText, _ = tr.GetString(result.Key)
+			default:
+				temp, _ := tr.GetString(result.Key)
 				replyText = fmt.Sprintf(temp, num)
 			}
 		}

@@ -53,6 +53,14 @@ func GetLanguage(ctx *ext.Context) string {
 	return getGroupLanguageContext(tracing.UpdateContext(ctx), chat.Id)
 }
 
+// GetGroupLanguage returns a group's language by its chat ID through the same cached
+// chat_lang read that GetLanguage makes in a group, which is what /rules reaches. It
+// falls back to uk on a missing row, an empty value or an error, and creates no row. It
+// is for callers whose update's chat is not the group, such as a private settings menu.
+func GetGroupLanguage(ctx context.Context, groupID int64) string {
+	return getGroupLanguageContext(ctx, groupID)
+}
+
 func getGroupLanguage(GroupID int64) string {
 	return getGroupLanguageContext(context.Background(), GroupID)
 }
@@ -70,7 +78,24 @@ func getUserLanguageContext(ctx context.Context, userID int64) string {
 }
 
 func getCachedLanguage(ctx context.Context, key string, model any, idColumn string, id int64) string {
-	language, err := cache.GetFromCacheOrLoad(ctx, key, cache.CacheTTLLanguage, func(ctx context.Context) (string, error) {
+	language, err := loadCachedLanguage(ctx, key, model, idColumn, id)
+	if err != nil {
+		return "uk"
+	}
+	return language
+}
+
+// LoadGroupLanguageContext returns a group's language by its chat ID through the same cached
+// chat_lang read the bot's own group updates make, but returns the read error instead of
+// hiding it behind uk and creates no row. A missing row or an empty value reads uk, the bot's
+// default. It is for the settings menu's Language page, which must tell a failed read from a
+// stored default.
+func LoadGroupLanguageContext(ctx context.Context, groupID int64) (string, error) {
+	return loadCachedLanguage(ctx, cache.CacheKey("chat_lang", groupID), &models.Chat{}, "chat_id", groupID)
+}
+
+func loadCachedLanguage(ctx context.Context, key string, model any, idColumn string, id int64) (string, error) {
+	return cache.GetFromCacheOrLoad(ctx, key, cache.CacheTTLLanguage, func(ctx context.Context) (string, error) {
 		if db.DB == nil {
 			return "", errors.New("database not initialized")
 		}
@@ -87,10 +112,6 @@ func getCachedLanguage(ctx context.Context, key string, model any, idColumn stri
 		}
 		return result.Language, nil
 	})
-	if err != nil {
-		return "uk"
-	}
-	return language
 }
 
 func ChangeUserLanguage(UserID int64, lang string) error {

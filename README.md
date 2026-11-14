@@ -138,7 +138,7 @@ on that branch):
 
 **Operations**
 - Back up a group's settings to JSON and import or reset them module by module.
-- 7 interface languages: English, Spanish, French, Hindi, Indonesian, Portuguese and Russian.
+- 8 interface languages: Ukrainian (the default), English, Spanish, French, Hindi, Indonesian, Portuguese and Russian.
 - Webhook or long-polling mode, `/health`, Prometheus `/metrics` and optional OpenTelemetry tracing.
 - Versioned SQL migrations whose checksums are verified at startup, a Redis read-through cache with an in-process LRU
   layer, and graceful shutdown.
@@ -379,6 +379,32 @@ Admins only.
 | `/cleanservice <on/off>` | Delete "X joined the group" service messages |
 | `/autoapprove <on/off>` | Approve join requests automatically |
 
+You can also set the welcome, the goodbye and the rules from `/settings` in the bot's private chat: pick the page, tap Set and send the text, media or buttons as a normal message. `/cancel` ends the wait.
+
+The rules can carry one media item (a photo, video, GIF or file) and URL buttons, set from `/settings` in private; `/rules` shows them in the group and as private rules. Media under text puts a photo, video or GIF below its text, for the welcome, the goodbye and the rules. Greet once welcomes each member only the first time they join.
+
+The Warnings page in `/settings` sets the warn limit (1 to 100) and the action at the limit (Mute, Ban or Kick), exactly as `/setwarnlimit` and `/setwarnmode` do; an action stored any other way, which the bot does not act on, is shown with a plain line saying so.
+
+The Switches page in `/settings` turns reports, the AI spam filter and auto-approve of join requests on or off, exactly as `/reports`, `/aispam` and `/autoapprove` do, and says plainly when the AI spam filter cannot run on this bot, in which case it can only be switched off.
+
+The Language page in `/settings` sets the language the bot answers in inside the group, written exactly as the language buttons of `/lang` write it; a menu opened in the group switches to the new language at once, and your own language is still set with `/lang` in a private chat with the bot.
+
+The Log channel page in `/settings` turns each of the six log categories (settings, admin, user, automated, reports, other) on or off exactly as `/log` and `/nolog` do, and posts the same `#SETTINGS` line to the log channel; it shows whether a channel is linked without ever naming it, and linking stays `/setlog` (forwarded from the channel) and `/unsetlog`. With no channel linked a press is refused and changes nothing.
+
+The Anonymous admins page in `/settings` shows every admin whether anonymous-admin mode is on and what it does, and lets only the group's owner switch it, with the bot an admin of the group, exactly as `/anonadmin` does; opening the page changes nothing.
+
+The Locks page in `/settings` turns each of the 22 lock types (stickers, GIFs, links, forwards, bots and the rest) on or off over two pages, exactly as `/lock` and `/unlock` do, and says plainly when the bot cannot delete messages in the group, in which case a lock has no effect. Admins and approved members are never affected by a lock; one tap undoes any of them, `all` and `messages` included.
+
+The Blacklist page in `/settings` lists the group's blacklisted words eight to a page, deletes one behind a Yes/No card, and sets the blacklist action (warn, mute, kick, ban, or delete only) for every word at once, exactly as `/rmblacklist` and `/blacklistaction` do; when the words do not share one action the page says so and shows how many words have each. It works only in the bot's private menu (a menu opened in the group shows a note and never a word), and words are added by pressing Add and typing them in private, as `/addblacklist` does: a single letter, digit or punctuation mark is refused because it would match almost every message, and a new word takes the action the other words share. Changing the blacklist needs the same rights as the commands.
+
+The Filters page in `/settings` lists the group's filter keywords eight to a page and deletes one behind a Yes/No card, exactly as `/stop` does. It works only in the bot's private menu. A filter is added by pressing Add, typing the keyword and then sending the reply (text, photo, sticker or any other message the filters support, with its buttons) in private; an existing keyword is refused rather than overwritten, a single-character keyword is refused as too broad, and a group holds at most 150 filters. Changing filters needs `can_change_info`, as `/filter` does.
+
+The Notes page in `/settings` lists the group's notes eight to a page, marks the ones only admins can fetch, and deletes one behind a Yes/No card, exactly as `/clear` does. It works only in the bot's private menu. A note is added by pressing Add, typing the name (one word, up to 100 characters, not starting with `#`) and then sending the content in private; an existing name is refused rather than overwritten. Changing notes needs the bot as an admin and `can_change_info`, as `/save` does.
+
+Member requirements, in `/settings` on the Requirements page, give each of eight rules (must have a last name, must have a username, no Russian, Arabic or Chinese name, judged by letters, must have a profile photo, must be subscribed to the group's linked channel, and no spam-like name as judged by AI) its own punishment: off, warn, kick, ban or mute. Every rule is off by default. The photo rule counts a photo the bot cannot see (hidden by the member's privacy settings) as missing, so a member who hides their photo can be asked to show it or be approved by an admin. The channel rule works only in a group that is linked to a channel and only while the bot is an administrator of that channel; the page says when a rule cannot work in the group. The AI spam-name rule sends only a member's first name, last name and username to Anthropic's Claude, never messages: new members are checked when they join or at their first message, any member is checked again after a name change, and members already in the group are checked only after one. It is off when `ENABLE_AISPAM` is false or no `ANTHROPIC_API_KEY` is set, and the page says so; because the AI can be wrong, Warn or Mute is the recommended punishment. A check that cannot be answered (a Telegram error, a timeout, a busy lookup, an AI error or spent budget) punishes nobody. Members are checked at their next message and, with Check on join, right after the captcha; Delete messages removes a held member's messages. A muted member gets an I fixed it button that frees only them, and only from a mute the requirements placed. Supergroups only.
+
+Scheduled deletion, in `/settings` on the Deletion page, keeps the chat readable. The Service messages section sets, for each kind of Telegram service message (member joined, member left, new chat photo, title change, pinned message, video chat, forum topic, boost, auto-delete timer, chat background, giveaways and everything else deletable), whether it is kept, deleted at once or deleted after 10 seconds, 1 minute, 10 minutes, 1 hour, 6 hours or 24 hours. The Bot messages section does the same for the bot's own welcome, goodbye, rules, automatic punishment notices (requirement, antiflood, blacklist and AI spam breaker notices) and the replies to manual punishment commands, which are off by default and can be set to 1 minute, 10 minutes, 1 hour, 6 hours or 24 hours. The time counts from when the message was sent, never from when the rule was set. Member joined and left share their switch with `/cleanservice`. A requirement mute notice carries the "I fixed it" button, so it stays up to 24 hours whatever the timer says; the button then moves its deletion to the timer after the member taps it. The Member messages section has three rules for what members send, all off by default. Commands: with it on, every command the bot handles is deleted after the bot has answered it, an admin's included (the answer still arrives); another bot's command and a word the bot does not know are never touched. An anonymous admin's command is deleted after their proof tap, but in a group whose anonymous admin setting is on it stays. Edited messages: a member's message that is edited more than 30 seconds, 1 minute, 5 minutes, 15 minutes or 1 hour after it was sent (your choice) is deleted at once, so an edit cannot slip spam in later; any edit past that time counts, even one that only touches a link preview. Self-destruct: every message a member sends is deleted 1 minute, 5 minutes, 10 minutes, 1 hour, 6 hours or 24 hours after it was sent. It deletes in bulk, so turning it on asks for a second tap, and switching it off cancels the deletions still waiting (a batch the bot has already started to delete can finish within about a minute and a half). Edited messages and Self-destruct leave the messages of admins and approved members alone, Self-destruct also keeps pinned messages, and a message whose sender cannot be checked at that moment is kept; Commands has no such exemption, so an admin's command is deleted too. In a very busy group with a long delay some new messages may be kept rather than deleted, to protect the queue. Staff Group messages, lockdown alerts, captcha challenges and log-channel posts are never deleted, and the page does not exist in a Staff Group. Every deletion page says so when the bot cannot delete in the group. Scheduled deletions survive a restart, run once across replicas, and a message too old for Telegram to delete (over 47 hours) is dropped quietly. Nothing changes until an admin sets a rule: every kind starts at Keep or Off.
+
 </details>
 
 <details>
@@ -581,7 +607,7 @@ flowchart TD
   private chats, and posts a "Started Bot!" message to `MESSAGE_DUMP`.
 - **Handler groups.** Watchers (captcha, antiflood, locks and so on) pass the update on to the next group. Commands
   end it. A module registers itself in `init()`. Newer commands go through `helpers.WrapCommand`, a pipeline that
-  runs the permission and disable checks; older ones register `handlers.NewCommand` directly. See
+  runs the permission and disable checks; older ones register through `helpers.NewBotCommand`, the recording shim. See
   [handler groups](docs/src/content/docs/architecture/handler-groups.md) and [AGENTS.md](AGENTS.md).
 - **Data.** Each domain has a repository package in `fuku/db/<domain>/`. Reads go through a cache loader (process
   memory, then Redis, then PostgreSQL), and every write invalidates the keys it affects.
@@ -795,7 +821,9 @@ parse falls back to its default, with only a warning in the log.
 | Variable | Default | Description |
 | --- | --- | --- |
 | `TYPESAFE_API_KEY` | — | TypeSafe API key ([typesafe.ai](https://typesafe.ai)). Without it the filter does nothing. |
-| `ENABLE_AISPAM` | `true` | Global kill switch. Chats still have to opt in with `/aispam on`. |
+| `ENABLE_AISPAM` | `true` | Global kill switch for every AI check (text, images and names). `/aispam` still has to be turned on per chat, and the AI spam-name rule stays off until an owner sets it to a punishment. |
+| `ANTHROPIC_API_KEY` | — | Anthropic API key for the raid image checks and the AI spam-name rule of the Member requirements page (only names are sent for the rule, under the terms and retention of the owner's Anthropic account). Without it neither runs. |
+| `ANTHROPIC_MODEL` | `claude-haiku-5-5` | Claude model for those checks. It must accept a forced tool call (a Haiku-class model). |
 
 </details>
 
@@ -877,7 +905,7 @@ Fuku_Robot/
 │   ├── i18n/                  # locale manager and translator
 │   ├── modules/               # one file per bot module: bans.go, notes.go, captcha.go, federations.go, …
 │   └── utils/                 # command pipeline, permission checks, callback codec, cache, HTTP server, tracing, monitoring, …
-├── locales/                   # en, es, fr, hi, id, pt, ru + config.yml (help aliases)
+├── locales/                   # uk, en, es, fr, hi, id, pt, ru + config.yml (help aliases)
 ├── migrations/                # 42 timestamped .sql files: the schema's source of truth
 ├── docker/                    # alpine (production), alpine.debug, goreleaser, pr-build Dockerfiles
 ├── docs/                      # Blume docs site: generated command pages, guides, architecture notes
@@ -921,7 +949,7 @@ CGO_ENABLED=0 go build ./...                                         # quick com
 - Tests run on SQLite and miniredis by default. Set `DATABASE_URL` and `FUKU_TEST_DATABASE=true` to use real
   PostgreSQL.
 - Before adding a module, migration or command, read [AGENTS.md](AGENTS.md). It covers migration naming and checksums,
-  cache invalidation, handler groups, the locale rule (every new key goes into all 7 files) and conventional commits.
+  cache invalidation, handler groups, the locale rule (every new key goes into all 8 files) and conventional commits.
 - [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs gosec and govulncheck, lint, build, tests with a 78 %
   coverage floor, docs and translation drift checks, and a Docker build. On pushes to `main` it publishes
   `ghcr.io/<owner>/<repo>:dev`. GitHub usually keeps workflows off on a fork until you enable them in the **Actions** tab. The

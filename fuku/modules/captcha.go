@@ -225,7 +225,9 @@ func isPermanentTelegramError(err error) bool {
 }
 
 func isPermanentUnmuteError(err error) bool {
-	if err == nil {
+	// An unreadable requirement hold is a database fault that passes: the member stays muted and the
+	// retry stays scheduled, so it is never permanent.
+	if err == nil || errors.Is(err, errMemberReqHoldUnreadable) {
 		return false
 	}
 	errStr := strings.ToLower(err.Error())
@@ -1628,6 +1630,9 @@ func executeCaptchaFailureAction(bot *gotgbot.Bot, chatID, userID int64, action 
 }
 
 func unmuteCaptchaUser(bot *gotgbot.Bot, chatID, userID int64) error {
+	if handled, err := memberReqCaptchaGuard(bot, chatID, userID); err != nil || handled {
+		return err
+	}
 	chat, err := bot.GetChat(chatID, nil)
 	if err != nil {
 		return err
@@ -1739,7 +1744,7 @@ func finishCaptchaPass(in captchaPassInput, stored []*models.StoredMessages) {
 		})
 	}
 
-	if err := SendWelcomeMessage(bot, in.Ctx, in.UserID, in.FirstName); err != nil {
+	if err := memberReqJoinThenWelcome(bot, in.Ctx, gotgbot.User{Id: in.UserID, FirstName: in.FirstName}); err != nil {
 		log.Errorf("Failed to send welcome message after captcha verification: %v", err)
 	}
 }

@@ -107,7 +107,10 @@ separate from the opt-in filter above, and the two work together:
   limited to 20 per member, 150 per group and 500 for all groups per hour.
 - **Nothing is sent without the keys.** Without `ANTHROPIC_API_KEY` no image
   leaves the server. Without `TYPESAFE_API_KEY` no text is sent for the raid
-  checks. With `ENABLE_AISPAM` off nothing is sent at all, no text and no image. Without Redis the trigger does nothing.
+  checks. With `ENABLE_AISPAM` off nothing is sent at all, no text, no image and no name. Without Redis the trigger does nothing.
+- **Names are a separate check.** The AI spam-name rule of the Member requirements page (`/settings`) uses the same
+  Anthropic key and the same switch, but it is not part of the raid trigger or of `/aispam`: when an owner sets that rule,
+  only a member's first name, last name and username are sent to Anthropic, never messages.
 - **The owner's account terms apply.** Every image check sends that image to
   Anthropic under the terms of the owner's API account, so the owner decides
   before turning the image checks on.
@@ -143,7 +146,7 @@ never left believing their chat is protected when it is not.
 | Variable | Meaning |
 |----------|---------|
 | `TYPESAFE_API_KEY` | TypeSafe API key used for every check. One credential for the whole bot; chats cannot bring their own. Empty disables the feature. |
-| `ENABLE_AISPAM` | Global kill switch for every AI check, `/aispam` and the raid checks, text and images. Default `true`; `/aispam` still stays off in chats that never enabled it. Set to `false`, nothing goes to TypeSafe or Anthropic even with the keys set. |
-| `ANTHROPIC_API_KEY` | Anthropic key for the raid protection's image checks. Empty means no image is ever sent. Every check sends that image to Anthropic under the terms of the owner's API account. |
+| `ENABLE_AISPAM` | Global kill switch for every AI check, `/aispam`, the raid checks (text and images) and the AI spam-name rule of the Member requirements page. Default `true`; `/aispam` still stays off in chats that never enabled it, and the name rule stays off until an owner sets it to a punishment. Set to `false`, nothing goes to TypeSafe or Anthropic even with the keys set. |
+| `ANTHROPIC_API_KEY` | Anthropic key for the raid protection's image checks. Empty means no image is ever sent. Every check sends that image to Anthropic under the terms of the owner's API account. The same key serves the AI spam-name rule of the Member requirements page, which sends only a member's names. |
 
 The key is registered with `logredact`, so it never appears in logs.

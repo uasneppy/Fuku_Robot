@@ -91,24 +91,24 @@ func TestSettingsAntifloodPage(t *testing.T) {
 	t.Run("Main button shows the limit or Off", func(t *testing.T) {
 		env := newSettingsEnv(t)
 		msgID := env.openMenu(env.admin)
-		_, keyboard := env.lastEdit(env.chat.Id, msgID)
-		button, ok := settingsButtonByMarker(keyboard, "settings_page_antiflood")
-		if !ok {
+		text, keyboard := env.lastEdit(env.chat.Id, msgID)
+		if _, ok := settingsButtonByMarker(keyboard, "settings_page_antiflood"); !ok {
 			t.Fatal("no Antiflood button on the Main page")
 		}
-		if !strings.Contains(button.Text, staffMarker("settings_state_off_plain")) {
-			t.Errorf("Antiflood button %q does not show Off on a fresh chat", button.Text)
+		line, ok := settingsMainStateLine(text, "settings_page_antiflood")
+		if !ok || !strings.Contains(line, staffMarker("settings_state_off_plain")) {
+			t.Errorf("Antiflood status line %q (found %v) does not show Off on a fresh chat", line, ok)
 		}
 
 		env.send(env.admin, "/setflood 7")
 		msgID = env.openMenu(env.admin)
-		_, keyboard = env.lastEdit(env.chat.Id, msgID)
-		button, ok = settingsButtonByMarker(keyboard, "settings_page_antiflood")
-		if !ok {
+		text, keyboard = env.lastEdit(env.chat.Id, msgID)
+		if _, ok := settingsButtonByMarker(keyboard, "settings_page_antiflood"); !ok {
 			t.Fatal("no Antiflood button on the Main page after /setflood 7")
 		}
-		if !strings.Contains(button.Text, staffMarker("settings_state_limit")) || !strings.Contains(button.Text, "7") {
-			t.Errorf("Antiflood button %q does not show the limit 7", button.Text)
+		line, ok = settingsMainStateLine(text, "settings_page_antiflood")
+		if !ok || !strings.Contains(line, staffMarker("settings_state_limit")) || !strings.Contains(line, "7") {
+			t.Errorf("Antiflood status line %q (found %v) does not show the limit 7", line, ok)
 		}
 	})
 
@@ -478,13 +478,13 @@ func TestSettingsAntifloodReadFailure(t *testing.T) {
 	t.Cleanup(func() { settingsFloodRead = previous })
 
 	msgID := env.openMenu(env.admin)
-	_, keyboard := env.lastEdit(env.chat.Id, msgID)
+	mainText, keyboard := env.lastEdit(env.chat.Id, msgID)
 	button, ok := settingsButtonByMarker(keyboard, "settings_page_antiflood")
 	if !ok {
 		t.Fatal("no Antiflood button on the Main page")
 	}
-	if !strings.HasSuffix(button.Text, " · ❔") {
-		t.Errorf("Antiflood button %q does not end with the unreadable state ' · ❔'", button.Text)
+	if line, found := settingsMainStateLine(mainText, "settings_page_antiflood"); !found || !strings.HasSuffix(line, settingsUnknownState) {
+		t.Errorf("Antiflood status line %q (found %v) does not end with the unknown mark", line, found)
 	}
 
 	before := env.answerCount()

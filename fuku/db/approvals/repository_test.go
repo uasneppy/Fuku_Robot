@@ -3,7 +3,12 @@
 package approvals
 
 import (
+	"context"
 	"testing"
+
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
@@ -273,4 +278,57 @@ func TestListApprovedIDsFresh(t *testing.T) {
 	if !ids[504] {
 		t.Errorf("ListApprovedIDsFresh() = %v, want user 504 written straight through db.DB", ids)
 	}
+}
+
+func TestIsUserApprovedContext(t *testing.T) {
+	skipIfNoDb(t)
+
+	chatID := int64(-999999999999998)
+	ctx := context.Background()
+	t.Cleanup(func() {
+		_ = RemoveAllApprovedUsers(chatID)
+	})
+
+	if err := AddApprovedUser(chatID, 12345, 99999, "trusted member"); err != nil {
+		t.Fatalf("AddApprovedUser() error = %v", err)
+	}
+	if ok, err := IsUserApprovedContext(ctx, chatID, 12345); err != nil || !ok {
+		t.Fatalf("IsUserApprovedContext(approved) = %t, %v, want true, nil", ok, err)
+	}
+	if ok, err := IsUserApprovedContext(ctx, chatID, 54321); err != nil || ok {
+		t.Fatalf("IsUserApprovedContext(other user) = %t, %v, want false, nil", ok, err)
+	}
+
+	// A write deletes the shared approvals:<chat> key, so the next read sees it.
+	if err := AddApprovedUser(chatID, 777, 99999, ""); err != nil {
+		t.Fatalf("AddApprovedUser() error = %v", err)
+	}
+	if ok, err := IsUserApprovedContext(ctx, chatID, 777); err != nil || !ok {
+		t.Fatalf("IsUserApprovedContext(after the write) = %t, %v, want true, nil", ok, err)
+	}
+
+	t.Run("a read that fails is an error, never not approved", func(t *testing.T) {
+		original := db.DB
+		broken, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		sqlDB, err := broken.DB()
+		if err != nil {
+			t.Fatal(err)
+		}
+		db.DB = broken
+		t.Cleanup(func() {
+			db.DB = original
+			_ = sqlDB.Close()
+		})
+		// A chat nobody read before, so no cached list can answer.
+		ok, err := IsUserApprovedContext(ctx, -999999999999997, 12345)
+		if err == nil || ok {
+			t.Fatalf("IsUserApprovedContext(broken database) = %t, %v, want false and an error", ok, err)
+		}
+		if got := GetApprovedUsersContext(ctx, -999999999999997); got != nil {
+			t.Errorf("GetApprovedUsersContext(broken database) = %v, want nil as before", got)
+		}
+	})
 }

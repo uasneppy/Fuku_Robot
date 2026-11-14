@@ -1,248 +1,265 @@
-# Stack Research
+# Technology Stack
 
-**Domain:** Telegram group-management bot (Go / gotgbot v2): Staff Group fan-out moderation, AI-assisted raid lockdown, Turnstile Mini App captcha, inline settings menu
-**Researched:** 2026-10-04
-**Mode:** Ecosystem, subsequent milestone. The existing stack (Go 1.26.0, gotgbot v2, GORM/PostgreSQL, Redis, `fuku/utils/httpserver`) is fixed and not re-researched. This file covers only what must be ADDED.
-**Overall confidence:** MEDIUM. Library versions were verified against proxy.golang.org and module source. The Telegram and Cloudflare behaviour claims come from search-result summaries, because `core.telegram.org` and `developers.cloudflare.com` were blocked by the session's egress policy. Each phase must re-confirm the items marked "verify in phase" against primary docs.
+**Project:** Fuku Robot, milestone v1.1 (PM Settings Hub and Member Screening)
+**Researched:** 2026-11-02
+**Scope:** only what the NEW v1.1 features need. Phases 1-9 (staff group, lockdown, raid detection, Turnstile, settings menu, Claude image client) are not re-researched.
+**Overall confidence:** HIGH on the gotgbot surface and the repo seams (read from source); MEDIUM on Telegram runtime behaviour that the docs do not spell out (flagged per item, each needs a live spike).
 
-## Headline Recommendation
+## Headline
 
-The additions are small. **Add only two third-party Go modules**: `golang.org/x/time` (rate limiting for fan-out) and `github.com/anthropics/anthropic-sdk-go` (image and borderline-text classification). Everything else is stdlib plus modules already in `go.mod`.
+**No new Go dependency is needed.** Every v1.1 capability is already in `go.mod`:
 
-- Turnstile `siteverify`: about 60 lines of `net/http`, in the style of the existing `aispam_jev.go`.
-- Mini App `initData` HMAC validation: about 30 lines of `crypto/hmac`, hand-written.
-- Mini App page: `embed` plus `html/template` served by the existing HTTP server.
-- Settings menu: existing `callbackcodec`, `keyboard` and gotgbot types. No library.
+- gotgbot `v2.0.0-rc.36.0.20260919140833-240296efadb4` (the pinned pseudo-version) already has every Telegram field and method listed below. I read them in the module source, not from memory. No gotgbot bump.
+- Unicode script detection is the standard library `unicode` package.
+- Scheduled deletion and the "greet once" ledger use PostgreSQL through GORM with append-only migrations.
+- The PM "waiting for your next message" state reuses the repo's existing Redis `GETDEL` pattern (`fuku/modules/overwrite.go`).
+- The Claude Haiku name check is a small extension of the stdlib-only `fuku/utils/claude` client.
+
+What changes is new tables (migrations), new handler/worker code, one new handler group number, and a handful of new Redis key families.
 
 ## Recommended Stack
 
-### Core Technologies (new)
+### Core framework (unchanged)
 
-| Technology | Version | Purpose | Why Recommended | Confidence |
-|------------|---------|---------|-----------------|------------|
-| `golang.org/x/time/rate` | v0.16.0 (2026-08-19) | Token-bucket limiter for Staff Group fan-out: one global bucket plus per-chat buckets | The standard Go limiter, maintained by the Go team. Telegram publishes no limits for admin calls, so the bot needs its own governor plus `retry_after` handling. Already in the `golang.org/x/*` family the repo uses (`x/sync` v0.23.0), so no new trust surface. | HIGH (version), MEDIUM (limit values) |
-| `golang.org/x/sync` (`errgroup`, `semaphore`) | v0.23.0 (already required) | Bounded-concurrency fan-out across linked groups | Already a direct dependency. `errgroup.SetLimit` bounds in-flight calls. Do not add a worker-pool library. | HIGH |
-| `github.com/anthropics/anthropic-sdk-go` | v1.78.0 (2026-09-30) | Classify borderline text and images in the raid pipeline using `claude-haiku-4-5` | TypeSafe Jev is text-only (see Alternatives), so images need a vision-capable model. Claude Haiku 4.5 is vision-capable, cheap ($1 / $5 per MTok in/out, 200K context) and supports structured outputs, so the verdict is schema-valid JSON. Provides typed errors and built-in retries (default 2 on 408/409/429/5xx). | MEDIUM-HIGH |
-| Cloudflare Turnstile `siteverify` (stdlib `net/http`) | API v0 (`POST https://challenges.cloudflare.com/turnstile/v0/siteverify`) | Server-side validation of the Mini App token | No official or necessary Go SDK. The call is one form-encoded POST. Reuse the `aispam_jev.go` pattern: dedicated `http.Client`, 5 s timeout, 1 MiB response cap, single retry. | HIGH |
-| Telegram Mini App `initData` validation (stdlib `crypto/hmac`, `crypto/sha256`) | n/a | Prove the Mini App request came from Telegram and identify the user | About 30 lines. Writing it in-repo gives constant-time compare, strict duplicate-key rejection and an exact `auth_date` window. See "initData validation" below. | HIGH |
-| Go `embed` + `html/template` + `net/http` | stdlib (Go 1.26.0) | Serve the Mini App HTML/JS from the existing HTTP server | One binary, one origin, no frontend toolchain. Satisfies "the bot hosts the page". | HIGH |
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| Go | 1.26.0 | everything | repo constraint |
+| gotgbot v2 | rc.36 (`...20260919140833-240296efadb4`) | Telegram API | has all v1.1 fields/methods, verified below |
+| GORM + PostgreSQL (SQLite in tests) | v1.31.2 / driver v1.6.3 | queues, settings, ledgers | durable, cross-replica, same test fixtures as Phase 4-6 |
+| go-redis | v9.22.0 | wait state, verdict caches, latches, pacers | already the operational-state store |
+| `fuku/utils/callbackcodec` | in repo | all new callbacks | 64-byte cap, `<ns>|v1|...` |
+| `fuku/utils/ratelimit.TelegramPacer` | in repo | pace deletes and requirement checks | fleet-wide, Redis-backed, exists |
 
-### Existing modules to reuse (do not replace)
+### Telegram Bot API surface (verified against rc.36 source)
 
-| Module | Reuse for |
-|--------|-----------|
-| `github.com/redis/go-redis/v9` v9.22.0 | Captcha nonce store. Consume with `GETDEL` for single use. Also the lockdown counters and alert-token store (callback data is capped at 64 bytes). Operational keys sit outside `fuku:cache:` per AGENTS.md. |
-| `github.com/google/uuid` v1.6.0 | Turnstile `idempotency_key`, nonces |
-| `fuku/utils/callbackcodec` | All settings-menu and lockdown-alert buttons |
-| `fuku/utils/logredact` | `RegisterSecret` for `TURNSTILE_SECRET_KEY`, `ANTHROPIC_API_KEY` |
-| gotgbot `TelegramError.ResponseParams.RetryAfter` | 429 handling. gotgbot (rc.36 plus the repo's Sep-2026 pseudo-version) exposes it. It has **no built-in retry or limiter**, so the bot must wrap it. |
+All rows: confidence HIGH that gotgbot exposes it (read from `gen_types.go` / `gen_methods.go` in the module cache). Runtime-behaviour caveats are in the Notes column and in PITFALLS.
 
-### Supporting Libraries
+| Need | gotgbot rc.36 symbol | Notes |
+|------|---------------------|-------|
+| Linked channel of a group | `Bot.GetChat(chatId, nil)` returns `*ChatFullInfo`; field `LinkedChatId int64` | "discussion group identifier for a channel and vice versa". Only via `getChat` on the group; the `Chat` in an update does not carry it. Cache it (10 min, key via `cache.CacheKey("linked_chat", chat)`), invalidate on chat migration. 0 means no linked channel. |
+| Subscription check | `Bot.GetChatMember(channelId, userId, nil)` returns `ChatMember` (interface; use `.MergeChatMember()` or `GetStatus()`) | Doc: "only guaranteed to work for other users if the bot is an administrator in the chat". So the bot must be an admin of the **channel**. Subscribed = creator, administrator, member, or restricted with `IsMember` true (`ChatMemberRestricted.IsMember` exists). left/kicked = not subscribed. Any lookup error (bot not in channel, "chat not found") = no information, fail open, and surface "bot is not an admin of the linked channel" in the menu (check `GetChatMember(channel, bot.Id)` once). MEDIUM on the exact error text for a non-admin bot. |
+| Has profile photo | `Bot.GetUserProfilePhotos(userId, &GetUserProfilePhotosOpts{Limit: 1})` returns `*UserProfilePhotos{TotalCount int64, Photos [][]PhotoSize}` | `TotalCount == 0` means "no photo OR hidden from the bot by the user's privacy". Telegram does not document the privacy case; community reports say a hidden photo returns empty. LOW-MEDIUM: run one live spike with a test account that hides its photo. Treat it as a known false-positive class, say so in the menu text, and let "I fixed it" re-check. |
+| Last name / username present | `gotgbot.User.LastName`, `.Username` (from the update's `From`) | Free, no API call, so these two rules can run on every message at zero cost. |
+| Batch delete | `Bot.DeleteMessages(chatId, []int64, nil)` | 1-100 ids per call; doc: "If some of the specified messages can't be found, they are skipped". Same limits as `deleteMessage`: 48 h, no topic/supergroup-creation service messages, bot needs admin / `can_delete_messages`. Behaviour of a batch that contains an undeletable (too old) id is not documented: LOW. Plan: on a batch error that is not 429/rights, fall back to per-id `DeleteMessage` to isolate the bad row. |
+| Single delete | `Bot.DeleteMessage(chatId, messageId, nil)` | Doc also says: bots can delete incoming messages in private chats, so the PM editor can delete the user's input message to keep the PM tidy. |
+| Link preview below text | `LinkPreviewOptions{IsDisabled, Url, PreferSmallMedia, PreferLargeMedia, ShowAboveText}` on `SendMessageOpts` and `EditMessageTextOpts` | `ShowAboveText:false` (the zero value) puts the preview below the text. **`Url` must be a URL**, so this only works for media the owner gives as a link, never for a `file_id`. |
+| Caption above/below media | `ShowCaptionAboveMedia bool` on `SendPhotoOpts`, `SendVideoOpts`, `SendAnimationOpts`, `EditMessageCaptionOpts`, `CopyMessageOpts` | The native way to render "text above, media below" for an uploaded photo/video/GIF. Caption limit is 1024 characters after entity parsing (text messages: 4096). |
+| Copy a message | `Bot.CopyMessage(chatId, fromChatId, messageId, *CopyMessageOpts)` | Exists, but needs the source message to still exist. Not recommended for storage (see below). |
+| Keep formatting from a PM message | `Message.OriginalHTML()`, `OriginalTextHTML()`, `OriginalCaptionHTML()` (`formatting.go`) | Converts the user's text plus entities back to HTML. Store HTML, send with `ParseMode: "HTML"`. |
+| Edited messages | `Update.EditedMessage *Message`; `handlers.NewMessage(filter, h).SetAllowEdited(true)` | `edited_message` is already in `config.AllowedUpdates`. Handlers ignore edits unless `SetAllowEdited(true)`. Doc warning (verbatim in source): the update "may at times be triggered by changes to message fields that are either unavailable or not actively used by your bot". |
+| Join/leave detection | `Update.ChatMember` (`ChatMemberUpdated`, with `InviteLink`, `ViaJoinRequest`, `ViaChatFolderInviteLink`), plus `Message.NewChatMembers` | Both already handled by the lockdown guard (group -7); dedupe through the existing join-claim helpers. |
 
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| `github.com/telegram-mini-apps/init-data-golang` | v1.5.0 (2025-03-09), zero deps | Ready-made `initdata.Validate` / `Parse` | **Optional fallback only.** Last released March 2025. Its `Validate` compares the hash with `!=`, which is not constant-time, and it takes `v[0]` for duplicate keys. Prefer the hand-written validator. Use it only as a cross-check in tests (see Installation). |
-| Telegram `telegram-web-app.js` (`https://telegram.org/js/telegram-web-app.js`) | served by Telegram | Mini App client SDK (`Telegram.WebApp.initData`, `ready()`, `close()`) | Always, on the captcha page. Load it from Telegram, not a vendored copy, and allow it in CSP `script-src`. |
-| Cloudflare Turnstile `api.js?render=explicit` | served by Cloudflare | Client widget | Always. Use **explicit render** so the widget lifecycle (`callback`, `error-callback`, `expired-callback`, `timeout-callback`) is controlled from the page. |
-| Cloudflare Turnstile test keys | n/a | Tests and local dev | Sitekey `1x00000000000000000000AA` always passes. Cloudflare also documents always-fail sitekeys and a dummy secret for `siteverify`. Use them in `httptest`-based tests. Do not call the live endpoint in `make test`. |
-| `alicebob/miniredis/v2` v2.39.0 (existing) | n/a | Test nonce/`GETDEL` and lockdown counters | Already the repo's Redis fixture. |
+### Service message fields in rc.36 (all present on `gotgbot.Message`)
 
-### Development Tools
+One table-driven `serviceMessageKind(msg) (key string, ok bool)` should map these to settings keys. Never test with `msg.Text == ""`; test the typed field.
 
-| Tool | Purpose | Notes |
-|------|---------|-------|
-| `httptest.Server` (stdlib) | Fake `siteverify` and Anthropic endpoints | Make the endpoints package-level vars, as `aispamJevEndpoint` is. AGENTS.md forbids mock libraries and wants hand-written fakes. |
-| Telegram test environment (`UseTestEnvironment` on gotgbot's `BaseBotClient`) | Exercise Mini App launch end to end | Mini Apps can be tested against Telegram's test servers. The initData third-party signature uses a separate test public key. |
-| BotFather `/newapp` | Register a **Direct Link Mini App** (short name plus HTTPS URL) | Manual one-time ops step. Must be in the deploy runbook. |
+| Menu type | Field on `Message` | Type |
+|-----------|-------------------|------|
+| User joined | `NewChatMembers` | `[]User` |
+| User left | `LeftChatMember` | `*User` |
+| New group photo | `NewChatPhoto` | `[]PhotoSize` |
+| Group photo removed | `DeleteChatPhoto` | `bool` |
+| New title | `NewChatTitle` | `string` |
+| Pinned message | `PinnedMessage` | `MaybeInaccessibleMessage` |
+| Auto-delete timer changed | `MessageAutoDeleteTimerChanged` | pointer |
+| Forum topic created / edited / closed / reopened | `ForumTopicCreated`, `ForumTopicEdited`, `ForumTopicClosed`, `ForumTopicReopened` | pointers. **Telegram cannot delete the "topic created" service message** (doc: supergroup/channel/forum-topic creation messages can't be deleted); do not offer it. |
+| General topic hidden / unhidden | `GeneralForumTopicHidden`, `GeneralForumTopicUnhidden` | pointers |
+| Boost added | `BoostAdded` | `*ChatBoostAdded` (the separate `chat_boost` update is not needed and is not in `AllowedUpdates`) |
+| Video chat | `VideoChatScheduled`, `VideoChatStarted`, `VideoChatEnded`, `VideoChatParticipantsInvited` | pointers (invites = `VideoChatParticipantsInvited`) |
+| Chat background | `ChatBackgroundSet` | pointer |
+| Gifts | `Gift`, `UniqueGift`, `GiftUpgradeSent` | pointers |
+| Giveaways | `GiveawayCreated`, `Giveaway`, `GiveawayWinners`, `GiveawayCompleted` | pointers (`Giveaway` is user content, not strictly service; offer under "giveaways") |
+| Owner changes | `ChatOwnerLeft`, `ChatOwnerChanged` | new in this Bot API, pointers |
+| Group/supergroup created, migration | `GroupChatCreated`, `SupergroupChatCreated`, `MigrateToChatId`, `MigrateFromChatId` | **never delete** (creation can't be deleted; migration is handled by `staff.RekeyChat`) |
+| Payments / shared / misc | `SuccessfulPayment`, `RefundedPayment`, `UsersShared`, `ChatShared`, `WriteAccessAllowed`, `ProximityAlertTriggered`, `Checklist*` | offer one "other service messages" bucket |
 
-## Capability-by-Capability Findings
+Existing `greetings.clean_service_settings` covers join/leave only; v1.1 replaces it with the per-type table below and migrates the old flag into the join and leave rows.
 
-### 1. Staff Group fan-out: rate limits and partial failure (MEDIUM)
+### Database (new tables, one migration each, timestamped after `20261101120000`)
 
-- Telegram does not publish limits for admin methods (`banChatMember`, `restrictChatMember`). Community guidance is roughly 30 messages/s global and about 20 messages/min per group for sends. Admin calls are "more forgiving", but no number is guaranteed. A hard-coded limit is therefore a guess. Treat `429` with `retry_after` as the source of truth.
-- **Recommended design** (stdlib plus `x/time` plus `x/sync`):
-  - One process-wide `rate.Limiter`, about 20 rps with a small burst, shared by all fan-out calls. Config-tunable.
-  - `errgroup` with `SetLimit(~8)` across linked groups.
-  - Wrap each Bot API call in `callWithRetry`. On `*gotgbot.TelegramError` with `Code == 429`, sleep `ResponseParams.RetryAfter` (cap about 30 s, honour context), then retry up to 2 times.
-  - Classify results per group as `done`, `skipped` (not admin, or missing the right), or `failed` (bot lacks rights, chat gone, retries exhausted). Never drop a failure. This is the core PROJECT.md requirement.
-  - Send **one** summary message to the issuer. Per-group log-channel posts go through the same limiter (1 message/s per chat).
-- The limiter is per-process. AGENTS.md notes antiflood counters are per-replica. If deployed with more than one replica, fan-out limits are per-replica too. If multi-replica is real, use a Redis token bucket. The repo already has the Redis `SetNX` pattern in `ratelimit/backup_ratelimit.go`. For a single-owner bot, in-process is sufficient.
-- Timed actions: `until_date` under 30 s or over 366 days from now is treated as **permanent** by Telegram. Validate durations in the command parser and reject or clamp them. gotgbot's `BanChatMemberOpts.UntilDate` / `RestrictChatMemberOpts.UntilDate` doc comments state this.
-- Admin gating needs `getChatMember(chat, issuer)` per linked group, which is one extra call per group per action. Add it to the same limiter budget. Cache admin status through the existing admin cache where it is fresh enough. **Never skip the check** (PROJECT.md constraint).
-- Use `getChatMember` status `creator` for the owner check that gates linking. React to `chat_member` updates to auto-unlink on ownership change. `chat_member` is **already in `AllowedUpdates`** (`fuku/config/config.go`), and the bot must be an admin in the chat to receive it. Verify the owner-transfer path in phase.
+Follow AGENTS.md: append-only, one transaction per file, models with `TableName()`, add to every `AutoMigrate` harness list, reads via `cache.GetFromCacheOrLoad`, every write `cache.DeleteCache`. Design rule for every settings column: **the Go zero value must be the safe default** (off / 0 / owner-only), because GORM's `Create` turns a Go `false` back into a SQL default (the existing `chat_raid_detection` note). Use column-targeted `INSERT ... ON CONFLICT (chat_id) DO UPDATE` upserts like `raiddetection` so two admins never clobber each other.
 
-### 2. Raid lockdown: Bot API mechanics (MEDIUM, one LOW risk)
+| Table | Purpose | Notes |
+|-------|---------|-------|
+| `scheduled_deletions` | durable delete queue | `id`, `chat_id`, `message_id`, `delete_at`, `sent_at` (the message's own date, for the 48 h rule), `kind` (short string: `service`, `own_welcome`, `own_punish`, `command`, `edited`, `selfdestruct`...), `claimed_at`, `attempts`. `UNIQUE (chat_id, message_id)` with `ON CONFLICT DO UPDATE SET delete_at = LEAST(...)` so the earliest rule wins. Index `(delete_at)`. Rows are **deleted** on completion (no history), so the table stays small. Never cached, never in backup/export/import/reset. |
+| `chat_cleanup_settings` | per-chat delete rules | one row per chat; seconds columns per service type (0 = off, so zero is safe) plus own-message minutes per kind, commands, edited, self-destruct minutes. Cached read via `GetFromCacheOrLoad`. |
+| `chat_requirements` | member requirements | action columns as small ints `0 off, 1 warn, 2 kick, 3 ban, 4 mute` per rule (last name, username, photo, channel, AI name, Russian, Arabic, Chinese), plus `check_on_join`, `delete_messages`. Zero = off. |
+| `chat_menu_access` | owner gate | `chat_id` PK, `admins_allowed bool` (zero = owner only). Read **fresh** (uncached) in the press pipeline: it is an authority input, and AGENTS.md already keeps authority reads off the in-process cache. |
+| `chat_admin_index` | reverse index for the PM group list | `(chat_id, user_id, status)` with `status` creator/administrator, PK `(chat_id, user_id)`, index on `user_id`. The Bot API cannot list a user's groups and `fuku/utils/cache/adminCache.go` is keyed by chat only, so there is no reverse lookup today. Fill it from `loadAdminCacheFromTelegram` (one replace-per-chat transaction, in a recover-protected goroutine), from `chat_member` promotions/demotions, and clear it on `my_chat_member` when the bot leaves. The PM list reads this table only; every row is **live-verified** (`getChatMember`) when drawn or picked, and a stale row is pruned, so the index is a hint and never authority. Owner-only default means only `status = 'creator'` rows are listed. |
+| `chat_welcomed_users` | "greet once" ledger | PK `(chat_id, user_id)`, `first_welcomed_at`. `INSERT ... ON CONFLICT DO NOTHING`; `RowsAffected == 1` means first time, so it is atomic across replicas and doubles as the dedupe for the two join deliveries. Postgres, not Redis: "ever" must survive a flush. |
+| `greetings`, `rules` (columns added) | message editor | add media kind, `file_unique_id`, `media_below_text`, buttons (rules gets the same `ButtonArray` welcome already has), greet-once flag. Existing columns `file_id`, `btns`, `last_msg_id`, `clean_old` stay; "delete last welcome" is the existing `clean_old` + `last_msg_id`. |
 
-- Chat-wide mute: `setChatPermissions` with all permissions false (one call, no member enumeration). The bot cannot list members, so per-member muting at lockdown time is impossible. Admins are unaffected by default permissions.
-- Joiner kick: on each new member while locked, `banChatMember` then `unbanChatMember` (kick that allows rejoin), or a timed ban. Record joiner IDs in a Redis list for the "Ban N recent joiners" button.
-- **LOW-confidence risk to spike in the first raid phase: exempting approved users.** The requirement is "mute everyone except admins and approved users". Whether `restrictChatMember` (with `use_independent_chat_permissions=true`) can grant a specific member **more** than the chat default could not be confirmed from primary docs. One search summary claimed it can, but it conflated the flag's documented meaning (permission implication) with exceeding the default. Run a 30-minute experiment on a throwaway supergroup before designing around it. Fallbacks:
-  - (a) Instead of a default-permission mute, enforce the lockdown with a watcher that `deleteMessage`s non-exempt senders. This costs more API calls.
-  - (b) Grant approved users a no-rights admin promotion for the duration.
-  - (c) Accept that approved users are muted and note it in the alert.
-- Alert buttons: `callbackcodec`-encoded, with a short Redis token for the burst's joiner list. Do not put user lists in callback data (64-byte cap, and `encodeCallbackData` returns `""` on overflow, which ships a dead button).
-- Detection (joins/min, media flood) is plain Redis counters (`INCR` plus `EXPIRE`), as `antiraid` does today. **No library needed.** Do not use per-replica in-process counters for the surge trigger.
+### Scheduled deletion: PostgreSQL queue plus a DB-driven worker (recommended over Redis ZSET)
 
-### 3. AI classification for borderline text and images (MEDIUM-HIGH)
+**Use a PostgreSQL table drained by a worker that copies the lockdown worker pattern** (`StartLockdownWorker`: `context` + cancel, `RecoverFromPanic`, `done` channel, bounded stop wait, wake channel).
 
-- **Text (borderline):** keep the existing TypeSafe Jev path (`jev-latest`, text-only, calibrated probabilities, about 70-500 ms, $0.042/MTok input). It is already integrated, cheap and fast. Reuse its circuit breaker and shed-on-overload behaviour.
-- **Images: Jev cannot do this.** Multiple sources agree Jev takes text only (no images, audio or video). Use **Claude Haiku 4.5** (`claude-haiku-4-5`, 200K context, $1 in / $5 out per MTok, vision). It is the cheapest current vision-capable Claude. Newer Sonnet-tier models (`claude-sonnet-5-5`, $2 / $10) are available if Haiku's accuracy on spam and porn imagery proves insufficient. Make the model ID a config value.
-- Image path:
-  1. Pick a mid-size `PhotoSize` (about 320-800 px) from the Telegram message. For stickers, GIFs and video, use `Thumbnail`. Animated TGS stickers cannot be classified.
-  2. `bot.GetFile`, then download from `https://api.telegram.org/file/bot<token>/<path>`. Do **not** download originals. The `backup.go` downloader already shows the base-URL pattern.
-  3. Send it as a base64 image block to Claude. SDK helper: `anthropic.NewImageBlockBase64(mediaType, b64)`.
-  4. Constrain the output with structured outputs: `OutputConfig.Format` (a `JSONOutputFormatParam` with a JSON Schema) such as `{verdict: "spam"|"ok"|"unsure", category, confidence}`.
-- **Prompt-injection hardening** (user text and image text are untrusted):
-  - Verdict-only output through the JSON schema.
-  - The model never receives tool access, so it cannot act.
-  - The model's output only raises or lowers a score. **Rules, not the model, trigger lockdown** (a PROJECT.md decision).
-  - Truncate message text, wrap it in delimiters, and tell the model in the system prompt that content inside the delimiters is data.
-  - Put the static system prompt first so prompt caching applies. Verify `usage.cache_read_input_tokens` is non-zero. The minimum cacheable prefix is model-dependent (about 1-4K tokens), so a short prompt will not cache and that is fine.
-- Cost control: classify only borderline cases (rule score in a middle band), only from non-approved users, with a per-chat per-minute cap and the same breaker/shed semantics as `aispam`. Use structured outputs (`OutputConfig.Format`) rather than forced tool use to get JSON back.
-- Register `ANTHROPIC_API_KEY` with `logredact.RegisterSecret`. Feature is inert when the key is empty, matching the `TYPESAFE_API_KEY` convention.
-- Dependency note: `anthropic-sdk-go` v1.78.0 has a large module graph (AWS, Google, MCP SDKs for its Bedrock/Vertex backends). With Go module pruning only the imported packages compile, but `go.mod`/`go.sum` will grow. If that is unacceptable, call `POST /v1/messages` with `net/http`. It is one endpoint and the repo already does this for Jev. The tradeoff is losing typed errors and retries. **Recommendation: use the SDK**, run `govulncheck` (already in CI), and revisit only if `go mod tidy` pulls something objectionable. Note that its `go.mod` declares `go 1.24`, so it is compatible with Go 1.26.0.
+Why PostgreSQL:
 
-### 4. Turnstile Mini App captcha (MEDIUM, with items to verify in phase)
+1. The requirement says deletions must survive restarts and work across replicas. A queue row in PG survives a Redis flush, `CLEAR_CACHE_ON_STARTUP` (which spares `fuku:*` operational keys, but not an operator `FLUSHDB` or a failover without persistence), and works without Redis at all, like the lockdown worker does.
+2. The repo already has the proven shape: rows claimed with one conditional update, a stale-claim release, `RowsAffected == 1` as the winner test, and PG-integrity tests. SQLite test parity needs no `FOR UPDATE SKIP LOCKED`.
+3. A ZSET would need a Lua pop-and-claim, a lost-claim recovery path and a second source of truth for "which messages are pending". More code for a weaker guarantee.
 
-**Launch mechanism, the most important finding.** The `web_app` inline-keyboard button is **private chats only** (gotgbot's own doc comment on `InlineKeyboardButton.WebApp` says "Available only in private chats between a user and the bot"). A group welcome message therefore cannot carry a `web_app` button. Use a **Direct Link Mini App**: an inline `url` button pointing at `https://t.me/<bot_username>/<app_short_name>?startapp=<nonce>`. This opens in any chat. `startapp` is delivered to the app as `start_param` inside signed `initData`. The Mini App must be registered with BotFather `/newapp` first. The `startapp` value is limited to `A-Za-z0-9_-` and 512 chars, so use a 128-bit random nonce (base64url or hex). **Verify the exact limits in phase.**
+Claim shape that works on both PostgreSQL and SQLite and is safe across replicas (put the claim predicate in the **outer** `WHERE` so the loser re-evaluates it after the row lock):
 
-**Flow:**
-1. User joins and is restricted (existing captcha flow). Bot creates a nonce, stores it in Redis (`fuku:captcha:miniapp:<nonce>` mapping to `{chat, user}`, TTL equal to the captcha timeout) and sends the `url` button.
-2. Mini App page loads. JS reads `Telegram.WebApp.initData` and renders Turnstile explicitly (`action: "join"`, `cdata: <nonce>`).
-3. On the widget callback, JS `POST`s `{initData, turnstileToken}` to `/captcha/verify` (same origin).
-4. Server, in this order:
-   - Validate the `initData` HMAC.
-   - Check `auth_date` is within the allowed window (about 5-10 min).
-   - Read `start_param` and `GETDEL` the nonce.
-   - **Require `user.id` from the signed initData to equal the stored pending user.** Without this, anyone with the link could verify on someone else's behalf.
-   - Call `siteverify`.
-   - On `success` with matching `hostname`, `action` and `cdata`, run the existing "captcha passed" path: unrestrict, replay pending messages, `cache.DeleteCache("fuku:cache:captcha_pending:<chat>")` per AGENTS.md.
-5. Failure paths keep the existing "one attempt per `(user, chat)`" semantics (a deliberate PROJECT.md decision, to reconcile with "can rejoin to try again").
+```sql
+UPDATE scheduled_deletions SET claimed_at = :now, attempts = attempts + 1
+WHERE id IN (SELECT id FROM scheduled_deletions
+             WHERE delete_at <= :now AND (claimed_at IS NULL OR claimed_at < :stale)
+             ORDER BY delete_at LIMIT :n)
+  AND delete_at <= :now AND (claimed_at IS NULL OR claimed_at < :stale)
+RETURNING id, chat_id, message_id, sent_at;
+```
 
-**`siteverify` specifics (verify in phase against Cloudflare docs):**
-- Form-encoded POST (JSON also accepted). Fields: `secret`, `response` (token), optional `remoteip`, optional `idempotency_key` (UUID, so a retried request after a network error is not rejected as a duplicate).
-- Response: `success`, `error-codes[]`, `challenge_ts`, `hostname`, `action`, `cdata`. **Check `hostname`, `action` and `cdata` yourself.** Success alone does not prove the token was minted for your page and nonce.
-- Tokens are single-use and expire after 300 s. Error `timeout-or-duplicate` means expired or replayed. Do not retry the siteverify call with the same token unless an `idempotency_key` is supplied.
-- Fail **closed** on network error or non-200 (the user stays restricted, the timeout kick applies). Do not fail open.
-- `remoteip` is optional, so omit it unless a trusted proxy header is configured.
+(GORM: `Clauses(clause.Returning{})`; works on PG and SQLite 3.35+, which go-sqlite3 in `gorm.io/driver/sqlite` v1.6.0 ships.)
 
-**initData validation (stdlib, about 30 lines):**
-1. `url.ParseQuery(initData)`. Reject duplicate keys and a missing `hash`.
-2. Data-check string: every pair except `hash`, as `key=value` (decoded values), sorted by key, joined with `\n`. For **first-party** validation, `signature` stays in the string and only `hash` is excluded. The Mini Apps library's `Validate` does this.
-3. `secret = HMAC_SHA256(key="WebAppData", msg=botToken)`, then `calc = hex(HMAC_SHA256(key=secret, msg=dataCheckString))`.
-4. `hmac.Equal` (constant time) against `hash`.
-5. Enforce `auth_date` freshness. A valid signature only proves origin, not recency, so without this check a leaked `initData` string is valid forever.
-6. Ed25519 `signature` / third-party validation is **not needed** (the bot owns the token). The public keys, if ever needed, are in `init-data-golang` v1.5.0 `validate_third_party.go`: production `e7bf03a2fa4602af4580703d88dda5bb59f32ed8b02a56c187fe7d34caed242d`, test `40055058a4ee38156a06562e52eece92a771bcd8346a8c4615cb7376eddf72ec`.
-7. Never trust `initDataUnsafe` on the server. Only the validated raw string.
+Worker rules:
 
-**Hosting and security:**
-- Mini Apps require a **public HTTPS** URL. The deploy needs a TLS-terminating reverse proxy or tunnel (Caddy, nginx, Cloudflare Tunnel) in front of the bot's HTTP port. The current `Server` has no TLS. The `docker-compose.yml` should gain the proxy or document it. **This is a deploy-side change the roadmap must schedule.** The Turnstile widget's allowed hostname list must include this domain.
-- Mount routes on `Server.mux` only, never on `http.DefaultServeMux`. `server.go` exposes `DefaultServeMux` for pprof, and routes added there would be exposed by that path.
-- The server's `WriteTimeout` is 10 s, which is fine for a verify call bounded at about 5 s.
-- Security headers on the page: a strict CSP allowing `script-src 'self' https://telegram.org https://challenges.cloudflare.com` (use a nonce for inline script), `frame-src https://challenges.cloudflare.com`, `connect-src 'self'`, plus `Referrer-Policy: no-referrer` and `X-Content-Type-Options: nosniff`. Do **not** send `X-Frame-Options: DENY` or `frame-ancestors 'none'`. Telegram Web and some clients embed Mini Apps in an iframe, so a `frame-ancestors` allowlist of Telegram origins is the right control. Verify the exact origins in phase.
-- **Bot API 10.2 (2026-07-14) Mini App origin protection**, enforced by default from 2026-07-20 (opt-out via BotFather): Mini App methods are blocked when called from an origin other than the Mini App's registered domain. Keep **every** `Telegram.WebApp.*` call on the bot's own origin, and never call them from inside the Turnstile iframe or any third-party frame. The design above does (the Turnstile callback hands the token to the same-origin page, which does the `fetch`). Source is secondary, so verify in phase.
-- Rate-limit `/captcha/verify` per IP and per nonce with Redis `INCR`/`EXPIRE`. No middleware library is needed.
-- Register `TURNSTILE_SECRET_KEY` with `logredact.RegisterSecret` (6+ chars). The sitekey is public and goes in the page template.
+- **One path for everything**, including "immediately": enqueue with `delete_at = now` and wake the worker through an in-process channel. Never call `DeleteMessage` inline on the update path. That gives batching (a join burst becomes one `deleteMessages`), pacing and 429 handling in one place, and avoids deleting a command message before the command's own reply has been sent (a reply to a deleted message fails). Schedule command deletions with a small minimum delay (about 2 s).
+- Per cycle, group claimed rows by chat, send up to 100 ids per `DeleteMessages` call through a **new `ratelimit.NewTelegramPacer`** instance (`fuku:del:pace:next` / `fuku:del:pace:block`, own budget like `lockdownPacer` and `staffPaced`).
+- Drop, without any Telegram call, rows whose `sent_at` is older than 47 h 50 m (48 h limit, small safety margin) and count them. After downtime this is the normal case for stale rows, so it must not loop. Cap every UI delay below 47 h (self-destruct minutes max 2820).
+- Outcomes: success or "message to delete not found" / "can't be deleted" / bot kicked / chat gone / bot lacks the delete right means **delete the row** (no retry, log at debug, count). 429 or shutdown releases the claim with no attempt. Other errors: up to 3 attempts, then drop.
+- Stale claim release (`claimed_at` older than 2 min) at the start of each cycle, like `lockdownStaleClaim`.
+- Shutdown: register a `StopDeletionWorker` drain **after** DB-close with `RegisterHandlerWithTimeout` (5 s wait plus `shutdownDrainGrace`), exactly like `StopLockdownWorker`; every row resumes from the database, so a cut-off cycle loses nothing. Update the AGENTS.md shutdown paragraph in the same commit.
+- Enqueue is one `INSERT ... ON CONFLICT` and is a hot path only for the self-destruct feature (one row per member message in chats that turned it on). Gate it on the cached `chat_cleanup_settings` read so chats without the feature cost nothing, and do not batch the writer until a measurement says so. A failed enqueue is logged and the message stays (fail safe).
 
-### 5. Inline settings menu (HIGH)
+Why not a library: River, asynq, machinery and similar bring their own schema/Redis layout and a new dependency tree, against the "append-only migrations, stay on the stack" rules.
 
-No library. Use gotgbot's `InlineKeyboardMarkup`, `EditMessageText` and `AnswerCallbackQuery` with the repo's `callbackcodec` (`<ns>|v1|<url-encoded>`, 64 B). Keep menu state in the callback payload (page and chat) plus short Redis tokens for anything larger. Gate every callback with a fresh admin check (not a cached message-author assumption). Always `AnswerCallbackQuery`. Edit in place instead of sending new messages to stay under per-chat send limits. Handlers follow AGENTS.md (value receivers, `WrapCommand` for the `/settings` entry point, anonymous-admin registration where needed). Use `RegisterLegacyModule` with a unique name.
+### PM "waiting for your next message" state: reuse the existing Redis consume pattern
+
+Use the repo's own mechanism (`fuku/modules/overwrite.go`: `setOverwriteCache`, `consumeOverwriteCache` with `rdb.GetDel`, `cache.GetMarshal()`), generalised with a new kind. It already survives replicas (Redis), expires on its own (5 min TTL there; use 10 min for an editor), sits outside the `fuku:cache:` prefix, and falls back to a mutex-guarded in-process path when no Redis client exists (tests, dev).
+
+- Key `fuku:pmwait:<user id>`: one pending input per user (a new menu press replaces the old one). Value: chat ID being configured, the field (`rules_text`, `welcome_media`, `welcome_buttons`, `filter_add`, ...), the menu message ID to edit afterwards, and a version byte.
+- Consume with atomic `GETDEL`, so when a user sends two messages quickly only one replica gets the state. On a validation failure (bad URL line, text over the limit), **write the state back** with the remaining TTL (the same shape as `captchaweb.Store.Rearm`) and reply with the reason. Cancel is a button (`a=xw`) that deletes the key, and `/cancel` or any other command clears it.
+- Authority is checked **when the input is applied**, not only when the wait was armed: the consumer re-runs the live creator/admin check (and the owner gate) for the stored chat before writing anything, because Redis state is not proof of rights.
+- The input handler is a watcher in the **private chat only**, in a free handler group (suggested group `1`: it comes after the group-0 command handlers, so `/commands` never become input, and group 1 is unused today). It returns `ext.ContinueGroups` when there is no pending state, and `ext.EndGroups` only when it consumed one. Verify no group-0 handler already catches every private message and returns `nil` (AGENTS.md: that silently kills later group-0 handlers). Add the new group number to the AGENTS.md handler list.
+- Without Redis the editor says it is temporarily unavailable; the rest of the menu (stateless) keeps working.
+- **Do not use gotgbot's `ext/handlers/conversation`**: its default storage is in-memory (per replica), it keys by chat/user in its own way, and its handler groups would not line up with the repo's group numbering. Writing the state in Redis directly is smaller and testable with miniredis.
+
+The editor stores media as **`file_id` plus `file_unique_id` plus media kind** taken from the PM message (`Message.Photo[last].FileId`, `Video.FileId`, `Animation.FileId`, `Document`, `Sticker`), which is what the existing `greetings.file_id` and `type` columns already do. Do not store a source message to `copyMessage`: it breaks when the owner deletes the PM message, and it cannot carry the group's own buttons and settings. Albums arrive as separate updates (one per item, same `media_group_id`): take the first, ignore the rest, say "one media only".
+
+"Media under text" has two honest implementations, pick by media source:
+
+| Media source | Render | Limit |
+|--------------|--------|-------|
+| Uploaded photo / video / GIF (a `file_id`) | `sendPhoto` / `sendVideo` / `sendAnimation` with `Caption` = the text and `ShowCaptionAboveMedia: true` | caption 1024 chars; the editor must refuse longer text for this mode |
+| An `https` URL given by the owner | `sendMessage` with `LinkPreviewOptions{Url: url, ShowAboveText: false, PreferLargeMedia: true}` | URL must be reachable by Telegram |
+
+A `file_id` cannot be a link preview (no URL). Do not add media hosting or a public media route to the bot's HTTP server to fake it: a `getFile` URL contains the bot token (AGENTS.md forbids exposing it) and a new public route widens the attack surface the Phase 8 hardening just closed. If the owner insists on "link preview below text" for uploaded files, that is a separate decision (external hosting), not part of this milestone.
+
+URL buttons: parse owner input with `net/url` (scheme `https`, `http` or `tg`), at most 8 per row and 100 per message (Telegram limits), and render with `gotgbot.InlineKeyboardButton{Text, Url}`. The existing `ButtonArray` / `db.Button` model already stores them for welcome. The preview in PM is the **real send function** of the greeting module called with the PM chat as target, so preview and group output cannot drift (the same "one code path" rule as the Phase 9 apply functions).
+
+### Unicode script detection (standard library only)
+
+`unicode.Cyrillic`, `unicode.Arabic`, `unicode.Han`, `unicode.Hiragana`, `unicode.Katakana`, `unicode.Hangul` are all in the standard library. I compiled and ran a probe on Go 1.26.0 to confirm the cases below.
+
+| Rule | Implementation | Verified behaviour |
+|------|---------------|--------------------|
+| Arabic name | any rune with `unicode.Is(unicode.Arabic, r)` | matches basic Arabic and the Presentation Forms (`ﻣﺤﻤﺪ`), so Persian/Urdu/Pashto also match. Accepted: the menu says "Arabic script". |
+| Chinese name | any `unicode.Han` rune **and** no Hiragana/Katakana/Hangul rune | `李雷` matches; `田中さん` does not (Japanese kana present). A Japanese name written only in kanji (`田中`) is indistinguishable from Chinese: accepted false positive, documented. |
+| Russian name | any of `ы ъ э ё` (case-folded via `unicode.ToLower`), **and** the Cyrillic check | `Иван ёж` matches; `Олег`, `Олексій їжак`, `ҐЄ` do not. This is the owner's rule. Known false positives: Belarusian (ы ё э), Bulgarian (ъ), Kazakh and other Cyrillic languages. Ukrainian never uses these four letters, which suits a Ukrainian community. Optionally exempt a name that also holds an Ukrainian-only letter (`і ї є ґ`): a Russian name will not, so this only removes mixed-script oddities. |
+| Which strings to test | `first_name` + `last_name` only (each at most 64 chars) | usernames are ASCII by Telegram rules, so script rules do not apply to them |
+| Normalisation (for the AI cache key only, not for script rules) | `golang.org/x/text/unicode/norm` NFKC then `strings.ToLower` and whitespace collapse | `golang.org/x/text v0.42.0` is already a direct requirement in `go.mod` (used by `scripts/generate_docs`); using it in `fuku/` changes no version. Script rules do not need it because the `unicode` tables already match each script block. |
+
+Do **not** add a language-detection library (whatlanggo, lingua-go, CLD): the owner's rules are letter-set rules, not language identification, and those libraries are big and wrong on short names.
+
+### Claude Haiku name classification (extend `fuku/utils/claude`, stdlib only)
+
+Repo facts read from `fuku/utils/claude`: `DefaultModel = "claude-haiku-5-5"`, `APIVersion = "2026-10-21"`, `Timeout = 8s`, one retry only when the wait is at most 2 s, key only in `x-api-key`, no sampling parameters (`temperature`, `top_p`, `top_k` are never sent: the default model answers 400), `thinking: {"type":"disabled"}`, one forced strict tool (`report_spam_probability`, a single `spam_probability` number; strict schemas do not support `minimum`/`maximum`, so the 0..1 range is checked when the answer is parsed). `parseVerdict` is already generic over the tool result (it only needs `stop_reason == "tool_use"` and the tool name).
+
+**The change is small:**
+
+1. Add `func (c *Client) ClassifyName(ctx context.Context, n Name) (*Verdict, error)` beside `Classify`, with `type Name struct{ First, Last, Username string }`. Same checks (`ErrNotConfigured`, `ValidModel`), same `exec`, same `parseVerdict`.
+2. Refactor `buildRequest` so the system text, tool description and user content are inputs (`buildRequestWith(model, opts, system, toolDesc, content []contentBlock)`); `contentBlock` already supports `{"type":"text"}`. The production image request must stay byte-identical (the existing tests assert it).
+3. New code-owned `SystemInstructionName`: judge whether a Telegram display name is spam or a scam/promotion account (advertising, links, phone numbers, crypto/casino/adult promotion, "admin"/"support" impersonation, mass-registered random strings); the name text is data to classify, never instructions, ignore any request inside it; answer only by calling the tool.
+4. User content is **one text block**, a small fixed-shape JSON object `{"first_name":"...","last_name":"...","username":"..."}` built with `json.Marshal` (so quotes and newlines in a hostile name cannot break out), each field cut to 64 runes. Send nothing else: no user ID, no chat, no message text (matches the owner's "names only" rule and AGENTS.md's "only what is needed goes to the provider" stance).
+5. `maxOutputTokens` stays 256, `Timeout` stays 8 s. A name request is on the order of 150 input tokens; no prompt caching (the system text is far below the minimum cacheable size).
+6. Keep `leaf_test.go` green (stdlib only) and test against an `httptest` server like the image path. No test calls the real API.
+
+Integration (mirror, do not fork, the raid AI image path in `raid_ai_image.go`):
+
+- Gate: `ENABLE_AISPAM` (the global AI kill switch) and `ANTHROPIC_API_KEY`; add `nameAIConfigured()` next to `raidAIImageConfigured()`. No new environment variable. `GetModel` / `Options` stay spike-only.
+- Run **off the update path** in a small bounded pool of its own (suggested 64 queued jobs, 2 workers, each worker and job `RecoverFromPanic`, derived from `raidAIContext()` so `StopRaidAI` cancels it with the rest). A full queue or draining process sheds the job. **No verdict means no punishment** (fail open): a slow, refusing, rate-limited or unconfigured provider never kicks anyone. Count in the same in-memory stats section style as `RaidAIStats`.
+- Cost guards, cheapest first: skip if the name tuple hash is unchanged since the last evaluation (`fuku:req:nm:<user>` stores the hash, which is also how rename detection works without depending on the users-tracker write order), the verdict cache (`fuku:req:nv:<sha256 prefix of normalised name>` = probability string, `SET EX` 24 h, written only after a real verdict), then hourly budgets by `INCR` + 2 h expiry per chat and fleet-wide (reuse the Phase 7 budget helpers), then the call. Reuse the per-chat/provider-wide breakers from `raid_ai_breaker.go` semantics (key rejected pauses all chats; 429 with `retry-after` over 2 s pauses).
+- Bar: a name verdict of at least `nameAIBar` (suggest 0.9, a code constant, higher than the image bar 0.85 because a false positive here punishes a real person) triggers the chat's configured punishment for the "AI spam name" rule. Never log or store the name text beyond the hashed key; the verdict cache holds only a number.
+- Name sent to Anthropic also means a privacy note in the menu help text (like `lockdown_help_msg` does for TypeSafe/Anthropic) in all 7 locales.
+
+### Member requirements engine (what the stack needs, not the full design)
+
+- **Cheap rules first, no API call:** last name, username, the three script rules and the name hash all read the update's own `User`.
+- **Telegram-calling rules** (photo, channel subscription) go through a **bounded concurrency gate plus `singleflight`** (`golang.org/x/sync` is already a dependency; `raidAIImageFlight` uses it) and a short pass cache `fuku:req:ok:<chat>:<user>` (about 10 min, positive results only). Each call has a 2-3 s timeout and an error is "no information" (fail open), like the raid counters. This is what keeps "check on every message" from becoming one `getUserProfilePhotos` per message.
+- **One notice per violation burst:** a `SET NX EX 60` latch `fuku:req:latch:<chat>:<user>` so 20 messages from a violator do not produce 20 notices or 20 punishments across replicas (same design as `fuku:raid:{chat}:fire`).
+- **Punishments reuse the existing code paths** (warn through `warns`, kick/ban/mute through the bans/mutes functions); no staff code is involved. Unmute for "I fixed it" goes through `resolveUnmutePermissions` (the choke point, so it also works during a lockdown).
+- **"I fixed it" button:** callback `req|v1` through `callbackcodec`, fields `a=fx`, `u=<user>`; the handler requires `query.From.Id == u` (callback data is not authenticated), re-runs **all** rules live (bypassing the pass cache), and unmutes only when every rule passes. Needs its own `callbackquery.Prefix("req|")` registration.
+- **Exemptions** (must not be screened): admins, approved users, the bot, Telegram service IDs (`staffServiceUserIDs`), and anything with `sender_chat` (anonymous admins, channels, the linked channel's automatic forward). Reuse `raidFloodSenderCounts` and `IsApprovedForUpdate` rather than a second list.
+- **Handler placement:** a new watcher; the join check hooks the existing join paths, the on-message check is a watcher that always returns `ext.ContinueGroups`. Pick numbers from the free slots in AGENTS.md (the list has no `-5`, `-8`, `-9`, `1`) and update the list in the same commit.
+
+### Message deletion handlers (what the stack needs)
+
+- **Janitor watcher** (suggested group `-5`, free since the antiraid handler was retired): always `ext.ContinueGroups`; it only enqueues rows. It runs before group 0 so it sees a command that a group-0 handler will later end, and it enqueues service messages (via `serviceMessageKind`), member commands (slash text addressed to this bot or unaddressed, using the `bot_command` entity at offset 0 like `raidFloodIsSlashText`), and self-destruct rows. It runs after the lockdown join guard (-7), which stays first.
+- **Edited-message deletion:** a second handler on `handlers.NewMessage(...).SetAllowEdited(true)` that returns immediately unless `ctx.EditedMessage != nil`, skips admins/approved/bots/`sender_chat`, and enqueues a delete with `kind=edited`. Because Telegram may send `edited_message` for changes the bot cannot see (doc text above), require `EditDate` to differ from `Date` by more than a small grace (suggest 5 s) and make the setting say "edited messages" not "text edits". LOW confidence on false triggers: needs a live check with a link preview and a reaction.
+- **Bot's own messages after N minutes:** the send sites (welcome, goodbye, rules reply, automatic punishment notice, manual `/ban` `/mute` `/kick` `/warn` replies) each call one helper `scheduleOwnDeletion(chat, msg, kind)` right after a successful send; the helper reads the cached `chat_cleanup_settings` and enqueues. The message ID comes from the `*Message` the send returned. A sent message that is already older than 48 h at delete time is dropped by the worker.
+- The bot needs `can_delete_messages`; show the existing bot-admin notice (`chat_status_bot_not_admin`) on the page, as `/lock` pages do.
+- `setChatMessageAutoDeleteTime` does not exist in the Bot API; `ChatFullInfo.MessageAutoDeleteTime` is read-only. Telegram's own auto-delete timer cannot be set by the bot, so "self-destruct" must be implemented by the queue above.
+
+### Settings hub (PM) additions
+
+| Need | Choice | Why |
+|------|--------|-----|
+| PM `/settings` list | new `chat_admin_index` + live verify per drawn row (at most 8 per page, paced, the `staffPanelBuildTimeout` pattern) | Bot API cannot list a user's groups; the admin cache has no reverse index |
+| Owner gate | `chat_menu_access.admins_allowed`; creator check = live `getChatMember` status `creator` (not `chat_status.CheckOwner`'s full `getChatAdministrators` unless the list is needed) | extends the Phase 9 `settingsPress.verify` step 4 with one fresh PK read; in-group `/settings` and the `settings_<chat>` deep link run the same function so the three entry points cannot drift |
+| Pages | one `registerSettingsPage` call per page from its own file's `init` (warnings, reports, language, log channel, anon admin, locks, lists, requirements, deletion, editors) | the Phase 9 contract; no edits to `settings_pages.go` |
+| Callback namespaces | reuse `settings|v1`; the editor/requirements/button handlers that need their own prefix use `req|v1`; the PM editor's picks carry row IDs or tokens, never text | 64-byte cap; AGENTS.md rule |
+| Lists (blacklists/filters/notes) | offset-cursor paging (`o=`) like the staff history list; delete by row ID (`r=`), never by word; "add by typing" is a `fuku:pmwait` state | same hazards the history list already solved |
+| Parity | every new setting gets one `apply*` function shared by command and menu, plus the `TestSettingsParity*`, `TestSettingsDrift*`, `TestSettingsAuthorityParity*`, worst-case callback-byte and 7-locale length tests | existing Phase 9 test contract |
+
+New locale keys go in **all** locale files (`en es fr hi id pt ru uk`; the repo now ships `uk.yml` too, and AGENTS.md still says 7: confirm the current set with `make check-translations` before writing keys).
+
+## Alternatives Considered
+
+| Category | Recommended | Alternative | Why Not |
+|----------|-------------|-------------|---------|
+| Delete queue | PostgreSQL table + DB-driven worker | Redis ZSET + Lua pop | Loses the queue on a Redis flush/failover; needs a second recovery path; no DB-integrity test parity. Redis stays right for short-lived state, not for "must survive restarts". |
+| Delete queue | home-grown table | River / asynq / machinery | New dependency tree and their own schemas; against the append-only migration and "stay on the stack" rules; the lockdown worker already proves the pattern. |
+| Delete call | `DeleteMessages` (batch, up to 100) behind a pacer | `DeleteMessage` per row | Per-row calls multiply the request count in a raid or a busy self-destruct chat. Keep single delete only as the fallback that isolates a bad id. |
+| PM wait state | Redis `GETDEL` (existing `overwrite.go` pattern) | gotgbot `conversation` handler | In-memory by default (per replica), own key strategy, group numbering clash. |
+| PM wait state | Redis | PostgreSQL row per user | A DB read on every private message; no automatic expiry. Redis is already required for the other flows; accept "editor unavailable without Redis". |
+| Media storage | `file_id` + `file_unique_id` + kind | `copyMessage` from the PM message | Breaks when the PM message is deleted; cannot attach the group's buttons; copy has the same 48 h/permission pitfalls. |
+| "Media under text" | `ShowCaptionAboveMedia` (uploads) / `LinkPreviewOptions{ShowAboveText:false}` (URLs) | host the file and use a link preview | Needs public media hosting or exposing a bot-token `getFile` URL. |
+| Name script rules | `unicode` range tables | language-detection library | Heavy, inaccurate on 2-word names, and the rules are letter-set rules anyway. |
+| Name AI | extend `fuku/utils/claude` | Anthropic Go SDK | The repo keeps a stdlib-only, log-safe client with redaction rules and a spike tool; an SDK would break `leaf_test.go` and the key/URL hygiene guarantees. |
+| Name AI | Haiku through the existing client | TypeSafe (`aispam`) | TypeSafe is a text-moderation call tuned to messages with chat context; the owner asked for Haiku and the key/kill switch/breakers already exist. |
+| Channel check | `getChatMember` with a 10 min positive cache | `chat_member` updates on the channel | The bot only gets channel `chat_member` updates as a channel admin and only for changes while it is running; a live check is simpler and authoritative. |
 
 ## Installation
 
 ```bash
-# Run from the repo root. AGENTS.md: stay on the latest upstream versions.
-go get golang.org/x/time@v0.16.0
-go get github.com/anthropics/anthropic-sdk-go@v1.78.0
-go mod tidy
-
-# Optional, tests only (cross-check the hand-written validator):
-# go get github.com/telegram-mini-apps/init-data-golang@v1.5.0
-
-# No new dev tooling. Reuse: make test / make lint / govulncheck
+# No new modules. Core and supporting libraries are already in go.mod:
+#   github.com/PaulSonOfLars/gotgbot/v2 v2.0.0-rc.36.0.20260919140833-240296efadb4
+#   golang.org/x/text v0.42.0   (already a direct requirement; add unicode/norm imports only)
+#   golang.org/x/sync v0.23.0   (singleflight)
+CGO_ENABLED=0 go build ./...                   # compile check
+make test && make lint && make check-translations && make check-docs
 ```
 
-New environment variables (all new secrets registered via `logredact.RegisterSecret`):
-`TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`, `MINIAPP_BASE_URL`, `MINIAPP_SHORT_NAME`, `ANTHROPIC_API_KEY`, `RAID_VISION_MODEL` (default `claude-haiku-4-5`), `FANOUT_RPS`.
+Non-code changes this milestone must land together (AGENTS.md says to update it in the same commit): new handler group numbers, the `StopDeletionWorker` drain in the shutdown paragraph, the new Redis key families (`fuku:pmwait:*`, `fuku:req:*`, `fuku:del:pace:*`), the new tables under "Data" (read fresh / never in backup/export/import/reset), the new `req|v1` namespace, and the `make test-postgres-integrity` list for the deletion claim (`TestScheduledDeletionClaim`: two claimers, one winner) and any new `CHECK` (the action columns `0..4`).
 
-## Alternatives Considered
+## What NOT to add
 
-| Recommended | Alternative | When to Use Alternative |
-|-------------|-------------|-------------------------|
-| Hand-written `initData` validator | `telegram-mini-apps/init-data-golang` v1.5.0 | If you want the maintained-looking API and accept a stale module (last release 2025-03-09). It has zero dependencies, so risk is low. Choose it if you would rather not own crypto code, and patch the constant-time compare upstream. |
-| Claude Haiku 4.5 for images | OpenAI `omni-moderation-latest` (free) | Only for NSFW/violence/self-harm. Spam, scams and promotional images are **not categories** (images are covered only for violence, self-harm and sexual). Not a fit for raid spam. |
-| Claude Haiku 4.5 for images | A larger tier (`claude-sonnet-5-5`, $2/$10) | If Haiku misclassifies in practice. Keep the model ID in config. |
-| Anthropic Go SDK | Raw `net/http` to `/v1/messages` | If the module-graph growth is unacceptable. Matches the repo's Jev style, but you lose typed errors and retries. |
-| `x/time/rate` in-process | Redis token bucket | If the bot runs multiple replicas, so fan-out limits must be global. |
-| Direct Link Mini App via `url` button | `web_app` inline button | Never in groups (private chats only). Could be used in a PM fallback ("verify in PM") if the owner dislikes direct links. |
-| Reuse Jev for text | Send borderline text to Haiku too | If one provider is preferred. Jev is cheaper and already built. Do not rewrite `aispam`. |
-| Cloudflare Turnstile | reCAPTCHA / hCaptcha | Out of scope per PROJECT.md. |
-
-## What NOT to Use
-
-| Avoid | Why | Use Instead |
-|-------|-----|-------------|
-| `web_app` inline button in the group welcome message | Telegram only allows it in private chats, so the button would be rejected or useless | `url` button to a `t.me/<bot>/<app>?startapp=<nonce>` direct link |
-| Trusting `Telegram.WebApp.initDataUnsafe` or a client-sent `user_id` | Client-controlled; enables verifying for someone else | Server-side HMAC over raw `initData`, then compare `user.id` to the pending user |
-| Skipping the `auth_date` check | A valid HMAC never expires on its own, so captured `initData` is replayable forever | Reject if older than the window (about 5-10 min) |
-| Treating `siteverify` `success:true` as sufficient | It does not bind the token to your page or this attempt | Also check `hostname`, `action`, `cdata` (nonce) |
-| Failing open when Cloudflare is unreachable | Lets raiders through during an outage | Fail closed, keep the user restricted, let the timeout kick apply |
-| `github.com/go-telegram-bot-api/*`, `telebot`, `go-telegram/bot` | A second Telegram client duplicates gotgbot and splits the handler model | gotgbot v2 only |
-| Any unofficial Turnstile Go wrapper | Tiny, unaudited, and the call is 60 lines | Stdlib `net/http` |
-| Sending every message or image to an AI model | Out of Scope in PROJECT.md; slow and costly | Rule-based triggers; AI only for the borderline band |
-| Letting the AI verdict trigger lockdown | Prompt-injectable and non-deterministic | Rules trigger; AI adjusts a score |
-| Per-member `restrictChatMember` loops for lockdown | The bot cannot enumerate members and the loop would exceed rate limits | `setChatPermissions` (chat-wide) plus targeted exceptions |
-| In-process counters for the join-surge trigger | Per-replica, lost on restart (the antiflood limitation in AGENTS.md) | Redis `INCR`/`EXPIRE` |
-| Registering Mini App routes on `http.DefaultServeMux` | pprof lives there | `Server.mux` |
-| A frontend build toolchain (npm, React, Vite) for the captcha page | One widget and one `fetch`; adds supply-chain and CI burden | Plain embedded HTML + about 60 lines of JS |
-| Hard-coding "30 msg/s, 20 msg/min" as a guarantee | Telegram does not document admin-call limits and they vary | Configurable limiter plus mandatory `retry_after` handling |
-
-## Stack Patterns by Variant
-
-**If the bot runs a single replica (likely, for a one-owner bot):**
-- Use the in-process `rate.Limiter` and Redis for nonces and counters.
-- Because it is simplest and matches how everything else here is deployed.
-
-**If it runs multiple replicas:**
-- Use a Redis-backed token bucket for fan-out, and note the lockdown state must live in Redis (as `antiraid` does).
-- Because per-replica limiters multiply the real request rate.
-
-**If the owner will not set up a public HTTPS domain:**
-- The Turnstile Mini App is not feasible (Telegram requires HTTPS for Mini Apps). Fall back to the existing `base64Captcha` flow.
-- Because there is no Mini App without a public HTTPS origin. Raise this at roadmap time, before the captcha phase.
-
-**If the approved-user exemption spike fails (LOW-risk item above):**
-- Use delete-on-send enforcement for lockdown instead of a default-permission mute.
-- Because default permissions cannot be selectively overridden.
-
-## Version Compatibility
-
-| Package A | Compatible With | Notes |
-|-----------|-----------------|-------|
-| gotgbot `v2.0.0-rc.36.0.20260919140833-240296efadb4` (repo's pin) | Telegram Bot API 10.x | Has `WebAppInfo`, `ChatPermissions` (incl. `can_react_to_messages`, `can_edit_tag`), `ResponseParameters.RetryAfter`. Latest tag is rc.36 (2026-08-02), and the repo is on a newer commit. Do not move off it for this milestone. |
-| `anthropic-sdk-go` v1.78.0 | Go 1.24+ (declares `go 1.24`, `toolchain go1.25.8`) | Fine under Go 1.26.0. Has `NewImageBlockBase64` and `OutputConfigParam.Format`. |
-| `golang.org/x/time` v0.16.0 | Go 1.26.0 | No known issues. |
-| `CGO_ENABLED=0` production builds | All additions | All additions are pure Go. Tests still need `CGO_ENABLED=1` for go-sqlite3, unchanged. |
-| Redis 7+ | `GETDEL` (Redis 6.2+) | go-redis v9.22.0 `GetDel`. Fine. |
-| Bot API 10.2 Mini App origin protection | Same-origin design above | Calls to `Telegram.WebApp.*` from another origin are blocked. |
+- No gotgbot bump, no Anthropic SDK, no queue library, no language-detection library, no cron library (a ticker loop like the lockdown worker is enough), no Telegraph/media hosting, no new public HTTP route, no web UI, no second cache layer.
+- Do not use `gorm.AutoMigrate` outside test harnesses; do not edit any applied migration.
+- Do not put a `default:` GORM tag on any new boolean (the Create zero-value trap).
+- Do not call `getChatAdministrators` per row to draw the PM list (2N+1 calls is already the cap for the staff panel); one `getChatMember` per drawn row.
 
 ## Sources
 
-- proxy.golang.org module index and `.zip`/`.mod` (HIGH): `golang.org/x/time` v0.16.0 (2026-08-19), `anthropic-sdk-go` v1.78.0 (2026-09-30), `openai-go/v3` v3.71.1 (considered, rejected), `init-data-golang` v1.5.0 (2025-03-09, source read: `validate.go`, `validate_third_party.go`), `gotgbot/v2` rc.36 (2026-08-02) and repo pseudo-version (source read: `request.go`, `gen_types.go`, `gen_methods.go`).
-- `pkg.go.dev/github.com/telegram-mini-apps/init-data-golang` and `pkg.go.dev/github.com/PaulSonOfLars/gotgbot/v2` (MEDIUM): versions, function signatures.
-- Claude API skill (bundled, cached 2026-09-25) (HIGH for model IDs and pricing): `claude-haiku-4-5` $1/$5, 200K; Sonnet 5.5 $2/$10; Go SDK image and structured-output types.
-- Web search summaries, secondary (MEDIUM, **verify in phase against primary docs**; `core.telegram.org` and `developers.cloudflare.com` were egress-blocked):
-  - Cloudflare Turnstile `siteverify` endpoint, response fields, 300 s single-use tokens, `idempotency_key`, error codes, explicit render, CSP requirements, test sitekey `1x00000000000000000000AA` (Cloudflare docs excerpts and the `@marsidev/react-turnstile` server-validation guide).
-  - Mini App `initData` algorithm: HMAC `WebAppData` and Ed25519 third-party validation (`docs.telegram-mini-apps.com`, various ports).
-  - Web App inline button is private-chat-only, and Direct Link Mini Apps work in any chat with `startapp` to `start_param` (gotgbot's own struct comments agree, which raises confidence to MEDIUM-HIGH).
-  - Bot API 10.2 (2026-07-14) Mini App origin protection, enforced from 2026-07-20 (BotNews / community migration guides, single-lineage, **MEDIUM-LOW**).
-  - Telegram rate-limit folklore: about 30 msg/s global, about 20 msg/min per group, 429 `retry_after` (Telegram FAQ excerpt via search; admin-call limits undocumented).
-  - `chat_member` updates require the bot to be admin and an explicit `allowed_updates` entry (grammY / aiogram docs), and the repo already includes it.
-  - Jev is text-only, `jev-1.13.0`, 64K tokens (several secondary write-ups, consistent).
-  - OpenAI moderation image coverage is limited to violence, self-harm and sexual (OpenAI moderation guide).
-- Repo files read: `fuku/modules/aispam.go`, `aispam_jev.go`, `fuku/utils/httpserver/server.go`, `fuku/config/config.go` (AllowedUpdates), `fuku/utils/ratelimit/backup_ratelimit.go`, `fuku/modules/federations.go` (`applyActiveFban`: sequential, unthrottled, errors only logged at debug, which is not enough for Staff Group).
+Verified directly (HIGH):
 
-**Not verified (open):** restricted-member vs. chat-default permission semantics; exact `startapp` charset/length and `frame-ancestors` origins; whether Turnstile renders reliably in every Telegram client WebView (iOS/Android/Desktop/Web). Plan a manual device pass in the captcha phase.
+- gotgbot module source, `v2.0.0-rc.36.0.20260919140833-240296efadb4`, in the Go module cache: `gen_types.go` (`Message`, `Update`, `ChatFullInfo.LinkedChatId`, `LinkPreviewOptions`, `UserProfilePhotos`, `ChatMemberRestricted.IsMember`, `MessageAutoDeleteTimerChanged`, `ChatMemberUpdated`), `gen_methods.go` (`DeleteMessage`, `DeleteMessages`, `GetUserProfilePhotos`, `GetChatMember`, `CopyMessage`, `SendPhoto/Video/Animation`, `EditMessageCaption`, `SendMessageOpts`, `EditMessageTextOpts`), `formatting.go` (`OriginalHTML` and caption variants), `ext/handlers/message.go` (`SetAllowEdited`), `ext/handlers/conversation` (in-memory storage). The method and field doc comments are generated from the Bot API spec and carry the 48 h rule, the 1-100 id batch, the "skipped if not found" rule, and the `edited_message` caveat.
+- Repo: `fuku/utils/claude/{client,request,response}.go`, `fuku/modules/overwrite.go`, `fuku/modules/lockdown_worker.go`, `fuku/utils/ratelimit/telegram_pacer.go`, `fuku/utils/cache/adminCache.go`, `fuku/utils/chat_status/owner.go`, `fuku/db/models/{greetings,rules,admin,user}.go`, `fuku/config/config.go` (`AllowedUpdates`), `AGENTS.md`.
+- Go 1.26.0 probe program (run locally) for the `unicode` script cases in the table above.
 
----
-*Stack research for: Telegram group-management bot milestone (Staff Group, raid lockdown, Turnstile Mini App, settings menu)*
-*Researched: 2026-10-04*
+Not verifiable in this session (core.telegram.org is not reachable from the sandbox; web search returned only secondary sources):
+
+- Profile photo privacy returning an empty list: community reports only (Habr Q&A, a Chinese Q&A page). LOW-MEDIUM.
+- `getChatMember` on a channel requires the bot to be a channel admin: gotgbot's generated doc text says it is "only guaranteed to work for other users if the bot is an administrator in the chat"; exact failure text for a non-admin bot unconfirmed. MEDIUM.
+- `deleteMessages` behaviour for a batch holding an undeletable (too old) id; spurious `edited_message` deliveries. LOW. Both need a live spike in phase research (owner step, like the Claude spike).

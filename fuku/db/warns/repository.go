@@ -308,6 +308,32 @@ func GetWarnSettingContext(ctx context.Context, chatId int64) *models.WarnSettin
 	return &cached
 }
 
+// LoadWarnSettingsContext reads the chat's warn settings through the same cache key and TTL
+// as GetWarnSettingContext, but returns the read error instead of hiding it and never inserts
+// a row. A chat with no row reads the defaults (limit 3, mode mute) and that default is not
+// cached, so the command loader's next read still finds its miss and behaves as before. A row
+// that exists is cached exactly as the command's loader would cache it.
+func LoadWarnSettingsContext(ctx context.Context, chatId int64) (*models.WarnSettings, error) {
+	cached, err := cache.GetFromCacheOrLoad(ctx,
+		cache.CacheKey("warn_settings", chatId),
+		cache.CacheTTLWarnSettings,
+		func(ctx context.Context) (models.WarnSettings, error) {
+			var row models.WarnSettings
+			if err := db.DB.WithContext(ctx).Where("chat_id = ?", chatId).First(&row).Error; err != nil {
+				return models.WarnSettings{}, err
+			}
+			return row, nil
+		},
+	)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return &models.WarnSettings{ChatId: chatId, WarnLimit: 3, WarnMode: "mute"}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &cached, nil
+}
+
 func GetAllChatWarns(chatId int64) int {
 	var count int64
 	err := db.DB.Model(&models.Warns{}).Where("chat_id = ?", chatId).Count(&count).Error

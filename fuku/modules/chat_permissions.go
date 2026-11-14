@@ -54,31 +54,42 @@ func defaultUnmutePermissions() gotgbot.ChatPermissions {
 var lockdownSnapshotLookup = lockdown.GetActiveFresh
 
 // resolveUnmutePermissions is the single choke point of every unmute (D-23): /unmute,
-// the unrestrict button, a captcha pass and staff /unmute, whose undo of a staff mute
-// uses it too. It returns the permissions to give the unmuted user.
+// the unrestrict button, a captcha pass, staff /unmute (whose undo of a staff mute uses it
+// too), the member requirements' lift of a mute whose notice could not be delivered, their
+// rejoin reset (a requirement-muted member who left and rejoined) and their "I fixed it" button. It
+// returns the permissions to give the unmuted user. It is resolveUnmutePermissionsWithLockdown
+// without the lockdown flag, so every caller that does not need the flag is unchanged.
+func resolveUnmutePermissions(chatInfo *gotgbot.ChatFullInfo) (gotgbot.ChatPermissions, error) {
+	perms, _, err := resolveUnmutePermissionsWithLockdown(chatInfo)
+	return perms, err
+}
+
+// resolveUnmutePermissionsWithLockdown resolves the permissions of an unmute and says whether
+// a lockdown was active, so a caller can choose its words without a second lookup. The
+// requirements' unmute code (memberReqLiftMute) takes its permissions only from here.
 //
 // During an active lockdown the group's live defaults are the locked set, so copying
 // them into the user's own restriction would leave them muted after the lift. The
-// lockdown's stored pre-lockdown permissions are returned instead, and a failed
+// lockdown's stored pre-lockdown permissions are returned instead, with true, and a failed
 // lookup is an error so no caller restricts or announces an unmute that did not
 // happen. Without a lockdown the live defaults are used, else the built-in fallback.
 // A chatInfo with Id 0 is never looked up.
-func resolveUnmutePermissions(chatInfo *gotgbot.ChatFullInfo) (gotgbot.ChatPermissions, error) {
+func resolveUnmutePermissionsWithLockdown(chatInfo *gotgbot.ChatFullInfo) (gotgbot.ChatPermissions, bool, error) {
 	if chatInfo != nil && chatInfo.Id != 0 {
 		active, err := lockdownSnapshotLookup(chatInfo.Id)
 		if err != nil {
-			return gotgbot.ChatPermissions{}, fmt.Errorf("read the lockdown of chat %d before unmuting: %w", chatInfo.Id, err)
+			return gotgbot.ChatPermissions{}, false, fmt.Errorf("read the lockdown of chat %d before unmuting: %w", chatInfo.Id, err)
 		}
 		if active != nil {
 			var snapshot gotgbot.ChatPermissions
 			if err := json.Unmarshal([]byte(active.PrePermissions), &snapshot); err != nil {
-				return gotgbot.ChatPermissions{}, fmt.Errorf("decode the pre-lockdown permissions of chat %d: %w", chatInfo.Id, err)
+				return gotgbot.ChatPermissions{}, false, fmt.Errorf("decode the pre-lockdown permissions of chat %d: %w", chatInfo.Id, err)
 			}
-			return snapshot, nil
+			return snapshot, true, nil
 		}
 	}
 	if chatInfo != nil && chatInfo.Permissions != nil {
-		return *chatInfo.Permissions, nil
+		return *chatInfo.Permissions, false, nil
 	}
-	return defaultUnmutePermissions(), nil
+	return defaultUnmutePermissions(), false, nil
 }

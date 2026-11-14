@@ -27,6 +27,7 @@ import (
     "github.com/uasneppy/fuku_robot/fuku/utils/chat_status"
     "github.com/uasneppy/fuku_robot/fuku/utils/extraction"
     "github.com/uasneppy/fuku_robot/fuku/utils/formatting"
+    "github.com/uasneppy/fuku_robot/fuku/utils/helpers"
 )
 
 // Module struct with name for help system
@@ -104,7 +105,7 @@ func LoadExample(dispatcher *ext.Dispatcher) {
     DefaultHelpRegistry().AbleMap[exampleModule.moduleName] = true
 
     // Register command handlers
-    dispatcher.AddHandler(handlers.NewCommand("example", exampleModule.exampleCommand))
+    dispatcher.AddHandler(helpers.NewBotCommand("example", exampleModule.exampleCommand))
 
     // Register callback handlers
     dispatcher.AddHandler(handlers.NewCallback(
@@ -442,13 +443,13 @@ import (
 
     "github.com/PaulSonOfLars/gotgbot/v2"
     "github.com/PaulSonOfLars/gotgbot/v2/ext"
-    "github.com/PaulSonOfLars/gotgbot/v2/ext/handlers"
     log "github.com/sirupsen/logrus"
 
     "github.com/uasneppy/fuku_robot/fuku/db"
     "github.com/uasneppy/fuku_robot/fuku/i18n"
     "github.com/uasneppy/fuku_robot/fuku/utils/chat_status"
     "github.com/uasneppy/fuku_robot/fuku/utils/formatting"
+    "github.com/uasneppy/fuku_robot/fuku/utils/helpers"
 )
 
 var welcomeModule = moduleStruct{moduleName: "Welcome"}
@@ -527,8 +528,8 @@ func (m moduleStruct) togglewelcome(b *gotgbot.Bot, ctx *ext.Context) error {
 func LoadWelcome(dispatcher *ext.Dispatcher) {
     DefaultHelpRegistry().AbleMap[welcomeModule.moduleName] = true
 
-    dispatcher.AddHandler(handlers.NewCommand("welcomestatus", welcomeModule.welcomestatus))
-    dispatcher.AddHandler(handlers.NewCommand("togglewelcome", welcomeModule.togglewelcome))
+    dispatcher.AddHandler(helpers.NewBotCommand("welcomestatus", welcomeModule.welcomestatus))
+    dispatcher.AddHandler(helpers.NewBotCommand("togglewelcome", welcomeModule.togglewelcome))
 }
 
 func init() {

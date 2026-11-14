@@ -1,0 +1,223 @@
+//go:build testtools
+
+package modules
+
+import (
+	"html"
+	"regexp"
+	"sort"
+	"strconv"
+	"strings"
+	"testing"
+	"unicode/utf8"
+
+	"github.com/PaulSonOfLars/gotgbot/v2"
+
+	"github.com/uasneppy/fuku_robot/fuku/db/models"
+	"github.com/uasneppy/fuku_robot/fuku/i18n"
+)
+
+var memberReqTagRe = regexp.MustCompile(`<[^>]*>`)
+
+// memberReqNoticeCap is the most visible code points a notice or an edited notice may have. With
+// eight rule phrases (the photo, channel and AI phrases join the five name phrases) and the photo
+// and AI remedy tails the cap is 520, raised from the Phase 13 400 (UI contract section 3, M18).
+const memberReqNoticeCap = 520
+
+// memberReqScreenChannelID is the ID of a linked channel no notice or answer may name.
+const memberReqScreenChannelID int64 = -1009876543210
+
+// memberReqVisibleLength is the code points a member reads of an HTML notice: the tags go, the
+// entities become characters, and the mention's link text stays (isolates included).
+func memberReqVisibleLength(text string) int {
+	return utf8.RuneCountInString(html.UnescapeString(memberReqTagRe.ReplaceAllString(text, "")))
+}
+
+// memberReqScreenLanguages are the 8 languages of the locale files.
+var memberReqScreenLanguages = []string{"en", "es", "fr", "hi", "id", "pt", "ru", "uk"}
+
+// TestMemberReqScreensFitEveryLocale is the rendered-size check of the requirement screens.
+// It renders every group notice with the real locales, a 64-rune name, all eight rules (both
+// remedy tails among them) and two-digit numbers, then every "I fixed it" answer and the two notices that button edits in.
+func TestMemberReqScreensFitEveryLocale(t *testing.T) {
+	withRealLocales(t)
+	const chatID int64 = -1001234567890
+	allRules := 0
+	for _, rule := range memberReqRules {
+		allRules |= rule.Bit
+	}
+	user := gotgbot.User{Id: 9007199254740991, FirstName: strings.Repeat("Ж", memberReqNameCap)}
+
+	type screen struct {
+		name   string
+		action int
+		warn   *warnApplyResult
+	}
+	limit := func(mode string) *warnApplyResult {
+		return &warnApplyResult{Count: 99, Limit: 99, Mode: mode, LimitReached: true, LimitApplied: true}
+	}
+	screens := []screen{
+		{"warn", models.RequirementActionWarn, &warnApplyResult{Count: 99, Limit: 99}},
+		{"warn limit kick", models.RequirementActionWarn, limit("kick")},
+		{"warn limit ban", models.RequirementActionWarn, limit("ban")},
+		{"warn limit mute", models.RequirementActionWarn, limit("mute")},
+		{"kick", models.RequirementActionKick, nil},
+		{"ban", models.RequirementActionBan, nil},
+		{"mute", models.RequirementActionMute, nil},
+	}
+	for _, code := range memberReqScreenLanguages {
+		tr := i18n.MustNewTranslator(code)
+		for _, sc := range screens {
+			text := memberReqNoticeText(tr, user, allRules, sc.action, sc.warn)
+			if text == "" {
+				t.Errorf("%s %s: empty notice", code, sc.name)
+				continue
+			}
+			if got := memberReqVisibleLength(text); got > memberReqNoticeCap {
+				t.Errorf("%s %s: %d visible code points, want at most %d", code, sc.name, got, memberReqNoticeCap)
+			}
+			if strings.Contains(text, strconv.FormatInt(-chatID, 10)) || strings.Contains(strings.ToLower(text), "staff") {
+				t.Errorf("%s %s: the notice names a chat ID or the Staff Group: %q", code, sc.name, text)
+			}
+			if strings.Contains(text, "{") || strings.Contains(text, memberReqNamePlaceholder) {
+				t.Errorf("%s %s: unfilled placeholder in %q", code, sc.name, text)
+			}
+			if strings.Contains(text, strconv.FormatInt(-memberReqScreenChannelID, 10)) {
+				t.Errorf("%s %s: the notice names the linked channel: %q", code, sc.name, text)
+			}
+			// The remedy tails end the warn, kick and mute notices, and no other (all eight rules
+			// are broken here): the AI remedy last, with the photo remedy directly before it (M20).
+			photoRemedy, aiRemedy := memberReqText(tr, "mreq_remedy_photo"), memberReqText(tr, "mreq_remedy_ai")
+			wantRemedy := sc.action == models.RequirementActionKick || sc.action == models.RequirementActionMute ||
+				(sc.action == models.RequirementActionWarn && sc.name == "warn")
+			if got := strings.HasSuffix(text, " "+photoRemedy+" "+aiRemedy); got != wantRemedy {
+				t.Errorf("%s %s: ends with the photo remedy then the AI remedy = %t, want %t", code, sc.name, got, wantRemedy)
+			}
+			if got := strings.Contains(text, aiRemedy) || strings.Contains(text, photoRemedy); got != wantRemedy {
+				t.Errorf("%s %s: carries a remedy = %t, want %t", code, sc.name, got, wantRemedy)
+			}
+
+			keyboard := memberReqNoticeKeyboard(tr, sc.action, 123, user.Id)
+			wantButtons := 0
+			if sc.action == models.RequirementActionMute {
+				wantButtons = 1
+			}
+			count := 0
+			for _, row := range keyboard.InlineKeyboard {
+				count += len(row)
+			}
+			if count != wantButtons || len(keyboard.InlineKeyboard) != wantButtons {
+				t.Errorf("%s %s: keyboard %+v, want %d button", code, sc.name, keyboard.InlineKeyboard, wantButtons)
+			}
+		}
+		assertMemberReqFixedAnswers(t, code, tr, allRules, user, chatID)
+	}
+}
+
+// memberReqFixedAdminName is the name of the admin who set a rule in the answer checks below:
+// no answer or notice is built from it, so it must never appear in one.
+const memberReqFixedAdminName = "ZZ Rule Setter"
+
+// assertMemberReqFixedAnswers measures every answer of the "I fixed it" button as the code
+// builds it (memberreq_fixed.go): each is an alert or a toast of at most 200 code points, which
+// is Telegram's limit for an answer, and none holds the chat ID, the Staff Group, the admin who
+// set the rule or an unfilled token. The two notices the button edits in follow the notice limit.
+func assertMemberReqFixedAnswers(t *testing.T, code string, tr *i18n.Translator, allRules int, user gotgbot.User, chatID int64) {
+	t.Helper()
+	// A list answer names up to four rules and is held to 160 code points in English and 200
+	// elsewhere; the count answer, which names none, is held to 160 in every language.
+	listLimit := 200
+	if code == "en" {
+		listLimit = 160
+	}
+	limits := map[string]int{}
+	answers := map[string]string{
+		"done":            memberReqText(tr, "mreq_fixed_done"),
+		"done lockdown":   memberReqText(tr, "mreq_fixed_done_lockdown"),
+		"not yours":       memberReqText(tr, "mreq_fixed_not_yours"),
+		"not ours":        memberReqText(tr, "mreq_fixed_not_ours"),
+		"check failed":    memberReqText(tr, "mreq_fixed_check_failed"),
+		"stale":           memberReqText(tr, "mreq_fixed_stale"),
+		"invalid request": memberReqText(tr, "common_callback_invalid_request"),
+	}
+	addStillBroken := func(name string, mask, limit int) {
+		answers[name] = memberReqStillBrokenText(tr, mask)
+		limits[name] = limit
+	}
+	// Every rule alone, as the code builds the answer.
+	for _, rule := range memberReqRules {
+		addStillBroken("still broken "+rule.Code, rule.Bit, listLimit)
+	}
+	// The four longest phrases of the language together, the worst list answer.
+	longest := append([]memberReqRule(nil), memberReqRules...)
+	phrase := func(r memberReqRule) int { return utf8.RuneCountInString(memberReqText(tr, r.PhraseKey)) }
+	sort.SliceStable(longest, func(i, j int) bool { return phrase(longest[i]) > phrase(longest[j]) })
+	fourLongest := 0
+	for _, rule := range longest[:memberReqStillBrokenListMax] {
+		fourLongest |= rule.Bit
+	}
+	addStillBroken("still broken four longest", fourLongest, listLimit)
+	// Five to eight rules are the count answer, whatever the phrases are.
+	for n := memberReqStillBrokenListMax + 1; n <= len(memberReqRules); n++ {
+		addStillBroken("still broken "+strconv.Itoa(n), maskOfFirst(n), 160)
+	}
+	addStillBroken("still broken all", allRules, 160)
+	for name, text := range answers {
+		if text == "" {
+			t.Errorf("%s answer %q: empty", code, name)
+			continue
+		}
+		limit := 200
+		if own, ok := limits[name]; ok {
+			limit = own
+		}
+		if got := utf8.RuneCountInString(text); got > limit {
+			t.Errorf("%s answer %q: %d code points, want at most %d", code, name, got, limit)
+		}
+		assertMemberReqNoLeak(t, code+" answer "+name, text, chatID)
+	}
+
+	fallback := memberReqText(tr, "mreq_name_unknown", i18n.TranslationParams{"id": strconv.FormatInt(user.Id, 10)})
+	for _, key := range []string{"mreq_notice_fixed", "mreq_notice_fixed_lockdown"} {
+		text := memberReqText(tr, key, i18n.TranslationParams{"name": memberReqNamePlaceholder})
+		text = lockdownSplice(text, memberReqNamePlaceholder, memberReqMention(user, fallback))
+		if got := memberReqVisibleLength(text); got > memberReqNoticeCap {
+			t.Errorf("%s %s: %d visible code points, want at most %d", code, key, got, memberReqNoticeCap)
+		}
+		assertMemberReqNoLeak(t, code+" "+key, text, chatID)
+	}
+}
+
+// assertMemberReqNoLeak fails when text names the chat, a Staff Group, the admin who set a
+// rule, or holds an unfilled placeholder.
+func assertMemberReqNoLeak(t *testing.T, name, text string, chatID int64) {
+	t.Helper()
+	if strings.Contains(text, strconv.FormatInt(-chatID, 10)) || strings.Contains(strings.ToLower(text), "staff") ||
+		strings.Contains(text, memberReqFixedAdminName) || strings.Contains(text, strconv.FormatInt(-memberReqScreenChannelID, 10)) {
+		t.Errorf("%s: names a chat ID, the Staff Group, the linked channel or the admin who set the rule: %q", name, text)
+	}
+	if strings.Contains(text, "{") || strings.Contains(text, memberReqNamePlaceholder) {
+		t.Errorf("%s: unfilled placeholder in %q", name, text)
+	}
+}
+
+// TestMemberReqFixedButtonBytes holds the "I fixed it" button to Telegram's 64 bytes at the
+// worst case: a 19-digit hold ID and a 16-digit user ID.
+func TestMemberReqFixedButtonBytes(t *testing.T) {
+	withRealLocales(t)
+	for _, code := range memberReqScreenLanguages {
+		assertMemberReqFixedButton(t, i18n.MustNewTranslator(code))
+	}
+}
+
+func assertMemberReqFixedButton(t *testing.T, tr *i18n.Translator) {
+	t.Helper()
+	keyboard := memberReqFixedButton(tr, 9223372036854775807, 9007199254740991)
+	if len(keyboard.InlineKeyboard) != 1 || len(keyboard.InlineKeyboard[0]) != 1 {
+		t.Fatalf("keyboard = %+v, want one row of one button", keyboard.InlineKeyboard)
+	}
+	data := keyboard.InlineKeyboard[0][0].CallbackData
+	if data == "" || len(data) > 64 {
+		t.Fatalf("callback data %q is %d bytes, want 1 to 64", data, len(data))
+	}
+}

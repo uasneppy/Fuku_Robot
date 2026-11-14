@@ -82,7 +82,7 @@ func captchaWebHasEmoji(text string) bool {
 	return false
 }
 
-// TestCaptchaWebLocaleKeys guards every captcha_web_ string across all 7 locales.
+// TestCaptchaWebLocaleKeys guards every captcha_web_ string across all 8 locales.
 // make check-translations only sees literal GetString keys, and the page keys are read
 // from captchaweb.PageKeys, so it cannot catch a page key that is missing, empty, too
 // long for the layout or carrying markup.
