@@ -77,7 +77,6 @@ func getMainHelp(tr *i18n.Translator, firstName string) string {
 
 func getAboutKb(tr *i18n.Translator) gotgbot.InlineKeyboardMarkup {
 	aboutMeText, _ := tr.GetString("help_button_about_me")
-	newsChannelText, _ := tr.GetString("help_button_news_channel")
 	supportGroupText, _ := tr.GetString("help_button_support_group")
 	configurationText, _ := tr.GetString("help_button_configuration")
 	backText, _ := tr.GetString("common_back_arrow_alt")
@@ -91,10 +90,6 @@ func getAboutKb(tr *i18n.Translator) gotgbot.InlineKeyboardMarkup {
 				},
 			},
 			{
-				{
-					Text: newsChannelText,
-					Url:  "https://t.me/FukuRobotUpdates",
-				},
 				{
 					Text: supportGroupText,
 					Url:  "https://t.me/DivideSupport",

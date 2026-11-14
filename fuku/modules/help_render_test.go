@@ -87,6 +87,16 @@ func TestHelpKeyboardsUseCallbackCodecAndBotUsername(t *testing.T) {
 	if !strings.HasPrefix(aboutKb.InlineKeyboard[0][0].CallbackData, "about|v1|") {
 		t.Fatalf("about callback = %q, want encoded about callback", aboutKb.InlineKeyboard[0][0].CallbackData)
 	}
+	for _, row := range aboutKb.InlineKeyboard {
+		if len(row) == 0 {
+			t.Fatal("getAboutKb() has an empty row")
+		}
+		for _, button := range row {
+			if strings.Contains(button.Url, "RobotUpdates") {
+				t.Fatalf("getAboutKb() still links the removed updates channel: %q", button.Url)
+			}
+		}
+	}
 
 	startKb := getStartMarkup(tr, "FukuRobot")
 	if len(startKb.InlineKeyboard) != 4 {
