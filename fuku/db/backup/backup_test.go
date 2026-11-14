@@ -37,7 +37,7 @@ func TestBackupTypes(t *testing.T) {
 		backup := NewBackupFormat(12345, "Test Chat", 67890, []string{"notes", "filters"})
 
 		assert.Equal(t, BackupFormatVersion, backup.Version)
-		assert.Equal(t, "FukuRobot", backup.BotName)
+		assert.Equal(t, BackupBotName, backup.BotName)
 		assert.Equal(t, int64(12345), backup.ChatID)
 		assert.Equal(t, "Test Chat", backup.ChatName)
 		assert.Equal(t, int64(67890), backup.ExportedBy)
@@ -145,7 +145,7 @@ func TestBackupTypes(t *testing.T) {
 		jsonData, err := backup.ToJSON()
 		require.NoError(t, err)
 		assert.NotNil(t, jsonData)
-		assert.Contains(t, string(jsonData), "FukuRobot")
+		assert.Contains(t, string(jsonData), BackupBotName)
 		assert.Contains(t, string(jsonData), "notes")
 	})
 

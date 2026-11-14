@@ -125,7 +125,7 @@ func TestLoadAllStats(t *testing.T) {
 	}
 
 	expectedSections := []string{
-		"Fuku's Stats",
+		"Xenobot-72 Stats",
 		"Deployment Mode",
 		"Go Version",
 		"Goroutines",

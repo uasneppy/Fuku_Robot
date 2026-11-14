@@ -200,7 +200,7 @@ func LoadAllStats() string {
 		webhookInfo = "\n    <b>Update Method:</b> Long polling"
 	}
 
-	result := "<u>Fuku's Stats:</u>" +
+	result := "<u>Xenobot-72 Stats:</u>" +
 		fmt.Sprintf("\n\n<b>Deployment Mode:</b> %s%s", deploymentMode, webhookInfo) +
 		fmt.Sprintf("\n<b>Go Version:</b> %s", runtime.Version()) +
 		fmt.Sprintf("\n<b>Goroutines:</b> %s", comma(int64(runtime.NumGoroutine()))) +

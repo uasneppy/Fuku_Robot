@@ -13,6 +13,10 @@ import (
 const (
 	BackupFormatVersion = "1.1"
 	legacyFormatVersion = "1.0"
+
+	// BackupBotName is written into every exported backup. Import only requires a
+	// non-empty name, so files exported under the bot's earlier name still load.
+	BackupBotName = "Xenobot-72"
 )
 
 type BackupFormat struct {
@@ -30,7 +34,7 @@ func NewBackupFormat(chatID int64, chatName string, exportedBy int64, modules []
 	return &BackupFormat{
 		Version:    BackupFormatVersion,
 		ExportedAt: time.Now().UTC(),
-		BotName:    "FukuRobot",
+		BotName:    BackupBotName,
 		ChatID:     chatID,
 		ChatName:   chatName,
 		ExportedBy: exportedBy,

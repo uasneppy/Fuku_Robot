@@ -19,8 +19,8 @@ func TestNewBackupFormat(t *testing.T) {
 	if bf.Version != BackupFormatVersion {
 		t.Fatalf("Version = %q, want %q", bf.Version, BackupFormatVersion)
 	}
-	if bf.BotName != "FukuRobot" {
-		t.Fatalf("BotName = %q, want %q", bf.BotName, "FukuRobot")
+	if bf.BotName != "Xenobot-72" {
+		t.Fatalf("BotName = %q, want %q", bf.BotName, "Xenobot-72")
 	}
 	if bf.ChatID != chatID {
 		t.Fatalf("ChatID = %d, want %d", bf.ChatID, chatID)
@@ -39,6 +39,22 @@ func TestNewBackupFormat(t *testing.T) {
 	}
 	if bf.ExportedAt.IsZero() {
 		t.Fatal("ExportedAt should be set to current time")
+	}
+}
+
+// TestBackupFormat_ValidateAcceptsLegacyBotName keeps backups exported under the
+// bot's earlier name importable after the rename.
+func TestBackupFormat_ValidateAcceptsLegacyBotName(t *testing.T) {
+	bf := &BackupFormat{
+		Version:    legacyFormatVersion,
+		BotName:    "FukuRobot",
+		ChatID:     123,
+		Modules:    []string{"admin"},
+		Data:       map[string]interface{}{"admin": map[string]interface{}{}},
+		ExportedAt: time.Now(),
+	}
+	if err := bf.Validate(); err != nil {
+		t.Fatalf("Validate() on a backup named FukuRobot = %v, want nil", err)
 	}
 }
 
@@ -248,8 +264,8 @@ func TestBackupFormat_ToJSON(t *testing.T) {
 	if parsed["version"] != BackupFormatVersion {
 		t.Fatalf("JSON version = %v, want %v", parsed["version"], BackupFormatVersion)
 	}
-	if parsed["bot_name"] != "FukuRobot" {
-		t.Fatalf("JSON bot_name = %v, want %v", parsed["bot_name"], "FukuRobot")
+	if parsed["bot_name"] != "Xenobot-72" {
+		t.Fatalf("JSON bot_name = %v, want %v", parsed["bot_name"], "Xenobot-72")
 	}
 	if parsed["chat_id"] != float64(123) {
 		t.Fatalf("JSON chat_id = %v, want 123", parsed["chat_id"])
