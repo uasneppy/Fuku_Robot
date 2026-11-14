@@ -77,7 +77,6 @@ func getMainHelp(tr *i18n.Translator, firstName string) string {
 
 func getAboutKb(tr *i18n.Translator) gotgbot.InlineKeyboardMarkup {
 	aboutMeText, _ := tr.GetString("help_button_about_me")
-	supportGroupText, _ := tr.GetString("help_button_support_group")
 	configurationText, _ := tr.GetString("help_button_configuration")
 	backText, _ := tr.GetString("common_back_arrow_alt")
 
@@ -87,12 +86,6 @@ func getAboutKb(tr *i18n.Translator) gotgbot.InlineKeyboardMarkup {
 				{
 					Text:         aboutMeText,
 					CallbackData: encodeCallbackData("about", map[string]string{"a": "me"}),
-				},
-			},
-			{
-				{
-					Text: supportGroupText,
-					Url:  "https://t.me/DivideSupport",
 				},
 			},
 			{
@@ -114,7 +107,6 @@ func getAboutKb(tr *i18n.Translator) gotgbot.InlineKeyboardMarkup {
 func getStartMarkup(tr *i18n.Translator, botUsername string) gotgbot.InlineKeyboardMarkup {
 	aboutText, _ := tr.GetString("help_button_about")
 	addToChatText, _ := tr.GetString("help_button_add_to_chat")
-	supportGroupText, _ := tr.GetString("help_button_support_group")
 	commandsHelpText, _ := tr.GetString("help_button_commands_help")
 	languageText, _ := tr.GetString("help_button_language")
 
@@ -132,10 +124,6 @@ func getStartMarkup(tr *i18n.Translator, botUsername string) gotgbot.InlineKeybo
 				{
 					Text: addToChatText,
 					Url:  addToChatUrl,
-				},
-				{
-					Text: supportGroupText,
-					Url:  "https://t.me/DivideSupport",
 				},
 			},
 			{

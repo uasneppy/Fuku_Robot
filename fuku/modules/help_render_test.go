@@ -78,8 +78,8 @@ func TestHelpKeyboardsUseCallbackCodecAndBotUsername(t *testing.T) {
 
 	tr := helpTestTranslator(t)
 	aboutKb := getAboutKb(tr)
-	if len(aboutKb.InlineKeyboard) != 4 {
-		t.Fatalf("getAboutKb() rows = %d, want 4", len(aboutKb.InlineKeyboard))
+	if len(aboutKb.InlineKeyboard) != 3 {
+		t.Fatalf("getAboutKb() rows = %d, want 3", len(aboutKb.InlineKeyboard))
 	}
 	if aboutKb.InlineKeyboard[0][0].Text != "About me" {
 		t.Fatalf("about button text = %q", aboutKb.InlineKeyboard[0][0].Text)
@@ -92,8 +92,8 @@ func TestHelpKeyboardsUseCallbackCodecAndBotUsername(t *testing.T) {
 			t.Fatal("getAboutKb() has an empty row")
 		}
 		for _, button := range row {
-			if strings.Contains(button.Url, "RobotUpdates") {
-				t.Fatalf("getAboutKb() still links the removed updates channel: %q", button.Url)
+			if button.Url != "" {
+				t.Fatalf("getAboutKb() links out to %q, want no external link", button.Url)
 			}
 		}
 	}
@@ -104,6 +104,9 @@ func TestHelpKeyboardsUseCallbackCodecAndBotUsername(t *testing.T) {
 	}
 	if got := startKb.InlineKeyboard[1][0].Url; got != "https://t.me/FukuRobot?startgroup=botstart" {
 		t.Fatalf("add-to-chat URL = %q", got)
+	}
+	if got := len(startKb.InlineKeyboard[1]); got != 1 {
+		t.Fatalf("add-to-chat row has %d buttons, want only the add-to-chat button", got)
 	}
 	if !strings.HasPrefix(startKb.InlineKeyboard[2][0].CallbackData, "helpq|v1|") {
 		t.Fatalf("commands callback = %q, want encoded help callback", startKb.InlineKeyboard[2][0].CallbackData)
