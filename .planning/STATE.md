@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-30)
 Phase: 9 of 9 (Settings Menu) — complete
 Plan: 14 of 14
 Status: All phases complete
-Last activity: 2026-10-30 — Completed quick task 261030-rig: Switch raid AI image checks from Gemini to Claude Haiku 5.5 through the Anthropic API
+Last activity: 2026-11-14 — Completed quick task 261114-x72: Rename the bot to Xenobot-72 and rewrite en/uk texts in her voice
 
 Progress: [██████████] 100%
 
@@ -152,6 +152,7 @@ None yet.
 | 261008-j3c | Make TestStaffActionNonStaffUnchanged robust to second boundaries | 2026-10-08 | 077ee2e | .planning/quick/261008-j3c-make-the-flaky-test-teststaffactionnonstaffunchanged-tmute-a |
 | 261008-j3d | Lockdown copy polish: no raw Telegram errors, warning markers, code-formatted help | 2026-10-08 | 924b5e6 | .planning/quick/261008-j3d-lockdown-copy-polish-from-planning-phases-04-manual-lockdown |
 | 261030-rig | Switch raid AI image checks from Gemini to Claude Haiku 5.5 through the Anthropic API | 2026-10-30 | d2b368f | [261030-rig-change-gemini-to-claude-haiku-5-5-via-th](./quick/261030-rig-change-gemini-to-claude-haiku-5-5-via-th/) |
+| 261114-x72 | Rename the bot to Xenobot-72 and rewrite en/uk texts in her voice | 2026-11-14 | 854cadc | [261114-x72-rename-to-xenobot-72-and-rewrite-voice](./quick/261114-x72-rename-to-xenobot-72-and-rewrite-voice/) |
 
 ## Deferred Items
 
