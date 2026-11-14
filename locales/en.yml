@@ -29,39 +29,22 @@ admin_title_truncated: "\nNote: admin title cut to 16 characters from %d"
 admin_cache_cleared: "Admin cache cleared."
 admin_no_visible_admins: "\nNo visible admins (all are bots or anonymous)."
 admin_anon_admin_db_error: "Malfunction: could not update the anonymous admin setting. Try again."
-approvals_help_msg: |
-  <b>👤 Approvals</b>
-
-  Grant trusted members immunity from automated anti-spam measures without making them admins.
-
-  <b>Admin Commands:</b>
-
-  × /approve <code><reply/username/mention/userid></code> <code>[reason]</code>
-  × /unapprove <code><reply/username/mention/userid></code>
-  × /approval <code><reply/username/mention/userid></code>
-  × /approved: List all approved users
-  × /unapproveall: Remove all approvals (creator only)
-
-  Approved users are exempt from: antiflood, blacklists, locks, and CAPTCHA.
-approvals_user_approved: "Approved %s by %s.%s"
-approvals_already_approved: "%s is already approved in this chat."
-approvals_not_approved: "%s is not in the approved list."
-approvals_user_unapproved: "Removed %s from the approved list."
-approvals_check_not_approved: "%s is not currently approved in this chat."
-approvals_check_status: |
-  <b>User:</b> %s
-  <b>Approved On:</b> %s
-  <b>Approved By:</b> %s
-  %s
+approvals_help_msg: "<b>👤 Approvals</b>\n\nIssue trusted residents a pass: immunity from the automatic anti-spam measures, without making them admins.\n\n<b>Admin Commands:</b>\n\n× /approve <code><reply/username/mention/userid></code> <code>[reason]</code>\n× /unapprove <code><reply/username/mention/userid></code>\n× /approval <code><reply/username/mention/userid></code>\n× /approved: List all approved users\n× /unapproveall: Remove all approvals (creator only)\n\nApproved users are exempt from: antiflood, blacklists, locks and CAPTCHA.\n"
+approvals_user_approved: "Pass issued to %s by %s.%s"
+approvals_already_approved: "%s already holds a pass in this chat."
+approvals_not_approved: "%s is not on the approved list."
+approvals_user_unapproved: "Pass revoked: %s removed from the approved list."
+approvals_check_not_approved: "%s is not approved in this chat."
+approvals_check_status: "<b>User:</b> %s\n<b>Approved On:</b> %s\n<b>Approved By:</b> %s\n%s\n"
 approvals_none_approved: "No approved users in this chat."
 approvals_approved_list_file_caption: "Approved users list for %s"
-approvals_list_file_error: "Failed to generate the approved users file."
-approvals_unapproveall_ask: "Are you sure you want to remove ALL approved users?"
-approvals_unapproveall_done: "All approved users have been removed."
-approvals_unapproveall_cancel: "Unapprove all cancelled."
-approvals_approve_error: "Failed to approve the user. Please try again."
-approvals_unapprove_error: "Failed to remove the user from the approved list."
-approvals_unapproveall_error: "Failed to remove all approved users: {error}"
+approvals_list_file_error: "Malfunction: could not generate the approved users file."
+approvals_unapproveall_ask: "Remove ALL approved users?"
+approvals_unapproveall_done: "All passes revoked. No approved users remain."
+approvals_unapproveall_cancel: "Cancelled. All passes stay valid."
+approvals_approve_error: "Malfunction: could not approve the user. Try again."
+approvals_unapprove_error: "Malfunction: could not remove the user from the approved list."
+approvals_unapproveall_error: "Malfunction: could not remove all approved users: {error}"
 approvals_reason: "\nReason: %s"
 approvals_list_header: "Approved users:\n"
 approvals_list_item: " - %s"
@@ -230,32 +213,7 @@ connections_stale_connection: "Your connection is stale - I can no longer access
 connections_reconnect_need_pm: You need to be in a PM with me to reconnect to a chat!
 connections_reconnect_no_last_chat: You have no last chat to reconnect!
 connections_reconnect_reconnected: You are now reconnected to <b>%s</b>!!
-disabling_help_msg:
-  "This module allows you to disable some commonly used commands,
-  So, no one can use them. It'll also allow you to autodelete them, stopping people
-  from blue texting.
-
-
-  *Admin commands*:
-
-  × /disable `<commandname>`: Stop users from using commandname in this group.
-
-  × /enable `<item name>`: Allow users from using commandname in this group.
-
-  × /disableable: List all disableable commands.
-
-  × /disabledel `<yes/no/on/off>`: Delete disabled commands when used by non-admins.
-
-  × /disabled: List the disabled commands in this chat.
-
-
-  Note:
-
-  When disabling a command, the command only gets disabled for non-admins. All admins
-  can still use those commands.
-
-  Disabled commands are still accessible through the /connect feature. If you would
-  be interested to see this disabled too, let me know in the support chat."
+disabling_help_msg: "Disable commonly used commands so no one can use them. Commands can also be deleted automatically, which stops people from blue texting.\n\n*Admin commands*:\n× /disable `<commandname>`: Stop users from using commandname in this group.\n× /enable `<item name>`: Let users use commandname in this group again.\n× /disableable: List all disableable commands.\n× /disabledel `<yes/no/on/off>`: Delete disabled commands when non-admins use them.\n× /disabled: List the disabled commands in this chat.\n\nNote:\nA disabled command is disabled for non-admins only. All admins can still use it.\nDisabled commands are still reachable through the /connect feature. If you want that disabled too, tell the people who run this bot."
 devs_help_msg:
   "Bot management and diagnostic commands restricted to the bot owner and
   trusted developers. These commands are not surfaced to regular users.
@@ -420,40 +378,7 @@ mutes_help_msg: "Some residents talk too much. Silence orders are issued here: m
 notes_help_msg: "Notes: the facility's filing cabinet. Save data for future users.\nNotes are good for random bits of information: a phone number, a nice gif, a funny picture, anything.\n*User commands:*\n- /get <notename>: Get a note.\n- #notename: Same as /get.\nAdmin commands:\n- /save <notename> <note text>: Save a new note called \"word\". Replying to a message saves that message. Works on media too.\n- /clear <notename>: Delete the note.\n- /notes: List all notes in the current chat.\n- /saved: Same as /notes.\n- /clearall: Delete ALL notes in a chat. This cannot be undone.\n- /privatenotes: Whether to send notes in PM. Sends a message with a button users can press to get the note in PM."
 pins_help_msg: "The facility notice board. Keep your chat up to date with a simple pinned message.\n\n*User commands:*\n× /pinned: Get the current pinned message.\n\n*Admin commands:*\n× /pin: Pin the message you replied to. Add 'loud' or 'notify' to notify group members.\n× /pinned: Get the latest pinned message in the current chat.\n× /permapin <text>: Pin a custom message through the bot. It can contain markdown, buttons and all the other features.\n× /unpin: Unpin the current pinned message. As a reply, unpins the replied-to message.\n× /unpinall: Unpin all pinned messages.\n× /antichannelpin <yes/no/on/off>: Stop telegram from auto-pinning linked channels. With no arguments, shows the current setting.\n× /cleanlinked <yes/no/on/off>: Delete messages sent by the linked channel.\nNote: with anti channel pins on, use the /unpin command instead of unpinning manually. Otherwise the old message gets pinned again when the channel posts."
 purges_help_msg: "*Admin only:*\n- /purge: deletes all messages between this one and the replied-to message.\n- /del: deletes the message you replied to.\n\n*Examples*:\n- Delete all messages from the replied message until now.\n-> `/purge`"
-reports_help_msg:
-  "We're all busy people who don't have time to monitor our groups
-  24/7. But how do you react if someone in your group is spamming?
-
-
-  × /report `<reason>`: reply to a message to report it to admins.
-
-  - @admin: same as /report but not a command.
-
-
-  *Admins Only:*
-
-  × /reports `<on/off/yes/no>`: change report setting, or view current status.
-
-  - If done in PM, toggles your status.
-
-  - If in a group, toggles that group's status.
-
-  × /reports `block` (via reply only): Block a user from using /report or @admin.
-
-  × /reports `unblock` (via reply only): Unblock a user from using /report or @admin.
-
-  × /reports `showblocklist`: Check all the blocked users who cannot use /report or
-  @admin.
-
-
-  To report a user, simply reply to his message with @admin or /report; Fuku will
-  then reply with a message stating that admins have been notified.
-
-  You MUST reply to a message to report a user; you can't just use @admin to tag
-  admins for no reason!
-
-
-  *NOTE:* Neither of these will get triggered if used by admins."
+reports_help_msg: "Nobody can watch a group 24/7. I can, but your admins need to be told. So what happens when someone spams?\n\n× /report `<reason>`: reply to a message to report it to admins.\n- @admin: same as /report, but not a command.\n\n*Admins Only:*\n× /reports `<on/off/yes/no>`: change the report setting, or view the current status.\n- In PM, toggles your own status.\n- In a group, toggles that group's status.\n× /reports `block` (via reply only): Block a user from using /report or @admin.\n× /reports `unblock` (via reply only): Unblock a user from using /report or @admin.\n× /reports `showblocklist`: Check all blocked users who cannot use /report or @admin.\n\nTo report a user, reply to their message with @admin or /report; Xenobot-72 replies that the admins have been notified.\nYou MUST reply to a message to report a user; @admin is not for tagging admins for no reason.\n\n*NOTE:* Neither of these triggers when used by admins."
 rules_help_msg: "Every facility runs on regulations. This module keeps yours clear.\n*User commands*:\n× /rules: Check the current chat rules.\n*Admin commands*:\n× /setrules `<text>`: Set the rules for this chat.\n× /privaterules `<yes/no/on/off>`: Choose whether the rules are sent in private.\n× /resetrules: Reset the chat rules to default\n× /rulesbtn `<custom text>`: Set the text of the rules button.\n× /resetrulesbutton: Reset the text of the rules button to default.\n× /resetrulesbtn: Same as above."
 bot_updates_creators_plug: "\nI am Xenobot-72, version 72 of 74. Jaya Abadi built me to run facilities like this one."
 utils_string_handling_extract_time_invalid_time_amount: Invalid time amount specified.
@@ -586,10 +511,10 @@ warns_specify_action: "Specify the action to take after too many warns. Availabl
 admin_need_admin: "Access denied. You need to be an admin to do this."
 
 # Reports module strings
-reports_reply_to_report: You need to reply to a message to report it.
-reports_expose_yourself: You need to expose yourself first!
-reports_reply_to_block: You must reply to a user to block them.
-reports_reply_to_unblock: You must reply to a user to unblock them.
+reports_reply_to_report: "Reply to a message to report it."
+reports_expose_yourself: "Identify yourself first. Anonymous reports are not accepted."
+reports_reply_to_block: "Reply to a user to block them."
+reports_reply_to_unblock: "Reply to a user to unblock them."
 
 # Mute module strings
 mute_reply_to_dmute: "Reply to a message to delete it and mute the user."
@@ -787,20 +712,20 @@ rules_button_current: "The rules button currently reads:\n%s"
 rules_button_cleared: "Custom rules button text cleared."
 
 # Disabling module strings
-disabling_disabled_successfully: "Disabled the use of the following in this chat:%s"
-disabling_unknown_command: "Unknown command to disable:\n-%s\nCheck /disableable!"
-disabling_no_command_specified: You haven't specified a command to disable.
-disabling_disableable_commands: "The following commands can be disabled:"
-disabling_no_disabled_commands: There are no disabled commands in this chat.
-disabling_disabled_commands: "The following commands are disabled in this chat:"
-disabling_delete_enabled: Disabled messages will now be deleted.
-disabling_delete_disabled: Disabled messages will no longer be deleted.
-disabling_delete_current_enabled: Disabled Command deleting is *enabled*, disabled commands from users will be deleted!
-disabling_delete_current_disabled: Disabled Command deleting is *disabled*, disabled commands from users will *not* be deleted!
-disabling_enabled_successfully: "Re-Enabled the use of the following in this chat:%s"
-disabling_unknown_reenable: "Unknown command to Re-Enable:\n-%s\nCheck /disableable!"
-disabling_no_command_reenable: You haven't specified a command to disable.
-disabling_invalid_option: "I only understand an option from: `yes`/`no`/`on`/`off`"
+disabling_disabled_successfully: "Disabled in this chat:%s"
+disabling_unknown_command: "Unknown command to disable:\n-%s\nSee /disableable."
+disabling_no_command_specified: "You have not specified a command to disable."
+disabling_disableable_commands: "These commands can be disabled:"
+disabling_no_disabled_commands: "No disabled commands in this chat."
+disabling_disabled_commands: "Disabled in this chat:"
+disabling_delete_enabled: "Disabled commands will now be deleted."
+disabling_delete_disabled: "Disabled commands will no longer be deleted."
+disabling_delete_current_enabled: "Disabled command deleting is *enabled*: disabled commands from users will be deleted."
+disabling_delete_current_disabled: "Disabled command deleting is *disabled*: disabled commands from users will *not* be deleted."
+disabling_enabled_successfully: "Re-enabled in this chat:%s"
+disabling_unknown_reenable: "Unknown command to re-enable:\n-%s\nSee /disableable."
+disabling_no_command_reenable: "You have not specified a command to disable."
+disabling_invalid_option: "Unrecognised input. I accept: `yes`/`no`/`on`/`off`"
 
 # Misc module strings
 misc_reply_to_someone: "Reply to someone."
@@ -1157,27 +1082,27 @@ math_operator_minus: "-"
 math_operator_multiply: "×"
 
 # Reports module additional strings
-reports_cannot_report_channel: "You can't report a channel post."
-reports_cannot_report_self: "You can't report your own message!"
-reports_special_account: "It's a special account of telegram!"
-reports_admin_report: "You're an admin, whom will I report your issues to?"
-reports_why_report_myself: "Why would I report myself?"
-reports_why_report_admin: "Why would I report an admin?"
-reports_turned_on_personal: "Turned on reporting! You'll be notified whenever anyone reports something in groups you are admin."
-reports_turned_on_group: "Users will now be able to report messages."
-reports_turned_off_personal: "Turned off reporting! You'll no longer be notified whenever anyone reports something in groups you are admin."
-reports_turned_off_group: "Users will no longer be able to report via @admin or /report."
-reports_group_only: "This command can only be used in a group!"
-reports_user_blocked: "Blocked user %s from reporting."
-reports_user_unblocked: "Unblocked user %s from reporting."
-reports_no_blocked_users: "No users are currently blocked from using report commands!"
-reports_preference_enabled: "Your current preference is true, You'll be notified whenever anyone reports something in groups you are admin."
-reports_preference_disabled: "You haven't enabled reports, You won't be notified."
-reports_status_enabled: "Reports are currently enabled in this chat.\nUsers can use the /report command, or mention @admin, to tag all admins."
-reports_status_disabled: "Reports are currently disabled in this chat."
-reports_user_kicked: "User kicked!"
-reports_user_banned: "User banned!"
-reports_message_deleted: "Message Deleted!"
+reports_cannot_report_channel: "You cannot report a channel post."
+reports_cannot_report_self: "You cannot report your own message."
+reports_special_account: "That is a special Telegram account. It cannot be reported."
+reports_admin_report: "You are an admin. There is nobody above you to report to."
+reports_why_report_myself: "Request denied. I do not report myself."
+reports_why_report_admin: "Request denied. I do not report admins."
+reports_turned_on_personal: "Reports on. You will be notified whenever someone reports something in groups where you are an admin."
+reports_turned_on_group: "Users can now report messages."
+reports_turned_off_personal: "Reports off. You will no longer be notified when someone reports something in groups where you are an admin."
+reports_turned_off_group: "Users can no longer report via @admin or /report."
+reports_group_only: "This command works in groups only."
+reports_user_blocked: "%s is blocked from reporting."
+reports_user_unblocked: "%s is unblocked and may report again."
+reports_no_blocked_users: "No users are blocked from using report commands."
+reports_preference_enabled: "Your preference is on. You will be notified whenever someone reports something in groups where you are an admin."
+reports_preference_disabled: "You have not enabled reports. You will not be notified."
+reports_status_enabled: "Reports are enabled in this chat.\nUsers can use the /report command, or mention @admin, to tag all admins."
+reports_status_disabled: "Reports are disabled in this chat."
+reports_user_kicked: "User kicked."
+reports_user_banned: "User banned."
+reports_message_deleted: "Message deleted."
 
 # Language module additional strings
 language_current_user: "Your Current Language is %s\nChoose a language from keyboard below."
@@ -1235,16 +1160,16 @@ reports_button_ban: "⛔️ Ban"
 reports_button_delete: "❎ Delete Message"
 reports_button_resolved: "✔️ Mark Resolved"
 reports_blocked_users_header: "Users blocked from using report commands:"
-reports_invalid_input: "Your input was not recognised as one of: <code><yes/on/no/off> or <block/unblock/showblocklist></code>"
-reports_preference_enabled_private: "Your current preference is true. You'll be notified whenever anyone reports something in groups you are admin."
-reports_preference_disabled_private: "You haven't enabled reports. You won't be notified."
-reports_status_enabled_group: "Reports are currently enabled in this chat.\nUsers can use the /report command, or mention @admin, to tag all admins."
-reports_status_disabled_group: "Reports are currently disabled in this chat."
-reports_change_settings_hint: "\n\nTo change this setting, try this command again, with one of the following args: yes/no/on/off"
-reports_success_kick: "✅ Successfully kicked"
-reports_success_ban: "✅ Successfully banned"
-reports_success_delete: "✅ Successfully deleted"
-reports_resolved_success: "✅ Resolved report"
+reports_invalid_input: "Unrecognised input. I accept: <code><yes/on/no/off> or <block/unblock/showblocklist></code>"
+reports_preference_enabled_private: "Your preference is on. You will be notified whenever someone reports something in groups where you are an admin."
+reports_preference_disabled_private: "You have not enabled reports. You will not be notified."
+reports_status_enabled_group: "Reports are enabled in this chat.\nUsers can use the /report command, or mention @admin, to tag all admins."
+reports_status_disabled_group: "Reports are disabled in this chat."
+reports_change_settings_hint: "\n\nTo change this setting, send this command again with one of: yes/no/on/off"
+reports_success_kick: "✅ Kicked"
+reports_success_ban: "✅ Banned"
+reports_success_delete: "✅ Deleted"
+reports_resolved_success: "✅ Report resolved"
 reports_action_by: "Action taken by %s"
 reports_resolved_by: "<b>Resolved by:</b> %s"
 reports_message_template: "<b>⚠️ Report:</b>\n<b> • Report by:</b> %s\n<b> • Reported user:</b> %s\n<b>Status:</b> <i>Pending...</i>"
@@ -1381,37 +1306,9 @@ purges_extended_docs: "<b>Range Deletion with purgefrom/purgeto:</b>\nWhen you n
 purges_notes_docs: "<b>Notes:</b>\n• The <code>/purgefrom</code> marker expires after 30 seconds if no <code>/purgeto</code> follows\n• Large ranges are deleted concurrently for better performance\n• Status messages (how many messages were deleted) delete themselves after 3 seconds\n• Messages already deleted are skipped without errors\n"
 
 # Extended documentation locale keys - Reports module
-reports_extended_docs: |
-  <b>How It Works:</b>
+reports_extended_docs: "<b>How It Works:</b>\n\n<b>Reporting a Message:</b>\n1. <b>Reply to the offending message</b> with <code>/report</code> or mention <code>@admin</code>\n2. The bot sends a notification mentioning every admin who has reports enabled\n3. The notification has action buttons for quick moderation\n\n<b>Admin Action Buttons:</b>\n• <b>📩 Message</b> - Link to the reported message\n• <b>👢 Kick</b> - Kick the reported user (they can rejoin)\n• <b>🚫 Ban</b> - Permanently ban the reported user\n• <b>🗑 Delete</b> - Delete the reported message\n• <b>✅ Resolved</b> - Mark the report as resolved without action\n\n<b>Personal vs Group Settings:</b>\n• <b>In PM:</b> <code>/reports on/off</code> toggles whether YOU receive report notifications\n• <b>In Group:</b> <code>/reports on/off</code> toggles whether reporting is enabled for that group\n"
 
-  <b>Reporting a Message:</b>
-  1. <b>Reply to the offending message</b> with <code>/report</code> or mention <code>@admin</code>
-  2. The bot sends a notification mentioning all admins who have reports enabled
-  3. The notification includes action buttons for quick moderation
-
-  <b>Admin Action Buttons:</b>
-  • <b>📩 Message</b> - Link to the reported message
-  • <b>👢 Kick</b> - Kick the reported user (they can rejoin)
-  • <b>🚫 Ban</b> - Permanently ban the reported user
-  • <b>🗑 Delete</b> - Delete the reported message
-  • <b>✅ Resolved</b> - Mark the report as resolved without action
-
-  <b>Personal vs Group Settings:</b>
-  • <b>In PM:</b> <code>/reports on/off</code> toggles whether YOU receive report notifications
-  • <b>In Group:</b> <code>/reports on/off</code> toggles whether reporting is enabled for that group
-
-reports_permissions_docs: |
-  <b>Who Can Report?</b>
-  ✅ Regular users
-  ❌ Admins (no need to report to themselves)
-  ❌ Blocked users
-  ❌ Anonymous channels / Telegram system accounts
-
-  <b>Who Can Be Reported?</b>
-  ✅ Regular users
-  ❌ The bot itself
-  ❌ Admins (protected from reports)
-  ❌ Anonymous channels / Telegram system accounts
+reports_permissions_docs: "<b>Who Can Report?</b>\n✅ Regular users\n❌ Admins (no need to report to themselves)\n❌ Blocked users\n❌ Anonymous channels / Telegram system accounts\n\n<b>Who Can Be Reported?</b>\n✅ Regular users\n❌ The bot itself\n❌ Admins (protected from reports)\n❌ Anonymous channels / Telegram system accounts\n"
 
 # Extended documentation locale keys - Rules module
 rules_extended_docs: "<b>Features:</b>\n\n<b>Private Rules:</b>\nTurn on private rules (<code>/privaterules on</code>) to send the rules via PM instead of in the group. The group chat stays clean.\n\n<b>Custom Rules Button:</b>\nSet a custom button text (max 30 characters):\n<code>/rulesbtn View Rules</code>\n\nReset to default:\n<code>/resetrulesbtn</code>\n\n<b>Setting Rules:</b>\nSet rules by giving the text directly or by replying to a message:\n<code>/setrules Please be respectful to all members.</code>\n\nOr reply to a message:\n<code>/setrules</code>\n\n<b>Required Permissions:</b>\n• User commands: Available to all users\n• Admin commands: Require admin permissions in the chat\n"
@@ -1468,32 +1365,9 @@ captcha_permissions_docs: |
 blacklists_extended_docs: "<b>Available Actions:</b>\nThese actions can be set with <code>/blaction</code>:\n• <code>none</code> - Only deletes the message, nothing else\n• <code>warn</code> - Deletes the message and warns the user (default)\n• <code>mute</code> - Deletes the message and mutes the user\n• <code>kick</code> - Deletes the message and kicks the user (they can rejoin)\n• <code>ban</code> - Deletes the message and permanently bans the user\n\n<b>Note:</b>\nThe default mode for Blacklist is <b>warn</b>, which deletes the message and warns the user.\n\n<b>Commands:</b>\n• <code>/addblacklist &lt;trigger&gt;</code> - Blacklists the word in the current chat\n• <code>/rmblacklist &lt;trigger&gt;</code> - Removes the word from the chat's blacklisted words\n• <code>/blaction &lt;mute/kick/ban/warn/none&gt;</code> - Sets the action the bot takes when a blacklisted word is detected\n• <code>/remallbl</code> - Removes all blacklisted words from chat (Owner Only)\n"
 
 # Extended documentation locale keys - Disabling module
-disabling_extended_docs: |
-  <b>Key Features:</b>
-  • Disable specific bot commands for non-admin users
-  • Admins can always bypass disabled commands
-  • Optional automatic deletion of disabled command messages
-  • Support for disabling multiple commands at once
+disabling_extended_docs: "<b>Key Features:</b>\n• Disable specific bot commands for non-admin users\n• Admins can always use disabled commands\n• Optional automatic deletion of disabled command messages\n• Disable several commands at once\n\n<b>Disable Multiple Commands:</b>\n<code>/disable adminlist rules info</code>\nDisables <code>/adminlist</code>, <code>/rules</code> and <code>/info</code> at once.\n\n<b>Toggle Command Deletion:</b>\n<code>/disabledel on</code> - Disabled commands will now be deleted.\n<code>/disabledel off</code> - Disabled commands will no longer be deleted.\n<code>/disabledel</code> - Check the current deletion setting.\n"
 
-  <b>Disable Multiple Commands:</b>
-  <code>/disable adminlist rules info</code>
-  Disables <code>/adminlist</code>, <code>/rules</code>, and <code>/info</code> commands at once.
-
-  <b>Toggle Command Deletion:</b>
-  <code>/disabledel on</code> - Disabled messages will now be deleted.
-  <code>/disabledel off</code> - Disabled messages will no longer be deleted.
-  <code>/disabledel</code> - Check the current deletion setting.
-
-disabling_notes_docs: |
-  <b>Important Notes:</b>
-  • <b>Admin Bypass:</b> Disabled commands only affect non-admin users. All admins can still use any command.
-  • <b>Connection Support:</b> Disabled commands are still accessible through the <code>/connect</code> feature for connected chats.
-  • <b>Multiple Commands:</b> Both <code>/disable</code> and <code>/enable</code> support multiple command names in a single message.
-  • <b>Error Handling:</b> If some commands fail to disable/enable, you'll be notified about which ones succeeded and which failed.
-
-  <b>Required Permissions:</b>
-  • <code>/disable</code>, <code>/enable</code>, <code>/disabledel</code>: Admin only
-  • <code>/disableable</code>, <code>/disabled</code>: All users (but <code>/disabled</code> can be disabled)
+disabling_notes_docs: "<b>Important Notes:</b>\n• <b>Admin Bypass:</b> Disabled commands only affect non-admin users. All admins can still use any command.\n• <b>Connection Support:</b> Disabled commands are still reachable through the <code>/connect</code> feature for connected chats.\n• <b>Multiple Commands:</b> Both <code>/disable</code> and <code>/enable</code> accept several command names in one message.\n• <b>Error Handling:</b> If some commands fail to disable/enable, you are told which ones succeeded and which failed.\n\n<b>Required Permissions:</b>\n• <code>/disable</code>, <code>/enable</code>, <code>/disabledel</code>: Admin only\n• <code>/disableable</code>, <code>/disabled</code>: All users (but <code>/disabled</code> can be disabled)\n"
 
 # Extended documentation locale keys - Help module
 help_extended_docs: "<b>Navigation System:</b>\nThe Help module provides the bot's main entry points and navigation. When a user sends <code>/start</code> in a private chat, the bot shows a welcome message with an inline keyboard for navigating to the modules.\n\nThe <code>/help</code> command shows the module list. Pressing a module button shows that module's commands and usage. When <code>/help</code> is used in a group chat, the bot sends the user to a private chat for detailed help, so the group stays clean.\n\n<code>/about</code> shows bot information, version and links, while <code>/donate</code> shows how to support the project.\n"
@@ -1542,34 +1416,20 @@ common_settings_save_failed: "Failed to save settings. Please try again later."
 devs_chatlist_error: "Failed to generate chat list. Please try again."
 
 # Reactions module strings
-reactions_help_msg: |
-  <b>🎭 Auto-Reactions</b>
-
-  Automatically react to messages with specific keywords!
-
-  Setup automated emoji reactions that trigger when users send specific words.
-
-  <b>Admin Commands:</b>
-  • /addreaction <keyword> <emoji> - Add an auto-reaction
-  • /removereaction <keyword> - Remove a reaction
-  • /reactions - List configured reactions
-  • /resetreactions - Clear all reactions
-
-  <b>Example:</b>
-  • /addreaction hello 👋 - Bot reacts with 👋 when someone says "hello"
+reactions_help_msg: "<b>🎭 Auto-Reactions</b>\n\nAutomatic reactions to chosen keywords. Morale is a facility resource too.\n\nSet up emoji reactions that trigger when users send specific words.\n\n<b>Admin Commands:</b>\n• /addreaction <keyword> <emoji> - Add an auto-reaction\n• /removereaction <keyword> - Remove a reaction\n• /reactions - List configured reactions\n• /resetreactions - Clear all reactions\n\n<b>Example:</b>\n• /addreaction hello 👋 - The bot reacts with 👋 when someone says \"hello\"\n"
 
 reactions_add_usage: "Usage: /addreaction <keyword> <emoji>"
-reactions_invalid_emoji: "Please provide a valid emoji."
-reactions_add_error: "Failed to save reaction. Please try again."
-reactions_add_success: "Reaction added: <code>{keyword}</code> -> {emoji}"
+reactions_invalid_emoji: "Give me a valid emoji."
+reactions_add_error: "Malfunction: could not save the reaction. Try again."
+reactions_add_success: "Reaction filed: <code>{keyword}</code> -> {emoji}"
 reactions_remove_usage: "Usage: /removereaction <keyword>"
 reactions_not_found: "No reactions are configured for this chat."
 reactions_keyword_not_found: "No reaction found for keyword: <code>{keyword}</code>"
-reactions_remove_error: "Failed to remove reaction. Please try again."
+reactions_remove_error: "Malfunction: could not remove the reaction. Try again."
 reactions_remove_success: "Reaction removed for keyword: <code>{keyword}</code>"
 reactions_none: "No reactions are configured in this chat."
 reactions_list_header: "<b>Configured reactions:</b>\n{list}"
-reactions_reset_success: "All reactions have been reset for this chat."
+reactions_reset_success: "All reactions of this chat reset."
 
 # Backup/Restore module strings
 backup_help_msg: |
