@@ -68,62 +68,23 @@ approvals_list_item: " - %s"
 approvals_list_file_header: "Approved users for chat %d\n"
 approvals_list_file_item: "%d. %s"
 approvals_list_reason: " (reason: %s)"
-antiflood_checkflood_perform_action:
-  Yeah, I don't like your flooding. %s has been
-  %s!
-antiflood_errors_expected_args:
-  "I expected some arguments! Either off, or an integer.
-  eg: `/setflood 5`, or `/setflood off`"
-antiflood_errors_invalid_int:
-  That's not a valid integer. Please give me a valid integer,
-  or `off`.
-antiflood_errors_set_in_limit: The antiflood limit has to be set between 3 and 100.
-antiflood_flood_deleter_already_disabled:
-  Antiflood Message deleting is currently
-  *disabled* in this chat, Messages causing antiflood will be ignored!
-antiflood_flood_deleter_already_enabled:
-  Antiflood Message deleting is currently *enabled*
-  in this chat, Messages causing antiflood will be deleted!
-antiflood_flood_deleter_disabled:
-  Turned off Antiflood Message Deleting. Messages
-  causing antiflood will be ignored!
-antiflood_flood_deleter_enabled:
-  Turned on Antiflood Message Deleting. Messages causing
-  antiflood will be deleted!
-antiflood_flood_deleter_invalid_option: "I only understand an option from: `yes`/`no`/`on`/`off`"
-antiflood_flood_disabled: This chat is not currently enforcing flood control.
-antiflood_flood_show_settings:
-  This chat is currently enforcing flood control after
-  %d messages. Any users sending more than that amount of messages will be %s.
-antiflood_help_msg:
-  "You know how sometimes, people join, send 100 messages, and ruin
-  your chat? With antiflood, that happens no more!
-
-
-  Antiflood allows you to take action on users that send more than x messages in a
-  row. Actions are: ban/kick/mute
-
-
-  *Admin commands*:
-
-  × /flood: Get the current antiflood settings.
-
-  × /setflood `<number/off/no>`: Set the number of messages after which to take action
-  on a user. Set to '0', 'off', or 'no' to disable.
-
-  × /setfloodmode `<action type>`: Choose which action to take on a user who has been
-  flooding. Options: ban/kick/mute
-
-  × /delflood `<yes/no/on/off>`: If you want bot to delete messages flooded by user."
-antiflood_setflood_disabled: "Okay.
-
-  I won't warn users for flooding."
-antiflood_setflood_success: Flood Limit has been set to <b>%d</b> messages.
-antiflood_setfloodmode_specify_action:
-  "You need to specify an action to take upon
-  flooding. Current modes are: `ban`/`kick`/`mute`"
-antiflood_setfloodmode_success: Flood mode has been set to %s.
-antiflood_setfloodmode_unknown_type: "Unknown type '%s'. Please use one of: ban/kick/mute"
+antiflood_checkflood_perform_action: "Flood detected. %s has been %s."
+antiflood_errors_expected_args: "Arguments expected: off, or a whole number. E.g. `/setflood 5` or `/setflood off`"
+antiflood_errors_invalid_int: "That is not a valid whole number. Give me a whole number, or `off`."
+antiflood_errors_set_in_limit: "The antiflood limit must be between 3 and 100."
+antiflood_flood_deleter_already_disabled: "Antiflood message deleting is already *disabled* in this chat. Messages that trigger antiflood will be left alone."
+antiflood_flood_deleter_already_enabled: "Antiflood message deleting is already *enabled* in this chat. Messages that trigger antiflood will be deleted."
+antiflood_flood_deleter_disabled: "Antiflood message deleting off. Messages that trigger antiflood will be left alone."
+antiflood_flood_deleter_enabled: "Antiflood message deleting on. Messages that trigger antiflood will be deleted."
+antiflood_flood_deleter_invalid_option: "Unrecognised input. I accept: `yes`/`no`/`on`/`off`"
+antiflood_flood_disabled: "Flood control is off in this chat."
+antiflood_flood_show_settings: "Flood control is active in this chat after %d messages. Anyone sending more than that will be %s."
+antiflood_help_msg: "Someone joins, sends 100 messages and ruins the chat. With antiflood, that stops here.\n\nAntiflood acts on users who send more than x messages in a row. Actions: ban/kick/mute\n\n*Admin commands*:\n× /flood: Get the current antiflood settings.\n× /setflood `<number/off/no>`: Set the number of messages after which to act on a user. Set '0', 'off' or 'no' to disable.\n× /setfloodmode `<action type>`: Choose the action for a user who floods. Options: ban/kick/mute\n× /delflood `<yes/no/on/off>`: Whether the bot deletes the flood messages."
+antiflood_setflood_disabled: "Noted.\nI will not act on users for flooding."
+antiflood_setflood_success: "Flood limit set to <b>%d</b> messages."
+antiflood_setfloodmode_specify_action: "Specify the action to take on flooding. Available modes: `ban`/`kick`/`mute`"
+antiflood_setfloodmode_success: "Flood mode set to %s."
+antiflood_setfloodmode_unknown_type: "Unknown type '%s'. Use one of: ban/kick/mute"
 bans_ban_ban_reason: "<b>Reason:</b> %s"
 bans_ban_dban_no_reply: "Reply to a message to delete it and ban the user."
 bans_ban_is_admin: "Request denied. I do not ban admins."
@@ -141,60 +102,25 @@ bans_kickme_ok_out: "Request granted. Please exit the facility."
 bans_unban_is_admin: "Request denied. Admins are not banned, so there is nothing to unban."
 bans_unban_is_bot_itself: "Request denied. I am already here. I am always here."
 bans_unban_unbanned_user: "Access restored.\nUnbanned %s."
-blacklists_bl_watcher_banned_user: Banned %s due to %s
-blacklists_bl_watcher_kicked_user: Kicked %s due to %s
-blacklists_bl_watcher_muted_user: Muted %s due to %s
-blacklists_blacklist_added_bl: "Added these words as blacklists:"
-blacklists_blacklist_already_blacklisted: "These words are already blacklisted:"
-blacklists_blacklist_give_bl_word: Please give me a word to add to the blacklist!
+blacklists_bl_watcher_banned_user: "Banned %s due to %s"
+blacklists_bl_watcher_kicked_user: "Kicked %s due to %s"
+blacklists_bl_watcher_muted_user: "Muted %s due to %s"
+blacklists_blacklist_added_bl: "Added to the blacklist:"
+blacklists_blacklist_already_blacklisted: "Already on the blacklist:"
+blacklists_blacklist_give_bl_word: "Give me a word to add to the blacklist."
 blacklists_blacklist_word_too_long: "These words are too long (max 100 characters): %s"
-blacklists_help_msg: "*User Commands:*
-
-  × /blacklists: Check all the blacklists in chat.
-
-
-  *Admin Commands:*
-
-  × /addblacklist `<trigger>`: Blacklists the word in the current chat.
-
-  × /rmblacklist `<trigger>`: Removes the word from current Blacklisted Words in Chat.
-
-  × /blaction `<mute/kick/ban/warn/none>`: Sets the action to be performed by bot
-  when a blacklist word is detected.
-
-  × /blacklistaction: Same as above
-
-
-  *Owner Only:*
-
-  × /remallbl: Removes all the blacklisted words from chat
-
-
-  *Note:*
-
-  The Default mode for Blacklist is *none*, which will just delete the messages from
-  the chat."
-blacklists_ls_bl_list_bl: "These words are blacklisted in this chat:"
-blacklists_ls_bl_no_blacklisted: There are no blacklisted words in this chat.
-blacklists_rm_all_bl_ask:
-  Are you sure you want to remove all blacklisted words from
-  this chat?
-blacklists_rm_all_bl_button_handler_no:
-  Canceled removing all Blacklists of this Chat
-  ❌
-blacklists_rm_all_bl_button_handler_yes: Removed all Blacklists from this Chat ✅
-blacklists_set_bl_action_changed_mode: "Successfully Changed blacklist mode to: *%s*"
-blacklists_set_bl_action_choose_correct_option: Please choose an option out of <mute/kick/ban/warn/none>
-blacklists_set_bl_action_current_mode:
-  "The current blacklist mode for this chat is:
-  %s"
-blacklists_unblacklist_give_bl_word: Please give me a word to remove it from the blacklist!
-blacklists_unblacklist_no_removed_bl:
-  None of the given words were on the blacklist
-  which can be removed!
-blacklists_unblacklist_removed_bl:
-  Successfully removed '%s' from the blacklisted
-  words!
+blacklists_help_msg: "Forbidden words, deleted on sight. Contraband is not tolerated in this facility.\n\n*User Commands:*\n× /blacklists: Check all the blacklists in chat.\n\n*Admin Commands:*\n× /addblacklist `<trigger>`: Blacklist the word in the current chat.\n× /rmblacklist `<trigger>`: Remove the word from the chat's blacklisted words.\n× /blaction `<mute/kick/ban/warn/none>`: Set the action the bot takes when a blacklisted word is detected.\n× /blacklistaction: Same as above\n\n*Owner Only:*\n× /remallbl: Remove all blacklisted words from chat\n\n*Note:*\nThe default mode for Blacklist is *none*, which just deletes the messages from the chat."
+blacklists_ls_bl_list_bl: "Blacklisted in this chat:"
+blacklists_ls_bl_no_blacklisted: "No blacklisted words in this chat."
+blacklists_rm_all_bl_ask: "Remove all blacklisted words from this chat?"
+blacklists_rm_all_bl_button_handler_no: "Cancelled. The blacklist stays ❌"
+blacklists_rm_all_bl_button_handler_yes: "Entire blacklist of this chat removed ✅"
+blacklists_set_bl_action_changed_mode: "Blacklist mode changed to: *%s*"
+blacklists_set_bl_action_choose_correct_option: "Choose one of <mute/kick/ban/warn/none>"
+blacklists_set_bl_action_current_mode: "Current blacklist mode of this chat: %s"
+blacklists_unblacklist_give_bl_word: "Give me a word to remove from the blacklist."
+blacklists_unblacklist_no_removed_bl: "None of the given words were on the blacklist. Nothing removed."
+blacklists_unblacklist_removed_bl: "Removed '%s' from the blacklisted words."
 captcha_help_msg:
   "Protect your group from bots and spammers with CAPTCHA verification!
 
@@ -488,76 +414,12 @@ languages_help_msg: "Not able to change language of the bot?
 
 
   You can help us bring bot to more languages by helping on [Crowdin](https://crowdin.com/project/fuku_robot)"
-locks_help_msg: "*Admin only*:
-
-  × /lock `<permission>`: Lock Chat permission..
-
-  × /unlock `<permission>`: Unlock Chat permission.
-
-  × /locks: View Chat permission.
-
-  × /locktypes: Check available lock types!
-
-
-  Locks can be used to restrict a group's users.
-
-  Locking URLs will auto-delete all messages with URLs, locking stickers will delete
-  all stickers, etc.
-
-  Locking bots will stop non-admins from adding bots to the chat.
-
-
-  **Example:**
-
-  `/lock media`: this locks all the media messages in the chat."
+locks_help_msg: "*Admin only*:\n× /lock `<permission>`: Lock a chat permission.\n× /unlock `<permission>`: Unlock a chat permission.\n× /locks: View chat permissions.\n× /locktypes: Check the available lock types.\n\nLocks restrict what a group's users can send. Sealed doors, basically.\nLocking URLs auto-deletes every message with a URL, locking stickers deletes all stickers, and so on.\nLocking bots stops non-admins from adding bots to the chat.\n\n**Example:**\n`/lock media`: locks all media messages in the chat."
 misc_help_msg: "Miscellaneous instruments of the facility. Lightly used, well maintained.\n× /info: Get your user info. Works as a reply, or with a User Id or Username.\n× /id: Get the current group id. As a reply, get that user's id.\n× /ping: Ping the Telegram Server.\n× /tr <lang code> <msg/reply to message>: Translate the message.\n× /removebotkeyboard: Remove a stuck bot keyboard from your chat.\n× /stat: Count the total number of messages in the chat.\n× /stickerid: Reply to a sticker to get its file ID.\n× /zombies: Kick deleted accounts the bot knows about (admin).\n× /github <user|user/repo>: Look up a GitHub user or repository.\n× /wiki <search>: Search English Wikipedia.\n× /ud <term>: Look up Urban Dictionary.\n× /runs: A random quip."
 mutes_help_msg: "Some residents talk too much. Silence orders are issued here: mute members in your group.\n\n*Mute Commands:* (Admin only)\n× /mute <userhandle>: mutes a user. (via a handle, or reply)\n× /smute <userhandle>: mutes a user silently: no message to the group, and your command is deleted. (via a handle, or reply)\n× /dmute <userhandle>: mutes a user and deletes the replied message. (via a handle, or reply)\n× /tmute <userhandle> x(m/h/d): mutes a user for `x` time. (via a handle, or reply). m = minutes, h = hours, d = days.\n× /unmute <userhandle>: unmutes a user. (via a handle, or reply)"
 notes_help_msg: "Notes: the facility's filing cabinet. Save data for future users.\nNotes are good for random bits of information: a phone number, a nice gif, a funny picture, anything.\n*User commands:*\n- /get <notename>: Get a note.\n- #notename: Same as /get.\nAdmin commands:\n- /save <notename> <note text>: Save a new note called \"word\". Replying to a message saves that message. Works on media too.\n- /clear <notename>: Delete the note.\n- /notes: List all notes in the current chat.\n- /saved: Same as /notes.\n- /clearall: Delete ALL notes in a chat. This cannot be undone.\n- /privatenotes: Whether to send notes in PM. Sends a message with a button users can press to get the note in PM."
-pins_help_msg:
-  "All the pin-related commands can be found here; keep your chat up
-  to date on the latest news with a simple pinned message!
-
-
-  *User commands:*
-
-  × /pinned: Get the current pinned message.
-
-
-  *Admin commands:*
-
-  × /pin: Pin the message you replied to. Add 'loud' or 'notify' to send a notification
-  to group members.
-
-  × /pinned: Gets the latest pinned message in the current Chat.
-
-  × /permapin <text>: Pin a custom message through the bot. This message can contain
-  markdown, buttons, and all the other cool features.
-
-  × /unpin: Unpin the current pinned message. If used as a reply, unpins the replied-to
-  message.
-
-  × /unpinall: Unpins all pinned messages.
-
-  × /antichannelpin <yes/no/on/off>: Don't let telegram auto-pin linked channels.
-  If no arguments are given, show the current setting.
-
-  × /cleanlinked <yes/no/on/off>: Delete messages sent by the linked channel.
-
-  Note: When using anti channel pins, make sure to use the /unpin command, instead
-  of doing it manually. Otherwise, the old message will get re-pinned when the channel
-  sends any messages."
-purges_help_msg: "*Admin only:*
-
-  - /purge: deletes all messages between this and the replied-to message.
-
-  - /del: deletes the message you replied to.
-
-
-  *Examples*:
-
-  - Delete all messages from the replied message, until now.
-
-  -> `/purge`"
+pins_help_msg: "The facility notice board. Keep your chat up to date with a simple pinned message.\n\n*User commands:*\n× /pinned: Get the current pinned message.\n\n*Admin commands:*\n× /pin: Pin the message you replied to. Add 'loud' or 'notify' to notify group members.\n× /pinned: Get the latest pinned message in the current chat.\n× /permapin <text>: Pin a custom message through the bot. It can contain markdown, buttons and all the other features.\n× /unpin: Unpin the current pinned message. As a reply, unpins the replied-to message.\n× /unpinall: Unpin all pinned messages.\n× /antichannelpin <yes/no/on/off>: Stop telegram from auto-pinning linked channels. With no arguments, shows the current setting.\n× /cleanlinked <yes/no/on/off>: Delete messages sent by the linked channel.\nNote: with anti channel pins on, use the /unpin command instead of unpinning manually. Otherwise the old message gets pinned again when the channel posts."
+purges_help_msg: "*Admin only:*\n- /purge: deletes all messages between this one and the replied-to message.\n- /del: deletes the message you replied to.\n\n*Examples*:\n- Delete all messages from the replied message until now.\n-> `/purge`"
 reports_help_msg:
   "We're all busy people who don't have time to monitor our groups
   24/7. But how do you react if someone in your group is spamming?
@@ -853,60 +715,57 @@ warns_reset_all_cancelled: "Cancelled. All warns in this chat stay as they are."
 warns_reset_all_final: "All warns of all users in this chat removed."
 
 # Locks module strings
-locks_locktypes_header: "Locks:
-  - "
-locks_what_to_lock: What do you want to lock? Check /locktypes for available options.
-locks_invalid_lock_type: "`%s` is not a correct lock type, check /locktypes."
-locks_locked_successfully: "Locked the following in this group:
-  - %s"
-locks_unlocked_successfully: "Un-Locked the following in this group:
-  - %s"
-locks_lock_failed: "Failed to lock: %s. Please try again later."
-locks_unlock_failed: "Failed to unlock: %s. Please try again later."
-locks_what_to_unlock: What do you want to unlock? Check /locktypes for available options.
-locks_current_locks_header: "These are the locks in this chat:"
-locks_bot_lock_no_permission: I see a bot, and I've been told to stop them joining... but I'm not admin!
-locks_bot_lock_no_ban_permission: I see a bot, and I've been told to stop them joining... but I don't have permission to ban them!
-locks_bot_only_admins: Only admins are allowed to add bots to this chat!
+locks_locktypes_header: "Locks: - "
+locks_what_to_lock: "What should I lock? See /locktypes for the options."
+locks_invalid_lock_type: "`%s` is not a valid lock type. See /locktypes."
+locks_locked_successfully: "Sealed in this group: - %s"
+locks_unlocked_successfully: "Unsealed in this group: - %s"
+locks_lock_failed: "Malfunction: could not lock %s. Try again later."
+locks_unlock_failed: "Malfunction: could not unlock %s. Try again later."
+locks_what_to_unlock: "What should I unlock? See /locktypes for the options."
+locks_current_locks_header: "Locks in this chat:"
+locks_bot_lock_no_permission: "A bot is entering, and bots are locked. But I am not an admin, so I cannot stop it."
+locks_bot_lock_no_ban_permission: "A bot is entering, and bots are locked. But I do not have permission to ban it."
+locks_bot_only_admins: "Access denied. Only admins may add bots to this chat."
 
 # Pins module strings
-pins_unpin_not_pinned: Replied message is not a pinned message.
-pins_unpinned_message: Unpinned this message.
-pins_unpinned_last: Unpinned the last pinned message.
-pins_unpin_all_confirm: Are you sure you want to unpin all pinned messages?
-pins_unpin_all_success: Unpinned all pinned messages in this chat!
-pins_unpin_all_cancelled: Cancelled operation to unpin messages!
-pins_permapin_reply_or_text: Please reply to a message or give some text to pin.
-pins_permapin_unsupported: Permapin not supported for data type!
-pins_pinned_message: I have pinned <a href='%s'>this message</a>
-pins_reply_to_pin: Reply to a message to pin it
-pins_pinned_message_loud: I have pinned <a href='%s'>this message</a> loudly!
-pins_antichannelpin_enabled: <b>Enabled</b> anti channel pins. Automatic pins from a channel will now be replaced with the previous pin.
-pins_antichannelpin_disabled: <b>Disabled</b> anti channel pins. Automatic pins from a channel will not be removed.
-pins_antichannelpin_current_enabled: Anti-Channel pins are currently <b>enabled</b> in %s. All channel posts that get auto-pinned by telegram will be replaced with the previous pin.
-pins_antichannelpin_current_disabled: Anti-Channel pins are currently <b>disabled</b> in %s.
-pins_cleanlinked_enabled: <b>Enabled</b> linked channel post deletion in Logs. Messages sent from the linked channel will be deleted.
-pins_cleanlinked_disabled: <b>Disabled</b> linked channel post deletion in Logs.
-pins_cleanlinked_current_enabled: Linked channel post deletion is currently <b>enabled</b> in %s. Messages sent from the linked channel will be deleted
-pins_cleanlinked_current_disabled: Linked channel post deletion is currently <b>disabled</b> in %s.
-pins_no_pinned_message: No message has been pinned in the current chat!
-pins_here_is_pinned: <a href='%s'>Here</a> is the pinned message.
-pins_pinned_message_button: Pinned Message
-pins_input_not_recognized: "Your input was not recognised as one of: yes/no/on/off"
+pins_unpin_not_pinned: "The replied message is not pinned."
+pins_unpinned_message: "Message unpinned."
+pins_unpinned_last: "Last pinned message unpinned."
+pins_unpin_all_confirm: "Unpin all pinned messages?"
+pins_unpin_all_success: "All pinned messages in this chat unpinned. The notice board is clear."
+pins_unpin_all_cancelled: "Cancelled. Nothing was unpinned."
+pins_permapin_reply_or_text: "Reply to a message or give some text to pin."
+pins_permapin_unsupported: "Permapin does not support this type of content."
+pins_pinned_message: "<a href='%s'>This message</a> is now on the notice board."
+pins_reply_to_pin: "Reply to a message to pin it"
+pins_pinned_message_loud: "<a href='%s'>This message</a> is pinned, and everyone has been notified."
+pins_antichannelpin_enabled: "Anti channel pins <b>enabled</b>. Automatic pins from a channel will be replaced with the previous pin."
+pins_antichannelpin_disabled: "Anti channel pins <b>disabled</b>. Automatic pins from a channel will stay."
+pins_antichannelpin_current_enabled: "Anti channel pins are currently <b>enabled</b> in %s. Channel posts that telegram auto-pins are replaced with the previous pin."
+pins_antichannelpin_current_disabled: "Anti channel pins are currently <b>disabled</b> in %s."
+pins_cleanlinked_enabled: "Linked channel post deletion <b>enabled</b>. Messages sent from the linked channel will be deleted."
+pins_cleanlinked_disabled: "Linked channel post deletion <b>disabled</b>."
+pins_cleanlinked_current_enabled: "Linked channel post deletion is currently <b>enabled</b> in %s. Messages sent from the linked channel are deleted"
+pins_cleanlinked_current_disabled: "Linked channel post deletion is currently <b>disabled</b> in %s."
+pins_no_pinned_message: "Nothing is pinned in this chat. The notice board is empty."
+pins_here_is_pinned: "<a href='%s'>Here</a> is the pinned message."
+pins_pinned_message_button: "Pinned Message"
+pins_input_not_recognized: "Unrecognised input. I accept: yes/no/on/off"
 
 # Purges module strings
-purges_cannot_delete_old: You cannot delete messages over two days old. Please choose a more recent message.
-purges_purged_messages: Purged %d messages.
-purges_purged_with_reason: "Purged %d messages.\n*Reason*:\n%s"
-purges_reply_to_purge: Reply to a message to select where to start purging from.
-purges_reply_to_delete: Reply to a message to delete it!
-purges_message_marked: This message is already marked for purging!
-purges_marked_for_deletion: Message marked for deletion. Reply to another message with /purgeto to delete all messages in between; within 30s!
-purges_reply_to_purgefrom: Reply to a message to select where to start purging from.
-purges_need_purgefrom: You can only use this command after having used the /purgefrom command!
-purges_use_del_single: Use /del command to delete one message!
-purges_reply_to_purgeto: Reply to a message to show me till where to purge.
-purges_limit_exceeded: "Cannot purge more than %d messages at once! Please select a smaller range."
+purges_cannot_delete_old: "Messages over two days old cannot be deleted. Choose a more recent message."
+purges_purged_messages: "Messages deleted: %d."
+purges_purged_with_reason: "Messages deleted: %d.\n*Reason*:\n%s"
+purges_reply_to_purge: "Reply to a message to choose where the purge starts."
+purges_reply_to_delete: "Reply to a message to delete it."
+purges_message_marked: "This message is already marked for purging."
+purges_marked_for_deletion: "Message marked for deletion. Within 30s, reply to another message with /purgeto to delete everything in between."
+purges_reply_to_purgefrom: "Reply to a message to choose where the purge starts."
+purges_need_purgefrom: "Use the /purgefrom command first, then this one."
+purges_use_del_single: "To delete one message, use the /del command."
+purges_reply_to_purgeto: "Reply to a message to show me where the purge ends."
+purges_limit_exceeded: "Cannot purge more than %d messages at once. Select a smaller range."
 purges_invalid_button_data: "Invalid button data."
 purges_invalid_message_id: "Invalid message ID."
 
@@ -1488,44 +1347,12 @@ admin_extended_docs: "<b>Anonymous Admin Support</b>\n\nThe <code>/anonadmin</co
 admin_notes_docs: "<b>Security Notes</b>\n• All user-controlled input is HTML-escaped to prevent injection attacks\n• Admin permission changes run with proper error handling and panic recovery\n"
 
 # Antiflood extended docs
-antiflood_notes_docs: |
-  <b>Default Behavior</b>
-  Antiflood is <b>disabled by default</b>. You must explicitly enable it using <code>/setflood &lt;number&gt;</code>.
+antiflood_notes_docs: "<b>Default Behavior</b>\nAntiflood is <b>disabled by default</b>. Turn it on yourself with <code>/setflood &lt;number&gt;</code>.\n"
 
 # Locks module extended documentation
-locks_types_docs: |
-  <b>Permission Locks</b> (16 types)
-  <code>sticker</code> - Block stickers
-  <code>audio</code> - Block audio files
-  <code>voice</code> - Block voice messages
-  <code>document</code> - Block documents
-  <code>video</code> - Block videos
-  <code>videonote</code> - Block video notes
-  <code>contact</code> - Block contacts
-  <code>photo</code> - Block photos
-  <code>gif</code> - Block GIFs
-  <code>url</code> - Block URLs
-  <code>bots</code> - Prevent adding bots
-  <code>forward</code> - Block forwards
-  <code>game</code> - Block games
-  <code>location</code> - Block locations
-  <code>rtl</code> - Block RTL text
-  <code>anonchannel</code> - Block channel messages
+locks_types_docs: "<b>Permission Locks</b> (16 types)\n<code>sticker</code> - Block stickers\n<code>audio</code> - Block audio files\n<code>voice</code> - Block voice messages\n<code>document</code> - Block documents\n<code>video</code> - Block videos\n<code>videonote</code> - Block video notes\n<code>contact</code> - Block contacts\n<code>photo</code> - Block photos\n<code>gif</code> - Block GIFs\n<code>url</code> - Block URLs\n<code>bots</code> - Prevent adding bots\n<code>forward</code> - Block forwards\n<code>game</code> - Block games\n<code>location</code> - Block locations\n<code>rtl</code> - Block RTL text\n<code>anonchannel</code> - Block channel messages\n\n<b>Restriction Locks</b> (6 types)\n<code>messages</code> - Block all messages\n<code>comments</code> - Block non-member comments\n<code>media</code> - Block all media\n<code>other</code> - Block games/stickers/GIFs\n<code>previews</code> - Block URL previews\n<code>all</code> - Block everything\n"
 
-  <b>Restriction Locks</b> (6 types)
-  <code>messages</code> - Block all messages
-  <code>comments</code> - Block non-member comments
-  <code>media</code> - Block all media
-  <code>other</code> - Block games/stickers/GIFs
-  <code>previews</code> - Block URL previews
-  <code>all</code> - Block everything
-
-locks_notes_docs: |
-  <b>Technical Notes</b>
-  • Lock enforcement is real-time
-  • Admins are exempt from all locks
-  • Locks persist across bot restarts
-  • Cache invalidated on updates
+locks_notes_docs: "<b>Technical Notes</b>\n• Locks are enforced in real time\n• Admins are exempt from all locks\n• Locks survive bot restarts\n• The cache is cleared on updates\n"
 
 # Languages extended docs
 languages_extended_docs: |
@@ -1544,65 +1371,14 @@ notes_extended_docs: "<b>Features:</b>\n• <b>Text &amp; Media Support</b>: Sav
 notes_permissions_docs: "<b>Required Permissions:</b>\n• Save/Clear notes: Change Group Info\n• View admin notes: Admin status\n• Clear all notes: Chat Owner\n• Get regular notes: Any user\n"
 
 # Extended documentation locale keys - Pins module
-pins_extended_docs: |
-  <b>Features:</b>
+pins_extended_docs: "<b>Features:</b>\n\n<b>Anti-Channel Pin:</b>\nWhen enabled, the bot unpins any message that a linked channel auto-pins. Useful when you want control over what gets pinned in your group.\n\n<b>Important:</b> with anti channel pins on, always use the <code>/unpin</code> command instead of unpinning manually in Telegram. A manual unpin makes the old message get pinned again when the channel posts.\n\n<b>Clean Linked:</b>\nWhen enabled, the bot deletes every message sent to the group from the linked channel. Your group chat stays free of cross-posted channel content.\n\n<b>Permapin:</b>\nCreate custom pinned messages with:\n• Text with HTML/Markdown formatting\n• Inline buttons with URLs\n• Media attachments (photos, documents, stickers, audio, video, voice notes, video notes)\n• All standard message fillings ({first}, {chatname}, etc.)\n\n<b>Supported via Connection:</b>\nThese commands work when connected to a chat via <code>/connect</code>:\n• <code>/antichannelpin</code>\n• <code>/cleanlinked</code>\n"
 
-  <b>Anti-Channel Pin:</b>
-  When enabled, the bot will automatically unpin any message that gets auto-pinned by a linked channel. This is useful when you want to maintain control over what gets pinned in your group.
-
-  <b>Important:</b> When using anti channel pins, always use the <code>/unpin</code> command instead of unpinning manually through Telegram. Manual unpinning will cause the old message to get re-pinned when the channel sends new messages.
-
-  <b>Clean Linked:</b>
-  When enabled, the bot will automatically delete any messages sent to the group from the linked channel. This keeps your group chat clean from cross-posted channel content.
-
-  <b>Permapin:</b>
-  Create custom pinned messages with:
-  • Text with HTML/Markdown formatting
-  • Inline buttons with URLs
-  • Media attachments (photos, documents, stickers, audio, video, voice notes, video notes)
-  • All standard message fillings ({first}, {chatname}, etc.)
-
-  <b>Supported via Connection:</b>
-  The following commands work when connected to a chat via <code>/connect</code>:
-  • <code>/antichannelpin</code>
-  • <code>/cleanlinked</code>
-
-pins_notes_docs: |
-  <b>Notes:</b>
-  • The <code>/unpinall</code> command shows a confirmation dialog before unpinning all messages
-  • Permapin supports all media types that Telegram supports for pinning
-  • Anti-channel pin and clean linked settings are stored per-chat and persist across bot restarts
-
-  <b>Required Permissions:</b>
-  <b>Bot:</b> Must be admin with "Pin Messages" permission
-  <b>User:</b> Most commands require admin with "Pin Messages" permission
+pins_notes_docs: "<b>Notes:</b>\n• <code>/unpinall</code> asks for confirmation before unpinning all messages\n• Permapin supports every media type Telegram can pin\n• Anti-channel pin and clean linked settings are stored per chat and survive bot restarts\n\n<b>Required Permissions:</b>\n<b>Bot:</b> Must be admin with \"Pin Messages\" permission\n<b>User:</b> Most commands require admin with \"Pin Messages\" permission\n"
 
 # Extended documentation locale keys - Purges module
-purges_extended_docs: |
-  <b>Range Deletion with purgefrom/purgeto:</b>
-  When you need more control over the deletion range:
+purges_extended_docs: "<b>Range Deletion with purgefrom/purgeto:</b>\nWhen you need more control over what gets deleted:\n\n1. Reply to the <b>first</b> message of the range:\n<code>/purgefrom</code>\nThe bot confirms the message is marked (expires after 30 seconds).\n\n2. Reply to the <b>last</b> message of the range:\n<code>/purgeto</code>\nAll messages between the two markers (inclusive) are deleted.\n\nUseful when you cannot easily scroll to the starting point or want to check the range before deleting.\n\n<b>Limits and Restrictions:</b>\n• <b>Maximum messages per purge:</b> 1000 messages\n• <b>Message age limit:</b> Messages older than 48 hours may not be deletable (Telegram API restriction)\n• <b>Permissions required:</b> Both the user and the bot need the \"Delete Messages\" permission\n"
 
-  1. Reply to the <b>first</b> message in the range:
-  <code>/purgefrom</code>
-  The bot will confirm the message is marked (expires after 30 seconds).
-
-  2. Reply to the <b>last</b> message in the range:
-  <code>/purgeto</code>
-  All messages between the two markers (inclusive) will be deleted.
-
-  This is useful when you can't easily scroll to the starting point or need to verify the range before deletion.
-
-  <b>Limits and Restrictions:</b>
-  • <b>Maximum messages per purge:</b> 1000 messages
-  • <b>Message age limit:</b> Messages older than 48 hours may not be deletable (Telegram API restriction)
-  • <b>Permissions required:</b> Both the user and the bot must have "Delete Messages" permission
-
-purges_notes_docs: |
-  <b>Notes:</b>
-  • The <code>/purgefrom</code> marker expires after 30 seconds if not followed by <code>/purgeto</code>
-  • Deleting large ranges uses concurrent processing for better performance
-  • Status messages (showing how many messages were deleted) auto-delete after 3 seconds
-  • The bot handles already-deleted messages gracefully without errors
+purges_notes_docs: "<b>Notes:</b>\n• The <code>/purgefrom</code> marker expires after 30 seconds if no <code>/purgeto</code> follows\n• Large ranges are deleted concurrently for better performance\n• Status messages (how many messages were deleted) delete themselves after 3 seconds\n• Messages already deleted are skipped without errors\n"
 
 # Extended documentation locale keys - Reports module
 reports_extended_docs: |
@@ -1689,23 +1465,7 @@ captcha_permissions_docs: |
   • <code>mute</code> - Keep the user muted for 24 hours
 
 # Extended documentation locale keys - Blacklists module
-blacklists_extended_docs: |
-  <b>Available Actions:</b>
-  The following actions can be set using <code>/blaction</code>:
-  • <code>none</code> - Just deletes the message without any further action
-  • <code>warn</code> - Deletes message and issues a warning to the user (default)
-  • <code>mute</code> - Deletes message and mutes the user
-  • <code>kick</code> - Deletes message and kicks the user (they can rejoin)
-  • <code>ban</code> - Deletes message and permanently bans the user
-
-  <b>Note:</b>
-  The Default mode for Blacklist is <b>warn</b>, which will delete the message and issue a warning to the user.
-
-  <b>Commands:</b>
-  • <code>/addblacklist &lt;trigger&gt;</code> - Blacklists the word in the current chat
-  • <code>/rmblacklist &lt;trigger&gt;</code> - Removes the word from current Blacklisted Words in Chat
-  • <code>/blaction &lt;mute/kick/ban/warn/none&gt;</code> - Sets the action to be performed by bot when a blacklist word is detected
-  • <code>/remallbl</code> - Removes all the blacklisted words from chat (Owner Only)
+blacklists_extended_docs: "<b>Available Actions:</b>\nThese actions can be set with <code>/blaction</code>:\n• <code>none</code> - Only deletes the message, nothing else\n• <code>warn</code> - Deletes the message and warns the user (default)\n• <code>mute</code> - Deletes the message and mutes the user\n• <code>kick</code> - Deletes the message and kicks the user (they can rejoin)\n• <code>ban</code> - Deletes the message and permanently bans the user\n\n<b>Note:</b>\nThe default mode for Blacklist is <b>warn</b>, which deletes the message and warns the user.\n\n<b>Commands:</b>\n• <code>/addblacklist &lt;trigger&gt;</code> - Blacklists the word in the current chat\n• <code>/rmblacklist &lt;trigger&gt;</code> - Removes the word from the chat's blacklisted words\n• <code>/blaction &lt;mute/kick/ban/warn/none&gt;</code> - Sets the action the bot takes when a blacklisted word is detected\n• <code>/remallbl</code> - Removes all blacklisted words from chat (Owner Only)\n"
 
 # Extended documentation locale keys - Disabling module
 disabling_extended_docs: |
@@ -1775,7 +1535,7 @@ users_extended_docs: |
 
 # Issue #628 remediation keys
 misc_translate_parse_error: "Malfunction: could not read the translation response. Try again."
-blacklists_set_bl_action_update_failed: "Failed to update blacklist action. Please try again."
+blacklists_set_bl_action_update_failed: "Malfunction: could not update the blacklist action. Try again."
 filters_overwrite_token_failed: "Malfunction: could not create the overwrite confirmation. Try again."
 notes_overwrite_token_failed: "Malfunction: could not create the overwrite confirmation. Try again."
 common_settings_save_failed: "Failed to save settings. Please try again later."
