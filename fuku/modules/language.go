@@ -20,19 +20,7 @@ import (
 var languagesModule = moduleStruct{moduleName: "Languages"}
 
 func (moduleStruct) genFullLanguageKb() [][]gotgbot.InlineKeyboardButton {
-	keyboard := keyboard.MakeLanguageKeyboard()
-	tr := i18n.MustNewTranslator("uk")
-	helpTranslateText, _ := tr.GetString("language_help_translate")
-	keyboard = append(
-		keyboard,
-		[]gotgbot.InlineKeyboardButton{
-			{
-				Text: helpTranslateText,
-				Url:  "https://crowdin.com/project/fuku_robot",
-			},
-		},
-	)
-	return keyboard
+	return keyboard.MakeLanguageKeyboard()
 }
 
 func (m moduleStruct) changeLanguage(b *gotgbot.Bot, ctx *ext.Context) error {
