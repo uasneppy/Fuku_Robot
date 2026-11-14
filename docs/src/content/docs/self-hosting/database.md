@@ -1,11 +1,11 @@
 ---
 title: Database Configuration
-description: Configure and manage PostgreSQL database for Fuku Robot.
+description: Configure and manage PostgreSQL database for Xenobot-72.
 ---
 
 # Database Configuration
 
-Fuku Robot uses PostgreSQL as its primary database with GORM as the ORM layer. This guide covers database setup, migrations, connection pooling, and schema design.
+Xenobot-72 uses PostgreSQL as its primary database with GORM as the ORM layer. This guide covers database setup, migrations, connection pooling, and schema design.
 
 ## Requirements
 
@@ -49,7 +49,7 @@ Never use `sslmode=disable` in production. Always use `require` or stronger to p
 
 ## Automatic Migrations
 
-Fuku Robot supports automatic database migrations on startup, eliminating the need to manually run migration commands.
+Xenobot-72 supports automatic database migrations on startup, eliminating the need to manually run migration commands.
 
 ### Enabling Auto-Migration
 
@@ -196,7 +196,7 @@ Start with the defaults and only adjust pool settings if you observe connection 
 
 ## Schema Design Patterns
 
-Fuku Robot uses a **surrogate key pattern** for application tables. The `schema_migrations` metadata table is keyed by migration filename instead.
+Xenobot-72 uses a **surrogate key pattern** for application tables. The `schema_migrations` metadata table is keyed by migration filename instead.
 
 ### Primary Keys
 
@@ -236,7 +236,7 @@ Chat membership is managed via the JSONB `users` column on the `chats` table, no
 
 ## Database Tables
 
-Fuku Robot creates the following tables:
+Xenobot-72 creates the following tables:
 
 | Table | Purpose |
 |-------|---------|

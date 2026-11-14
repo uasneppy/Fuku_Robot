@@ -1,11 +1,11 @@
 ---
 title: Monitoring and Observability
-description: Monitor Fuku Robot health, metrics, and errors.
+description: Monitor Xenobot-72 health, metrics, and errors.
 ---
 
 # Monitoring and Observability
 
-Fuku Robot provides comprehensive monitoring capabilities including health checks, Prometheus metrics, and resource monitoring.
+Xenobot-72 provides comprehensive monitoring capabilities including health checks, Prometheus metrics, and resource monitoring.
 
 ## Health Endpoint
 
@@ -162,7 +162,7 @@ volumes:
 
 ## Resource Monitoring
 
-Fuku Robot includes automatic resource monitoring to prevent resource exhaustion.
+Xenobot-72 includes automatic resource monitoring to prevent resource exhaustion.
 
 ### Configuration
 
@@ -370,7 +370,7 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "Fuku Robot is down"
+          summary: "Xenobot-72 is down"
 
       - alert: HighMemoryUsage
         expr: process_resident_memory_bytes > 500000000

@@ -1,9 +1,9 @@
 ---
 title: Binary Installation
-description: Deploy Fuku Robot using pre-built binaries.
+description: Deploy Xenobot-72 using pre-built binaries.
 ---
 
-Pre-built binaries are available for all major platforms, making it easy to deploy Fuku Robot without Docker or building from source.
+Pre-built binaries are available for all major platforms, making it easy to deploy Xenobot-72 without Docker or building from source.
 
 ## Available Platforms
 
@@ -88,7 +88,7 @@ Always verify checksums after downloading to ensure the binary has not been tamp
 
 ## Systemd Service (Linux)
 
-For production deployments on Linux, run Fuku Robot as a systemd service.
+For production deployments on Linux, run Xenobot-72 as a systemd service.
 
 ### Create Service File
 
@@ -100,7 +100,7 @@ Add the following content:
 
 ```ini
 [Unit]
-Description=Fuku Robot Telegram Bot
+Description=Xenobot-72 Telegram Bot
 After=network.target postgresql.service redis.service
 Wants=postgresql.service redis.service
 

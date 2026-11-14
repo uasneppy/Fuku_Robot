@@ -6,7 +6,7 @@ description: Complete reference of the PostgreSQL database schema
 
 # Database Schema
 
-This page documents the complete PostgreSQL database schema for Fuku Robot.
+This page documents the complete PostgreSQL database schema for Xenobot-72.
 
 ## Overview
 

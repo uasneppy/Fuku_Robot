@@ -1,12 +1,12 @@
 ---
 title: Command Reference
-description: Complete reference of all Fuku Robot commands
+description: Complete reference of all Xenobot-72 commands
 ---
 <!-- MANUALLY MAINTAINED: do not regenerate -->
 
 # Command Reference
 
-This page provides a complete reference of all commands available in Fuku Robot.
+This page provides a complete reference of all commands available in Xenobot-72.
 
 ## Overview
 

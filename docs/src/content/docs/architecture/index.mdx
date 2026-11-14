@@ -1,9 +1,9 @@
 ---
 title: Architecture
-description: High-level architecture and design principles of Fuku Robot.
+description: High-level architecture and design principles of Xenobot-72.
 ---
 
-Fuku Robot is a modern Telegram group management bot built with Go and the gotgbot library. This document provides an overview of the architectural decisions, technology stack, and design principles that guide the codebase.
+Xenobot-72 is a modern Telegram group management bot built with Go and the gotgbot library. This document provides an overview of the architectural decisions, technology stack, and design principles that guide the codebase.
 
 ## Technology Stack
 
@@ -239,7 +239,7 @@ shutdownManager.RegisterHandler(func() error {
 
 ## Error Handling Strategy
 
-Fuku uses a 4-layer error handling hierarchy:
+Xenobot-72 uses a 4-layer error handling hierarchy:
 
 :::note[Error Recovery Layers]
 The 4-layer hierarchy ensures that no panic or error goes unhandled. Each layer catches what the layer below it might miss, providing defense-in-depth against crashes.

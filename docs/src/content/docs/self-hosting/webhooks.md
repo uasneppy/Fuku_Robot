@@ -1,11 +1,11 @@
 ---
 title: Webhook Configuration
-description: Configure webhooks for production deployments of Fuku Robot.
+description: Configure webhooks for production deployments of Xenobot-72.
 ---
 
 # Webhook Configuration
 
-Webhooks provide real-time message delivery from Telegram to your bot, making them ideal for production deployments. This guide covers the setup and configuration of webhooks for Fuku Robot.
+Webhooks provide real-time message delivery from Telegram to your bot, making them ideal for production deployments. This guide covers the setup and configuration of webhooks for Xenobot-72.
 
 ## Polling vs Webhooks
 
@@ -40,7 +40,7 @@ HTTP_PORT=8080
 
 ## Unified HTTP Server
 
-Fuku Robot uses a single HTTP server for all endpoints:
+Xenobot-72 uses a single HTTP server for all endpoints:
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
@@ -175,7 +175,7 @@ openssl rand -hex 32
 
 ### 2. Validate Webhook Origin
 
-Fuku validates the `X-Telegram-Bot-Api-Secret-Token` header against
+Xenobot-72 validates the `X-Telegram-Bot-Api-Secret-Token` header against
 `WEBHOOK_SECRET` before reading the request body. The secret is never placed in
 the URL.
 

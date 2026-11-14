@@ -1,11 +1,11 @@
 ---
 title: Troubleshooting
-description: Common issues and solutions for Fuku Robot.
+description: Common issues and solutions for Xenobot-72.
 ---
 
 # Troubleshooting
 
-This guide covers common issues you may encounter when running Fuku Robot and how to resolve them.
+This guide covers common issues you may encounter when running Xenobot-72 and how to resolve them.
 
 ## Bot Won't Start
 
@@ -63,7 +63,7 @@ BOT_TOKEN="123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
    nc -zv localhost 5432
    ```
 
-4. **Docker Compose:** Ensure PostgreSQL is healthy before Fuku starts:
+4. **Docker Compose:** Ensure PostgreSQL is healthy before Xenobot-72 starts:
    ```yaml
    depends_on:
      postgres:
@@ -91,7 +91,7 @@ BOT_TOKEN="123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
    REDIS_PASSWORD=your_password  # Leave empty if no password
    ```
 
-3. **Docker:** Ensure Redis is started before Fuku
+3. **Docker:** Ensure Redis is started before Xenobot-72
 
 ### MESSAGE_DUMP Invalid
 

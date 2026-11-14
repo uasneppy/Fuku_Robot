@@ -1,15 +1,14 @@
 <div align="center">
 
-<h1>Fuku Robot</h1>
+<h1>Xenobot-72</h1>
 
 <p><b>A Telegram group manager written in Go: moderation, anti-spam, captcha, federations and more.</b></p>
 
-<p>A fork of <a href="https://github.com/Divkix/Alita_Robot">the upstream project</a> by <a href="https://github.com/Divkix">Divkix</a></p>
+<p>A fork of an MIT-licensed open-source group manager (see <a href="#-credits--license">Credits</a>)</p>
 
 <p>
   <a href="go.mod"><img src="https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white" alt="Go 1.26"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
-  <a href="https://github.com/Divkix/Alita_Robot"><img src="https://img.shields.io/badge/fork%20of-Divkix%2FAlita__Robot-6f42c1?logo=github" alt="Fork of Divkix/Alita_Robot"></a>
   <a href="https://github.com/PaulSonOfLars/gotgbot"><img src="https://img.shields.io/badge/built%20with-gotgbot%20v2-26A5E4?logo=telegram&logoColor=white" alt="Built with gotgbot v2"></a>
   <img src="https://img.shields.io/badge/storage-PostgreSQL%20%2B%20Redis-336791?logo=postgresql&logoColor=white" alt="PostgreSQL + Redis">
 </p>
@@ -26,7 +25,7 @@
 
 ---
 
-**Fuku Robot** is [uasneppy](https://github.com/uasneppy)'s fork of an open-source project (see Credits), a Telegram group-management bot
+**Xenobot-72** is [uasneppy](https://github.com/uasneppy)'s fork of an open-source project (see Credits), a Telegram group-management bot
 written in Go on top of [gotgbot](https://github.com/PaulSonOfLars/gotgbot). It moderates groups (bans, mutes, warns,
 purges), keeps spam out (antiflood, anti-raid, join captcha, blacklists, locks and an optional AI spam filter), stores
 notes, filters, rules and greetings, and ties several groups together through federations, connections and log
@@ -37,7 +36,7 @@ protects every linked group at once, plus stronger raid protection.
 
 > [!NOTE]
 > Right now the `main` branch runs **the upstream project's code unchanged** (upstream commit `34ba3f6`, version
-> string `2.23.14`). The Fuku-specific features are being built on a separate branch and are not merged yet.
+> string `2.23.14`). The fork's own features are being built on a separate branch and are not merged yet.
 > See [What's different from upstream](#-whats-different-from-upstream) for the details.
 
 ## 📑 Table of contents
@@ -60,11 +59,11 @@ protects every linked group at once, plus stronger raid protection.
 
 ### On `main` today
 
-| | Fuku Robot `main` | Upstream Fuku Robot |
+| | Xenobot-72 `main` | Upstream |
 | --- | --- | --- |
 | Bot code | Identical to upstream commit `34ba3f6` (3 Oct 2026). Apart from this README, `main` has no commits of its own. | Still moving. In October 2026 upstream `main` was 74 commits ahead, with tags up to `v2.26.1`. |
 | Names inside the code | Unchanged: Go module `github.com/uasneppy/fuku_robot`, binary `fuku_robot`, Redis keys under `fuku:`, Docker labels and service names. | Same |
-| What users see | The bot's name and username come from BotFather, so you can call it Fuku. Some built-in texts still say "Fuku", and the `/start` and `/about` menus link to upstream's support group and update channel. | Same |
+| What users see | The built-in texts call the bot Xenobot-72 and speak in her voice in English and Ukrainian; the other languages only carry the new name. The display name and username come from BotFather. The `/about` menu still links to upstream's support group; the update-channel button is gone. | Upstream's own name and texts |
 | Deploy manifests | Still point at upstream: `docker-compose.yml` pulls `ghcr.io/uasneppy/fuku_robot:latest`, and `app.json` and `.goreleaser.yaml` name the upstream repository and image. | Same |
 
 Upstream `main` now has features this fork's `main` lacks, for example expiring warns, optional CAS and lols.bot checks
@@ -614,7 +613,7 @@ flowchart TD
 
 ### 1. Create the bot with BotFather
 
-1. Send `/newbot` to [@BotFather](https://t.me/BotFather), choose a display name (for example *Fuku Robot*) and a
+1. Send `/newbot` to [@BotFather](https://t.me/BotFather), choose a display name (for example *Xenobot-72*) and a
    username, and copy the token.
 2. Add the bot to your group and **make it an admin**, with the rights the features need: delete messages,
    ban/restrict members, pin messages, invite users. Admin bots receive every group message, so privacy mode does not
@@ -932,7 +931,7 @@ CGO_ENABLED=0 go build ./...                                         # quick com
 The fork's `main` does not follow upstream on its own. To pull in upstream's fixes and features:
 
 ```bash
-git remote add upstream https://github.com/Divkix/Alita_Robot.git   # once
+git remote add upstream <upstream repository URL>   # once
 git fetch upstream
 git switch main
 git merge upstream/main          # or: git rebase upstream/main
@@ -945,9 +944,7 @@ You can also use GitHub's **Sync fork** button. After syncing `main`, merge it i
 
 ## 📚 Documentation
 
-- **Upstream docs site:** [link](https://alita-docs.divkix.me) covers setup, configuration and every
-  module of Fuku Robot. Most of it applies to this fork's `main` too.
-- **In this repository:** the same site's sources live in [`docs/`](docs/README.md). Good starting points are
+- **In this repository:** the docs site's sources live in [`docs/`](docs/README.md). Good starting points are
   [Docker](docs/src/content/docs/self-hosting/docker.mdx),
   [from source](docs/src/content/docs/self-hosting/source.mdx),
   [database](docs/src/content/docs/self-hosting/database.md),
@@ -959,19 +956,18 @@ You can also use GitHub's **Sync fork** button. After syncing `main`, merge it i
 
 ## 🙏 Credits & License
 
-Fuku Robot is built entirely on **[the upstream project](https://github.com/Divkix/Alita_Robot)** by
-**[Divanshu Chauhan (Divkix)](https://github.com/Divkix)** and
-[its contributors](https://github.com/Divkix/Alita_Robot/graphs/contributors). Almost every line of code, test,
-translation and document in this repository comes from that project. Thank you!
+Xenobot-72 is built entirely on an MIT-licensed open-source Telegram group manager and the work of its
+contributors. Almost every line of code, test, translation and document in this repository comes from that project,
+and its copyright notice is kept in [`LICENSE`](LICENSE). Thank you!
 
 It also relies on [gotgbot](https://github.com/PaulSonOfLars/gotgbot) and
 [gotg_md2html](https://github.com/PaulSonOfLars/gotg_md2html) by PaulSonOfLars, plus the other open-source libraries
 listed in [`go.mod`](go.mod).
 
-**License:** [MIT](LICENSE), Copyright (c) 2020-2025 Divanshu Chauhan. This fork is distributed under the same MIT
-License. Any copy or substantial portion of the software must include the original copyright notice and the MIT
+**License:** [MIT](LICENSE). This fork is distributed under the same MIT License. Any copy or substantial portion of the software must include the original copyright notice and the MIT
 permission notice from [`LICENSE`](LICENSE).
 
 <div align="center">
-<sub>Fuku Robot is an independent fork and is not affiliated with or endorsed by the Fuku Robot project.</sub>
+<sub>Xenobot-72 is an independent fork and is not affiliated with or endorsed by the original project. The name and
+voice come from the series <i>Mau Makan Apa?</i> by Labirhin; this bot is a fan homage and is not affiliated with it.</sub>
 </div>

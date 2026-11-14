@@ -6,7 +6,7 @@ description: Complete reference of permission checking functions
 
 # 🔐 Permission System
 
-This page documents all permission checking functions in Fuku Robot.
+This page documents all permission checking functions in Xenobot-72.
 
 ## Overview
 

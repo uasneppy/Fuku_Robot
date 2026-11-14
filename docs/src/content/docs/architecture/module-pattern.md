@@ -1,9 +1,9 @@
 ---
 title: Module Pattern
-description: How to create new feature modules for Fuku Robot.
+description: How to create new feature modules for Xenobot-72.
 ---
 
-This guide explains how to add new feature modules to Fuku Robot, following the established patterns and conventions.
+This guide explains how to add new feature modules to Xenobot-72, following the established patterns and conventions.
 
 ## Module Structure Template
 
