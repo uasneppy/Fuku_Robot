@@ -138,10 +138,8 @@ captcha_help_msg:
   When enabled, new members are automatically muted until they complete the captcha.
 
   If they fail or timeout, the configured action is taken."
-commonstrings_admin_cache_cache_reloaded: Successfully reloaded admin cache.
-commonstrings_admin_cache_not_found:
-  Admincache not found. Ask an admin to use /admincache
-  to reload the admin cache.
+commonstrings_admin_cache_cache_reloaded: "Admin cache reloaded. Supervisor roster up to date."
+commonstrings_admin_cache_not_found: "Admin cache not found. Ask an admin to send /admincache to reload it."
 connections_allow_connect_currently_off: "User connections are currently <b>off</b>.\nUsers cannot connect this chat to their PMs."
 connections_allow_connect_currently_on: "User connections are currently <b>on</b>.\nUsers can connect this chat to their PMs."
 connections_allow_connect_turned_off: "User connections to this chat turned <b>off</b>.\nUsers cannot connect the chat to their PMs."
@@ -190,10 +188,8 @@ purges_help_msg: "*Admin only:*\n- /purge: deletes all messages between this one
 reports_help_msg: "Nobody can watch a group 24/7. I can, but your admins need to be told. So what happens when someone spams?\n\n× /report `<reason>`: reply to a message to report it to admins.\n- @admin: same as /report, but not a command.\n\n*Admins Only:*\n× /reports `<on/off/yes/no>`: change the report setting, or view the current status.\n- In PM, toggles your own status.\n- In a group, toggles that group's status.\n× /reports `block` (via reply only): Block a user from using /report or @admin.\n× /reports `unblock` (via reply only): Unblock a user from using /report or @admin.\n× /reports `showblocklist`: Check all blocked users who cannot use /report or @admin.\n\nTo report a user, reply to their message with @admin or /report; Xenobot-72 replies that the admins have been notified.\nYou MUST reply to a message to report a user; @admin is not for tagging admins for no reason.\n\n*NOTE:* Neither of these triggers when used by admins."
 rules_help_msg: "Every facility runs on regulations. This module keeps yours clear.\n*User commands*:\n× /rules: Check the current chat rules.\n*Admin commands*:\n× /setrules `<text>`: Set the rules for this chat.\n× /privaterules `<yes/no/on/off>`: Choose whether the rules are sent in private.\n× /resetrules: Reset the chat rules to default\n× /rulesbtn `<custom text>`: Set the text of the rules button.\n× /resetrulesbutton: Reset the text of the rules button to default.\n× /resetrulesbtn: Same as above."
 bot_updates_creators_plug: "\nI am Xenobot-72, version 72 of 74. Jaya Abadi built me to run facilities like this one."
-utils_string_handling_extract_time_invalid_time_amount: Invalid time amount specified.
-utils_string_handling_extract_time_invalid_time_type:
-  "Invalid time type specified.
-  Expected m, h, or d got: %s"
+utils_string_handling_extract_time_invalid_time_amount: "Invalid time amount."
+utils_string_handling_extract_time_invalid_time_type: "Invalid time unit. Expected m, h or d, got: %s"
 warns_help_msg: "Violation notices keep residents in check before things get out of control.\nFor automatic warnings, read about the blacklist module.\n\n*Admin Commands:*\n- /warn <reason>: Warn a user.\n- /dwarn <reason>: Warn a user by reply and delete their message.\n- /swarn <reason>: Warn a user silently and delete your message.\n- /warns: See a user's warnings.\n- /rmwarn: Remove a user's latest warning.\n- /resetwarn: Reset all of a user's warnings to 0.\n- /resetallwarns: Delete all warnings in a chat. All users return to 0 warns.\n- /warnings: Get the chat's warning settings.\n- /setwarnmode <ban/kick/mute>: Set the chat's warn mode.\n- /setwarnlimit <number>: Set the number of warnings before users are punished.\n\n*Examples*\n- Warn a user.\n-> `/warn @user For disobeying the rules`"
 users_help_msg: "Resident registry. An automatic background tracker of users and chats. This module has no commands: it quietly records every message sender and every chat the bot is active in.\n*What It Tracks:*\n× User IDs, usernames and display names of every message sender.\n× Chat IDs and names of every group the bot is in.\n× Channel IDs, names and usernames of linked channels.\n*Rate Limiting:*\n× User updates are limited to one per UserUpdateInterval.\n× Chat updates are limited to one per ChatUpdateInterval.\nOther modules, such as /info, depend on the data this module collects."
 
@@ -326,15 +322,15 @@ misc_translation_error: "Malfunction: the translation request failed."
 devs_specify_user: "Specify a user to get info on"
 
 # Common error messages used across modules
-error_generic: "An error occurred. Please try again later."
-common_anonymous_user_error: This command cannot be used on anonymous user.
-common_anonymous_ban_error: This command cannot be used on anonymous user, these user can only be banned/unbanned.
-common_cannot_identify_user: Cannot identify user. This command cannot be used by channels.
-common_no_user_specified: I don't know who you're talking about, you're going to need to specify a user...!
-common_user_not_in_chat: This user is not in this chat, how can I restrict them?
-common_cannot_target_admin: "I cannot perform this action on group administrators."
-common_cannot_target_self: "I cannot perform this action on myself."
-common_no_reply_to_message: "You need to reply to a user's message to perform this action."
+error_generic: "Malfunction. Try again later."
+common_anonymous_user_error: "This command cannot be used on an anonymous user."
+common_anonymous_ban_error: "This command cannot be used on an anonymous user. Anonymous users can only be banned or unbanned."
+common_cannot_identify_user: "Cannot identify the user. Channels cannot use this command."
+common_no_user_specified: "Target not specified. Tell me which user you mean."
+common_user_not_in_chat: "This user is not in this chat. There is nobody to restrict."
+common_cannot_target_admin: "Request denied. I do not perform this action on group administrators."
+common_cannot_target_self: "Request denied. I do not perform this action on myself."
+common_no_reply_to_message: "Reply to a user's message to perform this action."
 
 # Common action verbs (for dynamic error messages)
 common_action_ban: "ban"
@@ -721,10 +717,10 @@ filters_overwrite_expired: "⏰ Confirmation expired. Try again."
 
 # Helpers module strings
 helpers_back_button: "« Back"
-helpers_connection_success: "You have been connected to %s!"
-helpers_note_not_exist: "This note does not exist!"
-helpers_note_admin_only: "This note can only be accessed by a admin!"
-helpers_connected_to_chat: "You have been connected to %s!"
+helpers_connection_success: "Remote link established with %s."
+helpers_note_not_exist: "This note does not exist."
+helpers_note_admin_only: "Access denied. This note is for admins only."
+helpers_connected_to_chat: "Remote link established with %s."
 
 # Common/Shared strings
 common_yes: "Yes"
@@ -733,15 +729,15 @@ common_back: "Back"
 common_back_arrow: "« Back"
 common_back_arrow_alt: "⬅ Back"
 common_done: "Done ✅"
-common_continue: "✅ Continue ✅"
+common_continue: "✅ Continue"
 common_home: "Home"
 common_formatting_button: "Formatting"
 common_rules_button: "Rules"
 common_rules_button_emoji: "Rules 📝"
 
 # Main module strings
-main_bot_command_start: "Starts the Bot"
-main_bot_command_help: "Check Help section of bot"
+main_bot_command_start: "Start the bot"
+main_bot_command_help: "Open the help section"
 
 # Help module strings
 help_info_about_header: "Info & About\n\nFrequently asked questions about Xenobot-72."
@@ -765,42 +761,42 @@ help_fillings_button: "Fillings"
 help_random_content_button: "Random Content"
 
 # Chat status permission strings
-chat_status_change_info_button_error: "You don't have permissions to change info!!"
-chat_status_change_info_cmd_error: "You don't have permission to change info in this group!"
-chat_status_restrict_button_error: "You don't have permissions to restrict members!!"
-chat_status_restrict_cmd_error: "You don't have permission to restrict users in this group!"
-chat_status_bot_restrict_error: "I don't have permissions to restrict members!!"
-chat_status_bot_restrict_group_error: "I can't restrict people here! Make sure I'm admin and can restrict other members."
-chat_status_promote_button_error: "You don't have permissions to promote/demote members!!"
-chat_status_promote_cmd_error: "You can't promote/demote people here! Make sure you have appropriate rights!"
-chat_status_bot_promote_error: "I can't promote/demote people here! Make sure I'm admin and can appoint new admins."
-chat_status_pin_user_error: "You can't pin messages here! Make sure you're admin and can pin messages."
-chat_status_pin_bot_error: "I can't pin messages here! Make sure I'm admin and can pin messages."
-chat_status_invite_link_bot_error: "I don't have access to invite links! Make sure I'm admin and can invite users."
-chat_status_invite_link_user_error: "You don't have access to invite links; You need to be admin to get this!"
-chat_status_delete_button_error: "You don't have permissions to delete messages!!"
-chat_status_delete_cmd_error: "You don't have Permissions to Delete Messages!"
-chat_status_bot_delete_error: "I don't have Permissions to Delete Messages!"
-chat_status_bot_not_admin: "I'm not admin!"
-chat_status_user_admin_button_error: "You need to be an admin to do this!"
-chat_status_user_admin_cmd_error: "Only admins can execute this command!"
-chat_status_owner_button_error: "You need to be the group creator to do this!"
-chat_status_owner_cmd_error: "Only group creator to do this!"
-chat_status_pm_only_error: "This command is made for PM, not group chat!"
-chat_status_group_only_error: "This command is made to be used in group chats, not in PM!"
-chat_status_anon_confirm: "It looks like you're anonymous. Tap this button to confirm your identity."
-chat_status_anon_prove_admin: "Click to prove admin"
+chat_status_change_info_button_error: "Access denied. You lack the right to change info."
+chat_status_change_info_cmd_error: "Access denied. You lack the right to change info in this group."
+chat_status_restrict_button_error: "Access denied. You lack the right to restrict members."
+chat_status_restrict_cmd_error: "Access denied. You lack the right to restrict users in this group."
+chat_status_bot_restrict_error: "I lack the right to restrict members."
+chat_status_bot_restrict_group_error: "I cannot restrict anyone here. Make sure I am an admin and can restrict members."
+chat_status_promote_button_error: "Access denied. You lack the right to promote or demote members."
+chat_status_promote_cmd_error: "Access denied. You cannot promote or demote anyone here. Check your rights."
+chat_status_bot_promote_error: "I cannot promote or demote anyone here. Make sure I am an admin and can appoint new admins."
+chat_status_pin_user_error: "Access denied. You cannot pin messages here. Make sure you are an admin and can pin messages."
+chat_status_pin_bot_error: "I cannot pin messages here. Make sure I am an admin and can pin messages."
+chat_status_invite_link_bot_error: "I have no access to invite links. Make sure I am an admin and can invite users."
+chat_status_invite_link_user_error: "Access denied. Invite links are for admins only."
+chat_status_delete_button_error: "Access denied. You lack the right to delete messages."
+chat_status_delete_cmd_error: "Access denied. You lack the right to delete messages."
+chat_status_bot_delete_error: "I lack the right to delete messages."
+chat_status_bot_not_admin: "I am not an admin here."
+chat_status_user_admin_button_error: "Access denied. You need to be an admin to do this."
+chat_status_user_admin_cmd_error: "Access denied. Only admins can run this command."
+chat_status_owner_button_error: "Access denied. Only the group creator can do this."
+chat_status_owner_cmd_error: "Access denied. Only the group creator can do this."
+chat_status_pm_only_error: "This command is for PM, not group chats."
+chat_status_group_only_error: "This command is for group chats, not PM."
+chat_status_anon_confirm: "You appear to be anonymous. Press this button to confirm your identity."
+chat_status_anon_prove_admin: "Confirm admin"
 
 # Extraction module strings
 extraction_chat_not_found: "failed to connect to chat: failed to get chat: unable to getChat: Bad Request: chat not found"
-extraction_need_chat_id: "I need a chat id to connect to!"
-extraction_user_not_found: "Could not find a user by this name; are you sure I've seen them before?"
+extraction_need_chat_id: "I need a chat id to connect to."
+extraction_user_not_found: "No user by that name in my records. Has this user been seen here before?"
 extraction_get_chat_member_failed: "Failed to get user: unable to getChatMember: Bad Request: chat not found"
-extraction_invalid_time_amount: "Invalid time amount specified."
-extraction_time_limit_exceeded: "Cannot set time to more than 1 year!"
-extraction_no_time_specified: "Please specify a time duration (e.g., 1m, 1h, 1d, 1w)."
-extraction_invalid_time_type: "Invalid time type specified. Expected m, h, d or w got: %s"
-extraction_invalid_time_format: "Invalid time format specified."
+extraction_invalid_time_amount: "Invalid time amount."
+extraction_time_limit_exceeded: "The time cannot be longer than 1 year."
+extraction_no_time_specified: "Specify a duration (e.g., 1m, 1h, 1d, 1w)."
+extraction_invalid_time_type: "Invalid time unit. Expected m, h, d or w, got: %s"
+extraction_invalid_time_format: "Invalid time format."
 
 # Database default strings
 db_default_welcome: "Welcome to the facility, {first}. No sweat, Xenobot-72 will look after you. Today's ration is tempe. It is always tempe."
@@ -840,16 +836,16 @@ greetings_clean_service_not: "I am not deleting join messages at the moment."
 # Helpers utility strings
 helpers_admin_commands: "Admin commands"
 helpers_user_commands: "User commands"
-helpers_person_no_name: "PersonWithNoName"
-content_need_filter_content: "You need to give the filter some content!"
-content_need_note_content: "You need to give the note some content!"
+helpers_person_no_name: "Unnamed resident"
+content_need_filter_content: "The filter needs some content."
+content_need_note_content: "The note needs some content."
 content_invalid_message: "Invalid message: message is nil"
-content_need_content: "You need to give me some content to %s users!"
-content_text_too_long: "Your message text is %d characters long. The maximum length for text is 4096; please trim it to a smaller size. Note that markdown characters may take more space than expected."
-content_caption_too_long: "Your message caption is %d characters long. The maximum caption length is 1024; please trim it to a smaller size. Note that markdown characters may take more space than expected."
-helpers_module_help_header: "Here is the help for the *%s* module:\n\n"
-helpers_invalid_deep_link: "Invalid or malformed deep link. Please check the URL and try again."
-helpers_chat_not_found: "Could not find the chat associated with this link. The chat may no longer exist or I may not have access to it."
+content_need_content: "Give me some content to %s users."
+content_text_too_long: "Your message text is %d characters long. The maximum for text is 4096; trim it. Markdown characters may take more space than expected."
+content_caption_too_long: "Your message caption is %d characters long. The maximum caption length is 1024; trim it. Markdown characters may take more space than expected."
+helpers_module_help_header: "Manual for the *%s* module:\n\n"
+helpers_invalid_deep_link: "Invalid or malformed deep link. Check the URL and try again."
+helpers_chat_not_found: "No chat found for this link. The chat may no longer exist, or I may not have access to it."
 
 
 # Formatting strings
@@ -937,7 +933,7 @@ button_unmute_admins: "Unmute (Admins Only)"
 button_unban_admins: "Unban (Admins Only)"
 button_connect_to_chat: "Connect to chat"
 button_formatting: "Formatting"
-button_click_me: "Click Me!"
+button_click_me: "Open"
 button_ban: "Ban"
 button_kick: "Kick"
 button_mute: "Mute"
@@ -1002,7 +998,7 @@ bot_updates_convert_howto: "To convert this group to a supergroup, follow the in
 antiflood_button_unban_admins: "Unban (Admins Only)"
 
 # Helpers module strings
-helpers_notes_current_header: "These are the current notes in this Chat:\n"
+helpers_notes_current_header: "Notes on file in this chat:\n"
 
 
 # Configuration errors
@@ -1144,7 +1140,7 @@ misc_translate_parse_error: "Malfunction: could not read the translation respons
 blacklists_set_bl_action_update_failed: "Malfunction: could not update the blacklist action. Try again."
 filters_overwrite_token_failed: "Malfunction: could not create the overwrite confirmation. Try again."
 notes_overwrite_token_failed: "Malfunction: could not create the overwrite confirmation. Try again."
-common_settings_save_failed: "Failed to save settings. Please try again later."
+common_settings_save_failed: "Malfunction: could not save the settings. Try again later."
 devs_chatlist_error: "Malfunction: could not generate the chat list. Try again."
 
 # Reactions module strings
@@ -1362,7 +1358,7 @@ misc_wiki_not_found: "No Wikipedia result for that."
 misc_ud_usage: "Usage: /ud <term>"
 misc_ud_not_found: "No Urban Dictionary result for that."
 misc_runs: ["Leaves the facility. Briefly.", "Request denied.", "This unit is on a tempe break.", "Catch me if you can. You cannot. I fly."]
-chat_status_bot_change_info_error: "I can't change group info here! Make sure I'm admin and can change group info."
+chat_status_bot_change_info_error: "I cannot change group info here. Make sure I am an admin and can change group info."
 staff_help_msg: |
   A Staff Group is one group of trusted admins that manages your other groups.
 
