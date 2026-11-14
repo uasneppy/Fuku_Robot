@@ -670,6 +670,7 @@ rules_help_msg: |
 
   × /resetrulesbtn: Sama seperti di atas."
 bot_updates_creators_plug: "\nSaya Xenobot-72."
+bot_updates_make_me_admin: "Jadikan saya admin agar semua fitur saya bisa digunakan!"
 utils_string_handling_extract_time_invalid_time_amount: Jumlah waktu yang ditentukan tidak valid.
 utils_string_handling_extract_time_invalid_time_type: |
   "Tipe waktu yang ditentukan tidak valid.

@@ -1316,6 +1316,7 @@ mute_reply_to_dmute: Vous devez répondre à un message pour le supprimer et ren
 
 # Bot updates module strings
 bot_updates_creators_plug: "\nJe suis Xenobot-72."
+bot_updates_make_me_admin: "Nommez-moi administrateur pour utiliser toutes mes fonctionnalités !"
 bot_updates_need_admin: Vous devez être admin pour faire cela !
 bot_updates_need_supergroup: "Désolé, mais pour utiliser toutes mes fonctionnalités, vous devez convertir ce groupe en supergroupe."
 bot_updates_thanks_for_adding: "Merci de m'avoir ajouté à votre groupe !"

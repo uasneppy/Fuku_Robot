@@ -487,6 +487,7 @@ rules_help_msg: |
   
     × /resetrulesbtn: То же, что и выше."
 bot_updates_creators_plug: "\nЯ Xenobot-72."
+bot_updates_make_me_admin: "Сделайте меня администратором, чтобы использовать все мои возможности!"
 utils_string_handling_extract_time_invalid_time_amount: Указано неверное количество времени.
 utils_string_handling_extract_time_invalid_time_type: |
   "Указан неверный тип времени.

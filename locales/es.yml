@@ -1458,6 +1458,7 @@ bot_updates_need_supergroup: "Lo siento, pero para usar todas mis funciones, nec
 bot_updates_thanks_for_adding: "¡Gracias por añadirme en tu grupo!"
 bot_updates_button_expired: "Este botón ha expirado, Por favor usa el comando de nuevo."
 bot_updates_creators_plug: "\nSoy Xenobot-72."
+bot_updates_make_me_admin: "¡Hazme administrador para poder usar todas mis funciones!"
 
 # Formatting module additional strings
 formatting_press_button: "¡Presiona el botón de abajo para obtener Ayuda de Markdown!"
