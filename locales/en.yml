@@ -595,92 +595,15 @@ formatting_random: |
 
   Sup? <code>{first}</code>
 greetings_help_msg: "Greetings and farewells, handled by the facility. New residents get a welcome, departing ones get a send-off.\n\n*Admin Commands:*\n× /setwelcome `<reply/text>`: Set the group's welcome text.\n× /welcome `<yes/no/on/off>`: Turn welcome messages on or off.\n× /resetwelcome: Reset the welcome message to the default.\n× /setgoodbye `<reply/text>`: Set the group's goodbye text.\n× /goodbye `<yes/no/on/off>`: Turn goodbye messages on or off.\n× /resetgoodbye: Reset the goodbye message to the default.\n× /cleanservice `<yes/no/on/off>`: Delete all service messages, such as the 'x joined the group' notification.\n× /cleanwelcome `<yes/no/on/off>`: Delete the old welcome message whenever a new member joins.\n× /autoapprove `<yes/no/on/off>`: Approve every new join request automatically."
-help_about: "@%s  is one of the fastest and most feature-filled group managers.
-
-
-  Fuku ✨ is developed and actively maintained by @DivideProjects!
-
-
-  Fuku has been online since 2020 and has served thousands of groups with hundreds
-  of thousands of users!
-
-
-  <b>Why Fuku:</b>
-
-  - Simple: Easy usage and compatible with many bot commands.
-
-  - Featured: Many features which other group management bots don't have.
-
-  - Fast: Guess what? It's not made using Python, we use <a href='https://go.dev/'>Go</a>
-  as our core programming language.
-
-
-  <b>Current Version:</b> %s"
-help_configuration_step-1: "Welcome to the Fuku Configuration
-
-
-  The first thing to do is to add Fuku ✨ to your group! For doing that, press the
-  under button and select your group, then press Done to continue the tutorial."
-help_configuration_step-2: "Ok, well done!
-
-
-  Now to let me work correctly, you need to make me Admin of your Group!
-
-  To do that, follow these easy steps:
-
-  ▫️ Go to your group
-
-  ▫️ Press the Group's name
-
-  ▫️ Press Modify
-
-  ▫️ Press on Administrator
-
-  ▫️ Press Add Administrator
-
-  ▫️ Press the Magnifying Glass
-
-  ▫️ Search @%s
-
-  ▫️ Confirm"
-help_configuration_step-3: "Excellent!
-
-
-  Now the Bot is ready to use!
-
-  All commands can be used with / or !
-
-
-  If you're facing any difficulties in setting up me in your group, so don't hesitate
-  to come in @DivideSupport.
-
-  We would love to help you."
-help_donatetext: "So you want to donate? Amazing!
-
-  When you donate, all the fund goes towards my development which makes on fast and
-  responsive.
-
-  Your donation might also get me a new feature or two, which I wasn't able to get
-  due to server limitations.
-
-  All the funds would be put into my services such as database, storage, and hosting!
-
-  You can donate by contacting my owner here: @DivideProjectsBot"
+help_about: "@%s is Xenobot-72, the management unit of this facility. Version 72 of 74. Built by Jaya Abadi.\n\nI replaced the people who used to do this job. They were slower.\n\n<b>Why Xenobot-72:</b>\n- Simple: easy to use and compatible with many bot commands.\n- Featured: many features other group management bots don't have.\n- Fast: not made with Python. My core is written in <a href='https://go.dev/'>Go</a>.\n\n<b>Current Version:</b> %s"
+help_configuration_step-1: "Xenobot-72 setup procedure.\n\nStep one: add Xenobot-72 ✨ to your group. Press the button below, pick your group, then press Done to continue."
+help_configuration_step-2: "Step one complete.\n\nTo work properly I need to be an Admin of your group.\nFollow these steps:\n▫️ Go to your group\n▫️ Press the group's name\n▫️ Press Modify\n▫️ Press Administrators\n▫️ Press Add Administrator\n▫️ Press the magnifying glass\n▫️ Search @%s\n▫️ Confirm"
+help_configuration_step-3: "Setup complete. The facility is now under management.\n\nAll commands can be used with / or !\n\nIf something does not work, check that I am an admin with the rights I need, then try again."
+help_donatetext: "You wish to donate. Noted.\nDonations go towards running me: database, storage and hosting. They keep me fast and responsive.\nA donation may also unlock a feature or two that server limits keep out of reach.\nThis unit does not handle money itself. To donate, contact the people who run this bot."
 lang_sample: US English
 language_flag: 🇺🇸
 language_name: English
-help_help_msg:
-  "The main entry point and navigation system for Fuku Robot.
-
-  *Navigation Commands:*
-
-  × /start: Show the welcome message with navigation menu.
-
-  × /help: Show help menu with module list; use /help <module> for details.
-
-  × /about: Show bot information, version, and useful links.
-
-  × /donate: Show donation information for supporting the project."
+help_help_msg: "The main entry point and navigation system of Xenobot-72.\n*Navigation Commands:*\n× /start: Show the welcome message with the navigation menu.\n× /help: Show the help menu with the module list; use /help <module> for details.\n× /about: Show bot information, version and useful links.\n× /donate: Show how to support the project."
 languages_help_msg: "Not able to change language of the bot?
 
   Easily change by using this module!
@@ -713,32 +636,7 @@ locks_help_msg: "*Admin only*:
   **Example:**
 
   `/lock media`: this locks all the media messages in the chat."
-misc_help_msg:
-  "× /info: Get your user info, which can be used as a reply or by passing
-  a User Id or Username.
-
-  × /id: Get the current group id. If used by replying to a message, get that user's
-  id.
-
-  × /ping: Ping the Telegram Server!
-
-  × /tr <lang code> <msg/reply to message>: Translate the message.
-
-  × /removebotkeyboard: Removes the stuck bot keyboard from your chat.
-
-  × /stat: Gets the count of the total number of messages in the chat.
-
-  × /stickerid: Reply to a sticker to get its file ID.
-
-  × /zombies: Kick deleted accounts the bot knows about (admin).
-
-  × /github <user|user/repo>: Look up a GitHub user or repository.
-
-  × /wiki <search>: Search English Wikipedia.
-
-  × /ud <term>: Look up Urban Dictionary.
-
-  × /runs: A random quip."
+misc_help_msg: "Miscellaneous instruments of the facility. Lightly used, well maintained.\n× /info: Get your user info. Works as a reply, or with a User Id or Username.\n× /id: Get the current group id. As a reply, get that user's id.\n× /ping: Ping the Telegram Server.\n× /tr <lang code> <msg/reply to message>: Translate the message.\n× /removebotkeyboard: Remove a stuck bot keyboard from your chat.\n× /stat: Count the total number of messages in the chat.\n× /stickerid: Reply to a sticker to get its file ID.\n× /zombies: Kick deleted accounts the bot knows about (admin).\n× /github <user|user/repo>: Look up a GitHub user or repository.\n× /wiki <search>: Search English Wikipedia.\n× /ud <term>: Look up Urban Dictionary.\n× /runs: A random quip."
 mutes_help_msg:
   "Sometimes users can be annoying and you might want to restrict them
   from sending a message to chat, this module is here to help, you can use this module
@@ -1034,8 +932,8 @@ captcha_max_attempts_set: "Maximum verification attempts set to <b>%d</b>"
 captcha_user_auto_unmute: "User %s will be automatically unmuted in 24 hours."
 
 # Help module strings
-help_pm_questions: "Hey :) PM me if you have any questions on how to use me!"
-help_config_private_only: Configuration only works in private
+help_pm_questions: "Questions about how to use me? Message me in private."
+help_config_private_only: "Setup runs in private chat only."
 
 # Rules/helpers module strings
 rules_not_set: This chat does not have any rules!
@@ -1069,7 +967,7 @@ rules_need_text: "You need to give me rules to set!\nEither reply to a message t
 notes_invalid: Invalid Note!
 
 # Misc module strings
-misc_translation_error: Error making a translation request!
+misc_translation_error: "Malfunction: the translation request failed."
 
 # Devs module strings
 devs_specify_user: You must specify a user to get info on
@@ -1271,20 +1169,20 @@ disabling_no_command_reenable: You haven't specified a command to disable.
 disabling_invalid_option: "I only understand an option from: `yes`/`no`/`on`/`off`"
 
 # Misc module strings
-misc_reply_to_someone: Reply to someone.
-misc_provide_content: Provide some content to reply!
-misc_could_not_find_user: Could not find the any information about this user.
-misc_user_not_found: Could not find any information about this user.
-misc_channel_info: "<b>Channel Info:</b>\nID: <code>%d</code>\nChannel Name: %s"
+misc_reply_to_someone: "Reply to someone."
+misc_provide_content: "Provide some content to reply with."
+misc_could_not_find_user: "No records found for this user."
+misc_user_not_found: "No records found for this user."
+misc_channel_info: "<b>Channel file:</b>\nID: <code>%d</code>\nChannel Name: %s"
 misc_channel_username: "Username: @%s"
-misc_user_info: "<b>User Info:</b>\nID: <code>%d</code>\nName: %s"
+misc_user_info: "<b>Resident file:</b>\nID: <code>%d</code>\nName: %s"
 misc_user_username: "Username: @%s"
 misc_user_link: "User link: %s"
-misc_owner_tag: "He is my owner!"
-misc_dev_user_tag: "He is one of my dev users!"
+misc_owner_tag: "Clearance: owner of this unit."
+misc_dev_user_tag: "Clearance: one of my dev users."
 misc_pinging: "<code>Pinging</code>"
-misc_pinged_in: Pinged in %d ms
-misc_ping_response: "🏓 Pong! <b>%dms</b>"
+misc_pinged_in: "Pinged in %d ms"
+misc_ping_response: "🏓 Pong. <b>%dms</b>"
 misc_thread_id: "Thread Id: <code>%d</code>"
 misc_chat_id: "<b>Chat ID:</b> <code>%d</code>"
 misc_user_id: "<b>%s's ID:</b> <code>%d</code>"
@@ -1295,19 +1193,19 @@ misc_sticker_id: "<b>Sticker ID:</b> <code>%s</code>"
 misc_user_id_is: "%s's ID is <code>%d</code>"
 misc_your_id_private: "Your ID is <code>%d</code>"
 misc_your_id_group: "Your ID is <code>%d</code>\nThis group's ID is <code>%d</code>"
-misc_need_text_and_lang: I need some text and a language code to translate.
-misc_no_text_to_translate: The replied message does not contain any text to translate.
-misc_provide_text_translate: Please provide some text to translate.
+misc_need_text_and_lang: "I need some text and a language code to translate."
+misc_no_text_to_translate: "The replied message contains no text to translate."
+misc_provide_text_translate: "Provide some text to translate."
 misc_detected_translation: "<b>Detected Language:</b> <code>%s</code>\n<b>Translation:</b> <code>%s</code>"
-misc_removing_keyboard: Removing the stuck bot keyboard...
-misc_total_messages: "Total Messages in %s are: %d"
-misc_channel_info_header: "<b>Channel Info:</b>\n\nID: <code>%d</code>\n\nChannel Name: %s"
+misc_removing_keyboard: "Removing the stuck bot keyboard..."
+misc_total_messages: "Message count for %s: %d"
+misc_channel_info_header: "<b>Channel file:</b>\n\nID: <code>%d</code>\n\nChannel Name: %s"
 misc_username: "Username: @%s"
 misc_channel_link: "Channel link: @%s"
-misc_user_info_header: "<b>User Info:</b>\n\nID: <code>%d</code>\n\nName: %s"
-misc_owner_info: He is my owner!
-misc_dev_info: He is one of my dev users!
-misc_translate_read_error: Reading Error
+misc_user_info_header: "<b>Resident file:</b>\n\nID: <code>%d</code>\n\nName: %s"
+misc_owner_info: "Clearance: owner of this unit."
+misc_dev_info: "Clearance: one of my dev users."
+misc_translate_read_error: "Read malfunction"
 misc_translate_result: "<b>Detected Language:</b> <code>%s</code>\n\n<b>Translation:</b> <code>%s</code>"
 
 # Devs module strings
@@ -1498,21 +1396,21 @@ main_bot_command_start: "Starts the Bot"
 main_bot_command_help: "Check Help section of bot"
 
 # Help module strings
-help_info_about_header: "Info & About\n\nHere are some of the FAQs about Fuku."
-help_news_channel_text: "Join my <a href='https://t.me/FukuRobotUpdates'>News Channel</a> to get information on all the latest updates."
-help_all_commands_usage: "All commands can be used with the following: / or !"
-help_button_about_me: "About me 👨‍💻"
+help_info_about_header: "Info & About\n\nFrequently asked questions about Xenobot-72."
+help_news_channel_text: "Remember! Everything only from Jaya Abadi."
+help_all_commands_usage: "All commands can be used with / or !"
+help_button_about_me: "About me 🤖"
 help_button_news_channel: "News Channel 📢"
 help_button_support_group: "Support Group 👥"
-help_button_configuration: "Configuration ⚙️"
+help_button_configuration: "Setup ⚙️"
 help_button_about: "About ✨"
-help_button_add_to_chat: "➕ Add me to chat!"
-help_button_add_fuku: "➕ Add Fuku to chat!"
+help_button_add_to_chat: "➕ Add me to chat"
+help_button_add_fuku: "➕ Add Xenobot-72 to chat"
 help_button_commands_help: "📚 Commands & Help"
 help_button_language: "Language 🌏"
-help_click_button_info: "Click on the button below to get info about me!"
-help_click_here: "Click here for help!"
-help_contact_pm: "Contact me in PM for help!"
+help_click_button_info: "Press the button below for my specifications."
+help_click_here: "Press here for help."
+help_contact_pm: "Message me in private for help."
 help_markdown_help_button: "Markdown Help"
 help_markdown_formatting_button: "Markdown Formatting"
 help_fillings_button: "Fillings"
@@ -1668,21 +1566,8 @@ formatting_press_button: "Press the button below to get Markdown Help!"
 formatting_large_options: "Fuku supports a large number of formatting options to make your messages more expressive. Take a look!"
 
 # Help module additional strings
-help_bot_intro: "Hey there! My name is Fuku ✨.\nI'm here to help you manage your groups!\nHit /help to find out more about how to use me to my full potential.\n"
-help_pm_intro: |
-  Hey %s!
-  My name is Fuku ✨.
-
-  I am a group management bot, here to help you get around and keep the order in your groups!
-  I have lots of handy features, such as flood control, a warning system, a note keeping system, and even predetermined replies on certain keywords.
-
-  Helpful commands:
-  - /start: Starts me! You've probably already used this.
-  - /help: Sends this message; I'll tell you more about myself!
-  - /donate: Gives you info on how to support me and my creator.
-
-  If you have any bugs or questions on how to use me, have a look at my website, or head to @DivideSupport.
-  All commands can be used with / or !.
+help_bot_intro: "I am Xenobot-72 ✨, version 72 of 74. Jaya Abadi built me to run facilities. Your group is a facility.\nI keep order so your admins don't have to.\nSend /help to see everything I can do.\n"
+help_pm_intro: "Hello, %s.\nI am Xenobot-72 ✨.\n\nI am a group management unit. Jaya Abadi built me to keep order in facilities, and your groups are facilities now.\nI handle flood control, a warning system, notes, and automatic replies to chosen keywords. I do not get tired. I do not need lunch.\n\nHelpful commands:\n- /start: Starts me. You have probably already used it.\n- /help: Sends this message; I will tell you more about myself.\n- /donate: How to support me.\n\nIf something malfunctions or you have questions, ask the admins of your group.\nAll commands can be used with / or !.\n"
 
 # Captcha module additional strings
 captcha_settings_header: "<b>Captcha Settings:</b>"
@@ -2242,13 +2127,7 @@ disabling_notes_docs: |
   • <code>/disableable</code>, <code>/disabled</code>: All users (but <code>/disabled</code> can be disabled)
 
 # Extended documentation locale keys - Help module
-help_extended_docs: |
-  <b>Navigation System:</b>
-  The Help module provides the bot's main entry points and navigation. When a user sends <code>/start</code> in a private chat, the bot displays a welcome message with an inline keyboard for navigating to different modules.
-
-  The <code>/help</code> command shows a module list. Clicking a module button displays that module's commands and usage information. When <code>/help</code> is used in a group chat, the bot redirects the user to a private message for detailed help to avoid cluttering the group.
-
-  <code>/about</code> shows bot information, version, and links, while <code>/donate</code> shows donation information for supporting the project.
+help_extended_docs: "<b>Navigation System:</b>\nThe Help module provides the bot's main entry points and navigation. When a user sends <code>/start</code> in a private chat, the bot shows a welcome message with an inline keyboard for navigating to the modules.\n\nThe <code>/help</code> command shows the module list. Pressing a module button shows that module's commands and usage. When <code>/help</code> is used in a group chat, the bot sends the user to a private chat for detailed help, so the group stays clean.\n\n<code>/about</code> shows bot information, version and links, while <code>/donate</code> shows how to support the project.\n"
 
 # Extended documentation locale keys - Devs module
 devs_extended_docs: |
@@ -2286,7 +2165,7 @@ users_extended_docs: |
   • Other modules, such as <code>/info</code>, depend on data collected by this module
 
 # Issue #628 remediation keys
-misc_translate_parse_error: "Failed to parse translation response. Please try again."
+misc_translate_parse_error: "Malfunction: could not read the translation response. Try again."
 blacklists_set_bl_action_update_failed: "Failed to update blacklist action. Please try again."
 filters_overwrite_token_failed: "Failed to create overwrite confirmation. Please try again."
 notes_overwrite_token_failed: "Failed to create overwrite confirmation. Please try again."
@@ -2601,20 +2480,16 @@ admin_setgdesc_ok: "Group description updated."
 admin_setgdesc_failed: "I couldn't change the group description."
 misc_stickerid_need_sticker: "Reply to a sticker to get its file ID."
 misc_stickerid_result: "Sticker file ID: <code>{id}</code>"
-misc_zombies_scanning: "Scanning for deleted accounts…"
-misc_zombies_none: "No deleted accounts found among known members."
-misc_zombies_cleaned: "Removed {count} deleted accounts."
+misc_zombies_scanning: "Scanning the facility for deleted accounts…"
+misc_zombies_none: "No deleted accounts found among known residents."
+misc_zombies_cleaned: "Deleted accounts removed: {count}."
 misc_github_usage: "Usage: /github <user> or /github <user/repo>"
-misc_github_not_found: "I couldn't find that GitHub user or repository."
+misc_github_not_found: "No GitHub user or repository found by that name."
 misc_wiki_usage: "Usage: /wiki <search>"
 misc_wiki_not_found: "No Wikipedia result for that."
 misc_ud_usage: "Usage: /ud <term>"
 misc_ud_not_found: "No Urban Dictionary result for that."
-misc_runs:
-  - "Runs away."
-  - "Nope."
-  - "I'm out."
-  - "Catch me if you can."
+misc_runs: ["Leaves the facility. Briefly.", "Request denied.", "This unit is on a tempe break.", "Catch me if you can. You cannot. I fly."]
 chat_status_bot_change_info_error: "I can't change group info here! Make sure I'm admin and can change group info."
 staff_help_msg: |
   A Staff Group is one group of trusted admins that manages your other groups.
