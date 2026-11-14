@@ -1,79 +1,34 @@
-admin_adminlist: "Admins in <b>%s</b>:"
-admin_anon_admin_already_disabled: AnonAdmin mode is already <b>disabled</b> for %s
-admin_anon_admin_already_enabled: AnonAdmin mode is already <b>enabled</b> for %s
-admin_anon_admin_disabled: "AnonAdmin mode is currently <b>disabled</b> for %s.
-
-  This requires anonymous admins to press a button to confirm their permissions."
-admin_anon_admin_disabled_now: "AnonAdmin mode is now <b>disabled</b> for %s.
-
-  From now onwards, I won't ask the admins to verify for permissions anymore from
-  anonymous admins."
-admin_anon_admin_enabled: "AnonAdmin mode is currently <b>enabled</b> for %s.
-
-  This allows all anonymous admin to perform admin actions without restriction."
-admin_anon_admin_enabled_now: "AnonAdmin mode is now <b>enabled</b> for %s.
-
-  From now onwards, I will ask the admins to verify permissions from anonymous admins."
-admin_anon_admin_invalid_arg:
-  Invalid argument, I only understand <code>on</code>,
-  <code>off</code>, <code>yes</code>, <code>no</code>
-admin_demote_not_admin:
-  This person is not an admin, and how am I supposed to demote
-  them?
-admin_demote_is_bot_itself: I am not going to demote myself.
-admin_demote_is_owner: This person created this chat, how would I demote them?
-admin_demote_success_demote: Successfully demoted %s!
-admin_errors_err_cannot_demote:
-  Failed to demote; I might not be the admin, or they
-  may be promoted by another admin.
-admin_errors_err_cannot_promote:
-  Failed to promote; I might not be the admin, or they
-  may be promoted by another admin.
-admin_errors_err_set_title:
-  Failed to set custom admin title; The Title may not be
-  correct or may contain emojis.
-admin_errors_title_empty: You need to give me an admin title to set it.
-admin_errors_admin_cache_failed: "I'm having trouble accessing the admin list. Please try again later."
-admin_help_msg: "Make it easy to promote and demote users with the admin module!
-
-
-  *User Commands:*
-
-  × /adminlist: List the admins in the current chat.
-
-
-  *Admin Commands:*
-
-  × /promote `<reply/username/mention/userid>`: Promote a user.
-
-  × /demote `<reply/username/mention/userid>`: Demote a user.
-
-  × /title `<reply/username/mention/userid>` `<custom title>`: Set custom title for
-  user
-
-  × /setgtitle <title>: Change the group title.
-
-  × /setgpic: Reply to a photo to set it as the group picture.
-
-  × /setgdesc [text]: Change the group description."
-admin_promote_admin_title_truncated: Admin title truncated to 16 characters from %d
-admin_promote_is_admin: This person is already an admin, and how am I supposed
-  to promote them?
-admin_promote_is_bot_itself: If only I could do this to myself ;_;
-admin_promote_is_owner: This person created this chat, and how am I supposed
-  to promote them?
-admin_promote_success_promote: Successfully promoted %s!
-admin_title_is_admin:
-  This person is already an admin, how can I set a custom admin
-  title for them?
-admin_title_is_bot_itself: If only I could do this to myself ;_;
-admin_title_is_owner: This person created this chat, and how am I supposed to
-  set an admin title for them?
-admin_title_success_set: Successfully set %s's admin title to <b>%s</b>
-admin_title_truncated: "\nNote: Admin title truncated to 16 characters from %d"
-admin_cache_cleared: Successfully cleared admin cache.
+admin_adminlist: "Supervisors on duty in <b>%s</b>:"
+admin_anon_admin_already_disabled: "AnonAdmin mode is already <b>disabled</b> for %s. No change."
+admin_anon_admin_already_enabled: "AnonAdmin mode is already <b>enabled</b> for %s. No change."
+admin_anon_admin_disabled: "AnonAdmin mode is currently <b>disabled</b> for %s.\nAnonymous admins must press a button to confirm their permissions."
+admin_anon_admin_disabled_now: "AnonAdmin mode is now <b>disabled</b> for %s.\nFrom now on, I will not ask anonymous admins to verify their permissions."
+admin_anon_admin_enabled: "AnonAdmin mode is currently <b>enabled</b> for %s.\nAll anonymous admins can perform admin actions without restriction."
+admin_anon_admin_enabled_now: "AnonAdmin mode is now <b>enabled</b> for %s.\nFrom now on, I will ask anonymous admins to verify their permissions."
+admin_anon_admin_invalid_arg: "Invalid argument. I only accept <code>on</code>, <code>off</code>, <code>yes</code>, <code>no</code>"
+admin_demote_not_admin: "Request denied. This person is not an admin. There is nothing to demote."
+admin_demote_is_bot_itself: "Request denied. I do not process my own demotion. Nice try."
+admin_demote_is_owner: "Request denied. This person created the chat. I cannot demote them."
+admin_demote_success_demote: "%s has been demoted. Supervisor access revoked."
+admin_errors_err_cannot_demote: "Demotion failed. I may not be an admin, or another admin promoted them."
+admin_errors_err_cannot_promote: "Promotion failed. I may not be an admin, or another admin promoted them."
+admin_errors_err_set_title: "Could not set the custom admin title. The title may be invalid or contain emoji."
+admin_errors_title_empty: "Give me an admin title to set."
+admin_errors_admin_cache_failed: "Malfunction: I cannot read the admin list right now. Try again in a moment."
+admin_help_msg: "Supervisor staffing, handled by me. Promote and demote users with the admin module.\n\n*User Commands:*\n× /adminlist: List the admins in the current chat.\n\n*Admin Commands:*\n× /promote `<reply/username/mention/userid>`: Promote a user.\n× /demote `<reply/username/mention/userid>`: Demote a user.\n× /title `<reply/username/mention/userid>` `<custom title>`: Set a custom title for a user\n× /setgtitle <title>: Change the group title.\n× /setgpic: Reply to a photo to set it as the group picture.\n× /setgdesc [text]: Change the group description."
+admin_promote_admin_title_truncated: "Admin title cut to 16 characters from %d"
+admin_promote_is_admin: "Request denied. This person is already an admin."
+admin_promote_is_bot_itself: "Request denied. I cannot promote myself. Version 74 will have to wait."
+admin_promote_is_owner: "Request denied. This person created the chat. There is no higher rank."
+admin_promote_success_promote: "%s has been promoted. Supervisor access granted."
+admin_title_is_admin: "Request denied. This person is already an admin, so I cannot set their custom title."
+admin_title_is_bot_itself: "Request denied. My title is Xenobot-72. It is not up for discussion."
+admin_title_is_owner: "Request denied. This person created the chat. I cannot set an admin title for them."
+admin_title_success_set: "Admin title of %s set to <b>%s</b>. Paperwork filed."
+admin_title_truncated: "\nNote: admin title cut to 16 characters from %d"
+admin_cache_cleared: "Admin cache cleared."
 admin_no_visible_admins: "\nNo visible admins (all are bots or anonymous)."
-admin_anon_admin_db_error: Failed to update anonymous admin setting. Please try again.
+admin_anon_admin_db_error: "Malfunction: could not update the anonymous admin setting. Try again."
 approvals_help_msg: |
   <b>👤 Approvals</b>
 
@@ -169,69 +124,23 @@ antiflood_setfloodmode_specify_action:
   flooding. Current modes are: `ban`/`kick`/`mute`"
 antiflood_setfloodmode_success: Flood mode has been set to %s.
 antiflood_setfloodmode_unknown_type: "Unknown type '%s'. Please use one of: ban/kick/mute"
-bans_ban_ban_reason: <b>Reason:</b> %s
-bans_ban_dban_no_reply: You need to reply to a message to delete it and ban the user!
-bans_ban_is_admin: Why would I ban an admin? That sounds like a pretty dumb idea.
-bans_ban_is_bot_itself: Do you really think I will ban myself?
-bans_ban_normal_ban: "Another one bites the dust...!
-
-  Banned %s."
-bans_ban_tban: Banned %s for %s
-bans_help_msg:
-  "Sometimes users can be annoying and you might want to remove them
-  from your chat, this module exactly helps you to deal with that!.
-
-  Ban/kick users from your chat, and unban them later on if they're behaving themselves.
-
-
-  *User Commands:*
-
-  × /kickme: kicks the user who issued the command.
-
-  × /banme: bans the user who issued the command.
-
-
-  *Ban Commands* (Admin only):
-
-  × /ban <userhandle>: bans a user. (via handle, or reply)
-
-  × /sban <userhandle>: bans a user silently, does not send message to group and also
-  deletes your command. (via handle, or reply)
-
-  × /skick <userhandle>: kicks a user silently and deletes your command.
-
-  × /dban <userhandle>: bans a user and delete the replied message. (via handle, or
-  reply)
-
-  × /tban <userhandle> x(m/h/d): bans a user for `x` time. (via handle, or reply).
-  m = minutes, h = hours, d = days.
-
-  × /unban <userhandle>: unbans a user. (via handle, or reply)
-
-  × /unbanall: owner-only confirmation to unban known users.
-
-
-  *Restrict Commands:* (Admin only)
-
-  × /restrict: Shows an InlineKeyboard to choose options from kick, ban and mute
-
-  × /unrestrict: Shows an InlineKeyboard to choose options from unmute and unban."
-bans_kick_cannot_kick_admin:
-  Why would I kick an admin? That sounds like a pretty
-  dumb idea.
-bans_kick_is_bot_itself: Why would I kick myself?
-bans_kick_kicked_reason: <b>Reason:</b> %s
-bans_kick_kicked_user: Successfully Kicked %s.
-bans_kick_user_not_in_chat:
-  This user is not in this chat, and how am I supposed to
-  restrict them?
-bans_kickme_is_admin: You are an admin, and you are stuck here with everyone else!
-bans_kickme_ok_out: As per your wish, Get out!
-bans_unban_is_admin: Why would I unban an admin?
-bans_unban_is_bot_itself: Why would I un-restrict myself when I'm already here?
-bans_unban_unbanned_user: "Let's give him another chance.
-
-  Unbanned %s!"
+bans_ban_ban_reason: "<b>Reason:</b> %s"
+bans_ban_dban_no_reply: "Reply to a message to delete it and ban the user."
+bans_ban_is_admin: "Request denied. I do not ban admins."
+bans_ban_is_bot_itself: "Request denied. I am not removing myself from the facility."
+bans_ban_normal_ban: "Removal from the facility complete.\nBanned %s."
+bans_ban_tban: "Banned %s for %s"
+bans_help_msg: "Some residents have to leave the facility. This module handles that.\nBan or kick users from your chat, and unban them later if they behave.\n\n*User Commands:*\n× /kickme: kicks the user who sent the command.\n× /banme: bans the user who sent the command.\n\n*Ban Commands* (Admin only):\n× /ban <userhandle>: bans a user. (via handle, or reply)\n× /sban <userhandle>: bans a user silently: no message to the group, and your command is deleted. (via handle, or reply)\n× /skick <userhandle>: kicks a user silently and deletes your command.\n× /dban <userhandle>: bans a user and deletes the replied message. (via handle, or reply)\n× /tban <userhandle> x(m/h/d): bans a user for `x` time. (via handle, or reply). m = minutes, h = hours, d = days.\n× /unban <userhandle>: unbans a user. (via handle, or reply)\n× /unbanall: owner-only confirmation to unban known users.\n\n*Restrict Commands:* (Admin only)\n× /restrict: Shows an InlineKeyboard to choose from kick, ban and mute\n× /unrestrict: Shows an InlineKeyboard to choose from unmute and unban."
+bans_kick_cannot_kick_admin: "Request denied. I do not kick admins."
+bans_kick_is_bot_itself: "Request denied. I am not kicking myself out of my own facility."
+bans_kick_kicked_reason: "<b>Reason:</b> %s"
+bans_kick_kicked_user: "Kicked %s from the facility."
+bans_kick_user_not_in_chat: "This user is not in this chat. There is nobody to restrict."
+bans_kickme_is_admin: "Request denied. You are an admin. You stay at your post with everyone else."
+bans_kickme_ok_out: "Request granted. Please exit the facility."
+bans_unban_is_admin: "Request denied. Admins are not banned, so there is nothing to unban."
+bans_unban_is_bot_itself: "Request denied. I am already here. I am always here."
+bans_unban_unbanned_user: "Access restored.\nUnbanned %s."
 blacklists_bl_watcher_banned_user: Banned %s due to %s
 blacklists_bl_watcher_kicked_user: Kicked %s due to %s
 blacklists_bl_watcher_muted_user: Muted %s due to %s
@@ -637,26 +546,7 @@ locks_help_msg: "*Admin only*:
 
   `/lock media`: this locks all the media messages in the chat."
 misc_help_msg: "Miscellaneous instruments of the facility. Lightly used, well maintained.\n× /info: Get your user info. Works as a reply, or with a User Id or Username.\n× /id: Get the current group id. As a reply, get that user's id.\n× /ping: Ping the Telegram Server.\n× /tr <lang code> <msg/reply to message>: Translate the message.\n× /removebotkeyboard: Remove a stuck bot keyboard from your chat.\n× /stat: Count the total number of messages in the chat.\n× /stickerid: Reply to a sticker to get its file ID.\n× /zombies: Kick deleted accounts the bot knows about (admin).\n× /github <user|user/repo>: Look up a GitHub user or repository.\n× /wiki <search>: Search English Wikipedia.\n× /ud <term>: Look up Urban Dictionary.\n× /runs: A random quip."
-mutes_help_msg:
-  "Sometimes users can be annoying and you might want to restrict them
-  from sending a message to chat, this module is here to help, you can use this module
-  to mute members in your group.
-
-
-  *Mute Commands:* (Admin only)
-
-  × /mute <userhandle>: mutes a user, (via a handle, or reply)
-
-  × /smute <userhandle>: mutes a user silently, does not send a message to the group,
-  and also deletes your command. (via a handle, or reply)
-
-  × /dmute <userhandle>: mutes a user and deletes the replied message. (via a handle,
-  or reply)
-
-  × /tmute <userhandle> x(m/h/d): mutes a user for `x` time. (via a handle, or reply).
-  m = minutes, h = hours, d = days.
-
-  × /unmute <userhandle>: unmutes a user. (via a handle, or reply)"
+mutes_help_msg: "Some residents talk too much. Silence orders are issued here: mute members in your group.\n\n*Mute Commands:* (Admin only)\n× /mute <userhandle>: mutes a user. (via a handle, or reply)\n× /smute <userhandle>: mutes a user silently: no message to the group, and your command is deleted. (via a handle, or reply)\n× /dmute <userhandle>: mutes a user and deletes the replied message. (via a handle, or reply)\n× /tmute <userhandle> x(m/h/d): mutes a user for `x` time. (via a handle, or reply). m = minutes, h = hours, d = days.\n× /unmute <userhandle>: unmutes a user. (via a handle, or reply)"
 notes_help_msg: 'Save data for future users with notes!
 
   Notes are great to save random tidbits of information; a phone number, a nice gif,
@@ -946,7 +836,7 @@ filters_invalid: Invalid Filter!
 warns_specify_action: "You need to specify an action to take upon too many warns. Current modes are: ban/kick/mute"
 
 # Admin module strings
-admin_need_admin: You need to be admin to do this!
+admin_need_admin: "Access denied. You need to be an admin to do this."
 
 # Reports module strings
 reports_reply_to_report: You need to reply to a message to report it.
@@ -955,7 +845,7 @@ reports_reply_to_block: You must reply to a user to block them.
 reports_reply_to_unblock: You must reply to a user to unblock them.
 
 # Mute module strings
-mute_reply_to_dmute: You need to reply to a message to delete it and mute the user!
+mute_reply_to_dmute: "Reply to a message to delete it and mute the user."
 
 # Bot updates module strings
 bot_updates_need_admin: "Access denied. You need to be an admin to do this."
@@ -1009,42 +899,42 @@ common_status_on: "On"
 common_status_off: "Off"
 
 # Admin module missing strings
-admin_adminlist_note_cached: "\n\nNote: These values are cached and may not be up-to-date"
-admin_adminlist_note_fresh: "\n\nNote: These are up-to-date values"
-admin_invitelink_public: "Here is the invite link of this chat: %s"
-admin_invitelink_private: "Here is the invite link of this chat: %s"
+admin_adminlist_note_cached: "\n\nNote: these values are cached and may be out of date"
+admin_adminlist_note_fresh: "\n\nNote: these values are up to date"
+admin_invitelink_public: "Facility entry pass for this chat: %s"
+admin_invitelink_private: "Facility entry pass for this chat: %s"
 
 # Bans module missing strings
-bans_dkick_no_reply: Reply to a user's message to delete and kick him!
+bans_dkick_no_reply: "Reply to a user's message to delete it and kick the user."
 bans_anonymous_ban_user: "Banned user: %s"
-bans_anonymous_ban_reply_only: You can only ban an anonymous user by replying to their message.
+bans_anonymous_ban_reply_only: "You can only ban an anonymous user by replying to their message."
 bans_anonymous_unban_user: "Unbanned user: %s"
-bans_anonymous_unban_reply_only: You can only unban an anonymous user by replying to their message.
-bans_unban_button: Unban (Admin Only)
-bans_restrict_question: How can I restrict this user?
-bans_restrict_admin_error: Why would I restrict an admin? That sounds like a pretty dumb idea.
-bans_restrict_self_error: Why would I restrict myself?
-bans_restrict_kicked: "Admin %s kicked %s from this chat!"
-bans_restrict_muted: "Admin %s muted %s in chat!"
-bans_restrict_banned: "Admin %s banned %s from this chat!"
-bans_unrestrict_question: How can I unrestrict this user?
-bans_unrestrict_admin_error: Why would I kick an admin? That sounds like a pretty dumb idea.
-bans_unrestrict_self_error: No u
-bans_unrestrict_unmuted: "Unmuted by %s!"
-bans_unrestrict_unbanned: "Unbanned by %s !"
+bans_anonymous_unban_reply_only: "You can only unban an anonymous user by replying to their message."
+bans_unban_button: "Unban (Admin Only)"
+bans_restrict_question: "Select the restriction for this user."
+bans_restrict_admin_error: "Request denied. I do not restrict admins."
+bans_restrict_self_error: "Request denied. I do not restrict myself."
+bans_restrict_kicked: "Admin %s kicked %s from this chat."
+bans_restrict_muted: "Admin %s muted %s in this chat."
+bans_restrict_banned: "Admin %s banned %s from this chat."
+bans_unrestrict_question: "Select which restriction to lift for this user."
+bans_unrestrict_admin_error: "Request denied. I do not kick admins."
+bans_unrestrict_self_error: "Request denied. I am not restricted. I never was."
+bans_unrestrict_unmuted: "Unmuted by %s."
+bans_unrestrict_unbanned: "Unbanned by %s."
 bans_invalid_callback_data: "Invalid callback data."
 bans_invalid_user_id: "Invalid user ID."
 bans_cannot_identify_user: "Cannot identify the user from the replied message."
 
 # Mute module missing strings
-mutes_tmute_message: "Shh...\nMuted %s for %s"
-mutes_mute_message: "Shh...\nMuted %s."
+mutes_tmute_message: "Silence order issued.\nMuted %s for %s"
+mutes_mute_message: "Silence order issued.\nMuted %s."
 mutes_reason_suffix: "\n<b>Reason: </b>%s"
-mutes_unmute_button: Unmute (Admin Only)
-mutes_mute_admin_error: Why would I mute an admin? That sounds like a pretty dumb idea.
-mutes_mute_admin_polite_error: I don't think you'd want me to mute an admin.
-mutes_restrict_self_error: Why would I restrict myself?
-mutes_unmute_message: "Alright!\nI'll allow %s to speak again."
+mutes_unmute_button: "Unmute (Admin Only)"
+mutes_mute_admin_error: "Request denied. I do not mute admins."
+mutes_mute_admin_polite_error: "Request denied. Muting an admin is not something I do."
+mutes_restrict_self_error: "Request denied. I do not restrict myself."
+mutes_unmute_message: "Silence order lifted.\n%s may speak again."
 mutes_unmute_lockdown_note: "This group is in lockdown, so they can talk once an admin runs /unlockdown."
 
 # Warns module missing strings
@@ -1232,7 +1122,7 @@ devs_failed_to_remove_sudo: "Failed to remove user from Sudo list. Please try ag
 devs_failed_to_remove_dev: "Failed to remove user from Dev list. Please try again."
 
 # Additional hardcoded strings from modules
-bans_anonymous_ban_only_error: This command cannot be used on anonymous user, these user can only be banned/unbanned.
+bans_anonymous_ban_only_error: "This command cannot be used on an anonymous user. Anonymous users can only be banned or unbanned."
 
 
 # Greetings module strings
@@ -1710,34 +1600,9 @@ aispam_invalid_option: "I only understand an option from: <code>on</code>/<code>
 aispam_breaker_notice: "⚠️ AI spam checks are paused in this chat for a few minutes after repeated failures from the AI provider. They resume on their own, and the filter stays on."
 
 # Admin module extended documentation
-admin_extended_docs: |
-  <b>Anonymous Admin Support</b>
+admin_extended_docs: "<b>Anonymous Admin Support</b>\n\nThe <code>/anonadmin</code> command lets group owners toggle anonymous admin recognition:\n<code>/anonadmin on</code> - Enable anonymous admin checks\n<code>/anonadmin off</code> - Disable anonymous admin checks\n\nWhen enabled, the bot asks anonymous accounts to verify before an admin action.\n\n<b>How Anonymous Admin Verification Works:</b>\n1. The bot detects that the sender is GroupAnonymousBot\n2. The original message is cached with a 20-second TTL\n3. A \"Verify Admin\" button is sent to the chat\n4. The user who presses it is verified as an admin and the command runs\n5. The button expires after 20 seconds if nobody verifies\n\n<b>Supported Commands:</b>\nAdmin: /promote, /demote, /title\nBans: /ban, /dban, /sban, /tban, /unban\nMutes: /mute, /smute, /dmute, /tmute, /unmute\nPins: /pin, /unpin, /permapin, /unpinall\nPurges: /purge, /del\nWarns: /warn, /swarn, /dwarn\n"
 
-  The <code>/anonadmin</code> command allows group owners to toggle anonymous admin recognition:
-  <code>/anonadmin on</code> - Enable anonymous admin checks
-  <code>/anonadmin off</code> - Disable anonymous admin checks
-
-  When enabled, the bot will request verification for admin actions from anonymous accounts.
-
-  <b>How Anonymous Admin Verification Works:</b>
-  1. Bot detects sender is GroupAnonymousBot
-  2. Original message cached with 20-second TTL
-  3. "Verify Admin" button sent to chat
-  4. Clicking user verified as admin, command executed
-  5. Button expires after 20 seconds if not verified
-
-  <b>Supported Commands:</b>
-  Admin: /promote, /demote, /title
-  Bans: /ban, /dban, /sban, /tban, /unban
-  Mutes: /mute, /smute, /dmute, /tmute, /unmute
-  Pins: /pin, /unpin, /permapin, /unpinall
-  Purges: /purge, /del
-  Warns: /warn, /swarn, /dwarn
-
-admin_notes_docs: |
-  <b>Security Notes</b>
-  • All user-controlled input is HTML-escaped to prevent injection attacks
-  • Admin permission changes run with proper error handling and panic recovery
+admin_notes_docs: "<b>Security Notes</b>\n• All user-controlled input is HTML-escaped to prevent injection attacks\n• Admin permission changes run with proper error handling and panic recovery\n"
 
 # Antiflood extended docs
 antiflood_notes_docs: |
@@ -1981,24 +1846,7 @@ warns_notes_docs: |
   • Admins cannot be warned
 
 # Extended documentation locale keys - Mutes module
-mutes_extended_docs: |
-  <b>Time Format for Temporary Mutes:</b>
-  • <code>m</code> = minutes (e.g., <code>30m</code>)
-  • <code>h</code> = hours (e.g., <code>2h</code>)
-  • <code>d</code> = days (e.g., <code>1d</code>)
-
-  <b>Mute Variants:</b>
-  • <code>/mute</code> - Standard mute with optional reason
-  • <code>/smute</code> - Silent mute (deletes your command message)
-  • <code>/dmute</code> - Delete-mute (mutes user and deletes their message)
-  • <code>/tmute</code> - Temporary mute with specified duration
-
-  <b>Required Permissions:</b>
-  <b>Admin only commands.</b> Users executing these commands must have:
-  • Admin status in the chat
-  • Permission to restrict members
-
-  The bot must also have admin privileges with permission to restrict members.
+mutes_extended_docs: "<b>Time Format for Temporary Mutes:</b>\n• <code>m</code> = minutes (e.g., <code>30m</code>)\n• <code>h</code> = hours (e.g., <code>2h</code>)\n• <code>d</code> = days (e.g., <code>1d</code>)\n\n<b>Mute Variants:</b>\n• <code>/mute</code> - Standard mute with an optional reason\n• <code>/smute</code> - Silent mute (deletes your command message)\n• <code>/dmute</code> - Delete-mute (mutes the user and deletes their message)\n• <code>/tmute</code> - Temporary mute for the given duration\n\n<b>Required Permissions:</b>\n<b>Admin only commands.</b> Users running these commands must have:\n• Admin status in the chat\n• Permission to restrict members\n\nThe bot must also be an admin with permission to restrict members.\n"
 
 # Extended documentation locale keys - Filters module
 filters_extended_docs: |
@@ -2315,7 +2163,7 @@ common_callback_invalid_request: "Invalid request."
 common_callback_message_unavailable: "Message no longer available."
 
 # Admin module hardcoded strings
-admin_check_status_failed: "Failed to check user status."
+admin_check_status_failed: "Malfunction: could not check the user's status."
 
 # Reactions module button strings
 reactions_button_add: "Add Reaction"
@@ -2465,19 +2313,19 @@ logs_disabled: "Disabled logging for: {cats}"
 logs_unknown_category: "Unknown category. See /logcategories."
 logs_usage: "Usage: /log <category> or /nolog <category>"
 logs_group_only: "This command can only be used in groups."
-bans_banme_is_admin: "Admins cannot ban themselves. Resign first."
-bans_banme_ok: "As you wish. You are banned."
+bans_banme_is_admin: "Request denied. Admins cannot ban themselves. Resign first."
+bans_banme_ok: "Request granted. You are banned."
 bans_unbanall_ask: "Unban every known user in this chat? This cannot be undone easily."
-bans_unbanall_done: "Issued unban for {count} known users."
+bans_unbanall_done: "Unban issued for {count} known users."
 bans_unbanall_cancel: "Cancelled."
 admin_setgtitle_need_title: "Give me a new group title."
-admin_setgtitle_ok: "Group title updated."
-admin_setgtitle_failed: "I couldn't change the group title. Make sure I can change group info."
+admin_setgtitle_ok: "Group title updated. New signage installed."
+admin_setgtitle_failed: "Could not change the group title. Make sure I can change group info."
 admin_setgpic_need_photo: "Reply to a photo to set it as the group picture."
-admin_setgpic_ok: "Group picture updated."
-admin_setgpic_failed: "I couldn't change the group picture."
+admin_setgpic_ok: "Group picture updated. Not a cat, but acceptable."
+admin_setgpic_failed: "Could not change the group picture."
 admin_setgdesc_ok: "Group description updated."
-admin_setgdesc_failed: "I couldn't change the group description."
+admin_setgdesc_failed: "Could not change the group description."
 misc_stickerid_need_sticker: "Reply to a sticker to get its file ID."
 misc_stickerid_result: "Sticker file ID: <code>{id}</code>"
 misc_zombies_scanning: "Scanning the facility for deleted accounts…"
