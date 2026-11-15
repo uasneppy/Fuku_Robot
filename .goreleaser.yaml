@@ -11,7 +11,7 @@ release:
 
   footer: |
     Docker 🐳 images are available at:
-    `docker pull ghcr.io/divkix/{{ .ProjectName }}:{{ .Tag }}`
+    `docker pull ghcr.io/uasneppy/{{ .ProjectName }}:{{ .Tag }}`
 
 gomod:
   env:
@@ -97,7 +97,7 @@ snapshot:
 dockers_v2:
   - dockerfile: docker/goreleaser
     images:
-      - "ghcr.io/divkix/{{ .ProjectName }}"
+      - "ghcr.io/uasneppy/{{ .ProjectName }}"
     tags:
       - "{{ .Tag }}"
       - "{{ .Version }}"
