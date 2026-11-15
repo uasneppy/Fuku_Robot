@@ -418,7 +418,7 @@ Add `{admin}` to a reply to make the filter fire only for admins.
 <details>
 <summary><b>Greetings</b>: <code>/welcome</code> <code>/setwelcome</code> <code>/cleanservice</code> …</summary>
 
-Greetings. Today's ration is tempe. These are admin commands, and the settings menu offers the same changes.
+Greetings. I welcome new members and say goodbye to the ones who leave. These are admin commands, and the settings menu offers the same changes.
 
 | Command | What it does |
 | --- | --- |
