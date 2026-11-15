@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: v1.1
 status: Awaiting next milestone
 stopped_at: Completed 19-12-PLAN.md
-last_updated: "2026-11-15T19:34:15.066Z"
+last_updated: "2026-11-15T20:57:50.131Z"
 last_activity: 2026-11-14
 last_activity_desc: Quick task 261113-tjj completed (Staff Group forward-source blocklist)
-state_head: e3b94f9bfdad9f9580ad0d1c0fba83cc880815b7
+state_head: c662a525bdc244de426f5060719eaa744edb8789
 progress:
   total_phases: 10
   completed_phases: 10
@@ -352,6 +352,7 @@ None yet.
 | 7 | Raise make test per-package timeout 10m to 15m (fuku/modules hit 600 s on a slow CI runner) | 2026-11-04 | ff87d62 | — |
 | 261113-tjj | Staff Group forward-source blocklist: delete forwards from listed channels in every linked group and punish the forwarder (commands, settings page, group -9 watcher) | 2026-11-14 | b907052 | [261113-tjj-staff-group-forward-source-blocklist-blo](./quick/261113-tjj-staff-group-forward-source-blocklist-blo/) |
 | 261115-pvl | Rewrite README.md in the Xenobot-72 voice and add an original Ukrainian README.uk.md (v2.24.0) | 2026-11-15 | e3b94f9 | [261115-pvl-rewrite-readme-md-in-the-xenobot-72-voic](./quick/261115-pvl-rewrite-readme-md-in-the-xenobot-72-voic/) |
+| 261115-rcd | Rename the bot to Xenobot-72 in all user-visible text outside the READMEs and remove every link to the original developers (locales, help buttons, backup export name, captcha help fix, packaging, GitHub files, docs site) | 2026-11-15 | c662a52 | [261115-rcd-rename-the-bot-to-xenobot-72-in-all-user](./quick/261115-rcd-rename-the-bot-to-xenobot-72-in-all-user/) |
 
 ## Deferred Items
 

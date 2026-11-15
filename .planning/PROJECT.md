@@ -1,8 +1,8 @@
-# Fuku Robot
+# Xenobot-72
 
 ## What This Is
 
-Fuku Robot is a fork of Fuku Robot, a Go Telegram group-management bot. It runs only for my own communities, and the goal is to make it work more like GroupHelp. v1.0 shipped a **Staff Group** (one Telegram group of trusted admins that bans, mutes or kicks someone in every linked group with one command), durable raid lockdowns with automatic triggers, a Turnstile web captcha and a first button settings menu. v1.1 (shipped 2026-11-13) moved every group setting into the bot's private chat behind buttons, owner-gated, and added member screening (name, profile photo, channel and AI spam-name rules with per-rule punishments), message deletion (service messages, the bot's own messages, commands, edits, self-destruct) and list pages for blacklists, filters and notes.
+Xenobot-72 is a Go Telegram group-management bot. It runs only for my own communities, and the goal is to make it work more like GroupHelp. v1.0 shipped a **Staff Group** (one Telegram group of trusted admins that bans, mutes or kicks someone in every linked group with one command), durable raid lockdowns with automatic triggers, a Turnstile web captcha and a first button settings menu. v1.1 (shipped 2026-11-13) moved every group setting into the bot's private chat behind buttons, owner-gated, and added member screening (name, profile photo, channel and AI spam-name rules with per-rule punishments), message deletion (service messages, the bot's own messages, commands, edits, self-destruct) and list pages for blacklists, filters and notes.
 
 ## Core Value
 
@@ -27,7 +27,7 @@ Not yet chosen. Candidates are in STATE.md (Deferred Items and the per-phase SPI
 
 ### Validated
 
-<!-- Inferred from the existing Fuku Robot codebase (.planning/codebase/). Shipped and relied upon. -->
+<!-- Inferred from the existing Xenobot-72 codebase (.planning/codebase/). Shipped and relied upon. -->
 
 - ✓ Per-group moderation: ban, mute, kick, warn, including timed variants, plus purges — existing
 - ✓ Admin tooling: admin list cache, approvals (approved users skip antiflood, locks, blacklists and captcha), disabling commands, anonymous-admin handling — existing
@@ -112,7 +112,7 @@ v1.0 and v1.1 follow-ups and deferred live checks remain in STATE.md.
 
 ## Context
 
-- **Fork of Fuku Robot.** The Go module path is still `github.com/uasneppy/fuku_robot`. `AGENTS.md` at the repo root is the authoritative rulebook for this codebase, covering migrations, cache invalidation, handler groups, commands, locales and tests. Every phase must follow it.
+- **Identifiers keep the earlier name.** The Go module path is still `github.com/uasneppy/fuku_robot`. `AGENTS.md` at the repo root is the authoritative rulebook for this codebase, covering migrations, cache invalidation, handler groups, commands, locales and tests. Every phase must follow it.
 - **The codebase map** is in `.planning/codebase/`. It was written by fast mapper agents; its `CONCERNS.md` items are leads to verify, not confirmed bugs.
 - **Raid protection replaces the behaviour of the existing `antiraid`.** Today it temp-bans joiners, expires on its own, and relies on Redis alone. The new lockdown mutes, kicks joiners, never expires, and is lifted only by an admin. Existing `antiflood` counters live in-process per replica, and `aispam` already calls the TypeSafe API. Both are building blocks.
 - **The existing captcha** uses `base64Captcha` and allows one attempt per user per chat. Group `-10` stores a pending user's messages for replay. The Turnstile captcha has to fit that flow or replace it cleanly.
@@ -123,7 +123,7 @@ v1.0 and v1.1 follow-ups and deferred live checks remain in STATE.md.
 - **v1.1 starting point (settings).** Phase 9's menu (`settings|v1`, `settings_menu.go`, `settings_pages.go`) is stateless and lets any live creator or administrator in; v1.1 narrows that to the owner unless the owner allows admins. Pages register through `registerSettingsPage`, and each setting has one apply function beside its command, so new pages must call those, never write a second path. The `connections` module already manages one group from PM by command; `/admincache` refreshes the admin list the PM group list will be built from.
 - **v1.1 starting point (greetings and rules).** Welcome and goodbye already store text, one file, a type and URL buttons, with `cleanwelcome`/`cleangoodbye` (delete the previous one) and `cleanservice` (delete join and leave service messages at once). Rules store text, a button label and a private flag only, so media and URL buttons need a migration. Free-text editing inside the menu was deferred in v1.0 (MENU2-02) and now needs a short-lived "waiting for your message" state shared across replicas.
 - **v1.1 Telegram limits.** The Bot API cannot list the groups a user administers, so the PM list comes from the bot's own admin cache and every pick is checked live. A user who hides their profile photo from everyone looks photo-less to the bot. Checking a channel subscription needs the bot to be an admin of that channel. Bots cannot delete messages older than 48 hours, so deletion delays cap below that and scheduled deletions must survive restarts. "Russian name" can only be told from Ukrainian by Russian-only letters (ы, ъ, э, ё).
-- **Reference screenshots.** The owner's GroupHelp screenshots (PM group list, main menu, Rules and Welcome editors, member requirements, message deletion, scheduled deletion) are the UX reference for v1.1; Fuku keeps its own pages and labels.
+- **Reference screenshots.** The owner's GroupHelp screenshots (PM group list, main menu, Rules and Welcome editors, member requirements, message deletion, scheduled deletion) are the UX reference for v1.1; Xenobot-72 keeps its own pages and labels.
 
 ## Constraints
 
