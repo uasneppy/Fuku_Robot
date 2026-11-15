@@ -127,7 +127,7 @@ A message older than 47 hours is dropped quietly, because Telegram no longer all
 
 ### Settings menu
 
-`/settings` opens a button menu. Only the owner of the group can open it, unless the owner lets admins in on the Access page. A menu opened in the group answers only to the person who opened it. Every press checks again that the person is still allowed, and every change is the same change the matching command makes. The menu keeps no state of its own.
+`/settings` opens a button menu. Only the owner of the group can open it, unless the owner lets admins in on the Access page. A menu opened in the group answers only to the person who opened it. Every press checks again that the person is still allowed, and every change is the same change the matching command makes. The menu itself keeps no state; the one exception is the ten-minute wait for a typed reply in the message editor.
 
 Its pages: Staff Group, Lockdown, Captcha, Antiflood, Warnings, Locks, Welcome, Goodbye, Rules, Notes, Filters, Blacklist, Requirements, Deletion, Switches, Language, Log channel, Anonymous admins, Access (owner only) and Blocked sources (in a Staff Group only).
 
