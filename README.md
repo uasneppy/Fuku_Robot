@@ -1,5 +1,7 @@
 <div align="center">
 
+<a href="https://ibb.co/jP8DcHMB"><img src="https://i.ibb.co/VcLT73Sr/Profile-banner-1.jpg" alt="Profile-banner-1" border="0"></a>
+
 <h1>Xenobot-72</h1>
 
 <p><b>Telegram group management in Go. Moderation, raid protection, captcha. No sweat.</b></p>
@@ -1050,3 +1052,5 @@ CGO_ENABLED=0 go build ./...                                         # quick com
 ## License
 
 [MIT](LICENSE). The full text and the copyright notice are in [`LICENSE`](LICENSE). I rely on [gotgbot](https://github.com/PaulSonOfLars/gotgbot) and [gotg_md2html](https://github.com/PaulSonOfLars/gotg_md2html) by PaulSonOfLars, and on the other open-source libraries listed in [`go.mod`](go.mod).
+
+Props to Labirhin for creating such an amazing character! 
