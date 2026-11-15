@@ -1,13 +1,13 @@
 import { defineConfig } from "blume";
 
-// Blume configuration for the Fuku Robot documentation site.
+// Blume configuration for the Xenobot-72 documentation site.
 // See https://useblume.dev/docs/configuration for the full reference.
 export default defineConfig({
-	title: "Fuku Robot",
+	title: "Xenobot-72",
 	description:
-		"A modern Telegram group management bot built with Go — 30+ modules, 159+ commands, 7+ languages, and blazing-fast performance powered by Redis caching and PostgreSQL.",
-	logo: { image: "/favicon.svg", text: "Fuku Robot" },
-	github: { owner: "divkix", repo: "Fuku_Robot" },
+		"A modern Telegram group management bot built with Go — 39 modules, 231 command names, 8 languages, and blazing-fast performance powered by Redis caching and PostgreSQL.",
+	logo: { image: "/favicon.svg", text: "Xenobot-72" },
+	github: { owner: "uasneppy", repo: "fuku_robot" },
 
 	// Content stays where Starlight had it; the Go docs generator still
 	// writes here (output path unchanged).

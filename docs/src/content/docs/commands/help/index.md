@@ -6,27 +6,27 @@ description: Complete guide to Help module commands and features
 
 # 📦 Help Commands
 
-The main entry point and navigation system for Fuku Robot.
+The main entry point and navigation system for Xenobot-72.
 ### Navigation Commands:
 - `/start`: Show the welcome message with navigation menu.
 - `/help`: Show help menu with module list; use /help <module> for details.
-- `/about`: Show bot information, version, and useful links.
-- `/donate`: Show donation information for supporting the project.
+- `/about`: Show bot information and version.
+- `/donate`: Show whether this bot accepts donations.
 
 **Navigation System:**
 The Help module provides the bot's main entry points and navigation. When a user sends `/start` in a private chat, the bot displays a welcome message with an inline keyboard for navigating to different modules.
 
 The `/help` command shows a module list. Clicking a module button displays that module's commands and usage information. When `/help` is used in a group chat, the bot redirects the user to a private message for detailed help to avoid cluttering the group.
 
-`/about` shows bot information, version, and links, while `/donate` shows donation information for supporting the project.
+`/about` shows bot information and the version, while `/donate` says whether the bot accepts donations.
 
 
 ## Available Commands
 
 | Command | Description | Disableable |
 |---------|-------------|-------------|
-| `/about` | Show bot information, version, and useful links. | ❌ |
-| `/donate` | Show donation information for supporting the project. | ❌ |
+| `/about` | Show bot information and version. | ❌ |
+| `/donate` | Show whether this bot accepts donations. | ❌ |
 | `/help` | Show help menu with module list; use /help <module> for details. | ❌ |
 | `/start` | Show the welcome message with navigation menu. | ❌ |
 
@@ -50,10 +50,10 @@ Commands in this module are available to all users.
 
 Accessible from the `/about` keyboard via the **Configuration** button
 (`configuration` callback prefix), the wizard walks new users through
-setting up Fuku in three steps:
+setting up Xenobot-72 in three steps:
 
-1. **Step 1** — Add Fuku to a group (deep-link button + "Done").
-2. **Step 2** — Promote Fuku to admin with recommended permissions
+1. **Step 1** — Add Xenobot-72 to a group (deep-link button + "Done").
+2. **Step 2** — Promote Xenobot-72 to admin with recommended permissions
    (instructions + "Done").
 3. **Step 3** — Continue to Help module to explore commands.
 

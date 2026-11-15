@@ -1,6 +1,6 @@
 ---
 title: Handler Group Precedence
-description: Which message watchers fire first and how propagation works in Fuku Robot.
+description: Which message watchers fire first and how propagation works in Xenobot-72.
 ---
 
 # Handler Group Precedence

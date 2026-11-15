@@ -1,17 +1,17 @@
 ---
 title: Command Reference
-description: Complete reference of all Fuku Robot commands
+description: Complete reference of all commands in Xenobot-72
 ---
 <!-- MANUALLY MAINTAINED: do not regenerate -->
 
 # Command Reference
 
-This page provides a complete reference of all commands available in Fuku Robot.
+This page provides a complete reference of all commands available in Xenobot-72.
 
 ## Overview
 
-- **Total Modules**: 30 (28 user-facing + 2 internal)
-- **Total Commands**: 160
+- **Total Modules**: 39
+- **Total Commands**: 231 (command names, aliases included)
 
 ## Commands by Module
 
@@ -282,8 +282,8 @@ This page provides a complete reference of all commands available in Fuku Robot.
 
 | Command | Description | Permission | Disableable | Aliases |
 |---------|-------------|------------|-------------|---------|
-| `/about` | Show bot information and links | Everyone | ❌ | — |
-| `/donate` | Show donation information | Everyone | ❌ | — |
+| `/about` | Show bot information and version | Everyone | ❌ | — |
+| `/donate` | Show whether the bot accepts donations | Everyone | ❌ | — |
 | `/help` | Show help menu with module list | Everyone | ❌ | — |
 | `/start` | Show welcome message with navigation menu | Everyone | ❌ | — |
 
@@ -396,7 +396,7 @@ No commands — passive background tracker. See [module page](/commands/users/) 
 | `/disconnect` | Connections | Disconnect from current group | Everyone |
 | `/dkick` | Bans | Kick a user and delete their message | Admin |
 | `/dmute` | Mutes | Mute a user and delete their message | Admin |
-| `/donate` | Help | Show donation information | Everyone |
+| `/donate` | Help | Show whether the bot accepts donations | Everyone |
 | `/dwarn` | Warns | Warn a user and delete their message | Admin |
 | `/enable` | Disabling | Re-enable a disabled command | Admin |
 | `/export` | Backup | Export all group settings to a JSON file | Admin |

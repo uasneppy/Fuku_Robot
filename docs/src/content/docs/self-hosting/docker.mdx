@@ -1,9 +1,9 @@
 ---
 title: Docker Deployment
-description: Deploy Fuku Robot using Docker and docker-compose.
+description: Deploy Xenobot-72 using Docker and docker-compose.
 ---
 
-Docker is the recommended way to deploy Fuku Robot. The provided `docker-compose.yml` includes all required services with optimized configurations for production use.
+Docker is the recommended way to deploy Xenobot-72. The provided `docker-compose.yml` includes all required services with optimized configurations for production use.
 
 ## Prerequisites
 
@@ -47,7 +47,7 @@ Docker is the recommended way to deploy Fuku Robot. The provided `docker-compose
 The `docker-compose.yml` deploys three services:
 
 ```yaml
-# Production Docker Compose for Fuku Robot
+# Production Docker Compose for Xenobot-72
 # Uses pre-built images from GHCR
 
 services:
@@ -133,7 +133,7 @@ volumes:
 
 ## Service Descriptions
 
-### fuku (Bot Service)
+### `fuku` (Bot Service)
 
 The main Telegram bot service.
 
@@ -200,7 +200,7 @@ The compose file includes recommended resource limits:
 
 | Service | Memory Limit | CPU Limit | Use Case |
 |---------|-------------|-----------|----------|
-| fuku | 1GB | 1.0 | Handles bot traffic |
+| `fuku` | 1GB | 1.0 | Handles bot traffic |
 | postgres | 512MB | 0.5 | Database operations |
 | redis | 256MB | 0.25 | Caching |
 
@@ -332,7 +332,7 @@ Common issues:
 
 ### Database connection errors
 
-Ensure postgres is healthy before fuku starts:
+Ensure postgres is healthy before the `fuku` service starts:
 
 ```bash
 docker compose ps

@@ -6,7 +6,7 @@ description: Configuration reference for all environment variables
 
 # ⚙️ Environment Variables
 
-This page documents all environment variables used to configure Fuku Robot.
+This page documents all environment variables used to configure Xenobot-72.
 
 ## 📂 Activity monitoring configuration
 

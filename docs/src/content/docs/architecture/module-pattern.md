@@ -1,9 +1,9 @@
 ---
 title: Module Pattern
-description: How to create new feature modules for Fuku Robot.
+description: How to create new feature modules for Xenobot-72.
 ---
 
-This guide explains how to add new feature modules to Fuku Robot, following the established patterns and conventions.
+This guide explains how to add new feature modules to Xenobot-72, following the established patterns and conventions.
 
 ## Module Structure Template
 
@@ -267,7 +267,7 @@ example_confirmed: "Action confirmed!"
 example_cancelled: "Action cancelled."
 ```
 
-Add to other locale files (es.yml, fr.yml, hi.yml, id.yml, pt.yml, ru.yml) with appropriate translations.
+Add to other locale files (es.yml, fr.yml, hi.yml, id.yml, pt.yml, ru.yml, uk.yml) with appropriate translations.
 
 :::caution[Translation completeness]
 You must add keys to ALL locale files, not just `en.yml`. Missing keys cause runtime panics or empty strings. Run `make check-translations` to detect missing keys before committing.

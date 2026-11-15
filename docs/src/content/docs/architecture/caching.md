@@ -1,9 +1,9 @@
 ---
 title: Caching Architecture
-description: Redis caching implementation and patterns in Fuku Robot.
+description: Redis caching implementation and patterns in Xenobot-72.
 ---
 
-Fuku Robot uses Redis as its caching layer to reduce database load and improve response times. This document explains the caching architecture, patterns, and best practices.
+Xenobot-72 uses Redis as its caching layer to reduce database load and improve response times. This document explains the caching architecture, patterns, and best practices.
 
 ## Cache Configuration
 
@@ -178,7 +178,7 @@ Monitor cache performance via:
 # Check cache key count
 redis-cli DBSIZE
 
-# View all Fuku keys
+# View all Xenobot-72 keys
 redis-cli --scan --pattern "fuku:*"
 
 # Check specific key TTL
