@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: v1.1
 status: Awaiting next milestone
 stopped_at: Completed 19-12-PLAN.md
-last_updated: "2026-11-14T00:07:58.585Z"
+last_updated: "2026-11-15T19:34:15.066Z"
 last_activity: 2026-11-14
 last_activity_desc: Quick task 261113-tjj completed (Staff Group forward-source blocklist)
-state_head: b9070520711b96db1c1688807126bd5a2f52c9aa
+state_head: e3b94f9bfdad9f9580ad0d1c0fba83cc880815b7
 progress:
   total_phases: 10
   completed_phases: 10
@@ -351,6 +351,7 @@ None yet.
 | 261030-rig | Switch raid AI image checks from Gemini to Claude Haiku 5.5 through the Anthropic API | 2026-10-30 | d2b368f | [261030-rig-change-gemini-to-claude-haiku-5-5-via-th](./quick/261030-rig-change-gemini-to-claude-haiku-5-5-via-th/) |
 | 7 | Raise make test per-package timeout 10m to 15m (fuku/modules hit 600 s on a slow CI runner) | 2026-11-04 | ff87d62 | — |
 | 261113-tjj | Staff Group forward-source blocklist: delete forwards from listed channels in every linked group and punish the forwarder (commands, settings page, group -9 watcher) | 2026-11-14 | b907052 | [261113-tjj-staff-group-forward-source-blocklist-blo](./quick/261113-tjj-staff-group-forward-source-blocklist-blo/) |
+| 261115-pvl | Rewrite README.md in the Xenobot-72 voice and add an original Ukrainian README.uk.md (v2.24.0) | 2026-11-15 | e3b94f9 | [261115-pvl-rewrite-readme-md-in-the-xenobot-72-voic](./quick/261115-pvl-rewrite-readme-md-in-the-xenobot-72-voic/) |
 
 ## Deferred Items
 
