@@ -1,4 +1,4 @@
-# This is to run the fuku-robot in debug mode with alpine image
+# This is to run the bot in debug mode with alpine image
 # This starts up fast and does not do any optimizations
 services:
   fuku:

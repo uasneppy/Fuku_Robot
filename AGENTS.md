@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Fuku Robot: Telegram group-management bot. Go module `github.com/uasneppy/fuku_robot`; PostgreSQL (GORM) + Redis.
+Xenobot-72: Telegram group-management bot. Go module `github.com/uasneppy/fuku_robot`; PostgreSQL (GORM) + Redis.
 Update this file in the same commit as any change that invalidates a rule below.
 
 ## Commands

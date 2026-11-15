@@ -485,7 +485,7 @@ jobs:
             type=raw,value=dev-${{ steps.short-sha.outputs.short_sha }}
             type=raw,value=${{ steps.short-sha.outputs.short_sha }}
           labels: |
-            org.opencontainers.image.title=Fuku Robot Development Build
+            org.opencontainers.image.title=Xenobot-72 Development Build
             org.opencontainers.image.description=Development build from main branch
             org.opencontainers.image.source=${{ github.event.repository.html_url }}
             org.opencontainers.image.revision=${{ github.sha }}

@@ -1,4 +1,4 @@
-# Production Docker Compose for Fuku Robot
+# Production Docker Compose for Xenobot-72
 # Uses pre-built images from GHCR, optimized for Dokploy deployment
 #
 # Environment variables to set in Dokploy UI:
