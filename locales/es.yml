@@ -399,7 +399,7 @@ devs_help_msg:
   × /leavechat: Forzar al bot a salir de un chat especificado."
 filters_help_msg:
   "Los filtros no distinguen mayúsculas y minúsculas; cada vez que alguien diga tus palabras
-  disparadoras, ¡Fuku responderá algo más! Esto se puede usar para crear tus comandos,
+  disparadoras, ¡Xenobot-72 responderá algo más! Esto se puede usar para crear tus comandos,
   si lo deseas.
 
 
@@ -466,7 +466,7 @@ formatting_fillings: "<b>Rellenos</b>
   - <code>{preview}</code>: Habilita vistas previas en los mensajes.
 
   - <code>{nonotif}</code>: Deshabilita la notificación para ese mensaje."
-formatting_help_msg: "Fuku soporta un gran número de opciones de formato para hacer tus mensajes más expresivos. ¡Echa un vistazo haciendo clic en los botones de abajo!"
+formatting_help_msg: "Xenobot-72 soporta un gran número de opciones de formato para hacer tus mensajes más expresivos. ¡Echa un vistazo haciendo clic en los botones de abajo!"
 formatting_markdown: |
   <b>Formato Markdown</b>
 
@@ -525,7 +525,7 @@ formatting_random: |
   Esto elegirá aleatoriamente entre enviar el primer mensaje, "hola", o el segundo
   mensaje, "cómo estás".
 
-  ¡Usa esto para hacer que Fuku se sienta un poco más personalizada! (solo funciona en filtros/notas)
+  ¡Usa esto para hacer que Xenobot-72 se sienta un poco más personalizada! (solo funciona en filtros/notas)
 
   Ejemplo de mensaje de bienvenida:
 
@@ -569,32 +569,11 @@ greetings_help_msg:
   miembro se une.
 
   × /autoapprove `<yes/no/on/off>`: Aprobar automáticamente a todos los nuevos miembros."
-help_about:
-  "@%s es uno de los administradores de grupos más rápidos y con más funciones.
+help_about: "@%s es uno de los administradores de grupos más rápidos y con más funciones.\n\n<b>Por qué Xenobot-72:</b>\n- Simple: Uso fácil y compatible con muchos comandos de bot.\n- Con funciones: Muchas funciones que otros bots de administración de grupos no tienen.\n- Rápido: ¿Adivina qué? No está hecho usando Python, usamos <a href='https://go.dev/'>Go</a> como nuestro lenguaje de programación principal.\n\n<b>Versión actual:</b> %s"
+help_configuration_step-1: "Bienvenido a la Configuración de Xenobot-72
 
 
-  Fuku ✨ es desarrollado y mantenido activamente por @DivideProjects!
-
-
-  ¡Fuku ha estado en línea desde 2020 y ha servido a miles de grupos con cientos
-  de miles de usuarios!
-
-
-  <b>Por qué Fuku:</b>
-
-  - Simple: Uso fácil y compatible con muchos comandos de bot.
-
-  - Con funciones: Muchas funciones que otros bots de administración de grupos no tienen.
-
-  - Rápido: ¿Adivina qué? No está hecho usando Python, usamos <a href='https://go.dev/'>Go</a>
-  como nuestro lenguaje de programación principal.
-
-
-  <b>Versión actual:</b> %s"
-help_configuration_step-1: "Bienvenido a la Configuración de Fuku
-
-
-  ¡Lo primero que debes hacer es añadir Fuku ✨ a tu grupo! Para hacer eso, presiona el
+  ¡Lo primero que debes hacer es añadir Xenobot-72 ✨ a tu grupo! Para hacer eso, presiona el
   botón de abajo y selecciona tu grupo, luego presiona Listo para continuar el tutorial."
 help_configuration_step-2: "¡Ok, bien hecho!
 
@@ -618,53 +597,13 @@ help_configuration_step-2: "¡Ok, bien hecho!
   ▫️ Busca @%s
 
   ▫️ Confirma"
-help_configuration_step-3: "¡Excelente!
-
-  ¡Ahora el Bot está listo para usar!
-
-  Todos los comandos se pueden usar con / o !
-
-
-  Si tienes alguna dificultad configurándome en tu grupo, no dudes
-  en venir a @DivideSupport.
-
-  Nos encantaría ayudarte."
-help_donatetext: "¿Así que quieres donar? ¡Increíble!
-
-  Cuando donas, todos los fondos van hacia mi desarrollo lo que me hace rápido y
-  receptivo.
-
-  Tu donación también podría conseguirme una o dos funciones nuevas, que no pude obtener
-  debido a limitaciones del servidor.
-
-  ¡Todos los fondos se destinarían a mis servicios como base de datos, almacenamiento y alojamiento!
-
-  Puedes donar contactando a mi propietario aquí: @DivideProjectsBot"
+help_configuration_step-3: "¡Excelente!\n¡Ahora el Bot está listo para usar!\nTodos los comandos se pueden usar con / o !"
+help_donatetext: "Este bot no tiene página de donaciones.\nNo hay nada a lo que donar."
 lang_sample: Español
 language_flag: 🇪🇸
 language_name: Español
-help_help_msg:
-  "El punto de entrada principal y sistema de navegación de Fuku Robot.
-
-  *Comandos de navegación:*
-
-  × /start: Mostrar el mensaje de bienvenida con menú de navegación.
-
-  × /help: Mostrar menú de ayuda con lista de módulos; usa /help <módulo> para más detalles.
-
-  × /about: Mostrar información del bot, versión y enlaces útiles.
-
-  × /donate: Mostrar información de donación para apoyar el proyecto."
-languages_help_msg: "¿No puedes cambiar el idioma del bot?
-
-  ¡Cambia fácilmente usando este módulo!
-
-
-  Solo escribe /lang y usa el teclado en línea para elegir un idioma para ti o tu
-  grupo.
-
-
-  Puedes ayudarnos a llevar el bot a más idiomas ayudando en [Crowdin](https://crowdin.com/project/fuku_robot)"
+help_help_msg: "El punto de entrada principal y sistema de navegación de Xenobot-72.\n*Comandos de navegación:*\n× /start: Mostrar el mensaje de bienvenida con menú de navegación.\n× /help: Mostrar menú de ayuda con lista de módulos; usa /help <módulo> para más detalles.\n× /about: Mostrar información del bot y su versión.\n× /donate: Mostrar si este bot acepta donaciones."
+languages_help_msg: "¿No puedes cambiar el idioma del bot?\n¡Cambia fácilmente usando este módulo!\n\nSolo escribe /lang y usa el teclado en línea para elegir un idioma para ti o tu grupo."
 locks_help_msg: "*Solo administrador*:
 
   × /lock `<permiso>`: Bloquear permiso del Chat..
@@ -817,7 +756,7 @@ reports_help_msg:
   @admin.
 
 
-  Para reportar a un usuario, simplemente responde a su mensaje con @admin o /report; Fuku
+  Para reportar a un usuario, simplemente responde a su mensaje con @admin o /report; Xenobot-72
   entonces responderá con un mensaje indicando que los administradores han sido notificados.
 
   DEBES responder a un mensaje para reportar a un usuario; ¡no puedes usar @admin para etiquetar
@@ -1467,16 +1406,13 @@ main_bot_command_start: "Inicia el Bot"
 main_bot_command_help: "Revisar sección de Ayuda del bot"
 
 # Help module strings
-help_info_about_header: "Información y Acerca de\n\nAquí están algunas de las preguntas frecuentes sobre Fuku."
-help_news_channel_text: "Únete a mi <a href='https://t.me/FukuRobotUpdates'>Canal de Noticias</a> para obtener información sobre todas las últimas actualizaciones."
+help_info_about_header: "Información y Acerca de\n\nAquí están algunas de las preguntas frecuentes sobre Xenobot-72."
 help_all_commands_usage: "Todos los comandos se pueden usar con lo siguiente: / o !"
 help_button_about_me: "Acerca de mí 👨‍💻"
-help_button_news_channel: "Canal de Noticias 📢"
-help_button_support_group: "Grupo de Soporte 👥"
 help_button_configuration: "Configuración ⚙️"
 help_button_about: "Acerca de ✨"
 help_button_add_to_chat: "➕ ¡Añádeme al chat!"
-help_button_add_fuku: "➕ ¡Añadir Fuku al chat!"
+help_button_add_fuku: "➕ ¡Añadir Xenobot-72 al chat!"
 help_button_commands_help: "📚 Comandos y Ayuda"
 help_button_language: "Idioma 🌏"
 help_click_button_info: "¡Haz clic en el botón de abajo para obtener información sobre mí!"
@@ -1624,35 +1560,20 @@ language_current_group: "El Idioma Actual de Este Grupo es %s\nElige un idioma d
 language_changed_user: "Tu idioma ha sido cambiado a %s"
 language_changed_group: "El idioma de este grupo ha sido cambiado a %s"
 language_admin_required: "Necesitas ser administrador para cambiar el idioma del grupo."
-language_help_translate: "Ayúdanos a Traducir 🌎"
 language_invalid_selection: "Selección de idioma inválida."
 
 # Bot updates module additional strings
 bot_updates_need_supergroup: "Lo siento, pero para usar todas mis funciones, necesitas convertir este grupo en supergrupo."
 bot_updates_thanks_for_adding: "¡Gracias por añadirme en tu grupo!"
 bot_updates_button_expired: "Este botón ha expirado, Por favor usa el comando de nuevo."
-bot_updates_creators_plug: "\nSigue a @DivideProjects para más bots útiles de mis creadores."
 
 # Formatting module additional strings
 formatting_press_button: "¡Presiona el botón de abajo para obtener Ayuda de Markdown!"
-formatting_large_options: "Fuku soporta un gran número de opciones de formato para hacer tus mensajes más expresivos. ¡Echa un vistazo!"
+formatting_large_options: "Xenobot-72 soporta un gran número de opciones de formato para hacer tus mensajes más expresivos. ¡Echa un vistazo!"
 
 # Help module additional strings
-help_bot_intro: "¡Hola! Mi nombre es Fuku ✨.\n¡Estoy aquí para ayudarte a administrar tus grupos!\nPresiona /help para saber más sobre cómo usarme a mi máximo potencial.\n"
-help_pm_intro: |
-  ¡Hola %s!
-  Mi nombre es Fuku ✨.
-
-  Soy un bot de administración de grupos, ¡aquí para ayudarte a moverte y mantener el orden en tus grupos!
-  Tengo muchas funciones útiles, como control de flood, un sistema de advertencias, un sistema de notas, e incluso respuestas predeterminadas en ciertas palabras clave.
-
-  Comandos útiles:
-  - /start: ¡Me inicia! Probablemente ya has usado esto.
-  - /help: Te envía este mensaje; ¡Te contaré más sobre mí!
-  - /donate: Te da información sobre cómo apoyarme y a mi creador.
-
-  Si tienes algún error o preguntas sobre cómo usarme, echa un vistazo a mi sitio web, o dirígete a @DivideSupport.
-  Todos los comandos se pueden usar con / o !.
+help_bot_intro: "¡Hola! Mi nombre es Xenobot-72 ✨.\n¡Estoy aquí para ayudarte a administrar tus grupos!\nPresiona /help para saber más sobre cómo usarme a mi máximo potencial.\n"
+help_pm_intro: "¡Hola %s!\nMi nombre es Xenobot-72 ✨.\n\nSoy un bot de administración de grupos, ¡aquí para ayudarte a moverte y mantener el orden en tus grupos!\nTengo muchas funciones útiles, como control de flood, un sistema de advertencias, un sistema de notas, e incluso respuestas predeterminadas en ciertas palabras clave.\n\nComandos útiles:\n- /start: ¡Me inicia! Probablemente ya has usado esto.\n- /help: Te envía este mensaje; ¡Te contaré más sobre mí!\n- /donate: Te dice si este bot acepta donaciones.\n\nSi tienes algún error o preguntas sobre cómo usarme, echa un vistazo a mi sitio web.\nTodos los comandos se pueden usar con / o !.\n"
 
 # Captcha module additional strings
 captcha_settings_header: "<b>Configuración de Captcha:</b>"
@@ -2223,7 +2144,7 @@ help_extended_docs: |
 
   El comando <code>/help</code> muestra una lista de módulos. Al hacer clic en un botón de módulo, se muestran los comandos y la información de uso de ese módulo. Cuando se usa <code>/help</code> en un chat grupal, el bot redirige al usuario a un mensaje privado para obtener ayuda detallada y evitar saturar el grupo.
 
-  <code>/about</code> muestra información del bot, versión y enlaces, mientras que <code>/donate</code> muestra información de donación para apoyar el proyecto.
+  <code>/about</code> muestra información del bot y su versión, mientras que <code>/donate</code> indica si el bot acepta donaciones.
 
 # Extended documentation locale keys - Devs module
 devs_extended_docs: |

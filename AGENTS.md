@@ -170,6 +170,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `ext.ContinueGroups` with no reply, write or Telegram call. They are a documented exception to the `WrapCommand`
   rule, because `BuildCommandContext` replies to sender-less updates, and they have no anonymous-admin re-entry.
 - Handler methods use value receivers on `moduleStruct`.
+- The bot's name in visible text is Xenobot-72, written in Latin letters in every language and never declined; identifiers
+  (module path, image, env names, cache keys, locale key names such as `help_button_add_fuku`) keep their old spelling. Help screens
+  carry no link to a third party (O-02): the `/about` keyboard is three rows (about, configuration, back), the `/start` keyboard keeps
+  the add-to-chat URL button alone in its row, `/start` appends no news line, the thanks-for-adding message has no creators plug and
+  `genFullLanguageKb` is only the language buttons. `/donate` stays registered and its text says the bot has no donation page.
+  New exports write `bot_name` Xenobot-72 (`NewBackupFormat`); `BackupFormat.Validate` only requires a non-empty name and must never
+  compare it with a constant, so exports made under the earlier name keep importing (`TestBackupImportToleratesEarlierBotName`).
 - The forward blocklist watcher (`staff_forwardblock_watch.go`, quick task 261113-tjj) is registered by `LoadStaff` at group
   `-9` (`staffForwardBlockGroup`, the only free group below 12) through `handlers.NewMessage(forwardBlockFilter, ...)` with no
   setter (new messages only: no edits, channel posts or bot senders), and is the only handler of that group, so never add a
@@ -1082,8 +1089,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `config.AppConfig.ValidLangCodes` in its order (a code whose name and flag are both empty is skipped, as `/lang`'s keyboard
   skips it), two to a row, each `language_flag`, a space and `language_name` of that language's own locale file, and the stored
   language's cell shows `✅` in place of its flag (`✅ Bahasa Indonesia`, 18 code points: the prefix form is 22 and would not fit
-  a 20-point cell), then Back and Close, so five rows of two with the default eight languages. `/lang`'s Help Us Translate
-  link button is not drawn. A press of the stored language writes nothing and shows no notice. After a write in a menu opened
+  a 20-point cell), then Back and Close, so five rows of two with the default eight languages. `/lang` has no translation-platform
+  link row either (removed from the command's keyboard by owner decision O-02, see the language golden below). A press of the stored language writes nothing and shows no notice. After a write in a menu opened
   in the group the press's translator is replaced by `i18n.MustNewTranslator` of the code just written (never re-read: another
   replica's local cache layer can still hold the old value), so the page, its notice (`language_changed_group`, the
   callback's own text) and its Back and Close labels come out in the new language, and the next press and the next group reply
@@ -3668,7 +3675,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `change_language` callback (the buttons of `/lang`), not in `/lang` itself, which only shows the keyboard; the callback keeps
   its order (the code check against `groupLanguageCodes`, then the admin check, then the apply function) and its answers, and
   its private branch writes the user's own language through `lang.ChangeUserLanguage` and is never reached from the apply
-  function (`TestLegacyLanguageRequests` pins every byte of both branches and of `/lang`'s display, and
+  function (`TestLegacyLanguageRequests` pins every byte of both branches and of `/lang`'s display, except the translation-platform
+  keyboard row, removed from its two keyboard entries by owner decision O-02 in quick task 261115-rcd, and
   `TestLanguageCallbackWritesThroughApplyGroupLanguage`, `language_callback_wiring_test.go`, proves what a golden cannot see:
   a real press of the button reaches the write through the `languageWrites` seam that `applyGroupLanguage` owns, so the page and
   the buttons can never accept or refuse different things). A code outside the eight

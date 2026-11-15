@@ -76,10 +76,9 @@ func botJoinedGroup(b *gotgbot.Bot, ctx *ext.Context) error {
 	// send a message to group itself
 	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 	thanksText, _ := tr.GetString("bot_updates_thanks_for_adding")
-	creatorsPlug, _ := tr.GetString("bot_updates_creators_plug")
 	_, err := b.SendMessage(
 		chat.Id,
-		fmt.Sprint(thanksText, creatorsPlug, msgAdmin),
+		fmt.Sprint(thanksText, msgAdmin),
 		nil,
 	)
 	if err != nil {

@@ -37,14 +37,11 @@ func helpTestTranslator(t *testing.T) *i18n.Translator {
 	t.Helper()
 
 	tr, err := i18n.NewTestTranslator(`
-help_info_about_header: "About Fuku"
+help_info_about_header: "About Xenobot-72"
 help_bot_intro: "Intro. "
-help_news_channel_text: "News."
 help_pm_intro: "Hi %s. "
 help_all_commands_usage: "Use commands."
 help_button_about_me: "About me"
-help_button_news_channel: "News"
-help_button_support_group: "Support"
 help_button_configuration: "Config"
 common_back_arrow_alt: "Back"
 help_button_about: "About"
@@ -62,10 +59,10 @@ func TestHelpTextRendering(t *testing.T) {
 	t.Parallel()
 
 	tr := helpTestTranslator(t)
-	if got := getAboutText(tr); got != "About Fuku" {
+	if got := getAboutText(tr); got != "About Xenobot-72" {
 		t.Fatalf("getAboutText() = %q", got)
 	}
-	if got := getStartHelp(tr); got != "Intro. News." {
+	if got := getStartHelp(tr); got != "Intro. " {
 		t.Fatalf("getStartHelp() = %q", got)
 	}
 	if got := getMainHelp(tr, "Div"); got != "Hi Div. Use commands." {
@@ -78,8 +75,8 @@ func TestHelpKeyboardsUseCallbackCodecAndBotUsername(t *testing.T) {
 
 	tr := helpTestTranslator(t)
 	aboutKb := getAboutKb(tr)
-	if len(aboutKb.InlineKeyboard) != 4 {
-		t.Fatalf("getAboutKb() rows = %d, want 4", len(aboutKb.InlineKeyboard))
+	if len(aboutKb.InlineKeyboard) != 3 {
+		t.Fatalf("getAboutKb() rows = %d, want 3 (about, configuration, back)", len(aboutKb.InlineKeyboard))
 	}
 	if aboutKb.InlineKeyboard[0][0].Text != "About me" {
 		t.Fatalf("about button text = %q", aboutKb.InlineKeyboard[0][0].Text)
@@ -94,6 +91,20 @@ func TestHelpKeyboardsUseCallbackCodecAndBotUsername(t *testing.T) {
 	}
 	if got := startKb.InlineKeyboard[1][0].Url; got != "https://t.me/FukuRobot?startgroup=botstart" {
 		t.Fatalf("add-to-chat URL = %q", got)
+	}
+	if got := len(startKb.InlineKeyboard[1]); got != 1 {
+		t.Fatalf("add-to-chat row has %d buttons, want the add button alone", got)
+	}
+	// No button of either keyboard may send members to a third-party channel or group: the only
+	// URL button is the add-to-chat link built from the bot's own username.
+	for name, kb := range map[string]gotgbot.InlineKeyboardMarkup{"about": aboutKb, "start": startKb} {
+		for _, row := range kb.InlineKeyboard {
+			for _, btn := range row {
+				if btn.Url != "" && btn.Url != "https://t.me/FukuRobot?startgroup=botstart" {
+					t.Fatalf("%s keyboard has a third-party URL button: %q", name, btn.Url)
+				}
+			}
+		}
 	}
 	if !strings.HasPrefix(startKb.InlineKeyboard[2][0].CallbackData, "helpq|v1|") {
 		t.Fatalf("commands callback = %q, want encoded help callback", startKb.InlineKeyboard[2][0].CallbackData)
