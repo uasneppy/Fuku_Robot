@@ -33,6 +33,13 @@ Each applied action and each undo is posted to the log channel of the group it a
 /sban, /dban, /skick, /dkick, /smute and /dmute are not used here.
 Send these commands as yourself, not anonymously.
 
+### Forward blocklist (in the Staff Group):
+- `/addfwdblock source`: Block forwards from a channel (ID or @username) in every linked group. I delete them and apply the list action to the member. Only the Staff Group creator changes the list.
+- `/rmfwdblock ID`: Unblock a source.
+- `/fwdblocklist`: Show the blocked sources.
+- `/fwdblockaction [action]`: Show or set the action: none (delete only), warn, mute, kick or ban.
+A forward from a group is caught only when an anonymous admin posted it.
+
 
 ## Module Aliases
 

@@ -1,580 +1,382 @@
-# Architecture Research
+# Architecture Research: v1.1 PM Settings Hub & Member Screening
 
-**Domain:** Telegram group-management bot (Go, gotgbot v2, GORM/PostgreSQL, Redis). Subsequent milestone on the existing Fuku Robot fork: Staff Group fan-out moderation, raid lockdown, Turnstile Mini App captcha, inline settings menu.
-**Researched:** 2026-10-04
-**Confidence:** HIGH for how the new code attaches to the existing codebase (read from source). MEDIUM for Telegram and Cloudflare platform behaviour (web sources, primary docs were egress-blocked). LOW for two flagged items (approved-user permission exceptions, image classification). Both need a short spike. See "Open Questions / Spikes".
+**Domain:** Telegram group-management bot (Go, gotgbot v2, GORM/PostgreSQL, Redis, several replicas)
+**Researched:** 2026-11-02
+**Confidence:** HIGH for integration points (read from the code, `AGENTS.md` and gotgbot's source); MEDIUM for the PM group-list source and the name-AI pool sharing (design choices with a stated fallback); LOW only where marked "verify".
 
-Every codebase claim below was checked against the source in `/home/user/Fuku_Robot` on 2026-10-04. File references are given so the roadmap and plan phases can verify them quickly.
-
----
-
-## Standard Architecture
-
-### System Overview (what is added, and where it plugs in)
-
-New components are marked `[NEW]`. Handler group numbers follow `AGENTS.md`.
-
-```
-                         Telegram (updates in)                       Public internet (Mini App)
-                                  |                                            |
-                +-----------------+------------------+                 +-------+----------------+
-                |   gotgbot dispatcher (groups run in numeric order)  |  net/http mux (existing |
-                +-----------------+------------------+                 |  server, same port)    |
-                                  |                                    |  /health /metrics      |
- -10 captcha sweeper              |                                    |  /webhook              |
-  -6 fed-ban                      |                                    |  [NEW] /captcha/app    |
-  -5 [CHANGED] lockdown guard  <--+-- replaces antiraid enforcement    |  [NEW] /captcha/verify |
-  -3 [NEW] staff-link ownership watcher (chat_member)                  +-------+----------------+
-  -2 admin-cache refresh                                                       |
-  -1 users tracker  (feeds @username resolution)                               |
-   0 commands. [NEW] staff command interceptor registers FIRST                 |
-   2 [NEW] raid flood detector                                                 |
-   3 aispam  (+ [NEW] verdict-burst hook)                                      |
-   4 antiflood (per-user, in-process, unchanged)                               |
- 5/6 locks, 7 blacklists, 8 reports, 9 filters, 10 pins, 11 log-channel        |
-                                                                               |
- +--------------------- modules layer (fuku/modules) -----------------------+ |
- | [NEW] staff.go           designate / link / unlink / /staff panel         | |
- | [NEW] staff_actions.go   gated command interceptor -> fan-out op          | |
- | [NEW] staff_ownership.go chat_member watcher + periodic sweeper           | |
- | [NEW] lockdown.go        state machine, alerts, callbacks (ns "lockdown") | |
- | [NEW] lockdown_detect.go join-rate / flood-rate / ai-burst / ai-assist    | |
- | [CHANGED] captcha.go     "turnstile" mode + shared completion function  <-+-+
- | [NEW] settings_menu.go   page registry + callbacks (ns "cfg")             | |
- +--------------+---------------------------------+--------------------------+ |
-                |                                 |                            |
-   +------------v-----------+       +-------------v-------------+   +----------v-----------+
-   | [NEW] utils/fanout     |       | [CHANGED] utils/actionlog |   | [NEW] utils/tgwebapp |
-   | bounded, rate-limited  |       | + markup variant + Staff  |   | initData validator   |
-   | per-chat executor      |       +---------------------------+   | [NEW] utils/turnstile|
-   +------------+-----------+                                       | siteverify client    |
-                |                                                   +----------------------+
-   +------------v-------------------------------------------------------------------------+
-   | [NEW] utils/chat_status: fresh (uncached) admin snapshot for a chat ID               |
-   +------------+-------------------------------------------------------------------------+
-                |
-   +------------v-------------------------------------------------------------------------+
-   | Repositories (fuku/db/<domain>) + cache.GetFromCacheOrLoad / DeleteCache            |
-   | [NEW] db/staff   [NEW] db/lockdown   [CHANGED] db/captcha (mode enum)                |
-   +------------+---------------------------------------+---------------------------------+
-                |                                       |
-        PostgreSQL (migrations/*.sql)           Redis: cache (fuku:cache:*) and operational
-        [NEW] staff_groups, staff_group_links,  keys outside the cache prefix
-        chat_lockdowns, lockdown_joiners,       [NEW] fuku:raid:* counters (ephemeral only)
-        lockdown_settings; captcha_mode enum
-```
-
-### Component Responsibilities
-
-| Component | Responsibility | Why it lives there |
-|-----------|----------------|--------------------|
-| `db/staff` repository | Staff Group designation and group-to-staff links. Authoritative store for "who is linked to what, and whose ownership backs it". | One repo per domain, reads via `GetFromCacheOrLoad`, writes `DeleteCache` (AGENTS Data). |
-| `utils/chat_status` fresh admin snapshot | One `getChatAdministrators` call returns owner, issuer rights and target-is-admin for a chat ID, uncached. | Existing predicates (`CanUserRestrict` etc.) read the admin cache and read the sender from the *current* update's context, which is the Staff Group. Both are wrong for per-group authorization. See Pattern 2. |
-| `utils/fanout` | Run one operation per chat with a worker pool, a global rate limit, 429 `retry_after` handling, and a per-chat `Result`. Knows nothing about staff or Telegram semantics. | Reusable by Staff actions and by the lockdown "ban N joiners" button. Pure utils package, so no import cycle with `modules`. |
-| `modules/staff*.go` | Command surface, authorization, target resolution, the per-group op closure, summary rendering, ownership watcher. | Handlers live in `modules`, business rules call repos and utils. |
-| `modules/lockdown*.go` | Lockdown state machine, join and join-request enforcement, detectors, alert routing, `lockdown|` callbacks. | Replaces the *behaviour* of `antiraid.go`. Reuses its sliding-window Lua script. |
-| `db/lockdown` | Persistent lockdown state (never Redis-only), permission snapshot, kicked-joiner list, per-chat detector settings. | "Never lifts on its own" and "Ban N recent joiners" hours later must survive a Redis flush or restart. |
-| `utils/tgwebapp` | Pure functions: validate Mini App `initData` (HMAC, `auth_date` window), parse `user` and `start_param`. | Pure and table-testable. No HTTP, no DB. |
-| `utils/turnstile` | `Verify(ctx, token, remoteIP, idemKey) (Result, error)` against a configurable base URL. | The base URL is injectable, so tests use `httptest` instead of mocks (AGENTS Testing). |
-| `httpserver` (existing) | Gains an exported `Handle(pattern, http.Handler)` and a small hardened-route helper (body limit, security headers). Holds no captcha logic. | `httpserver` imports `db`, `config`, `cache`. It must not import `modules`. `main.go` is the composition root and wires `modules` handlers into it. |
-| `modules/captcha.go` (changed) | Third mode `turnstile`. Success branch extracted into `completeCaptchaSuccess` so the callback path and the HTTP path share one implementation. | The completion path is already atomic (`CompleteCaptchaAttemptAtomic`). Do not fork it. |
-| `modules/settings_menu.go` | Page registry, one callback namespace, permission re-check on every press, edit-in-place rendering. | Mirrors the existing registries (`RegisterDeepLinkHandler`, `RegisterAnonymousAdminHandler`, `SetModuleHelp`). |
+Scope: only what the six v1.1 feature groups add to or change in the existing architecture. `AGENTS.md` stays the rulebook; this file says where the new parts plug in.
 
 ---
 
-## Recommended Project Structure
+## 1. Key findings (read before the details)
 
-```
-migrations/
-  2026100500xxxx_add_staff_groups.sql          # staff_groups, staff_group_links
-  2026100600xxxx_add_lockdown.sql              # chat_lockdowns, lockdown_joiners, lockdown_settings
-  2026100700xxxx_captcha_mode_turnstile.sql    # DROP/ADD chk_captcha_mode (name verified in 20260412000000_*)
-fuku/
-  config/                                      # + TurnstileSiteKey, TurnstileSecretKey, PublicBaseURL, MiniAppShortName
-  db/
-    models/staff.go, lockdown.go               # TableName() must match migration names exactly
-    staff/repository.go (+ _test, testmain_test) # add models to the testmain AutoMigrate list
-    lockdown/repository.go (+ tests)
-    cache/local.go                             # add staff_* prefixes to skipLocal (security-relevant freshness)
-  modules/
-    staff.go  staff_actions.go  staff_ownership.go
-    lockdown.go  lockdown_detect.go  lockdown_classify.go
-    settings_menu.go  settings_pages_*.go
-    captcha_turnstile.go                       # HTTP handler constructor + button builder
-  utils/
-    fanout/            chat_status/fresh.go    tgwebapp/   turnstile/
-    httpserver/webapp/index.html, app.js       # go:embed, no JS build toolchain
-    actionlog/         # extend, do not fork
-```
-
-### Structure Rationale
-
-- **Fresh-admin helper in `chat_status`, executor in `utils/fanout`:** keeps the "permission predicates return bools and never reply" rule (AGENTS Permissions). The executor never replies. The module renders the summary.
-- **`db/lockdown` separate from `db/antiraid`:** `antiraid_settings` has the wrong shape (ban duration, expiry). A new table avoids an `ALTER` on a live table and leaves the old commands working during migration.
-- **Static page via `go:embed`, plain JS:** the repo has no Node toolchain and a Docker/goreleaser build. A single HTML file and about 60 lines of JS keeps `CGO_ENABLED=0 go build ./...` the only build step.
-- **Mini App handler built in `modules`, mounted in `main.go`:** avoids an `httpserver` to `modules` import cycle (see Component Responsibilities).
+1. **The settings menu is stateless and keyed on `c` (private) or `u` (group).** The PM hub is one extra namespace (`settingsh|v1`) for the group list. A pick is the existing `settings|v1` `a=bk&c=<chat id>` button, so the pick reuses the whole `settingsPress.verify` pipeline with no new code.
+2. **The owner gate is one function used by four doors.** Extract steps 4 to 4b of `verify` into `settingsAuthorize(b, userID, groupID)` (live `getChatMember`, then the stored `allow_admins` flag) and call it from `verify`, `settingsStartDeepLink`, the in-group `/settings` check and the PM input consumer. Four copies of the rule would drift.
+3. **Edited messages reach no handler today.** `edited_message` is in `AllowedUpdates`, but every `handlers.NewMessage` and `NewCommand` in the repo leaves `AllowEdited` false, and `Message.CheckUpdate` only looks at `ctx.EditedMessage` when it is true. A small custom `handlers.Handler` that matches `ctx.EditedMessage != nil` is therefore collision-free.
+4. **A handled command ends the update at group 0, so "delete commands" cannot be a watcher at group 1 or later, and cannot delete before the handler replies** (`msg.Reply` to a deleted message fails). The right hook is the dispatcher's `ext.Processor` seam, which `main.go` already wraps with `tracing.TracingProcessor`. A wrapper runs after all groups finished and deletes the command then.
+5. **New handler groups: none below 12 are needed beyond `-1` (shared with the users tracker, registered after it) and `1` (edited messages).** Everything else is a function call inside an existing flow (`ProcessSingleJoin`, send sites, the Processor).
+6. **The scheduled-deletion queue is the lockdown worker pattern**: a table, a batch claim by conditional update, a 1 s tick plus wake channel on every replica, a stale-claim release, a drain registered after DB-close. Use `deleteMessages` (up to 100 ids) per chat per call.
+7. **The PM "awaiting input" state is a Redis hash with a TTL and a claim nonce**, not a DB row and not a draft. Every input is applied immediately through the same apply function the command uses. Redis down means the editor entry buttons say so; every other page keeps working.
+8. **Requirement punishments must reuse the existing code, not copy it.** `warnThisUser` needs a ctx-free core; mute must use a marker `until_date` (the `ban_until` trick of the lockdown) so "I fixed it" can tell its own mute from an admin's; every unmute goes through `resolveUnmutePermissions`.
 
 ---
 
-## Architectural Patterns
+## 2. System overview (what changes)
 
-### Pattern 1: Gated command interceptor (Staff commands shadow per-group commands)
+```
+Telegram updates (polling or webhook)
+        |
+        v
+ tracing.TracingProcessor  --wrapped by-->  [NEW] postUpdateProcessor   (after all groups: delete the command message)
+        |
+        v
+ Dispatcher handler groups (ascending)
+  -10 captcha sweeper          -7 lockdown guard         -6 fed-ban       -4 raid flood counter
+  -3 staff watchers            -2 admin-cache
+  -1 users tracker ──► [NEW] memberReqWatcher ──► [NEW] messageHygieneWatcher ──► [NEW] settingsInputWatcher (PM only)
+   0 commands / greetings (ProcessSingleJoin ──► [NEW] Screen step before captcha/welcome)
+ [NEW] 1 editedMessageHandler (custom Handler, edited updates only)
+   2 raid AI watcher   3 aispam   4 antiflood   5/6 locks   7 blacklists   8 reports/reactions
+   9 filters   10 pins   11 log-channel   12 late raid flood counter (stays last)
 
-**What:** In the Staff Group, `/ban`, `/tban`, `/mute`, `/tmute`, `/kick`, `/unban`, `/unmute` must mean "act on all linked groups". The same names are already registered at group 0 by Bans (priority 70) and Mutes (80). gotgbot runs only the first matching handler in a group, and a handler returning `ContinueGroups` jumps to the *next group*, not the next handler in the same group. So a staff handler that "declines" by returning `ContinueGroups` would skip the real `/ban` in every non-staff chat.
+ Callbacks:  settings|v1 (existing, + new pages/rights)   [NEW] settingsh|v1 (PM hub list)   [NEW] memreq|v1 ("I fixed it")
 
-**Solution:** The decision must be made in `CheckUpdate`, not in the handler. Register the staff handlers at group 0 *before* Bans/Mutes load (module priority below 70, for example 65) with a gate predicate. For a non-staff chat the gate returns false, so dispatch moves on to the real handler.
+ Background (every replica, DB-driven, claim by conditional update):
+   StartLockdownWorker (existing)      [NEW] StartDeletionWorker (scheduled_deletions)
 
-- Verified in the vendored source: `handlers.Command` is a plain struct exposing `CheckUpdate`/`HandleUpdate`/`Name`. A tiny wrapper that embeds it and ANDs a predicate into `CheckUpdate` is enough.
-- To honour the AGENTS rule "new commands use `WrapCommand`", add an optional `Gate func(*ext.Context) bool` to `helpers.CommandDescriptor`. Zero value means today's behaviour, and `register()` wraps `handlers.NewCommand` when `Gate != nil`. This is additive and keeps `RecoverFromPanic`, `BuildCommandContext` and `RequiredChecks`.
+ Redis (outside fuku:cache:): [NEW] fuku:settings:await:<user>   fuku:memberreq:*   fuku:delete:pace:*
+ PostgreSQL: [NEW] chat_settings_access, chat_managers, chat_member_rules, member_requirement_holds,
+             chat_delete_rules, scheduled_deletions, greeted_members; columns on greetings and rules
+```
 
-**When to use:** any feature that overloads an existing command name based on chat identity.
-**Trade-offs:** one extra cached lookup per staff-named command, in every chat (cheap: only evaluated after the command-name match, so the cost is zero for other messages). The priority number becomes load-bearing; add a comment and a registry test asserting that Staff's priority is below Bans and Mutes.
+### Component boundaries
+
+| Component | Responsibility | Talks to | New / Modified |
+|-----------|---------------|----------|----------------|
+| `settingsAuthorize` (`settings_menu.go`) | Live member check plus owner gate; one answer type used by every door | `lockdownLiveMember`, `access` repo | NEW (extracted from `verify`) |
+| `fuku/db/access` | `chat_settings_access` (allow_admins), `chat_managers` (PM list projection) | PostgreSQL, `fuku/db/cache` | NEW |
+| `settings_hub.go` | PM `/settings` list, paging, Refresh, `settingsh\|v1` callbacks | `access`, `chats` | NEW |
+| `settings_access.go` | Access page: "let admins in" toggle (creator only) | `access` | NEW page |
+| `settings_await.go` | Redis await store: Begin, Claim, Release, Clear, Cancel | Redis | NEW |
+| `settings_input.go` | Group `-1` PM consumer, `/cancel`, per-kind input parsers and appliers | await store, `settingsAuthorize`, apply functions | NEW |
+| `settings_editor.go` + `settings_welcome.go` | Shared Rules/Welcome/Goodbye editor pages | greetings and rules apply functions | NEW pages |
+| `fuku/db/memberreq`, `memberreq*.go` | Rules, holds, join screen, message watcher, punisher, "I fixed it" | warns core, bans, `resolveUnmutePermissions`, claude client | NEW |
+| `fuku/db/deletion`, `deletion*.go` | Rules, queue, worker, hygiene watcher, edited handler, Processor hook | Telegram `deleteMessages`, pacer | NEW |
+| `membership.go` | Join pipeline | gets `Screen` dependency | MODIFIED |
+| `greetings.go`, `rules.go` | Apply functions, greet-once, media/buttons/preview, schedule bot messages | repos, `media.Send*` | MODIFIED |
+| `warns.go` | Ctx-free `applyWarn` core | `warns` repo | MODIFIED |
+| `fuku/utils/claude` | `ClassifyName(ctx, name)` | Anthropic | MODIFIED (stdlib only rule holds) |
+| `main.go` | Processor wrapper, `StartDeletionWorker`, drain registration | | MODIFIED |
+
+---
+
+## 3. PM hub and owner gate
+
+### 3.1 Where each piece plugs in (exact files)
+
+| File / symbol | Change |
+|---------------|--------|
+| `settings.go` `settingsDesc.RequiredChecks` | Replace `requireLockdownGroup(), requireLockdownAuthority(false)` with one `requireSettingsAccess()`. In a private chat it returns true (the hub decides per group). In a group it runs the live authority check and then the gate; a gated admin gets the reply `settings_owner_only`. |
+| `lockdown.go` `requireLockdownAuthority` | Split its body into `lockdownAuthorize(c) (member, ok)` and keep the old function as a wrapper. The gate needs the member's `Status`, and a second `getChatMember` would double the live calls. The anonymous-admin proof prompt stays inside `lockdownAuthorize`, so `anonPipelineHandler(settingsDesc, ...)` re-runs the same check after the proof with the tapper as sender. |
+| `settings.go` `settings()` | Branch on `chat.Type == "private"` to `settingsHub`. The group branch is unchanged. |
+| `settings.go` `settingsStartDeepLink` | After the existing `member.Status` check, call the gate. An admin the gate refuses gets `settings_owner_only` (safe: that user just proved they are an admin of that group, so the reply tells a stranger nothing). Bot-missing and plain-member answers stay the identical masked `settings_start_not_admin`. |
+| `settings_menu.go` `verify` step 4 | Replace the inline `getChatMember` + status check with `settingsAuthorize`. New step 4b: administrator and not `allow_admins` gives `settings_owner_only`. In a private menu this also edits the message to the no-keyboard note, so a dead menu does not stay on screen. A failed gate read fails closed with `settings_check_failed`. |
+| `settings_menu.go` `settingsRight` | Add `settingsRightOwner` (status creator, alert `settings_owner_only`), `settingsRightChangeInfo` (creator or admin with `can_change_info`, mirrors the greetings/rules commands' `CanUserChangeInfo`), and later `settingsRightBotDelete` (bot `can_delete_messages`, notice). `settingsRightRefusal` reads them from `p.member`, so no extra Telegram call. |
+| `settings_pages.go` `renderSettingsMain` | Draw two buttons per row. About 15 pages will not fit one per row, and the long "title · state" labels need shortening. One-time edit; later pages still never touch this file. |
+| `fuku/db/cache/local.go` `skipLocal` | Add the `settings_access:` prefix. A creator turning admins off must reach every replica at once, as `raid_detection:` does. |
+
+### 3.2 The gate rule
+
+```
+status creator                      -> allowed (always)
+status administrator + allow_admins -> allowed
+status administrator, no allow_admins -> refused: settings_owner_only (hidden from the PM list)
+anything else                       -> settings_not_admin (unchanged)
+```
+
+- Storage: `chat_settings_access(chat_id BIGINT PRIMARY KEY, allow_admins BOOLEAN NOT NULL DEFAULT FALSE, updated_by BIGINT, updated_at)`. A missing row is "owner only". Read through `cache.GetFromCacheOrLoad` under `cache.CacheKey("settings_access", chat)`; the single write path `applyAllowAdmins` does a column-targeted upsert (a Go `false` must be written) and `cache.DeleteCache`. No `default:` tag on the Go model's bool, for the same reason as `ChatRaidDetection`. Never part of backup/export/import/reset. Not re-keyed on chat migration (falls back to owner-only, which is the safe side); say so in `AGENTS.md`.
+- The toggle lives on a new Access page (key `a`, Order 5, so it sits first) with `settingsRightOwner`. In-group setting commands (`/captchamode` and the rest) are untouched, as the milestone requires.
+- The gate never replaces the per-control right. Order stays: decode, service identity, opener, live member, **gate**, control right.
+- Staff Group page, Lockdown page and the rest all ride on `verify`, so they are gated with no per-page code.
+
+### 3.3 PM group list (source decision)
+
+The Bot API cannot list a user's groups. Recommendation: **a derived projection table `chat_managers(chat_id, user_id, role, updated_at, PK(chat_id, user_id))`**, role `creator` or `admin`.
+
+- Written from the one place that learns admin lists from Telegram: a package-level hook in `fuku/utils/cache/adminCache.go` (`AdminCacheLoadedHook func(chatID int64, ac AdminCache)`), called after a successful `loadAdminCacheFromTelegram` store, installed from a module `init`. The hook replaces that chat's rows in one transaction (delete rows for the chat, insert the current admins), from a recovered goroutine that joins the users-async-writes WaitGroup. Because every `IsUserAdmin` miss, `/admincache` and the `adminCacheAutoUpdate` reload go through `LoadAdminCache`, the table warms itself. Keeping the DB write out of `utils/cache` and behind a hook respects the import hierarchy.
+- The list query is one SQL statement: `chat_managers` joined to `chats` for the stored title, joined to `chat_settings_access`, keeping `role = 'creator' OR allow_admins`, ordered by title, paged at 8. **No Telegram call per row.** The list is only a hint; picking a group runs the live `settingsAuthorize`, and a stale row is refused there.
+- An admin of a group where the gate is closed never sees that group (hidden, not read-only). A user with no rows gets `settings_hub_empty` explaining that the bot learns admins as it sees them and that `/admincache` in the group fills the list.
+- Fallback if the projection is rejected: scan active `chats` rows and read each Redis admin cache. This is O(all chats), misses cold caches and the fork may carry thousands of old rows, so it is the worse choice. A one-off warm-up for a user with zero rows is a phase decision (`chats.users @> [uid]` candidates, `getChatMember` on at most 20).
+- Privacy (D-21/D-32): the hub shows only the user's own manageable groups' titles and never the Staff Group.
+
+### 3.4 Hub callbacks
+
+- Namespace `settingsh|v1`, registered with `callbackquery.Prefix("settingsh|")` (the `|` keeps it distinct from `settings|`). Fields: `a=ls`, `o=<offset>` (offset cursor like the staff history, clamped, refused outside the range). The press must be on a private-chat message and `query.From.Id` must equal the chat id; a service identity is refused first. It draws the list from the database only, so it works with Redis down.
+- **Pick** buttons are `settings|v1|a=bk&c=<chat id>`. That lands on the existing pipeline: structure check, service identity, live member, gate, `getChat`, and `dispatch` redraws Main. Zero new pick code.
+- The private Main page gets a leading "All groups" row (`settingsh` `a=ls`) above the nav row. Back from a page still goes to Main.
+- `answer` exactly once per press, `defer RecoverFromPanic`, edit in place, "message is not modified" is success: the same discipline as `settingsCallback`.
+
+---
+
+## 4. Stateful PM input flow
+
+### 4.1 State: Redis hash with TTL, claim nonce
+
+Recommendation: **Redis, not a DB row.** It is ephemeral by definition, needs a TTL and an atomic claim (the staff card and captcha handle patterns already do both with Lua), and it avoids a table, a migration and a cleanup sweep. A DB row would work without Redis, but the cost (a migration, a PK read on every PM message, expiry housekeeping) buys nothing, because no draft is kept: each accepted input is written to its real table at once.
+
+| Key | Type | TTL | Content |
+|-----|------|-----|---------|
+| `fuku:settings:await:<user id>` | hash | 10 min (`settingsAwaitTTL`) | `g` group chat id, `k` input kind (`wt` welcome text, `wm` welcome media, `wb` welcome buttons, `gt`/`gm`/`gb` goodbye, `rt`/`rm`/`rb` rules, `bl`/`fl`/`nt` list adds, ...), `p` page key, `m` the PM menu message id, `n` nonce, `s` step for two-step kinds, `x` scratch (a filter's keyword, kept in Redis, never in callback data) |
+
+- **One state per user.** `Begin` overwrites. The old prompt message is not edited (no timer, no Redis expiry hook); its Cancel finds a different nonce and answers "no longer valid" and redraws the menu.
+- **Begin** is a button press (`a=in`, fields `p`, `k`) that already passed `verify`: it writes the hash and edits the menu message into a prompt page (the prompt text, a Cancel button `a=ic&n=<nonce>` and no Back). The prompt page must declare its input kind so tests can enumerate them.
+- **Cancel**: (a) the inline button, a Lua compare-and-delete on the nonce, then redraw the page; (b) `/cancel` in private, registered with `helpers.WrapCommand` (no existing `cancel` command), clearing the state and redrawing; (c) any other `settings|` press by that user for that menu (`bk`, `cl`, a page `op`) clears the state first, so a Close or Back never leaves an invisible pending input; (d) TTL expiry, lazy: input after expiry just falls through to the normal handlers.
+- **Without Redis**: the `in` action answers `settings_input_unavailable` (alert, no edit). Toggles, steppers and the rest of every page are unaffected (the stateless-menu property is kept for everything that does not type).
+
+### 4.2 Consumer handler
+
+- `handlers.NewMessage(privateInputFilter, settingsInputWatcher)` in **group `-1`**, registered by a module whose priority is above the Users module's 100 so it sits after the users tracker. The tracker returns `ext.ContinueGroups`, so gotgbot keeps iterating the group (`iterateOverHandlerGroups` continues on `ContinueGroups`). Group `-1` is below `0`, so it runs before the `#note` watcher (group 0), `filtersWatcher` (9) and every command.
+- Filter (cheap, no I/O): private chat, a real user sender, not a bot, **and** not slash-prefixed text (`raidFloodIsSlashText` already defines that; reuse it). Slash commands, `/start` included, pass through untouched, so `/start settings_<id>`, `/connect`, `/settings` and `/cancel` still work while a prompt is pending.
+- Body: one Redis `GET` (a hash existence check). No state returns `ext.ContinueGroups` (one cheap read per PM message, PMs are rare). A state returns `ext.EndGroups` once consumed, so nothing else in that update runs.
+- **Claim like `ConsumeIfUser`**: a Lua script sets a `claim` nonce field if absent and returns the state; a second message of an album finds a live claim and is ignored. After a good apply a second script deletes only while the claim matches. A validation failure (bad URL, empty text) **releases** the claim and keeps the state: the bot replies with the reason and the user can resend, with the original TTL. An unexpected error releases the claim and keeps the state. This mirrors the captcha handle (an error always means nothing was used up).
+- **Re-authorize before applying**: `settingsAuthorize(b, user.Id, g)` runs again, because the user may have been demoted, or the owner may have closed the gate, since the prompt was drawn. A refusal clears the state and replies with the refusal text. Authority is therefore never a property of the stored state.
+- Apply through a registry entry, the same registration style as pages: `settingsPage.Inputs map[string]settingsInputKind{Right, Parse, Apply}`, collected by `registerSettingsPage` (panics at init on a duplicate kind). `Apply` calls the setting's own apply function (`applyWelcomeText`, `applyRulesMedia`, `applyFilterAdd`, ...) that holds validation, refusal, write and `cache.DeleteCache`, so the typed path and the menu cannot drift (one setting, one code path).
+- After a good apply: delete the user's input message (the Bot API lets a bot delete incoming messages in private chats; a failure is ignored) and edit the stored menu message `m` back to the page with a success notice. If the edit fails because the user deleted the menu, send the page as a new message.
+- Input parsers need the message itself: `content.ExtractWelcome` does `strings.Fields(msg.Text)[1:]`, which assumes a leading `/command` and would panic on a plain PM message. Add `content.ExtractGreetingInput(msg)`-style helpers (text with entities to HTML, one media file id and type, button lines) rather than calling `ExtractWelcome`. **Verify** during the phase how `/setwelcome` turns entities into HTML so the PM path stores identical output.
+
+### 4.3 Interaction with other PM handlers
+
+| Handler | Group | Interaction |
+|---------|-------|-------------|
+| `start` + deep-link router | 0, command | Commands are never consumed. `settings_<id>` re-authorizes and renders Main; a pending prompt for another group stays until its TTL or `Begin` overwrites it. |
+| Connections (`/connect`, `IsUserConnected`, `/setwelcome` via connection) | 0, command | Unaffected. The menu is keyed on `c`, not on the connection. Do not call `connections.ConnectId` from the hub. |
+| Notes `#hashtag` watcher | 0 | Runs after `-1`, so a note named `#x` typed as input is consumed as input. Correct. |
+| Filters watcher | 9 | Same. |
+| Users tracker | -1 | Registered first, returns `ContinueGroups`, so the PM user is tracked before the consumer. |
+| Anonymous-admin proof | callbacks | None; PMs have no anonymous senders. |
+
+### 4.4 Group menus cannot type
+
+A menu opened in the group has no PM to type in. Editor pages detect `!p.private` and show the editing buttons as a single URL button, `settingsPrivateURL`, "Edit in private", plus the toggles that need no typing. This keeps D-21/D-32 and avoids prompting in the group.
+
+---
+
+## 5. Message editor (Rules, Welcome, Goodbye)
+
+**Pages.** `w`, `g`, `r` registered from `settings_welcome.go` and `settings_rules.go` through a shared `settings_editor.go` that renders: Text, Media, Buttons, Preview (link preview) toggle, "Media under text" toggle, and for Welcome On/Off, "Delete last welcome", "Greet once" and a Test button. Goodbye has On/Off, "Delete last goodbye". Rules has Text, Media, Buttons, the existing button label and private flag.
+
+**Storage (one migration, `202611..._extend_greetings_rules_editor.sql`):**
+
+- `greetings`: `welcome_preview`, `welcome_media_below`, `welcome_once`, `goodbye_preview`, `goodbye_media_below`, all `BOOLEAN NOT NULL DEFAULT FALSE`. Pick semantics so zero equals today's behavior (preview off, caption above, greet every join). That keeps old backup imports and the GORM zero-value trap harmless. Telegram's `show_caption_above_media` is the "text above media" switch (verify the exact option name in this gotgbot version).
+- `rules`: `media_file_id TEXT`, `media_type INT`, `btns JSONB`, `preview`, `media_below`. Reuse `models.ButtonArray` and `db.TEXT`-style type constants.
+- `greeted_members(chat_id BIGINT, user_id BIGINT, created_at, PK(chat_id, user_id))`. Greet-once is `INSERT ... ON CONFLICT DO NOTHING` and `RowsAffected == 1` means send. That is exactly-once across replicas by the same trick as `BeginAlert`. Never part of backup. Only consulted when `welcome_once` is on.
+- Backup: the existing backup module reads `greetings` and `rules` through their models, so the new columns travel in JSON and an old export decodes to zero (legacy behavior). The new tables are excluded, as the staff and lockdown tables are.
+
+**Code.**
+
+- Column-targeted repository writes (`SetWelcomeText`, `SetWelcomeMedia`, `SetWelcomeButtons`, `SetWelcomePreview`...). Today's `greetings.SetWelcomeText(chat, text, file, buttons, type)` overwrites text, file and buttons together, which is wrong for one-field edits. Use explicit-map updates (`UpdateRecordWithZeroValues`) so a `false` is written.
+- Re-use the toggle spec table in `greetings.go` (`setPref`, `showEnabled` ...), the pattern the greeting toggle commands already use, for the new bools. Add `applyWelcomeX` functions beside the commands; `/setwelcome` stays and also calls them.
+- Sending: one `renderGreeting(chat, user, settings)` used by join, goodbye, Test (to the PM, with the presser as the member) and rules. Extend `media.Send`'s `Options` with `WebPreview` and caption-above. Rules sending (`sendRules`, the `rules_<chat>` deep link, the private-rules button) moves to the same renderer so media and buttons appear everywhere.
+- Right: `settingsRightChangeInfo` (mirrors the commands).
+- Bot messages: `SendWelcomeMessage`, goodbye and rules sends call `scheduleBotMessage` (section 7) after a successful send.
+
+---
+
+## 6. Member requirements and name blocks
+
+### 6.1 Where the checks run
+
+| Trigger | Hook | Notes |
+|---------|------|-------|
+| Join | New `Screen func(user gotgbot.User) (screened bool, err error)` in `MembershipDeps`, called in `ProcessSingleJoin` **after `Claim`** (so once per join, both delivery paths deduped) and **before the captcha decision**. Wire it in `membershipDepsForJoin`. | A screened join (punished) ends the pipeline: no captcha, no welcome (`JoinScreened` outcome). A pass continues unchanged. `DecideJoin` and its tests stay pure. |
+| Every message | `memberReqWatcher` in **group `-1`** after the users tracker | Before commands, so a violator's commands are not served either; after `-4` raid flood counter and `-3`, so raid detection still counts everything; after `-10` (pending-captcha messages are held and ended) and `-7`/`-6` (lockdown/fed-ban already ended the update). Returns `ContinueGroups` except when it punished and deleted, then `EndGroups` (do not run aispam, filters or replies on a deleted message). |
+| Name change | Same watcher: hash of the full name compared with a per-user Redis marker | Cheap local rules re-run on every message anyway; only the AI job is gated by the name hash. |
+| "I fixed it" | `memreq\|v1` callback | Fresh re-check, see 6.4. |
+
+Cheapest-first order inside the watcher, mirroring `raidFloodCountUpdate`: chat type, sender is a real user and not the bot and has no `sender_chat`, rule set loaded (cached, one read; no rule on means return), approved user (`IsApprovedForUpdate`), admin by the cached list, pending captcha, hold exists, per-user pass cache `fuku:memberreq:ok:<chat>:<user>:<rules version>` (TTL 5 min), then the rules. Free rules (last name, username, name scripts) read `msg.From` only. The photo rule (`getUserProfilePhotos`) and the channel rule (`getChatMember` of the linked channel) cost a Telegram call, so they run only on a pass-cache miss, and their results are cached.
+
+### 6.2 Storage (migration `202611..._add_member_requirements.sql`)
+
+- `chat_member_rules(chat_id, rule VARCHAR(16), punishment VARCHAR(8), on_join BOOLEAN, delete_msgs BOOLEAN, notify BOOLEAN, updated_at, PK(chat_id, rule))`, `CHECK punishment IN ('off','warn','kick','ban','mute')`. **One row per rule, absent row means off.** A new rule (`last_name`, `username`, `photo`, `channel`, `name_ai`, `name_ru`, `name_ar`, `name_zh`) needs no migration, and every toggle is a column-targeted upsert that cannot clobber another rule, so the `UpdateRecord`-skips-zero trap never applies. A fixed 8x4 column layout was rejected for the clobber and zero-value risks.
+- `member_requirement_holds(chat_id, user_id, rule, mute_until BIGINT, notice_msg_id BIGINT, created_at, PK(chat_id, user_id))`. A hold is a record that **this system** muted this user. Insert-first with `ON CONFLICT DO NOTHING` decides who punishes: only the caller with `RowsAffected == 1` restricts and posts the notice, so ten messages from one violator, on three replicas, cause one mute and one notice.
+- Rules are read through `cache.GetFromCacheOrLoad` (`cache.CacheKey("memberreq_rules", chat)`) with `cache.DeleteCache` on every write; the staleness of the 10 s local layer is acceptable (put it in `skipLocal` only if the owner wants instant off switches). Holds and the pass cache are read fresh. Neither table is part of backup/export/import/reset.
+- Redis (outside `fuku:cache:`): `fuku:memberreq:ok:*` (pass cache), `fuku:memberreq:warn:<chat>:<user>:<rule>` (`SET NX EX 600`, the warn cooldown), `fuku:memberreq:namev:<sha8 of lowercased name>` (the AI verdict, global across chats), AI budget and breaker keys modelled on the raid image ones.
+
+### 6.3 Punishments: reuse, do not copy
+
+One executor, `applyMemberReqPunishment(ctx, b, chat, user, verdict, src, msg)`, where `src` is join, message or AI. It never runs for admins, approved users, the bot, or a pending-captcha member, and it needs the bot to be an administrator (otherwise log once, show the page warning, change nothing).
+
+| Punishment | Reuse | Detail |
+|------------|-------|--------|
+| warn | Extract `applyWarn(b, chat, userID, reason) (result, err)` from `warnThisUser` (the `warns.WarnUser` call, the limit and mode switch, the reset), keeping `warnPunishLock`. `warnThisUser` becomes a thin reply wrapper. | Rate-limited by the `:warn:` latch so a nameless user does not collect a warn per message. At the limit the warn mode (kick/mute/ban) applies through the existing code. |
+| kick | `kickMember(b, chatID, userID)` | The rejoiner is re-screened. `greetings.leftMember` would post a goodbye for the kick: set a short Redis flag `fuku:memberreq:kicked:<chat>:<user>` that `leftMember` honors. |
+| ban | `chat.BanMember` | A ban waits for an admin; there is no button. |
+| mute | Insert the hold first, then `chat.RestrictMember(b, userID, MutedPermissions, &gotgbot.RestrictChatMemberOpts{UntilDate: markerUntil})` | The marker is `now + 330 days` (below Telegram's 366-day "forever"), stored as `mute_until`. Same device as `lockdown`'s `ban_until`: the unmute side only acts when the live status is restricted **and** its `until_date` equals the hold's `mute_until` within 2 s, so an admin's own mute, or a lockdown's, is never lifted. A failed restrict deletes the hold again. |
+| unmute | Always `resolveUnmutePermissions(chatInfo)` and refuse (alert, hold kept) when it returns an error | During a lockdown it returns the stored pre-lockdown permissions; raw `chatInfo.Permissions` would leave the member muted after the lift. The `/unmute` and captcha paths already do this. |
+
+- "Delete their messages" deletes the offending message immediately and inline (they are in the update). The notice is posted with `ParseMode HTML`, the member mention escaped, with the "I fixed it" button only for mute (`memreq|v1|a=fx&c=<chat>&u=<user>`, about 42 bytes, via `callbackcodec`), then handed to `scheduleBotMessage(kindPunishAuto)` (section 7) so the notice can self-delete.
+- Log: post to the group's log channel under the existing `automated` category through `actionlog.Destination`, naming the rule. No new category.
+- `notify` off posts nothing but still punishes.
+
+### 6.4 "I fixed it" button
+
+Callback handler `memreq|v1`, `a=fx`. Order, each step refusing before the next: decode with `callbackcodec` and structure check; a service identity is refused; **`query.From.Id` must equal `u`** (only the target can tap; anyone else gets a presser-only alert); read the hold by `(c, u)` fresh, none means "already fixed or lifted"; the live `getChatMember` of the presser must be restricted with the hold's marker `until_date` (anything else: delete the hold and say nothing was changed); a **fresh re-check of the rules** (bypassing the pass cache; an unreadable check, such as a channel the bot cannot see, answers "try again" and keeps the mute); then `resolveUnmutePermissions` and `restrictChatMember`; the hold is removed by conditional delete only after Telegram confirmed. After a good unmute: delete the notice, and if the group uses a captcha and the member is not approved, hand the member to the normal join challenge instead of leaving them let in (recommendation; confirm with the owner, because the alternative lets a fixed member skip the captcha). Kick lets the member rejoin and be re-screened; ban gets no button (matches the PROJECT.md decision).
+
+### 6.5 AI spam names (Claude Haiku)
+
+- `fuku/utils/claude` gets `ClassifyName(ctx, name) (*Verdict, error)`: same forced single-tool request shape, no sampling parameters, the key only in `x-api-key`, name only in the prompt (never chat, user id or text). This is a stdlib-only change and keeps the leaf test.
+- Run it **off the update path**. A join or a name change enqueues a job; the verdict later calls `applyMemberReqPunishment` with `src=AI`.
+- Pool: recommend adding a third job kind (`name`) to the **existing raid AI pool** (`raid_ai.go`: 128 queue, 4 workers, `raidAIContext`, `StopRaidAI` drain, `ENABLE_AISPAM` kill switch, `ANTHROPIC_API_KEY` gate), with **its own breaker, hourly budget and verdict cache keys** (`fuku:memberreq:*`). That avoids a third drain registration and a second worker set, and the name call is tiny. Trade-off: a 100-image raid shares the 4 workers with name checks. If that is judged too coupled, give names their own small pool and drain in the same style. Flag for phase research.
+- The check is off when the key is missing, `ENABLE_AISPAM=false`, the breaker is paused or the budget is gone: no verdict, never a block. Cached verdicts cost nothing. Name scripts (Russian letters ы, ъ, э, ё; Arabic; Han) are pure local rules and need no AI.
+
+### 6.6 Interactions to keep correct
+
+- Captcha: `claimCaptchaPass` unmutes through `resolveUnmutePermissions`; a member who then fails a requirement is caught by the next message check. Screening before the challenge means a violator never gets a challenge they cannot finish.
+- Lockdown guard `-7` ends joins during a lockdown before screening; nothing to do.
+- A staff `/unmute` or `/unban` on a held member does not clear the hold: the "I fixed it" step's live marker check and a hold-prune on `mute_until` passing keep it from lying. Optionally delete the hold when the member leaves (`leftMember`).
+- Stored `rules` for the Staff Group chat: requirements do not apply to a Staff Group's own members unless an admin turns them on there; no special code.
+
+---
+
+## 7. Message deletion
+
+### 7.1 Storage (migration `202611..._add_message_deletion.sql`)
+
+- `chat_delete_rules(chat_id, kind VARCHAR(40), delay_secs INTEGER NOT NULL CHECK (delay_secs >= 0), updated_at, PK(chat_id, kind))`. Row absent = off. Kinds: `service:<type>` (new_chat_members, left_chat_member, new_chat_title, new_chat_photo, delete_chat_photo, pinned_message, video_chat_*, message_auto_delete_timer_changed, forum_topic_*, and so on), `bot:welcome`, `bot:goodbye`, `bot:rules`, `bot:punish_auto`, `bot:punish_manual`, `member:commands`, `member:edited`, `member:selfdestruct`. Kinds are not CHECKed (so a new service type needs no migration, the `trigger_kind` precedent); the Go side validates against a list. Delay unit is **seconds** everywhere; "N minutes" in the UI is `N*60`. Cap the stored delay at 24 h (`CHECK delay_secs <= 86400`), well below Telegram's 48 h delete limit.
+- Read as one struct per chat through `cache.GetFromCacheOrLoad` (`cache.CacheKey("delete_rules", chat)`), invalidated by the single write path.
+- Migration data copy: `INSERT INTO chat_delete_rules SELECT chat_id, 'service:new_chat_members', 0 ... FROM greetings WHERE clean_service_settings` and the same for `left_chat_member`. The legacy `/cleanservice` apply function writes both the new rows and the old `clean_service_settings` column in one transaction (the column stays for backup compatibility); `greetings.cleanService` keeps its join processing and drops its own delete in favor of the rules.
+- `scheduled_deletions(id BIGSERIAL PK, chat_id, message_id, delete_at TIMESTAMPTZ, kind VARCHAR(40), state VARCHAR(8) DEFAULT 'pending' CHECK IN ('pending','acting'), claim_token VARCHAR(36), claimed_at, attempts INT DEFAULT 0, created_at, UNIQUE(chat_id, message_id))` plus a partial index on `delete_at WHERE state = 'pending'`. `UNIQUE(chat_id, message_id)` with `ON CONFLICT (chat_id, message_id) DO UPDATE SET delete_at = LEAST(...)` makes double scheduling (self-destruct plus a bot-message rule) harmless and keeps the earliest. Rows are removed when done. No `DeleteCache` (read fresh, never cached), not in backup. A row more than 47 h after its `created_at` is given up (Telegram refuses older deletes).
+
+### 7.2 Scheduler API and who calls it
 
 ```go
-// helpers/command_pipeline.go (additive)
-type CommandDescriptor struct {
-    Name, Aliases, Group, RequiredChecks, Disableable // existing
-    Gate func(*ext.Context) bool // optional; nil = always eligible
-}
-
-type gatedCommand struct {
-    handlers.Command
-    gate func(*ext.Context) bool
-}
-func (g gatedCommand) CheckUpdate(b *gotgbot.Bot, ctx *ext.Context) bool {
-    return g.Command.CheckUpdate(b, ctx) && g.gate(ctx) // command match first = cheap reject
-}
+// package deletion repo: Schedule(chatID, msgID int64, kind string, delay time.Duration) error  (ON CONFLICT keep earliest)
+// package modules:
+func scheduleBotMessage(chat int64, msg *gotgbot.Message, kind string) // reads chat_delete_rules; no rule means no row; delay 0 = delete inline in a recovered goroutine
 ```
 
-Staff gate: `staff.IsStaffGroup(ctx.EffectiveChat.Id)` via `GetFromCacheOrLoad`. Add `RequireStaffMember()` and `RejectAnonymousSender()` `CheckFunc`s. Anonymous admins bypass `WrapCommand`; in the Staff Group they cannot be authorized per group anyway, so do **not** register anonymous handlers for staff actions. Reply once: "post as yourself" (PROJECT.md Context).
+| Rule kind | Hook (new vs modified) |
+|-----------|------------------------|
+| `service:*` | `messageHygieneWatcher` (new, group `-1`): a service message is recognized by a table of gotgbot `Message` fields; schedules, returns `ContinueGroups`. Delay 0 deletes inline (recovered goroutine). Join/leave service messages are handled here too, so the group `0` `cleanService` keeps only its join-processing role. |
+| `member:selfdestruct` | Same watcher: real-user messages that are not exempt (approved, admin by the cached list, bot, `sender_chat`) get a row. Commands and everything else included, because the watcher is before group 0. |
+| `member:commands` | The Processor wrapper (7.4), after all groups ran. Not a queue row. |
+| `member:edited` | `editedMessageHandler` (7.5). |
+| `bot:welcome`, `bot:goodbye`, `bot:rules` | After the successful send in `SendWelcomeMessage`, `leftMember`, `sendRules` (modified, one line each). |
+| `bot:punish_auto` | The requirement notice, `warn` limit punishments from `applyWarn`, captcha failure notices if wanted. |
+| `bot:punish_manual` | The final reply of `/ban /tban /kick /mute /tmute /warn` family. These are about 15 `msg.Reply` sites in `bans.go`, `mute.go` and `warns.go` (the `moderationCommand` helpers `banReplyWithButton`, `kickReply`, `muteReplyWithButton` plus the legacy handlers). A call-site change is the right shape because the categories are explicit; a `BotClient` decorator cannot know the category. |
 
-### Pattern 2: Per-group authorization from one fresh admin snapshot
+Call sites must check the rule before inserting, so a chat with deletion off costs one cached read and no write.
 
-**What:** The core safety rule is "the bot never lets anyone act in a group where they aren't an admin". Do the check per target group from live data, not from the admin cache:
+### 7.3 Worker (copy of the lockdown worker shape)
 
-```
-op(chatID):
-  admins := chat_status.FreshAdmins(bot, chatID)      // one uncached getChatAdministrators
-  link still valid?  admins.CreatorID == link.OwnerUserID   // else unlink + Skipped(link_broken)
-  issuer ok?         creator OR (admin AND can_restrict_members)  // else Skipped(not_admin / missing_right)
-  target protected?  target in admins                          // else Skipped(target_admin)
-  act:               ban / unban / kick / restrict / unrestrict  // Telegram enforces the bot's own rights
-  map errors:        bot lacks rights -> Failed("bot lacks rights"); not a member -> Skipped
-```
+- `StartDeletionWorker(b)` in `postInit` right after `StartLockdownWorker`; `RegisterDeletionDrain` in `main.go` after the DB-close handler, with `deletionWorkerStopWait` (5 s) plus `shutdownDrainGrace`. Every row resumes from the database, so a worker cut off loses nothing. It also joins the insert goroutines (`deletionInserts` counter) so a scheduled row in flight is written before the DB closes.
+- Loop: tick **1 s** plus a `deletionWake` channel (a short delay scheduled while idle wakes it). Each cycle, with its own `RecoverFromPanic`: (1) release stale claims older than `deletionStaleClaim` (2 min) back to `pending` without counting an attempt; (2) list up to 200 due rows ordered by `delete_at`; (3) **batch claim** with one `UPDATE ... SET state='acting', claim_token=?, claimed_at=? WHERE id IN (...) AND state='pending'`, then `SELECT ... WHERE claim_token=?`. That is portable to the SQLite tests and keeps a multi-replica race to one winner per row, without `SKIP LOCKED`; (4) group by chat and call `deleteMessages` (at most 100 ids) through a new `deletionPacer` (`fuku:delete:pace:next` and `:block`, its own budget like the lockdown and staff pacers); (5) delete the rows of a call that succeeded (`deleteMessages` skips missing ids and still succeeds); (6) on 429/timeout/5xx return the rows to `pending` with `attempts+1` (three tries); on a permanent answer (bot not in chat, kicked, no `can_delete_messages`) delete the rows and set a 10-minute negative latch `fuku:delete:norights:<chat>` so a rightless group is not hammered; (7) prune rows past 47 h.
+- A delete whose message is already gone is success. The worker never logs per message.
+- Without Redis the pacer falls back to a local interval (existing behavior) and deletion still works.
 
-**Why not reuse `chat_status.CanUserRestrict` and friends:** they go through `hasUserPermission`, which (a) calls `checkAnonAdmin` using the *current update's* sender, i.e. the Staff Group message, and (b) reads `cache.GetAdminCacheUser`. A cached view lets a just-demoted admin keep acting for up to the cache TTL. The new helper is a separate function with an explicit `chatID`, not a variant of the predicates.
+### 7.4 Command deletion: the Processor seam
 
-**Why not pre-check the bot's rights:** `getChatAdministrators` excludes bots, so the bot's own rights need a second call. Attempt the action and map Telegram's error to `Failed(bot lacks rights)`. This is one read plus one write per group instead of three calls, and the spec already lists "bot lacks rights" as a *failed* outcome.
+`main.go` builds the dispatcher with `Processor: tracing.TracingProcessor{}`. Wrap it in `deletionPostProcessor{inner: tracing.TracingProcessor{}}` (a new type in `fuku/modules`): `ProcessUpdate` calls `inner.ProcessUpdate`, then `afterUpdate(b, ctx)` with its own `defer RecoverFromPanic`. `afterUpdate` returns at once unless the update is a group message whose first entity is a `bot_command` at offset 0 addressed to this bot (or no `@bot`), the chat has `member:commands`, and the sender is not an anonymous admin. Then it deletes the message inline. Why this and not a queue row or a watcher:
 
-**Trade-offs:** about 2 API calls per group per action (plus an optional log-channel send). At 30 groups that is about 60 to 90 calls, which is a few seconds under the rate limiter below.
+- The handler (group 0) has already replied to the command; a delete earlier would break `msg.Reply`.
+- It needs no second command list (the same principle as `raid_flood`), covers commands registered with raw `handlers.NewCommand` that bypass `WrapCommand`, and survives nothing it needs to survive: a crash between handling and delete leaves one command message, which is acceptable.
+- **Skip anonymous admins**: the proof-tap flow re-runs the cached command and replies to it; deleting the message first would fail that reply.
+- Also skip a command that the dispatcher left unhandled and addressed to another bot.
+- Cost: one cached rules read per command message. Rules are loaded only when the message is a command, so non-command traffic pays nothing.
 
-### Pattern 3: Bounded fan-out executor with partial-success results
+### 7.5 Edited messages
 
-**What:** `utils/fanout.Run(ctx, targets, op, opts) []Result`.
-
-- Worker pool of about 5, plus a shared token bucket (add `golang.org/x/time/rate`, not currently in `go.mod`; or a 30-line pacer) at about 20 req/s, safely under the Bot API's ~30/s broadcast ceiling (MEDIUM, widely documented, primary doc not fetchable).
-- On `*gotgbot.TelegramError` with `Code == 429`, read `ResponseParams.RetryAfter` (verified present in `gen_types.go`), sleep, retry that chat up to N times, then report `Failed(rate limited)`. Never drop silently.
-- Result is `{ChatID, Title, Outcome (Done|Skipped|Failed), ReasonKey (i18n), Err}`. Reason keys are i18n keys, so the renderer localizes. Never embed English in results.
-- Every goroutine starts with `defer error_handling.RecoverFromPanic(...)` (AGENTS Go rules). The command handler waits for the pool, so no shutdown WaitGroup is needed unless the work is made detached; if it is, join a drain registered *after* DB-close (AGENTS Startup: LIFO).
-
-**Reply flow:** send one "Applying to N groups..." message immediately, run the fan-out, then **edit once** with the final summary. Do not edit per group (edit rate limits and noise). Cap the summary at about 3500 characters: list non-Done lines first, then collapse the Done groups into a count.
-
-**Contrast with `applyActiveFban` (`federations.go:756`):** it is `go`-detached, ignores errors (`log.Debugf`), has no concurrency limit and no result. It is a model for *shape* only, as PROJECT.md says. Do not copy it.
-
-### Pattern 4: Persisted state machine with atomic transitions (lockdown)
-
-**What:** Postgres is the source of truth; Redis holds only ephemeral counters.
-
-```
-              trigger (rule | AI-assisted | manual)
- Idle ────────────────────────────────────────────▶ Active(applied=false)
-                                                        │ snapshot taken BEFORE insert,
-                                                        │ stored in the row
-                                                        ▼
-                                                  Active(applied=true)  ◀── join: kick + record
-                                                        │
-              admin presses Lift / /unlockdown          │
- Idle ◀──────────────────────────────────────── Lifting ┘  (row stays Active until restore succeeds)
-```
-
-- `chat_lockdowns(id, chat_id, state, trigger, triggered_by, snapshot_perms (text/JSON), applied, started_at, lifted_at, lifted_by)`.
-- **One active lockdown per chat is enforced by a partial unique index** `UNIQUE (chat_id) WHERE state='active'` (supported by both PostgreSQL and SQLite). Triggering is `INSERT ... ON CONFLICT DO NOTHING`; zero rows affected means somebody else already started it, so do nothing. This makes triggers idempotent across replicas and across a join-surge plus flood firing in the same second.
-- **Take the snapshot (`getChat` to `Permissions`) before the INSERT and write it in the same row.** Never re-read permissions after applying, or the locked state gets stored as the "original" (see Anti-Pattern 4).
-- Lift is `UPDATE ... SET state='lifted' WHERE id=? AND state='active'` **after** `setChatPermissions(snapshot)` succeeds. Double-presses and two-alert races resolve on rows-affected. A failed restore leaves the row active and tells the admin to retry.
-- **Startup recovery** for rows with `applied=false`: re-apply. This mirrors the existing `runOrphanedCaptchaRecovery` (`captcha.go:244`). Register it in `postInit`, not in an `init()` (AGENTS Startup).
-
-### Pattern 5: Namespaced callbacks that carry an ID, never user text
-
-**What:** All new buttons go through `callbackcodec` (via the package-local `encodeCallbackData`/`decodeCallbackData`). Payloads reference a **DB row ID**, not chat IDs or text:
-
-| Button | Data (`ns|v1|payload`) | Bytes |
-|--------|------------------------|-------|
-| Lift lockdown | `lockdown|v1|a=lift&l=123` | about 25 |
-| Ban N recent joiners | `lockdown|v1|a=banj&l=123` | about 26 |
-| Staff panel actions | `staff|v1|a=unlink&g=-1001234567890` | about 36 |
-| Settings menu | `cfg|v1|p=cap&a=t&v=1` (chat comes from the message or the PM connection) | about 22 |
-
-- The handler loads the lockdown row, takes `chat_id` **from the row**, and authorizes `query.From.Id` against that chat. This is what makes "only an admin of the locked group can lift it, wherever they press the button" correct: the alert copies live in the Staff Group and a log *channel*, where `ctx.EffectiveChat` is the wrong chat.
-- **Namespace collision trap (verified):** existing registrations use `callbackquery.Prefix("antiraid")`, `"report"`, `"backup"`, `"about"`, `"restrict"`, `"formatting"`, `"helpq"` and so on, with no trailing `|`. A new namespace that *starts with* one of those (`antiraid_lockdown`, `report_x`) is swallowed by the older handler, which returns `ContinueGroups`. That skips the rest of group 0, so the new handler never runs. Use `lockdown`, `staff`, `cfg`, register each with a trailing `|` (as `unbanall|` and the federations namespace do), and add a registry test that no registered prefix is a prefix of another.
-- A dead button is silent: `encodeCallbackData` returns `""` on overflow (AGENTS Callbacks). Add a unit test that encodes the longest realistic payload for each namespace.
-
-### Pattern 6: Settings-page registry (menu is a router, not a rewrite)
-
-**What:**
-
-```go
-type MenuPage struct {
-    ID       string                         // short code used in cfg|p=
-    Order    int
-    Perm     PagePerm                       // admin | admin+right | owner
-    Render   func(m *MenuCtx) (text string, kb [][]gotgbot.InlineKeyboardButton)
-    Handle   func(m *MenuCtx, action, value string) error // mutate via existing repo setters, then re-render
-}
-func RegisterMenuPage(p MenuPage) // called from each feature module's init(), like RegisterDeepLinkHandler
-```
-
-- Each press **re-authorizes** `query.From` against the target chat (callbacks can be pressed by anyone who can see the message; `antiraid.callbackHandler` already does this).
-- Pages call the existing repository setters (`captcha.SetCaptchaEnabled`, `antiraid`/`lockdown` settings setters, etc.). Those already `DeleteCache`; the menu adds no new write paths.
-- **Constraint on phases 1 to 3:** keep business logic in repositories and put status rendering in pure functions `(chat, user, tr) -> (text, keyboard)`. The menu then only wires them in. `/staff` is built that way in phase 1, so folding it into a "Staff Group" page is a registration, not a rewrite.
-- `/settings` goes through `WrapCommand` with `RequireGroup`, `RequireUserAdmin`, `Disableable: true`, and an `anonPipelineHandler` registration. The PM variant resolves the chat via the existing connection (`IsUserConnected`) instead of encoding chat IDs.
+`edited_message` is already delivered, and no handler wants it. Implement `editedMessageHandler` as a small `handlers.Handler` (`CheckUpdate`: `ctx.EditedMessage != nil`, group or supergroup, real user sender, not a bot; `HandleUpdate`; `Name`) registered with `AddHandlerToGroup(..., 1)`. It checks `member:edited`, exempts approved and admins (cached list), then deletes inline (delay 0) or schedules. Do **not** use `NewMessage(...).SetAllowEdited(true)`: that would also match every new message and force an in-body `ctx.EditedMessage` check on the hot path. Group `1` is free today; edited updates match no other handler, so ordering against other groups is irrelevant. Note for `AGENTS.md`: this is the first handler to consume edits, so antiflood, locks, blacklists and aispam still do not see edits (an existing gap, out of scope).
 
 ---
 
-## Data Flow
+## 8. Remaining pages
 
-### Flow A: Staff Group moderation command
+Each page is one `registerSettingsPage` call from its own `settings_<page>.go`, and each setting needs an `applyX` function **beside its command** first (the repo rule). Today only captcha, antiflood and auto-lockdown have them, so the extraction is the real work:
 
-```
-Staff member: "/ban @someone spamming" in Staff Group S
-  -1  users tracker records the sender and username (feeds lookups)
-   0  gated staff handler (priority 65) CheckUpdate: command matches AND IsStaffGroup(S) [cached]
-      WrapCommand -> RequiredChecks: RejectAnonymousSender, RequireStaffMember
-      resolve target: extraction.ExtractUserAndText -> GetUserId(@name) -> users table
-                      (-> channels -> getChat fallback), or a numeric ID. Reply-to also works for free.
-      refuse: target == issuer / bot / a Staff Group admin
-      links := staff.ListLinksFresh(S)             // DB read, deliberately NOT cached (authority)
-      reply "Applying to N groups..."
-      fanout.Run(links, op)                        // Pattern 3, op per Pattern 2
-          op -> FreshAdmins(G) -> checks -> BanChatMember(G, target, until?) 
-             -> on Done: actionlog.Admin(bot, G, issuer, "STAFF_BAN via <S>", target, reason)
-      edit reply with per-group summary (+ reason)
-  return ext.EndGroups
-```
+| Page | Apply functions to extract | Right |
+|------|----------------------------|-------|
+| Warnings | `applyWarnLimit`, `applyWarnMode` from `setWarnLimit`/`setWarnMode` | admin (verify what the commands require) |
+| Reports | reports toggle | admin |
+| Language | `applyChatLanguage` (the `/lang` handler) | admin |
+| Log channel | category toggles; channel set/unset by typing in PM (an input kind) | admin |
+| Anonymous-admin mode | `applyAnonAdmin` (`admin.SetAnonAdminMode`) | admin |
+| Locks | `applyLock(type, on)` over the lock-types table | `settingsRightChangeInfo` or the lock command's check |
+| Lists (blacklists, filters, notes) | browse and delete use existing repos; **add** is a PM input kind (a filter is two-step: keyword in `x`, then the reply content) | admin |
 
-- Timed variants: parse the duration **once** in the staff handler (`extraction.TemporaryUntilDate` / the time parser), pass `untilDate` into every op. Do not call `extraction.ExtractTime` per group; it replies into the current chat.
-- `kick` is ban-then-unban per group; reuse `kickMember` semantics (`UnbanChatMember(OnlyIfBanned:false)`).
-- `ban` on a non-member is still performed (pre-emptive ban across all groups, which matches "act on a bad actor everywhere"). `mute`/`kick` on a non-member become `Skipped(not a member)`.
-
-### Flow B: Link, unlink, and auto-unlink
-
-```
-/setstaff  (in S, owner only: helpers.RequireUserOwner + anon handler, owners are often anonymous)
-   -> staff_groups upsert(chat_id=S, owner_user_id=U); chat must be group/supergroup, not channel
-/linkstaff (in G, issued by U)
-   -> RequireUserOwner in G; find staff groups where owner_user_id=U; verify U is creator of S now
-   -> transaction: reject if G is itself a staff group or already linked (unique index on group_chat_id)
-   -> insert staff_group_links(group_chat_id=G, staff_chat_id=S, owner_user_id=U)
-   -> DeleteCache(staff_link_of:G, staff_links:S, staff_group:S) after commit
-Ownership change detection (three layers, because chat_member updates can be missed):
-   (1) group -3 watcher: chat_member where old OR new status == "creator" in a staff/linked chat
-       -> re-verify via getChatMember -> unlink + notify S
-   (2) fan-out time: Pattern 2 compares the live creator with link.owner_user_id for every group
-   (3) hourly sweeper goroutine (recover + lifecycle context + stop handler): getChatMember for each link
-```
-
-The ownership watcher must **not** be group 0: `bot_updates.go` registers a group-0 `NewChatMember(ExtractAdminUpdateStatusChange, adminCacheAutoUpdate)` that matches creator-to-admin transitions and returns `ContinueGroups`, which would shadow any later group-0 `chat_member` handler. Use group `-3` (free) and always return `ContinueGroups`.
-
-### Flow C: Raid detection to lockdown to lift
-
-```
-JOIN SIGNALS (service message AND ChatMemberUpdated both arrive; neither is guaranteed)
-  group -5 lockdown guard handles both signals
-     ZADD fuku:raid:joins:<chat>  (member = userID, score = ts)   // member = user => both signals dedupe
-     ZADD fuku:raid:newmembers:<chat> (userID, joinTs)             // for "new member" weighting
-     if lockdown active: kick joiner (+ record in lockdown_joiners) and return EndGroups
-                         (so greetings/captcha at group 0 never welcome or challenge a kicked user)
-     else: join-rate rule (reuse trackJoinScript semantics) -> Trigger?
-  chat_join_request: decline while active (greetings.pendingJoins would otherwise approve/queue)
-
-MESSAGE SIGNALS
-  group 2 raid flood detector (after users tracker, before aispam/antiflood so raw volume is counted)
-     skip admins/approved (IsUserAdminForUpdate / IsApprovedForUpdate, memoised)
-     Lua: record msg, return {msgs, distinctSenders, newMemberShare, mediaShare} over window T
-     rule: msgs >= M AND distinct >= K AND newMemberShare >= S  -> Trigger
-           between soft and hard thresholds                      -> Borderline
-
-AI SIGNALS (assist only)
-  aispam worker: after a "delete" verdict -> raid.ObserveSpamVerdict(chat, user, isNew)
-        burst rule: >= V deletions from >= K distinct users inside T -> Trigger
-  Borderline -> rate-limited async classify of a sample (own small queue, per-chat cooldown,
-        honours aispamBreakerPaused). Result may ESCALATE Borderline -> Trigger. It never
-        de-escalates a rule Trigger and never fires alone.
-
-TRIGGER
-  lockdown.Engage(chat, trigger):
-     getChat -> snapshot; INSERT chat_lockdowns ON CONFLICT DO NOTHING (loser stops)
-     setChatPermissions(all false)  (needs can_restrict_members; failure => applied=false, alert says so)
-     approved-user exceptions (see Spike 1)
-     alert -> [Staff Group of this chat via staff_group_links] + [chat's log channel] + fallback: the chat itself
-              buttons: Lift lockdown | Ban N recent joiners     (ns "lockdown|", ID-only payload)
-     store alert (chat_id, message_id) pairs so Lift can edit every copy
-
-LIFT
-  press -> decode -> load row -> IsUserAdmin(query.From, row.ChatID) [fresh]
-        -> setChatPermissions(snapshot) -> UPDATE state='lifted' WHERE state='active'
-        -> edit all alert copies ("Lifted by X"), answer callback
-```
-
-### Flow D: Turnstile Mini App captcha
-
-```
-Join (group 0 greetings -> ProcessSingleJoin -> SendCaptcha)         [existing path]
-  SendCaptcha, mode == "turnstile":
-     CreateCaptchaAttemptPreMessageIfEnabled(user, chat, answer=<128-bit random nonce>, timeout)  // reuse; answer column holds the nonce
-     RestrictMember(MutedPermissions)                                   // existing
-     send message with ONE url button:  https://t.me/<bot>/<MiniAppShortName>?startapp=t_<attemptID>_<nonce>
-     scheduleCaptchaTimeout(...)                                        // existing: kick on expiry, can rejoin
-
-User taps button (opens Mini App page from the group via Direct Link)
-  GET  /captcha/app   -> embedded HTML (sitekey templated), strict CSP, loads telegram-web-app.js + Turnstile
-  JS   Turnstile solved -> POST /captcha/verify {init_data: WebApp.initData, token}
-
-POST /captcha/verify  (modules.NewTurnstileHandler(bot) mounted by main.go)
-  1 body limit (16 KB), per-IP and per-attempt rate limit, JSON only
-  2 tgwebapp.Validate(initData, botToken, maxAge)       // HMAC "WebAppData"; reject stale auth_date
-  3 attempt := GetCaptchaAttemptByID(id from start_param)
-        require attempt.UserID == initData.user.id      // the binding: Telegram-signed identity == pending user
-        require constant-time attempt.Answer == nonce   // the binding: this exact attempt
-        require not expired, mode == turnstile
-  4 turnstile.Verify(token, remoteIP, idemKey)          // once per token; success, hostname == PublicBaseURL host,
-                                                        // action == "tg_captcha"; token life 300 s, single use
-  5 completeCaptchaSuccess(...)                         // CompleteCaptchaAttemptAtomic -> restore perms ->
-                                                        // stored-message summary -> welcome (shared with callback path)
-  6 respond JSON {ok:true}; page calls WebApp.close()
-```
-
-Notes:
-- `InlineKeyboardButton.web_app` works only in **private** chats, so it cannot be used for the group captcha message. A URL button with a Direct Link Mini App is the group-compatible launch method, and `initData` then carries `start_param` plus the signed `user` (MEDIUM; see Spike 3). It needs a Mini App created in BotFather (`/newapp`) whose short name goes into config.
-- The HTTP handler has no `ext.Context`. `handleCaptchaTimeout` and `membershipDepsForJoin` already synthesize `ext.Context{EffectiveChat: ...}` for the same reason, so there is precedent. The extracted completion function takes explicit `(bot, chatID, userID, lang)` rather than a context.
-
-### Flow E: Settings menu
-
-```
-/settings (group, admin) or PM (connected)  ->  root page lists pages by Order
-button  cfg|v1|p=<page>&a=<open|t|set|inc|dec>&v=<val>
-   -> decode (callbackcodec) -> resolve chat (message chat, or connection) -> re-authorize query.From
-   -> page.Handle (existing repo setter, which DeleteCaches) -> page.Render -> msg.EditText
-```
+Each new setting adds the standing test set (parity, drift, authority-parity, worst-case callback bytes, page-fits-every-locale), a `settings_` limits-table row, and the Main-page state function. `TestSettingsStaffPrivacy` must still pass: no new page may name the Staff Group.
 
 ---
 
-## Handler Group Plan (additions to the AGENTS.md table)
+## 9. Migrations (append-only, timestamp above 20261101120000, one transaction each)
 
-| Group | Existing | Change |
-|-------|----------|--------|
-| `-5` | antiraid | Lockdown guard (join, join-request) takes over; antiraid's ban/expiry enforcement is retired in the same phase so two handlers never share `-5` |
-| `-3` | free | **Staff-link ownership watcher** (`chat_member`), always `ContinueGroups` |
-| `0` | commands/help/greetings | Staff interceptor registers first via module priority 65 (< Bans 70), gated. `/lockdown`, `/unlockdown`, `/staff`, `/setstaff`, `/linkstaff`, `/unlinkstaff`, `/settings`, `cfg|`, `lockdown|`, `staff|` callbacks |
-| `2` | free | **Raid flood detector** (after users tracker `-1`, before aispam `3` and antiflood `4`), always `ContinueGroups` |
-| `3` | aispam | + one hook call after a delete verdict |
+| Order | File (suggested) | Contents |
+|-------|------------------|----------|
+| 1 | `20261103120000_add_settings_access.sql` | `chat_settings_access`, `chat_managers` (+ index on `user_id`) |
+| 2 | `20261103130000_extend_greetings_rules_editor.sql` | greetings columns, rules columns, `greeted_members` |
+| 3 | `20261103140000_add_member_requirements.sql` | `chat_member_rules` (CHECK on punishment), `member_requirement_holds` |
+| 4 | `20261103150000_add_message_deletion.sql` | `chat_delete_rules` (CHECK on delay), `scheduled_deletions` (UNIQUE, partial index), copy of `clean_service_settings` |
 
-Update `AGENTS.md` in the same commit that allocates `-3` and `2`, and add `fuku:raid:*` to its list of operational Redis keys that sit outside `fuku:cache:`.
-
----
-
-## Data Model (migrations; names must match `TableName()`)
-
-Use timestamps greater than `20261001120000` (the current latest). One transaction per file. No `CREATE INDEX CONCURRENTLY`. Update both `fuku/db/migrations/runner.go` and `scripts/migrate_psql.sh` only if the applier changes, which it should not. Add every new model to the relevant `testmain_test.go` AutoMigrate list.
-
-| Table | Key columns | Constraints / indexes | Cache keys to `DeleteCache` on write |
-|-------|-------------|-----------------------|--------------------------------------|
-| `staff_groups` | `chat_id`, `owner_user_id`, timestamps | `UNIQUE(chat_id)` | `staff_group:<chat>` |
-| `staff_group_links` | `group_chat_id`, `staff_chat_id`, `owner_user_id`, `created_at` | `UNIQUE(group_chat_id)` (one Staff Group per group, enforced by the DB), `INDEX(staff_chat_id)`, `CHECK(group_chat_id <> staff_chat_id)` | `staff_link_of:<group>`, `staff_links:<staff>` |
-| `chat_lockdowns` | `chat_id`, `state`, `trigger`, `triggered_by`, `snapshot_perms`, `applied`, `started_at`, `lifted_at`, `lifted_by`, `alerts` (JSON text of message refs) | partial `UNIQUE(chat_id) WHERE state='active'`, `CHECK(state IN ('active','lifted'))` | `lockdown_active:<chat>` |
-| `lockdown_joiners` | `lockdown_id`, `user_id`, `first_name`, `joined_at`, `banned_at NULL` | `UNIQUE(lockdown_id,user_id)`; cap rows per lockdown in code (about 500) | none (read uncached) |
-| `lockdown_settings` | `chat_id`, `enabled`, join threshold and window, flood M/K/S/T, `ai_assist`, `ai_burst` | `UNIQUE(chat_id)`; defaults **off** (a false-positive lockdown is disruptive) | `lockdown_settings:<chat>` |
-| `captcha_settings` | extend `chk_captcha_mode` to include `'turnstile'` | `DROP CONSTRAINT IF EXISTS` then `ADD` (same name as in `20260412000000_*`); update the model's `check:` tag so the SQLite test schema agrees | existing captcha-settings key |
-
-Rules that come straight from AGENTS and bite here:
-- **Authority reads are uncached.** The executor and the lockdown callbacks read links and lockdown rows straight from the DB. The cached copies serve only the cheap gate (`IsStaffGroup`) and UI. Also add `staff_`/`lockdown_active` prefixes to `skipLocal` (`fuku/db/cache/local.go`) so a second replica cannot serve a stale link for `CACHE_LOCAL_TTL`.
-- Writes that set booleans to `false` (`enabled`, `ai_assist`) must use `UpdateRecordWithZeroValues`; both update helpers return `gorm.ErrRecordNotFound` on no match.
-- Never discard a DB error on these state-changing paths (Engage, Link, Unlink, Lift).
+Same-file rules from `AGENTS.md`: every statement idempotent (`IF NOT EXISTS`), no top-level `BEGIN/COMMIT`, no `CREATE INDEX CONCURRENTLY`, `fuku/db/migrations/runner.go` and `scripts/migrate_psql.sh` agree; `duplicate_object` is swallowed on `ADD CONSTRAINT`, so add each CHECK in the `CREATE TABLE`, not later. Add every new model to the `AutoMigrate` lists of `fuku/modules/test_harness_test.go`, the new repo packages' `testmain_test.go`, and `fuku/db/testmain_test.go`. `make test-postgres-integrity` gets: `TestScheduleDeletion` (unique key keeps the earliest), `TestDeletionBatchClaim` (a second claimer gets nothing), `TestMemberHoldFirstWins` (the PK insert), `TestMemberRulePunishmentCheck`, `TestDeleteRuleDelayCheck`. Each rests on a unique index, a CHECK or a conditional update.
 
 ---
 
-## Integration Seams With Existing Subsystems
+## 10. Data flow changes
 
-| Existing | Relationship | Concrete seam / risk |
-|----------|--------------|----------------------|
-| **antiraid** (`-5`, Redis-only, `antiraid.go`) | Superseded in behaviour. Keep `/antiraid`, `/autoantiraid` as aliases (`on` = manual lockdown, `off` = lift, `autoantiraid N` = join threshold). Reuse `trackJoinScript` (sliding ZSET). Delete: ban action, expiry poller, `StopAntiRaidExpiryPoller` shutdown handler, `raidtime`/`raidactiontime`. | Its `onJoin` only sees the **service-message** signal. Join service messages can be absent in large groups, so the guard must also take `ChatMemberUpdated`. ZSET member in the old script is `user:ts:nano` (unique), which would double-count if both signals feed it. Use `member = userID`. |
-| **antiflood** (`4`, in-process per replica) | Unchanged. It is per-user. The raid flood detector is cross-user and Redis-backed because it must be cluster-wide. | Do not extend antiflood's `syncHelperMap`. Different keying and different scope. |
-| **aispam** (`3`, queue of 256, 4 workers, breaker) | Producer of one signal (post-delete hook) and host of the assist classifier. | Reuse `aispamBreakerPaused`. Give the raid classifier its own queue and per-chat cooldown so a raid cannot starve per-message checks. The Jev state struct is **text-only** (`aispamState`), so "classify borderline images" has no existing path (Spike 4). |
-| **captcha** (`-10` sweeper, group 0 challenge) | Lockdown kicks joiners at `-5` *before* group 0, so no captcha starts for them. Users already pending keep their attempt. | **Trap:** `unmuteCaptchaUser` (and `/unmute`, `/unrestrict`) compute permissions from `resolveUnmutePermissions(getChat)`. During a lockdown `getChat().Permissions` is all-false, so a captcha pass or timeout would write the *locked* defaults as that user's own restriction and they stay muted after the lift. Make `resolveUnmutePermissions` (single choke point, `chat_permissions.go`) return the active lockdown's snapshot when one exists. |
-| **greetings** (group 0) | `leftMember` posts goodbye messages and `cleanService` deletes join messages. | Lockdown kicks fire `chat_member` left updates, so a raid produces N goodbye messages. Skip goodbye when the update's actor (`ChatMember.From.Id`) is the bot, or when a short Redis flag `fuku:raid:kicked:<chat>:<user>` is set. Do **not** call `claimRecentJoinProcessing` from the lockdown guard. Its dedupe key is shared with greetings and claiming it first would suppress welcome/captcha for legitimate joiners. |
-| **approvals** | Exempt from lockdown mute and from the flood detector. | Chat-level mute does not exempt them automatically. See Spike 1. |
-| **log channels** (`actionlog`) | Staff actions use `actionlog.Admin` per affected group (category `admin`, per-category toggles honoured). Lockdown alerts need buttons. | `actionlog.Log` takes no `ReplyMarkup`. Add `LogWithMarkup` (returns the sent message ref) and use it for alerts. The helper needs a `*gotgbot.Chat` with `Title` for its header, so source titles from the `chats` table. |
-| **federations** | Untouched. `/fban` keeps its own path and `enforceFedBan` stays at `-6`. | Staff fan-out does not write fed bans and does not read them. |
-| **anonymous-admin router** | Needed for owner-only and admin-only commands (`/setstaff`, `/linkstaff`, `/lockdown`, `/settings`). Not wanted for staff moderation. | The owner is frequently anonymous. Register `RegisterAnonymousAdminHandler` + `anonPipelineHandler` for those, none for staff actions. |
-| **users tracker** (`-1`) | Source of truth for `@username` to ID. | A recycled username can map to the wrong user, and the action hits every group. Echo the resolved ID and name in the summary so a mistake is visible and one `/unban` away. A confirm step is a product decision (Open Questions). |
-| **HTTP server** | Routes added on the same mux and port. | `ReadTimeout`/`WriteTimeout` are 10 s (fine). `/metrics` and pprof stay behind their existing auth. The new routes are public, so give them their own body limit and rate limiting. In polling mode `httpServer.Start()` runs *before* `postInit` (`main.go:261` vs `285`), so mount the routes before `Start()` in both modes. |
+**Open a group from PM:** `/settings` (private) -> `settingsHub` -> SELECT from `chat_managers` + access -> list message with pick buttons -> press `a=bk&c=<id>` -> `verify` (decode, service identity, `settingsAuthorize` = live member + gate, `getChat` type check) -> Main page edited in place.
+
+**Edit a welcome text:** press `a=in&p=w&k=wt` -> `verify` + `settingsRightChangeInfo` -> `Begin` hash -> prompt page (Cancel) -> user types -> group `-1` consumer: GET, claim, `settingsAuthorize` again, parse, `applyWelcomeText`, `DeleteCache`, delete claim -> delete input message -> edit menu back with a notice.
+
+**Join with requirements:** `chat_member` or service message -> group 0 -> `ProcessSingleJoin`: Claim -> Screen (rules cached, free rules, then cached photo/channel result, AI job enqueued) -> punished: executor (+hold, +notice, +schedule) and stop; else captcha or welcome (+`scheduleBotMessage`).
+
+**Scheduled delete:** watcher or send site -> `deletion.Schedule` -> worker on any replica -> batch claim -> `deleteMessages` (paced) -> row removed.
 
 ---
 
-## Anti-Patterns
+## 11. Patterns to follow and anti-patterns
 
-### Anti-Pattern 1: Declining from a group-0 handler with `ContinueGroups`
+**Follow:** conditional-write-decides (holds, greet-once, claims), DB-driven worker with release-stale and drain (deletion), stateless callbacks that carry object IDs and re-authorize (hub, I-fixed-it), one apply function per setting, per-rule/per-type rows instead of wide tables, marker `until_date` to own a restriction, Lua compare-and-delete on a nonce (await).
 
-**What people do:** register `/ban` for staff and `return ext.ContinueGroups` when the chat is not a Staff Group.
-**Why it's wrong:** it skips the real `/ban` and every later group-0 handler for that update. This is the failure mode AGENTS warns about.
-**Do this instead:** Pattern 1. Decide in `CheckUpdate` so non-staff chats fall through to the next handler untouched.
+**Avoid:**
 
-### Anti-Pattern 2: Reusing `chat_status.CanUser*` for cross-chat authorization
+- **`time.AfterFunc` for deletions or expiries.** Lost on restart and on the replica that dies; the queue exists for this.
+- **Trusting the stored await state for authority.** It records intent only; re-run `settingsAuthorize` on consumption.
+- **Putting the owner gate in the page code or a per-page check.** It must be in `verify`/`settingsAuthorize` so no page can forget it.
+- **Using the cached admin list as the gate or as the "I fixed it" authority.** Live `getChatMember`, the repo's standing rule.
+- **A watcher at group 1 or later for command deletion**, or deleting before the handler replied.
+- **A watcher returning `nil`** in group `-1` or `0`: it silently kills the rest of that group. New watchers return `ContinueGroups` except on a deliberate consume.
+- **Unmuting with `chatInfo.Permissions`.** Always `resolveUnmutePermissions`; refuse on error.
+- **Punishing on an unknown check.** A photo or channel lookup that errors (privacy, bot not channel admin, 429) is "unknown": no punishment, no hold, a page warning.
+- **Putting message text in callback data or Redis keys.** Tokens only; the keyword of a filter lives in the await hash.
+- **A new group number for each feature.** Use `-1` (registered after the tracker) and `1`; update the `AGENTS.md` group table in the same commit.
 
-**What people do:** call `CanUserRestrict(b, ctx, chat, issuer)` once per linked group.
-**Why it's wrong:** it consults the admin cache (stale after demotion) and `checkAnonAdmin` looks at the current update's sender. The safeguard the whole feature rests on would be cache-dependent.
-**Do this instead:** Pattern 2, an explicit uncached `FreshAdmins(chatID)`.
+## 12. Scalability
 
-### Anti-Pattern 3: Redis-only lockdown state
+| Concern | Few groups (this bot) | Hundreds of groups | Notes |
+|---------|-----------------------|--------------------|-------|
+| Per-message watchers | one cached rules read each | same, plus Redis pass cache | keep early returns; no DB read per message when no rule is on |
+| `scheduled_deletions` writes | direct insert | self-destruct on a busy group is one insert per message; batch the inserts in a bounded channel if needed | partial index on pending keeps the poll cheap |
+| Delete throughput | `deleteMessages` per chat | paced fleet-wide; one 429 block shared | |
+| Hub query | one indexed SQL | same | no per-row Telegram call |
+| Name AI | negligible | verdict cache by name hash, hourly budgets | |
 
-**What people do:** copy `antiraid`'s `raidState` into Redis with a TTL.
-**Why it's wrong:** "a lockdown never lifts on its own" is violated by a Redis flush, `CLEAR_CACHE_ON_STARTUP` mistakes, or an eviction. The `antiraid` precedent also silently does nothing without Redis.
-**Do this instead:** Postgres state (Pattern 4). Redis for counters only. Manual `/lockdown` works with no Redis. Auto-triggers log a warning and are disabled without it.
+## 13. Suggested build order (dependencies)
 
-### Anti-Pattern 4: Snapshotting permissions after applying the lock
+1. **Hub and gate** (nothing depends on it, everything rides on it). Migration 1, `fuku/db/access`, admin-cache hook, `settingsAuthorize` extraction and the four doors, `requireSettingsAccess`, hub, Access page, Main grid layout, `settingsRightOwner`. Tests: gate parity across the four doors, hub list never shows a gated group, Redis down, old `/settings`-in-PM refusal tests updated.
+2. **PM input state and the editor.** (a) await store, group `-1` consumer, `/cancel`, input registry, proven with one trivial kind; (b) migration 2, repos, apply functions, renderer, Rules/Welcome/Goodbye pages, greet-once, Test. Depends on 1 (authorize, pages). Unblocks Lists and log-channel set.
+3. **Member requirements.** Migration 3; `applyWarn` extraction; local rules (last name, username, scripts) with join `Screen` and the message watcher; executor and holds; "I fixed it"; then photo and channel checks; then `ClassifyName` and the name AI job. Depends on 1 for its page; soft-depends on 4 only for notice deletion (one added line later).
+4. **Message deletion.** Migration 4; repo, worker, drain, `StartDeletionWorker`; service-message and self-destruct watcher; Processor wrapper for commands; edited handler; bot-message call sites; wire requirement notices. Independent of 2 and 3 technically; after them to match the owner's priority.
+5. **Remaining pages.** Extract the apply functions command by command, then the pages. Lists add (needs 2's input registry) last. The simple toggle pages (anonymous-admin, reports, language) can be pulled forward as early proof of page 1 if a quick win is wanted.
 
-**What people do:** `setChatPermissions(locked)` then read `getChat()` "to remember what to restore".
-**Why it's wrong:** it stores the locked state as the original. The group stays muted after lift.
-**Do this instead:** read before the INSERT, persist in the lockdown row, and only ever restore from that row.
+Phases most in need of deeper research: **3** (Telegram behavior of `getUserProfilePhotos` privacy, linked-channel lookups, the captcha interplay, the name-AI pool decision), **4** (`deleteMessages` limits and permission errors, service-message field table across gotgbot's `Message`, the exact set of manual-punishment reply sites), **2** (entity-to-HTML parity with `/setwelcome`, `show_caption_above_media` support in this gotgbot, album handling for media input). Phases 1 and 5 follow established repo patterns.
 
-### Anti-Pattern 5: Trusting `initData` without a freshness check, or the Turnstile token without the hostname/action
+## 14. `AGENTS.md` updates this milestone owes (same commit rule)
 
-**What people do:** verify the HMAC only, and accept any `success:true`.
-**Why it's wrong:** a captured `initData` verifies forever; a token minted on another site that shares the sitekey could be replayed.
-**Do this instead:** reject old `auth_date`, bind `user.id` to the attempt's user and the nonce to the attempt, check `hostname` and `action` in the siteverify response, call siteverify exactly once per token.
-
-### Anti-Pattern 6: Putting the Turnstile logic in `httpserver`
-
-**What people do:** import `modules` or `db/captcha` from `httpserver` to finish the verification.
-**Why it's wrong:** import cycle risk and a second copy of the completion path.
-**Do this instead:** `httpserver` exposes `Handle`; `modules` builds the handler; `main.go` mounts it.
-
-### Anti-Pattern 7: Menu callbacks that carry chat IDs plus user text
-
-**What people do:** `cfg|...&c=<chat>&t=<free text>` for setters that take values.
-**Why it's wrong:** 64-byte cap, a dead button on overflow, and anyone can read and replay the payload.
-**Do this instead:** enumerated actions and small values in the payload. Free-text settings use a Redis token behind a short key (AGENTS Callbacks) and a "reply to this message" prompt.
-
----
-
-## Scalability Considerations
-
-The project is single-owner and small by design. The relevant "scale" axes are linked groups and raid size, not user count.
-
-| Concern | 5 linked groups | 50 linked groups | 500 linked groups (not a goal) |
-|---------|-----------------|------------------|--------------------------------|
-| Staff action latency | under 1 s | about 5 to 8 s at 20 req/s with 2 calls per group | minutes; would need background mode and progress edits |
-| Summary message size | trivial | collapse Done groups into a count | paginate or send as a document |
-| Raid with 500 joins/min | counters are O(1) Redis ops | same | kicking is bound by the rate limiter. Batch the kicks through `fanout`, and expect the kick queue, not the detector, to lag |
-| Lockdown alert fan-out | 2 to 3 sends | same | same |
-| Lockdown approved-user exceptions | one `restrictChatMember` per approved member | same | the cost grows with the approved list (Spike 1) |
-
-**First bottleneck:** Bot API request rate during a large raid (kick plus delete plus alert). The shared token bucket in `fanout` should also front the lockdown kicker, so both features draw from one budget.
-**Second bottleneck:** the approved-user exception loop on lockdown start, if a chat has hundreds of approved users.
-
----
-
-## Suggested Build Order (dependencies drive phases)
-
-```
-Phase 1  Staff Group ────────────────────────────┐
-  1a schema + models + db/staff + cache/skipLocal │  (nothing else depends on 1a except 2's alert routing)
-  1b chat_status.FreshAdmins, utils/fanout, actionlog.Staff, CommandDescriptor.Gate
-  1c /setstaff /linkstaff /unlinkstaff + ownership checks + group -3 watcher + sweeper
-  1d gated interceptor, target resolution, op closure, summary, log-channel posts
-  1e /staff panel as a pure render function (+ staff| callbacks)
-                                                  │
-Phase 2  Raid protection  (needs: 1a for alert routing, 1b fanout for kicks, actionlog markup)
-  2-spike  approved-user exceptions; chat_member join delivery; EndGroups at -5
-  2a lockdown schema + repo + Engage/Lift + resolveUnmutePermissions seam + manual /lockdown /unlockdown
-  2b join guard (-5): kick, record joiners, decline join requests, goodbye suppression, alerts + callbacks
-  2c detectors: join-rate (reuse Lua), flood (group 2), ai-burst hook
-  2d AI-assist classifier (text first), then retire antiraid enforcement and re-point its commands
-                                                  │
-Phase 3  Turnstile captcha  (independent of 1 and 2 except the 2a unmute seam)
-  3-spike  Direct Link launch from a group, Turnstile inside Telegram WebViews (Android/iOS/Desktop)
-  3a config + RegisterSecret + migration (mode enum)
-  3b utils/tgwebapp + utils/turnstile (pure, fully table/httptest tested)
-  3c extract completeCaptchaSuccess; turnstile mode in SendCaptcha; button
-  3d HTTP routes + embedded page + hardening; mount in main.go
-                                                  │
-Phase 4  Settings menu  (needs the pages to exist: captcha, lockdown settings, antiflood, staff panel)
-  4a page registry + /settings + callbacks   4b pages migrate/register   4c Staff page = panel render
-```
-
-**Ordering rationale:**
-- Phase 1 first (owner priority, and it is the only phase that creates reusable infrastructure: `fanout`, fresh admin snapshot, gated commands, link table).
-- Phase 2 depends on Phase 1 only for alert routing (`staff_group_links`), so a Phase 2 started without it would still work by falling back to log channel and the group itself. The ordering keeps the owner's order and avoids stubs.
-- Phase 3 touches `captcha.go` heavily. Doing it after Phase 2 means the `resolveUnmutePermissions` lockdown seam already exists, so the new completion path cannot reintroduce the muted-after-lift bug.
-- Phase 4 last, but **the constraint flows backwards**: phases 1 to 3 must keep logic in repos and renderers so the menu is a thin layer.
-- Cross-cutting each phase: 7-locale keys, `make generate-docs`, `make check-translations`, `make test`, `make lint`, and an `AGENTS.md` update when a group number, Redis key family, or rule changes.
-
-**Research flags for the roadmap:**
-- Phase 2: needs a short spike before planning (Spikes 1, 2, 4).
-- Phase 3: needs a short spike (Spikes 3, 5).
-- Phase 1 and Phase 4: standard patterns on top of existing code. No external research needed.
-
-### Testing shape (per AGENTS: real fixtures, no mocking libraries)
-- Fan-out and staff actions: hand-written `gotgbot.BotClient` fake that records calls and can return a scripted `TelegramError` (including 429 with `retry_after`), SQLite via `internal/testdb.Run`. Assert observable results: summary text, rows, cache invalidation, who was *not* banned.
-- Lockdown: miniredis for counters; assert the partial-unique-index race (two concurrent `Engage`), restore-failure leaves `active`, and snapshot never overwritten.
-- Mini App: `httptest.Server` for both the bot's route and a fake Turnstile endpoint (injectable base URL), `initData` built in the test with the real HMAC recipe, replay/stale/wrong-user/wrong-nonce cases.
-- Callback codec: encode the max-length payload per namespace; registry test for prefix collisions.
-
----
-
-## Integration Points
-
-### External Services
-
-| Service | Integration Pattern | Notes |
-|---------|---------------------|-------|
-| Telegram Bot API | Existing `*gotgbot.Bot`. New calls: `GetChatAdministrators`, `SetChatPermissions`, `RestrictChatMember` (with `UseIndependentChatPermissions`), `DeclineChatJoinRequest`, `DeleteMessages`. | All exist in the vendored gotgbot rc.36 (verified). 429 surfaces as `*TelegramError{Code:429, ResponseParams.RetryAfter}`. |
-| Cloudflare Turnstile | `POST https://challenges.cloudflare.com/turnstile/v0/siteverify` with `secret`, `response`, optional `remoteip`, `idempotency_key`. | Token valid 300 s, single use (`timeout-or-duplicate` on replay), validate `hostname` and `action`. MEDIUM. Secret registered with `logredact.RegisterSecret` (>= 6 chars) in `config.go`'s existing call. |
-| Telegram Mini Apps | `initData` HMAC: `secret = HMAC_SHA256(key="WebAppData", msg=bot_token)`, `hash = HMAC_SHA256(secret, data_check_string)`, data-check-string = all fields except `hash`/`signature`, sorted, `k=v` joined by `\n`. | MEDIUM (secondary sources agree). Keep the Ed25519 `signature` path out of scope: the bot holds its own token. |
-| TypeSafe (Jev) | Existing client (`aispam_jev.go`). | Text-only today. |
-
-### Internal Boundaries
-
-| Boundary | Communication | Notes |
-|----------|---------------|-------|
-| `modules/staff` to `utils/fanout` | Direct call with an op closure | The closure owns Telegram semantics; the executor owns concurrency and rate. |
-| `modules/lockdown` to `modules/aispam` | Direct function call (same package) | One-way: aispam notifies, lockdown never calls back into the worker pool except via the classify queue. |
-| `modules/lockdown` to `modules/captcha` | `resolveUnmutePermissions` reads the active snapshot | Single choke point; keep it the only coupling. |
-| `modules/captcha_turnstile` to `httpserver` | `main.go` calls `httpServer.Handle("/captcha/", modules.NewTurnstileHandler(bot))` | `httpserver` stays free of module imports. |
-| All feature modules to `settings_menu` | `RegisterMenuPage` in `init()` | Same registration style as deep links and anon-admin handlers. |
-| Shutdown | New background goroutines (ownership sweeper, lockdown recovery, classify worker) get a lifecycle context and a stop function registered **after** the DB-close handler so they drain before it (LIFO, 60 s). | Follow `StartCaptchaLifecycle`/`StopCaptchaLifecycle`. Start them from `postInit`, never `init()`. |
-
----
-
-## Open Questions / Spikes (do before planning the phase that depends on them)
-
-1. **Per-user exceptions over restrictive default permissions (Phase 2). LOW.** The approved-user exemption assumes that `restrictChatMember(user, snapshotPerms, UseIndependentChatPermissions=true)` lets that user send while the group default is all-false. Telegram's client "exceptions" feature suggests yes, but the Bot API docs that were reachable did not confirm it. Test once in a throwaway supergroup. If it fails, the fallback is: approved users are muted during lockdown (admins are never affected), documented in the alert text.
-2. **Join delivery and `EndGroups` at `-5` (Phase 2). MEDIUM.** Confirm in a real group that (a) `chat_member` updates arrive for joins when the bot is admin, (b) a join service message is absent in some configurations, and (c) returning `EndGroups` from the `-5` guard really stops greetings at group 0 for the same update, as the AGENTS description implies.
-3. **Direct Link Mini App from a group (Phase 3). MEDIUM.** URL button to `t.me/<bot>/<short>?startapp=...` inside a group, `initData.user` present and signed, and a non-target user tapping it gets rejected by the `user.id` binding. Also confirm `start_param` length and charset limits for the `t_<id>_<nonce>` format (keep the nonce about 22 base64url chars).
-4. **Image classification (Phase 2d). LOW.** The existing Jev integration is text-only. Either defer image assist, or add a second classifier behind the same `Classifier` interface. Rules must remain sufficient on their own (they are, by design).
-5. **Turnstile in Telegram WebViews (Phase 3). MEDIUM.** Widget rendering and token callback on Android, iOS and Telegram Desktop; confirm hostname reported by siteverify equals the Mini App host and that CSP `frame-src https://challenges.cloudflare.com` is sufficient.
-6. **Product decisions to confirm with the owner:** confirm-before-fanout for `@username` targets (stale/recycled username risk); whether Staff Group members are protected from being targeted; whether the Staff Group itself should also receive the ban when the target is a member; lockdown auto-trigger defaults (recommended: off until configured).
-
----
+Handler group table (`-1` additions, group `1`), callback namespaces (`settingsh|v1`, `memreq|v1`, the new settings action codes and the `in`/`ic` pair), the new Redis keys, the new tables and their "never cached / not in backup" statements, `skipLocal` entries, the Processor wrapper, the new shutdown drain, the new `make test-postgres-integrity` names, the owner-gate rule beside the Permissions section, and the settings test toolkit entries.
 
 ## Sources
 
-- Repository source, read 2026-10-04 (HIGH): `AGENTS.md`; `fuku/utils/helpers/command_pipeline.go`; `fuku/modules/{antiraid,captcha,greetings,membership,bot_updates,federations,moderation,bans,aispam,antiflood,users,logchannels,callback_codec,chat_permissions,registry,anonymous_admin_router}.go`; `fuku/utils/{chat_status,callbackcodec,actionlog,extraction,httpserver}/`; `fuku/db/{captcha,federations,logchannels,cache,antiraid,models}`; `fuku/config/config.go`; `main.go`; `migrations/`.
-- gotgbot v2 rc.36 vendored source in the module cache (HIGH): `ext/handlers/command.go` (Command struct and `CheckUpdate`), `request.go` (`TelegramError`), `gen_types.go` (`ResponseParameters.RetryAfter`, `WebAppInfo`), `gen_methods.go` (`SetChatPermissions`, `RestrictChatMember` options).
-- Telegram Mini Apps initData validation and Direct Link behaviour (MEDIUM, secondary): https://docs.telegram-mini-apps.com/platform/init-data , https://docs.telegram-mini-apps.com/packages/tma-js-init-data-node/validating , https://core.telegram.org/bots/webapps (search snippet only; fetch blocked)
-- `web_app` inline button private-chat restriction (MEDIUM): https://docs.python-telegram-bot.org/en/stable/telegram.inlinekeyboardbutton.html
-- Cloudflare Turnstile server-side validation (MEDIUM, secondary): https://developers.cloudflare.com/turnstile/get-started/server-side-validation/ (search snippet; direct fetch blocked), https://flaviocopes.com/courses/cloudflare/verify-context-and-prevent-replay/
-- `use_independent_chat_permissions` semantics (MEDIUM): https://docs.aiogram.dev/en/dev-3.x/api/methods/restrict_chat_member.html
-
----
-*Architecture research for: Fuku Robot (Fuku fork) Staff Group, raid lockdown, Turnstile captcha, settings menu*
-*Researched: 2026-10-04*
+- `/home/user/Fuku_Robot/AGENTS.md`, `.planning/PROJECT.md` (HIGH)
+- `fuku/modules/settings.go`, `settings_menu.go`, `settings_pages.go`, `settings_card.go`, `greetings.go`, `rules.go`, `connections.go`, `deeplink_router.go`, `membership.go`, `warns.go`, `lockdown.go`, `lockdown_worker.go`, `shutdown_drains.go`, `chat_permissions.go`, `main.go`, `fuku/utils/cache/adminCache.go`, `fuku/db/cache/local.go`, `fuku/utils/helpers/command_pipeline.go` (HIGH, read in full or in the relevant parts)
+- gotgbot v2.0.0-rc.36 source in the module cache: `ext/dispatcher.go` (`iterateOverHandlerGroups`, `Processor`), `ext/handlers/message.go` and `command.go` (`CheckUpdate`, `AllowEdited`) (HIGH)
+- Bot API behavior of `deleteMessages`, deleting incoming private messages, `show_caption_above_media`, `getUserProfilePhotos` (MEDIUM: from knowledge of the API, not re-fetched in this session; verify in the owning phases)

@@ -11,8 +11,6 @@ Easily change by using this module!
 
 Just type /lang and use inline keyboard to choose a language for yourself or your group.
 
-You can help us bring bot to more languages by helping on [Crowdin](https://crowdin.com/project/fuku_robot)
-
 **How It Works**
 - **Private Chats:** Any user can change their personal language
 - **Group Chats:** Only admins can change the group language

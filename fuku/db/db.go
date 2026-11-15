@@ -39,6 +39,9 @@ const (
 	VOICE      int = 6
 	VIDEO      int = 7
 	VIDEO_NOTE int = 8
+	// ANIMATION is a GIF saved by a greeting command or the message editor from Phase 12 on. A GIF
+	// saved earlier, and every GIF of a note, filter or pin, stays DOCUMENT.
+	ANIMATION int = 9
 )
 
 const (

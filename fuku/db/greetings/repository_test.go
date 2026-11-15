@@ -1,8 +1,11 @@
 package greetings
 
 import (
+	"errors"
 	"testing"
 	"time"
+
+	"gorm.io/gorm"
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
 	"github.com/uasneppy/fuku_robot/fuku/db/chats"
@@ -477,5 +480,72 @@ func TestResetWelcomeText(t *testing.T) {
 	}
 	if settings.WelcomeSettings.WelcomeText != db.DefaultWelcome {
 		t.Fatalf("expected WelcomeText=%q after reset, got %q", db.DefaultWelcome, settings.WelcomeSettings.WelcomeText)
+	}
+}
+
+func TestSetCleanServiceTx(t *testing.T) {
+	skipIfNoDb(t)
+
+	chatID := time.Now().UnixNano()
+	t.Cleanup(func() {
+		db.DB.Where("chat_id = ?", chatID).Delete(&models.GreetingSettings{})
+		db.DB.Where("chat_id = ?", chatID).Delete(&models.Chat{})
+	})
+
+	flag := func() bool {
+		t.Helper()
+		var row models.GreetingSettings
+		if err := db.DB.Where("chat_id = ?", chatID).First(&row).Error; err != nil {
+			t.Fatalf("read the greetings row: %v", err)
+		}
+		return row.ShouldCleanService
+	}
+
+	// With no chat row and no greetings row, the helper creates both.
+	if err := db.DB.Transaction(func(tx *gorm.DB) error { return SetCleanServiceTx(tx, chatID, true) }); err != nil {
+		t.Fatalf("SetCleanServiceTx(true) error = %v", err)
+	}
+	if !db.ChatExists(chatID) {
+		t.Error("the chat row was not created")
+	}
+	if !flag() {
+		t.Error("the flag is false after SetCleanServiceTx(true)")
+	}
+
+	// A Go false is written: the column's default:false tag must not swallow the update.
+	var before models.GreetingSettings
+	if err := db.DB.Where("chat_id = ?", chatID).First(&before).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.DB.Transaction(func(tx *gorm.DB) error { return SetCleanServiceTx(tx, chatID, false) }); err != nil {
+		t.Fatalf("SetCleanServiceTx(false) error = %v", err)
+	}
+	if flag() {
+		t.Error("the flag is still true after SetCleanServiceTx(false)")
+	}
+	var after models.GreetingSettings
+	if err := db.DB.Where("chat_id = ?", chatID).First(&after).Error; err != nil {
+		t.Fatal(err)
+	}
+	if after.WelcomeSettings.WelcomeText != before.WelcomeSettings.WelcomeText ||
+		after.WelcomeSettings.ShouldWelcome != before.WelcomeSettings.ShouldWelcome ||
+		after.GoodbyeSettings.ShouldGoodbye != before.GoodbyeSettings.ShouldGoodbye ||
+		after.ShouldAutoApprove != before.ShouldAutoApprove {
+		t.Errorf("another greetings column changed: before %+v after %+v", before, after)
+	}
+
+	// A rolled-back transaction leaves the flag as it was.
+	rollback := errors.New("rollback")
+	err := db.DB.Transaction(func(tx *gorm.DB) error {
+		if err := SetCleanServiceTx(tx, chatID, true); err != nil {
+			return err
+		}
+		return rollback
+	})
+	if !errors.Is(err, rollback) {
+		t.Fatalf("transaction error = %v", err)
+	}
+	if flag() {
+		t.Error("the flag changed although the transaction rolled back")
 	}
 }

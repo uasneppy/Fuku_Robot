@@ -6,7 +6,7 @@ description: Complete guide to Formatting module commands and features
 
 # 📄 Formatting Commands
 
-Fuku supports a large number of formatting options to make your messages more expressive. Take a look by clicking the buttons below!
+Xenobot-72 supports a large number of formatting options to make your messages more expressive. Take a look by clicking the buttons below!
 
 ## Module Aliases
 

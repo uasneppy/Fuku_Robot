@@ -1,0 +1,326 @@
+{"level":"debug","msg":"Registered module: Admin (priority=30)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Registered module: AdminIndex (priority=31)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Registered module: AISpam (priority=12)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Registered module: Antiflood (priority=150)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Registered module: AntiRaid (priority=230)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Registered module: Approvals (priority=40)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Registered module: Backup (priority=270)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Registered module: Bans (priority=70)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Registered module: Blacklists (priority=240)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Registered module: BotUpdates (priority=-10)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Registered module: Captcha (priority=220)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Registered module: Connections (priority=170)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Registered module: ServiceDeletion (priority=242)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Registered module: Dev (priority=120)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Registered module: Disabling (priority=180)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Registered module: Federations (priority=235)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Registered module: Filters (priority=140)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Registered module: Formatting (priority=260)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Registered module: Greetings (priority=210)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Registered module: Languages (priority=20)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Registered module: Lockdown (priority=238)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Registered module: Locks (priority=130)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Registered module: LogChannels (priority=55)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Registered module: MemberDeletion (priority=243)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Registered module: MemberRequirements (priority=241)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Registered module: Misc (priority=60)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Registered module: Mutes (priority=80)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Registered module: Notes (priority=160)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Registered module: Pins (priority=50)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Registered module: Purges (priority=90)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Registered module: Reactions (priority=250)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Registered module: Reports (priority=110)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Registered module: Rules (priority=190)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Registered module: Settings (priority=239)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Registered module: Staff (priority=236)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Registered module: StaffActions (priority=65)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Registered module: StaffWatchers (priority=237)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Registered module: Users (priority=100)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Registered module: Warns (priority=200)","time":"2026-11-15T20:18:52Z"}
+=== RUN   TestZZCount
+{"level":"debug","msg":"Loading module: BotUpdates (priority=-10)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Loading module: AISpam (priority=12)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Loading module: Languages (priority=20)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Loading module: Admin (priority=30)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Loading module: AdminIndex (priority=31)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Loading module: Approvals (priority=40)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Loading module: Pins (priority=50)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Loading module: LogChannels (priority=55)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Loading module: Misc (priority=60)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Loading module: StaffActions (priority=65)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Loading module: Bans (priority=70)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Loading module: Mutes (priority=80)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Loading module: Purges (priority=90)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Loading module: Users (priority=100)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Loading module: Reports (priority=110)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Loading module: Dev (priority=120)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Loading module: Locks (priority=130)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Loading module: Filters (priority=140)","time":"2026-11-15T20:18:52Z"}
+{"level":"warning","msg":"Failed to create translator for uk: i18n get_translator failed for lang=uk key=: manager not initialized: locale manager not initialized, falling back to the default language","time":"2026-11-15T20:18:52Z"}
+{"level":"error","msg":"Failed to create default-language fallback translator: i18n get_translator failed for lang=uk key=: manager not initialized: locale manager not initialized","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Loading module: Antiflood (priority=150)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Loading module: Notes (priority=160)","time":"2026-11-15T20:18:52Z"}
+{"level":"warning","msg":"Failed to create translator for uk: i18n get_translator failed for lang=uk key=: manager not initialized: locale manager not initialized, falling back to the default language","time":"2026-11-15T20:18:52Z"}
+{"level":"error","msg":"Failed to create default-language fallback translator: i18n get_translator failed for lang=uk key=: manager not initialized: locale manager not initialized","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Loading module: Connections (priority=170)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Loading module: Disabling (priority=180)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Loading module: Rules (priority=190)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Loading module: Warns (priority=200)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Loading module: Greetings (priority=210)","time":"2026-11-15T20:18:52Z"}
+{"level":"warning","msg":"Failed to create translator for uk: i18n get_translator failed for lang=uk key=: manager not initialized: locale manager not initialized, falling back to the default language","time":"2026-11-15T20:18:52Z"}
+{"level":"error","msg":"Failed to create default-language fallback translator: i18n get_translator failed for lang=uk key=: manager not initialized: locale manager not initialized","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Loading module: Captcha (priority=220)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Loading module: AntiRaid (priority=230)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Loading module: Federations (priority=235)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Loading module: Staff (priority=236)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Loading module: StaffWatchers (priority=237)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Loading module: Lockdown (priority=238)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Loading module: Settings (priority=239)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Loading module: Blacklists (priority=240)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Loading module: MemberRequirements (priority=241)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Loading module: ServiceDeletion (priority=242)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Loading module: MemberDeletion (priority=243)","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Loading module: Reactions (priority=250)","time":"2026-11-15T20:18:52Z"}
+{"level":"info","msg":"[Modules] Reactions module loaded","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Loading module: Formatting (priority=260)","time":"2026-11-15T20:18:52Z"}
+{"level":"warning","msg":"Failed to create translator for uk: i18n get_translator failed for lang=uk key=: manager not initialized: locale manager not initialized, falling back to the default language","time":"2026-11-15T20:18:52Z"}
+{"level":"error","msg":"Failed to create default-language fallback translator: i18n get_translator failed for lang=uk key=: manager not initialized: locale manager not initialized","time":"2026-11-15T20:18:52Z"}
+{"level":"debug","msg":"Loading module: Backup (priority=270)","time":"2026-11-15T20:18:52Z"}
+{"level":"info","msg":"[Backup] Module loaded successfully","time":"2026-11-15T20:18:52Z"}
+{"level":"warning","msg":"Failed to create translator for uk: i18n get_translator failed for lang=uk key=: manager not initialized: locale manager not initialized, falling back to the default language","time":"2026-11-15T20:18:52Z"}
+{"level":"error","msg":"Failed to create default-language fallback translator: i18n get_translator failed for lang=uk key=: manager not initialized: locale manager not initialized","time":"2026-11-15T20:18:52Z"}
+COUNT 231
+CMD about
+CMD addblacklist
+CMD addblocklist
+CMD adddev
+CMD addfilter
+CMD addfwdblock
+CMD addnote
+CMD addreaction
+CMD addsudo
+CMD admincache
+CMD adminlist
+CMD aispam
+CMD allowconnect
+CMD anonadmin
+CMD antichannelpin
+CMD antiraid
+CMD approval
+CMD approve
+CMD approved
+CMD autoantiraid
+CMD autoapprove
+CMD autolockdown
+CMD ban
+CMD banme
+CMD blacklist
+CMD blacklistaction
+CMD blacklists
+CMD blaction
+CMD blocklist
+CMD blocklists
+CMD cancel
+CMD captcha
+CMD captchaaction
+CMD captchaclear
+CMD captchamaxattempts
+CMD captchamode
+CMD captchapending
+CMD captchatime
+CMD chatfed
+CMD chatinfo
+CMD chatlist
+CMD cleangoodbye
+CMD cleanlinked
+CMD cleanservice
+CMD cleanwelcome
+CMD clear
+CMD clearadmincache
+CMD clearall
+CMD clearflood
+CMD clearrules
+CMD clearrulesbtn
+CMD clearrulesbutton
+CMD connect
+CMD connection
+CMD dban
+CMD del
+CMD delfed
+CMD delflood
+CMD demote
+CMD disable
+CMD disableable
+CMD disabled
+CMD disabledel
+CMD disconnect
+CMD dkick
+CMD dmute
+CMD donate
+CMD dwarn
+CMD enable
+CMD export
+CMD fban
+CMD fbanlist
+CMD fbanstat
+CMD fedadmins
+CMD feddemote
+CMD feddemoteme
+CMD fedinfo
+CMD fednotif
+CMD fedpromote
+CMD fedreason
+CMD fedstat
+CMD fedsubs
+CMD filter
+CMD filters
+CMD flood
+CMD formatting
+CMD funban
+CMD fwdblockaction
+CMD fwdblocklist
+CMD get
+CMD github
+CMD goodbye
+CMD help
+CMD id
+CMD import
+CMD importfbans
+CMD info
+CMD invitelink
+CMD joinfed
+CMD kick
+CMD kickme
+CMD lang
+CMD leavechat
+CMD leavefed
+CMD linkstaff
+CMD lock
+CMD lockdown
+CMD lockdownstatus
+CMD locks
+CMD locktypes
+CMD log
+CMD logcategories
+CMD logchannel
+CMD markdownhelp
+CMD mute
+CMD myfeds
+CMD newfed
+CMD nolog
+CMD notes
+CMD permapin
+CMD pin
+CMD ping
+CMD pinned
+CMD privatenotes
+CMD privaterules
+CMD privnote
+CMD promote
+CMD purge
+CMD purgefrom
+CMD purgeto
+CMD quietfed
+CMD raidactiontime
+CMD raidtime
+CMD reactions
+CMD reconnect
+CMD remallbl
+CMD remdev
+CMD removebotkeyboard
+CMD removefilter
+CMD removereaction
+CMD remsudo
+CMD renamefed
+CMD report
+CMD reports
+CMD reset
+CMD resetallwarns
+CMD resetgoodbye
+CMD resetreactions
+CMD resetrules
+CMD resetrulesbtn
+CMD resetrulesbutton
+CMD resetwarn
+CMD resetwarns
+CMD resetwelcome
+CMD restrict
+CMD rmallbl
+CMD rmallblocklist
+CMD rmblacklist
+CMD rmblocklist
+CMD rmblocklistall
+CMD rmfilter
+CMD rmfwdblock
+CMD rmnote
+CMD rmwarn
+CMD rules
+CMD rulesbtn
+CMD rulesbutton
+CMD runs
+CMD save
+CMD saved
+CMD sban
+CMD setdescription
+CMD setfedlog
+CMD setflood
+CMD setfloodmode
+CMD setgdesc
+CMD setgoodbye
+CMD setgpic
+CMD setgroupdesc
+CMD setgrouppic
+CMD setgrouptitle
+CMD setgtitle
+CMD setlog
+CMD setrules
+CMD setstaff
+CMD settings
+CMD setwarnlimit
+CMD setwarnmode
+CMD setwelcome
+CMD skick
+CMD smute
+CMD staff
+CMD start
+CMD stat
+CMD stats
+CMD stickerid
+CMD stop
+CMD stopall
+CMD subfed
+CMD swarn
+CMD tban
+CMD teamusers
+CMD tell
+CMD title
+CMD tmute
+CMD tr
+CMD ud
+CMD unapprove
+CMD unapproveall
+CMD unban
+CMD unbanall
+CMD unblacklist
+CMD unfban
+CMD unlinkstaff
+CMD unlock
+CMD unlockdown
+CMD unmute
+CMD unpin
+CMD unpinall
+CMD unrestrict
+CMD unsetfedlog
+CMD unsetlog
+CMD unsetstaff
+CMD unsubfed
+CMD unwarn
+CMD warn
+CMD warnings
+CMD warns
+CMD welcome
+CMD wiki
+CMD zombies
+--- PASS: TestZZCount (0.00s)
+PASS
+ok  	github.com/uasneppy/fuku_robot/fuku/utils/helpers	0.037s

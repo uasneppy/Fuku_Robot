@@ -39,9 +39,6 @@ EXPOSE 8080
 ENTRYPOINT ["/app/fuku_robot"]
 
 # Metadata
-LABEL org.opencontainers.image.authors="Divanshu Chauhan <divkix@divkix.me>"
-LABEL org.opencontainers.image.url="https://divkix.me"
 LABEL org.opencontainers.image.source="https://github.com/uasneppy/fuku_robot"
-LABEL org.opencontainers.image.title="Fuku Go Robot"
-LABEL org.opencontainers.image.description="Official Fuku Go Robot Docker Image"
-LABEL org.opencontainers.image.vendor="Divkix"
+LABEL org.opencontainers.image.title="Xenobot-72"
+LABEL org.opencontainers.image.description="Xenobot-72 Docker Image"

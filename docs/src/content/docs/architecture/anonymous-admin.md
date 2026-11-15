@@ -1,11 +1,11 @@
 ---
 title: Anonymous Admin Verification
-description: How Fuku Robot handles admin commands sent via Telegram's anonymous admin mode.
+description: How Xenobot-72 handles admin commands sent via Telegram's anonymous admin mode.
 ---
 
 # Anonymous Admin Verification
 
-When a group admin enables "Send as Group" (anonymous admin mode), Telegram sends their messages as `GroupAnonymousBot` (ID `1087968824`). The bot cannot identify which admin sent the command. Fuku Robot provides two modes to handle this: automatic trust (AnonAdmin ON) or keyboard verification (AnonAdmin OFF, the default).
+When a group admin enables "Send as Group" (anonymous admin mode), Telegram sends their messages as `GroupAnonymousBot` (ID `1087968824`). The bot cannot identify which admin sent the command. Xenobot-72 provides two modes to handle this: automatic trust (AnonAdmin ON) or keyboard verification (AnonAdmin OFF, the default).
 
 ## AnonAdmin Modes
 
@@ -33,7 +33,7 @@ The following sequence diagram shows the complete verification process for both 
 ```mermaid
 sequenceDiagram
     participant A as Anonymous Admin
-    participant B as Bot (Fuku)
+    participant B as Bot (Xenobot-72)
     participant C as Redis Cache
     participant D as Any Chat Admin
 

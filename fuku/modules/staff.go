@@ -72,7 +72,7 @@ const (
 // interpolated. Group titles are user-controlled, and the translator runs a
 // printf-style pass over the interpolated text, so a title such as "100%d" must
 // be spliced in afterwards, never passed through the translator.
-const staffGroupsToken = "<<staff-groups>>"
+const staffGroupsToken = "<<staff-groups>>" // #nosec G101 -- a placeholder spliced after translation, not a credential
 
 // replyStaff sends an HTML reply to the command message and logs a failure.
 func replyStaff(c *helpers.CommandContext, text string) {
@@ -400,7 +400,13 @@ func LoadStaff(dispatcher *ext.Dispatcher) {
 	helpers.WrapCommand(dispatcher, staffDesc, staffModule.staffPanel)
 	helpers.WrapCommand(dispatcher, linkStaffDesc, staffModule.linkStaff)
 	helpers.WrapCommand(dispatcher, unlinkStaffDesc, staffModule.unlinkStaff)
+	helpers.WrapCommand(dispatcher, addFwdBlockDesc, staffModule.addFwdBlock)
+	helpers.WrapCommand(dispatcher, rmFwdBlockDesc, staffModule.rmFwdBlock)
+	helpers.WrapCommand(dispatcher, fwdBlockListDesc, staffModule.fwdBlockList)
+	helpers.WrapCommand(dispatcher, fwdBlockActionDesc, staffModule.fwdBlockAction)
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("staff|"), staffModule.staffCallback))
+	// The forward blocklist watcher is the only handler of group -9 and never ends an update.
+	dispatcher.AddHandlerToGroup(handlers.NewMessage(forwardBlockFilter, staffModule.forwardBlockWatcher), staffForwardBlockGroup)
 }
 
 func init() {

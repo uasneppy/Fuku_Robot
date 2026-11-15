@@ -510,11 +510,11 @@ func extractDisplayName(userID int64) string {
 func LoadApprovals(dispatcher *ext.Dispatcher) {
 	SetModuleEnabled(approvalsModule.moduleName, true)
 
-	dispatcher.AddHandler(handlers.NewCommand("approve", approvalsModule.approveUser))
-	dispatcher.AddHandler(handlers.NewCommand("unapprove", approvalsModule.unapproveUser))
-	dispatcher.AddHandler(handlers.NewCommand("approval", approvalsModule.checkApprovalStatus))
-	dispatcher.AddHandler(handlers.NewCommand("approved", approvalsModule.listApprovedUsers))
-	dispatcher.AddHandler(handlers.NewCommand("unapproveall", approvalsModule.unapproveAllHandler))
+	dispatcher.AddHandler(helpers.NewBotCommand("approve", approvalsModule.approveUser))
+	dispatcher.AddHandler(helpers.NewBotCommand("unapprove", approvalsModule.unapproveUser))
+	dispatcher.AddHandler(helpers.NewBotCommand("approval", approvalsModule.checkApprovalStatus))
+	dispatcher.AddHandler(helpers.NewBotCommand("approved", approvalsModule.listApprovedUsers))
+	dispatcher.AddHandler(helpers.NewBotCommand("unapproveall", approvalsModule.unapproveAllHandler))
 
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("rmAllApprovals"), approvalsModule.unapproveAllCallback))
 }

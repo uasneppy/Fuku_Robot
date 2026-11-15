@@ -296,12 +296,15 @@ func TestSettingsLockdownPage(t *testing.T) {
 		env := newSettingsEnv(t)
 		mainButton := func() string {
 			msgID := env.openMenu(env.admin)
-			_, keyboard := env.lastEdit(env.chat.Id, msgID)
-			button, ok := settingsPageButton(t, keyboard, settingsPageLockdown)
-			if !ok {
+			text, keyboard := env.lastEdit(env.chat.Id, msgID)
+			if _, ok := settingsPageButton(t, keyboard, settingsPageLockdown); !ok {
 				t.Fatal("the Main page has no Lockdown button")
 			}
-			return button.Text
+			line, ok := settingsMainStateLine(text, "settings_page_lockdown")
+			if !ok {
+				t.Fatalf("the Main page has no Lockdown status line: %q", text)
+			}
+			return line
 		}
 		if label := mainButton(); !strings.Contains(label, staffMarker("settings_state_lock_none")) {
 			t.Errorf("Main shows %q with no lockdown, want settings_state_lock_none", label)
@@ -369,13 +372,13 @@ func TestSettingsLockdownUnreadable(t *testing.T) {
 		t.Cleanup(restore)
 
 		mainID := env.openMenu(env.admin)
-		_, mainKeyboard := env.lastEdit(env.chat.Id, mainID)
+		mainText, mainKeyboard := env.lastEdit(env.chat.Id, mainID)
 		mainButton, ok := settingsPageButton(t, mainKeyboard, settingsPageLockdown)
 		if !ok {
 			t.Fatal("the Main page has no Lockdown button")
 		}
-		if !strings.HasSuffix(mainButton.Text, " · ❔") {
-			t.Errorf("Main shows %q, want the Lockdown button to end with the unknown mark", mainButton.Text)
+		if line, found := settingsMainStateLine(mainText, "settings_page_lockdown"); !found || !strings.HasSuffix(line, settingsUnknownState) {
+			t.Errorf("Main shows %q (found %v), want the Lockdown status line to end with the unknown mark", line, found)
 		}
 
 		env.pressRaw(env.chat, env.admin, mainID, mainButton.CallbackData)

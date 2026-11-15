@@ -1,6 +1,7 @@
 package lang
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
 	"github.com/uasneppy/fuku_robot/fuku/db/cache"
+	"github.com/uasneppy/fuku_robot/fuku/db/models"
 )
 
 func skipIfNoDb(t *testing.T) {
@@ -230,4 +232,101 @@ func TestGetLanguageFromPrivateAndGroupContexts(t *testing.T) {
 	if got := GetLanguage(groupCtx); got != "fr" {
 		t.Fatalf("GetLanguage(group) = %q, want fr", got)
 	}
+}
+
+func TestGetGroupLanguage(t *testing.T) {
+	skipIfNoDb(t)
+
+	ctx := context.Background()
+	base := time.Now().UnixNano()
+	forget := func(t *testing.T, chatID int64) {
+		t.Helper()
+		t.Cleanup(func() {
+			_ = db.DB.Where("chat_id = ?", chatID).Delete(&models.Chat{}).Error
+			cache.DeleteCache(cache.CacheKey("chat_lang", chatID))
+			cache.DeleteCache(cache.CacheKey("chat_settings", chatID))
+			cache.DeleteCache(cache.CacheKey("chat", chatID))
+		})
+	}
+	chatRows := func(t *testing.T, chatID int64) int64 {
+		t.Helper()
+		var n int64
+		if err := db.DB.Model(&models.Chat{}).Where("chat_id = ?", chatID).Count(&n).Error; err != nil {
+			t.Fatalf("count chats rows: %v", err)
+		}
+		return n
+	}
+
+	t.Run("a stored language is read", func(t *testing.T) {
+		chatID := base + 1
+		forget(t, chatID)
+		if err := ChangeGroupLanguage(chatID, "es"); err != nil {
+			t.Fatalf("ChangeGroupLanguage() error = %v", err)
+		}
+		if got := GetGroupLanguage(ctx, chatID); got != "es" {
+			t.Fatalf("GetGroupLanguage() = %q, want es", got)
+		}
+	})
+
+	t.Run("a chat with no row reads uk and creates nothing", func(t *testing.T) {
+		chatID := base + 2
+		forget(t, chatID)
+		if got := GetGroupLanguage(ctx, chatID); got != "uk" {
+			t.Fatalf("GetGroupLanguage() = %q, want uk", got)
+		}
+		if n := chatRows(t, chatID); n != 0 {
+			t.Fatalf("the read created %d chats rows", n)
+		}
+	})
+
+	t.Run("an empty language reads uk", func(t *testing.T) {
+		chatID := base + 3
+		forget(t, chatID)
+		if err := ChangeGroupLanguage(chatID, "es"); err != nil {
+			t.Fatalf("ChangeGroupLanguage() error = %v", err)
+		}
+		if err := db.DB.Model(&models.Chat{}).Where("chat_id = ?", chatID).Update("language", "").Error; err != nil {
+			t.Fatalf("blank the language: %v", err)
+		}
+		cache.DeleteCache(cache.CacheKey("chat_lang", chatID))
+		if got := GetGroupLanguage(ctx, chatID); got != "uk" {
+			t.Fatalf("GetGroupLanguage() = %q, want uk", got)
+		}
+	})
+
+	t.Run("a change is seen by the next read", func(t *testing.T) {
+		chatID := base + 4
+		forget(t, chatID)
+		if err := ChangeGroupLanguage(chatID, "es"); err != nil {
+			t.Fatalf("ChangeGroupLanguage() error = %v", err)
+		}
+		if got := GetGroupLanguage(ctx, chatID); got != "es" {
+			t.Fatalf("GetGroupLanguage() = %q, want es", got)
+		}
+		if err := ChangeGroupLanguage(chatID, "fr"); err != nil {
+			t.Fatalf("ChangeGroupLanguage() error = %v", err)
+		}
+		if got := GetGroupLanguage(ctx, chatID); got != "fr" {
+			t.Fatalf("GetGroupLanguage() after a change = %q, want fr", got)
+		}
+	})
+
+	t.Run("it equals GetLanguage of a group context", func(t *testing.T) {
+		chatID := -1000000000000 - (base % 1000000)
+		forget(t, chatID)
+		if err := ChangeGroupLanguage(chatID, "pt"); err != nil {
+			t.Fatalf("ChangeGroupLanguage() error = %v", err)
+		}
+		groupCtx := ext.NewContext(
+			&gotgbot.Bot{User: gotgbot.User{Id: 999, IsBot: true}},
+			&gotgbot.Update{Message: &gotgbot.Message{
+				Chat: gotgbot.Chat{Id: chatID, Type: "supergroup", Title: "Lang Group"},
+				From: &gotgbot.User{Id: 5, FirstName: "Tester"},
+			}},
+			nil,
+		)
+		if got, want := GetGroupLanguage(ctx, chatID), GetLanguage(groupCtx); got != want || got != "pt" {
+			t.Fatalf("GetGroupLanguage() = %q, GetLanguage() = %q, want both pt", got, want)
+		}
+	})
 }

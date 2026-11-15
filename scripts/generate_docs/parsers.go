@@ -148,8 +148,10 @@ func parseCommands(modulesPath string) ([]Command, error) {
 	var commands []Command
 
 	// Regex patterns for command extraction
-	// Matches handlers.NewCommand("cmd", module.handler) or handlers.NewCommand("cmd", func(...) {...})
-	newCommandPattern := regexp.MustCompile(`handlers\.NewCommand\s*\(\s*"([^"]+)"\s*,\s*(?:(\w+)(?:\(\))?\.(\w+)|func\b)`)
+	// Matches helpers.NewBotCommand("cmd", module.handler) or helpers.NewBotCommand("cmd", func(...) {...}).
+	// NewBotCommand is the recording shim every raw command is built through (the library's own
+	// constructor is only called inside it), so this finds the same registrations as before.
+	newCommandPattern := regexp.MustCompile(`helpers\.NewBotCommand\s*\(\s*"([^"]+)"\s*,\s*(?:(\w+)(?:\(\))?\.(\w+)|func\b)`)
 	disableablePattern := regexp.MustCompile(`(?:misc|helpers)\.AddCmdToDisableable\s*\(\s*"([^"]+)"\s*\)`)
 	moduleNamePattern := regexp.MustCompile(`(\w+)Module\s*=\s*moduleStruct\s*\{\s*moduleName:\s*"([^"]+)"`)
 

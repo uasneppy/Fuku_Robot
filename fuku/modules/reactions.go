@@ -18,6 +18,7 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
 	"github.com/uasneppy/fuku_robot/fuku/utils/chat_status"
 	"github.com/uasneppy/fuku_robot/fuku/utils/formatting"
+	"github.com/uasneppy/fuku_robot/fuku/utils/helpers"
 	"github.com/uasneppy/fuku_robot/fuku/utils/tracing"
 )
 
@@ -37,10 +38,10 @@ var supportedReactionEmoji = []string{
 }
 
 func LoadReactions(dispatcher *ext.Dispatcher) {
-	dispatcher.AddHandler(handlers.NewCommand("addreaction", reactionsModule.addReaction))
-	dispatcher.AddHandler(handlers.NewCommand("removereaction", reactionsModule.removeReaction))
-	dispatcher.AddHandler(handlers.NewCommand("reactions", reactionsModule.listReactions))
-	dispatcher.AddHandler(handlers.NewCommand("resetreactions", reactionsModule.resetReactions))
+	dispatcher.AddHandler(helpers.NewBotCommand("addreaction", reactionsModule.addReaction))
+	dispatcher.AddHandler(helpers.NewBotCommand("removereaction", reactionsModule.removeReaction))
+	dispatcher.AddHandler(helpers.NewBotCommand("reactions", reactionsModule.listReactions))
+	dispatcher.AddHandler(helpers.NewBotCommand("resetreactions", reactionsModule.resetReactions))
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("reactions_help"), reactionsModule.reactionsHelpHandler))
 
 	dispatcher.AddHandlerToGroup(handlers.NewMessage(message.All, reactionsModule.checkReactions), reactionsModule.handlerGroup)

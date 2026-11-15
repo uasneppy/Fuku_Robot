@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# PostgreSQL Migration Script for Fuku Robot (vendor-agnostic)
+# PostgreSQL Migration Script for Xenobot-72 (vendor-agnostic)
 # Uses migrations/ as source-of-truth and auto-cleans for plain PostgreSQL
 
 set -euo pipefail

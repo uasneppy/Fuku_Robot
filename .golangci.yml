@@ -1,4 +1,4 @@
-# golangci-lint configuration for Fuku Robot
+# golangci-lint configuration for Xenobot-72
 version: "2"
 
 run:

@@ -1,4 +1,4 @@
-// Package main provides a documentation generator for Fuku Robot.
+// Package main provides a documentation generator for Xenobot-72.
 // It parses the codebase and generates Markdown documentation for Blume.
 package main
 
@@ -90,7 +90,7 @@ func main() {
 		return
 	}
 
-	log.Info("🚀 Starting Fuku Robot Documentation Generator")
+	log.Info("🚀 Starting Xenobot-72 Documentation Generator")
 
 	// Parse all sources
 	log.Info("📖 Parsing translations...")
@@ -305,7 +305,7 @@ func generateInventory(projectRoot string) error {
 		}
 
 		for _, cmd := range modCmds {
-			regPattern := "NewCommand"
+			regPattern := "NewBotCommand"
 			if len(cmd.Aliases) > 0 {
 				regPattern = "MultiCommand"
 			}

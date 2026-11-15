@@ -115,20 +115,42 @@ func GetNotesListContext(ctx context.Context, chatID int64, admin bool) []string
 	return out
 }
 
+// DoesNoteExists reports whether the chat has a note with exactly this name. A failed read is logged and
+// reads as false, which is the behaviour the callers that cannot refuse rely on; use NoteExistsContext where
+// the error matters.
 func DoesNoteExists(chatID int64, noteName string) bool {
-	var note models.Notes
-	err := db.DB.Where("chat_id = ? AND note_name = ?", chatID, noteName).Take(&note).Error
+	exists, err := NoteExistsContext(context.Background(), chatID, noteName)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return false
-		}
-		log.Errorf("[Database] DoesNoteExists: %v - %d", err, chatID)
 		return false
 	}
-	return true
+	return exists
 }
 
+// NoteExistsContext reports whether the chat has a note with exactly this name and returns the database
+// error instead of hiding it. It creates nothing and uses no cache.
+func NoteExistsContext(ctx context.Context, chatID int64, noteName string) (bool, error) {
+	var note models.Notes
+	err := db.DB.WithContext(ctx).Where("chat_id = ? AND note_name = ?", chatID, noteName).Take(&note).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return false, nil
+		}
+		log.Errorf("[Database] NoteExistsContext: %v - %d", err, chatID)
+		return false, err
+	}
+	return true, nil
+}
+
+// AddNote stores a note and reports only the error; a name the chat already has is left as it is.
 func AddNote(chatID int64, noteName, replyText, fileID string, buttons models.ButtonArray, filtType int, pvtOnly, grpOnly, adminOnly, webPrev, isProtected, noNotif bool) error {
+	_, err := AddNoteContext(context.Background(), chatID, noteName, replyText, fileID, buttons, filtType, pvtOnly, grpOnly, adminOnly, webPrev, isProtected, noNotif)
+	return err
+}
+
+// AddNoteContext stores a note and reports whether a row was inserted: a name the chat already has (the unique
+// key is chat and name) inserts nothing and is not an error, so a caller can tell a stored note from one that
+// lost a race. The chat's note list cache is dropped only when a row was inserted.
+func AddNoteContext(ctx context.Context, chatID int64, noteName, replyText, fileID string, buttons models.ButtonArray, filtType int, pvtOnly, grpOnly, adminOnly, webPrev, isProtected, noNotif bool) (inserted bool, err error) {
 	now := time.Now().UTC()
 	noterc := map[string]any{
 		"chat_id":      chatID,
@@ -147,18 +169,19 @@ func AddNote(chatID int64, noteName, replyText, fileID string, buttons models.Bu
 		"updated_at":   now,
 	}
 
-	result := db.DB.Model(&models.Notes{}).Clauses(clause.OnConflict{
+	result := db.DB.WithContext(ctx).Model(&models.Notes{}).Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "chat_id"}, {Name: "note_name"}},
 		DoNothing: true,
 	}).Create(noterc)
 	if result.Error != nil {
 		log.Errorf("[Database][AddNote]: %d - %v", chatID, result.Error)
-		return result.Error
+		return false, result.Error
 	}
 	if result.RowsAffected > 0 {
 		invalidateNotesCache(chatID)
+		return true, nil
 	}
-	return nil
+	return false, nil
 }
 
 func UpdateNote(chatID int64, noteName, replyText, fileID string, buttons models.ButtonArray, filtType int, pvtOnly, grpOnly, adminOnly, webPrev, isProtected, noNotif bool) (bool, error) {
@@ -187,8 +210,15 @@ func UpdateNote(chatID int64, noteName, replyText, fileID string, buttons models
 	return result.RowsAffected > 0, nil
 }
 
+// RemoveNote deletes the chat's note with exactly this name.
 func RemoveNote(chatID int64, noteName string) error {
-	result := db.DB.Where("chat_id = ? AND note_name = ?", chatID, noteName).Delete(&models.Notes{})
+	return RemoveNoteContext(context.Background(), chatID, noteName)
+}
+
+// RemoveNoteContext deletes the chat's note with exactly this name and drops the chat's note list cache when a
+// row went. A name that is not stored is not an error.
+func RemoveNoteContext(ctx context.Context, chatID int64, noteName string) error {
+	result := db.DB.WithContext(ctx).Where("chat_id = ? AND note_name = ?", chatID, noteName).Delete(&models.Notes{})
 	if result.Error != nil {
 		log.Errorf("[Database][RemoveNote]: %d - %v", chatID, result.Error)
 		return result.Error
@@ -197,6 +227,63 @@ func RemoveNote(chatID int64, noteName string) error {
 		invalidateNotesCache(chatID)
 	}
 	return nil
+}
+
+// ListNoteEntriesFresh reads the chat's note rows (ID, name and the admin-only flag) with one query, oldest
+// first. It is fresh, chat-scoped and uncached, returns its error, and never touches notes_settings: it
+// creates nothing and fills no notes_list entry.
+func ListNoteEntriesFresh(ctx context.Context, chatID int64) ([]models.Notes, error) {
+	var rows []models.Notes
+	err := db.DB.WithContext(ctx).Select("id", "note_name", "admin_only").Where("chat_id = ?", chatID).Order("id").Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+// GetNoteEntryFresh reads one note row by its ID, only when it belongs to the chat: a missing ID and the ID
+// of another chat's row both return nil and a nil error. It is fresh, chat-scoped and uncached, returns its
+// read error, and never touches notes_settings.
+func GetNoteEntryFresh(ctx context.Context, chatID, id int64) (*models.Notes, error) {
+	var row models.Notes
+	err := db.DB.WithContext(ctx).Where("id = ? AND chat_id = ?", id, chatID).Take(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+// CountNotesFresh returns how many notes the chat has and the database error instead of hiding it. It is
+// fresh and uncached, and never touches notes_settings.
+func CountNotesFresh(ctx context.Context, chatID int64) (int64, error) {
+	var n int64
+	err := db.DB.WithContext(ctx).Model(&models.Notes{}).Where("chat_id = ?", chatID).Count(&n).Error
+	if err != nil {
+		log.Errorf("[Database][CountNotesFresh]: %d - %v", chatID, err)
+		return 0, err
+	}
+	return n, nil
+}
+
+// RemoveNoteByID deletes one note by its ID, only when it belongs to the chat, in one conditional statement,
+// and returns the stored name of the row that went. A missing ID and the ID of another chat's row delete
+// nothing and return removed false. The chat's notes_list cache is dropped only when a row went, and
+// notes_settings is never touched.
+func RemoveNoteByID(ctx context.Context, chatID, id int64) (name string, removed bool, err error) {
+	var rows []models.Notes
+	result := db.DB.WithContext(ctx).Clauses(clause.Returning{}).Where("id = ? AND chat_id = ?", id, chatID).Delete(&rows)
+	if result.Error != nil {
+		log.Errorf("[Database][RemoveNoteByID]: %d - %v", chatID, result.Error)
+		return "", false, result.Error
+	}
+	if len(rows) != 1 {
+		return "", false, nil
+	}
+	invalidateNotesCache(chatID)
+	return rows[0].NoteName, true, nil
 }
 
 func RemoveAllNotes(chatID int64) error {

@@ -19,8 +19,8 @@ func TestNewBackupFormat(t *testing.T) {
 	if bf.Version != BackupFormatVersion {
 		t.Fatalf("Version = %q, want %q", bf.Version, BackupFormatVersion)
 	}
-	if bf.BotName != "FukuRobot" {
-		t.Fatalf("BotName = %q, want %q", bf.BotName, "FukuRobot")
+	if bf.BotName != "Xenobot-72" {
+		t.Fatalf("BotName = %q, want %q", bf.BotName, "Xenobot-72")
 	}
 	if bf.ChatID != chatID {
 		t.Fatalf("ChatID = %d, want %d", bf.ChatID, chatID)
@@ -248,8 +248,8 @@ func TestBackupFormat_ToJSON(t *testing.T) {
 	if parsed["version"] != BackupFormatVersion {
 		t.Fatalf("JSON version = %v, want %v", parsed["version"], BackupFormatVersion)
 	}
-	if parsed["bot_name"] != "FukuRobot" {
-		t.Fatalf("JSON bot_name = %v, want %v", parsed["bot_name"], "FukuRobot")
+	if parsed["bot_name"] != "Xenobot-72" {
+		t.Fatalf("JSON bot_name = %v, want %v", parsed["bot_name"], "Xenobot-72")
 	}
 	if parsed["chat_id"] != float64(123) {
 		t.Fatalf("JSON chat_id = %v, want 123", parsed["chat_id"])
@@ -330,5 +330,66 @@ func TestBackupFormatFromJSON(t *testing.T) {
 	got := bf.Data["warns"].([]any)[0].(map[string]any)["user_id"]
 	if got != json.Number(largeID) {
 		t.Fatalf("nested user_id = %v (%T), want exact json.Number(%s)", got, got, largeID)
+	}
+}
+
+// TestBackupImportToleratesEarlierBotName proves that the bot name of an export is informational:
+// a file written under the bot's earlier name (the literal below is the string old exports carry)
+// parses and validates like one written now, while the real refusals of Validate still stand.
+func TestBackupImportToleratesEarlierBotName(t *testing.T) {
+	const earlierName = "FukuRobot"
+
+	build := func(botName, version string, modules string) []byte {
+		return []byte(`{"version":"` + version + `","bot_name":"` + botName + `","chat_id":123,` +
+			`"chat_name":"Test","exported_by":456,"modules":` + modules +
+			`,"data":{"admin":{"anon_admin":true}},"exported_at":"2024-01-01T00:00:00Z"}`)
+	}
+
+	valid := []struct {
+		name string
+		raw  []byte
+	}{
+		{"earlier name", build(earlierName, "1.0", `["admin"]`)},
+		{"current name", build("Xenobot-72", "1.0", `["admin"]`)},
+	}
+	for _, tc := range valid {
+		t.Run(tc.name, func(t *testing.T) {
+			bf, err := BackupFormatFromJSON(tc.raw)
+			if err != nil {
+				t.Fatalf("BackupFormatFromJSON() error: %v", err)
+			}
+			if err := bf.Validate(); err != nil {
+				t.Fatalf("Validate() error: %v", err)
+			}
+		})
+	}
+
+	// An export this version writes carries the current name and still passes its own checks.
+	fresh := NewBackupFormat(123, "Test", 456, []string{"admin"})
+	fresh.Data["admin"] = map[string]interface{}{"anon_admin": true}
+	if err := fresh.Validate(); err != nil {
+		t.Fatalf("Validate() of a new export error: %v", err)
+	}
+
+	refused := []struct {
+		name string
+		raw  []byte
+	}{
+		{"empty name", build("", "1.0", `["admin"]`)},
+		{"missing version", build(earlierName, "", `["admin"]`)},
+		{"empty module list", build(earlierName, "1.0", `[]`)},
+		{"unknown module", build(earlierName, "1.0", `["nonexistent"]`)},
+		{"module without data", build(earlierName, "1.0", `["filters"]`)},
+	}
+	for _, tc := range refused {
+		t.Run("refuses "+tc.name, func(t *testing.T) {
+			bf, err := BackupFormatFromJSON(tc.raw)
+			if err != nil {
+				t.Fatalf("BackupFormatFromJSON() error: %v", err)
+			}
+			if err := bf.Validate(); err == nil {
+				t.Fatal("Validate() = nil, want an error")
+			}
+		})
 	}
 }
