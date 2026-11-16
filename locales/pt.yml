@@ -206,8 +206,7 @@ blacklists_help_msg: "*Comandos de Usuário:*
 
   *Nota:*
 
-  O modo padrão para Lista Negra é *none*, que apenas deletará as mensagens do
-  chat."
+  O modo padrão para Lista Negra é *warn*, que apaga a mensagem e adverte o usuário."
 blacklists_ls_bl_list_bl: "Estas palavras estão na lista negra neste chat:"
 blacklists_ls_bl_no_blacklisted: Não há palavras na lista negra neste chat.
 blacklists_rm_all_bl_ask:
@@ -1545,6 +1544,7 @@ language_invalid_selection: "Seleção de idioma inválida."
 # Bot updates module additional strings
 bot_updates_need_supergroup: "Desculpe, mas para usar todas minhas funcionalidades, você precisa converter este grupo para supergrupo."
 bot_updates_thanks_for_adding: "Obrigado por me adicionar em seu grupo!"
+bot_updates_make_me_admin: "Torne-me administrador para usar todos os meus recursos!"
 bot_updates_button_expired: "Este botão expirou, Por favor use o comando novamente."
 
 # Formatting module additional strings

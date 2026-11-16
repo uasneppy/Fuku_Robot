@@ -745,11 +745,11 @@ func TestSettingsLocksFailedWrite(t *testing.T) {
 		withRealLocales(t)
 		p := &settingsPress{tr: i18n.MustNewTranslator("en")}
 		got := settingsLocksFailureNotice(p, "locks_lock_failed", settingsLockRow{NameKey: "settings_lock_bots"})
-		if want := "⚠️ Failed to lock: Bots. Please try again later."; got != want {
+		if want := "⚠️ Malfunction: could not lock Bots. Try again later."; got != want {
 			t.Errorf("lock notice = %q, want %q", got, want)
 		}
 		got = settingsLocksFailureNotice(p, "locks_unlock_failed", settingsLockRow{NameKey: "settings_lock_other"})
-		if want := "⚠️ Failed to unlock: Game/sticker/GIF. Please try again later."; got != want {
+		if want := "⚠️ Malfunction: could not unlock Game/sticker/GIF. Try again later."; got != want {
 			t.Errorf("unlock notice = %q, want %q", got, want)
 		}
 	})

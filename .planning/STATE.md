@@ -353,6 +353,7 @@ None yet.
 | 261113-tjj | Staff Group forward-source blocklist: delete forwards from listed channels in every linked group and punish the forwarder (commands, settings page, group -9 watcher) | 2026-11-14 | b907052 | [261113-tjj-staff-group-forward-source-blocklist-blo](./quick/261113-tjj-staff-group-forward-source-blocklist-blo/) |
 | 261115-pvl | Rewrite README.md in the Xenobot-72 voice and add an original Ukrainian README.uk.md (v2.24.0) | 2026-11-15 | e3b94f9 | [261115-pvl-rewrite-readme-md-in-the-xenobot-72-voic](./quick/261115-pvl-rewrite-readme-md-in-the-xenobot-72-voic/) |
 | 261115-rcd | Rename the bot to Xenobot-72 in all user-visible text outside the READMEs and remove every link to the original developers (locales, help buttons, backup export name, captcha help fix, packaging, GitHub files, docs site) | 2026-11-15 | c662a52 | [261115-rcd-rename-the-bot-to-xenobot-72-in-all-user](./quick/261115-rcd-rename-the-bot-to-xenobot-72-in-all-user/) |
+| 261116-v2r | Voice the v2.24.0 locale keys and the eight keys main changed (en, uk) and add an Attributions section to both READMEs | 2026-11-16 | f1872e0 | [261116-v2r-voice-the-v2-24-0-locale-keys-and-add-readme-a](./quick/261116-v2r-voice-the-v2-24-0-locale-keys-and-add-readme-a/) |
 
 ## Deferred Items
 

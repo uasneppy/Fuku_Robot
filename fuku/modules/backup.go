@@ -255,7 +255,7 @@ func (m moduleStruct) exportHandler(b *gotgbot.Bot, ctx *ext.Context) error {
 		return ext.EndGroups
 	}
 
-	fileName := fmt.Sprintf("fuku_backup_%d_%s.json", chat.Id, time.Now().Format("20060102_150405"))
+	fileName := fmt.Sprintf("xenobot72_backup_%d_%s.json", chat.Id, time.Now().Format("20060102_150405"))
 	caption := buildExportCaption(tr, bkp)
 
 	_, err = b.SendDocument(

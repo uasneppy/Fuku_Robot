@@ -213,8 +213,7 @@ blacklists_help_msg: "*Perintah Pengguna:*
 
   *Catatan:*
 
-  Mode default untuk Daftar Hitam adalah *none*, yang hanya akan menghapus pesan dari
-  obrolan."
+  Mode default untuk Daftar Hitam adalah *warn*, yang menghapus pesan dan memperingatkan pengguna."
 blacklists_ls_bl_list_bl: "Kata-kata ini didaftar hitam di obrolan ini:"
 blacklists_ls_bl_no_blacklisted: Tidak ada kata yang didaftar hitam di obrolan ini.
 blacklists_rm_all_bl_ask: |
@@ -1577,6 +1576,7 @@ language_invalid_selection: "Pilihan bahasa tidak valid."
 # Bot updates module additional strings
 bot_updates_need_supergroup: "Maaf, tetapi untuk menggunakan semua fitur saya, Anda perlu mengubah grup ini menjadi supergrup."
 bot_updates_thanks_for_adding: "Terima kasih telah menambahkan saya di grup Anda!"
+bot_updates_make_me_admin: "Jadikan saya admin agar semua fitur saya bisa digunakan!"
 bot_updates_button_expired: "Tombol ini telah kedaluwarsa, Silakan gunakan perintah lagi."
 
 # Formatting module additional strings

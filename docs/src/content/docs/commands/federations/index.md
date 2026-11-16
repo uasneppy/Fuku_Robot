@@ -5,7 +5,7 @@ description: Complete guide to Federations module commands and features
 
 # 🛡️ Federations Commands
 
-Federations share a ban list across groups you own.
+Federations share a ban list across the groups you own. One removal, every facility.
 
 ### Owner (PM):
 - `/newfed <name>`: Create a federation (one per user).

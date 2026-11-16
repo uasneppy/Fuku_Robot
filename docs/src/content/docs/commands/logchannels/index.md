@@ -5,7 +5,7 @@ description: Complete guide to Logchannels module commands and features
 
 # 📜 Logchannels Commands
 
-Send admin actions to a dedicated log channel.
+Send admin actions to a dedicated log channel. Every facility keeps records.
 
 1. Add the bot to a channel as admin.
 2. In that channel, send /setlog.

@@ -423,8 +423,7 @@ blacklists_help_msg: "*Commandes Utilisateur :*
 
   *Note :*
 
-  Le mode par défaut pour la liste noire est *none*, ce qui supprimera simplement les messages du
-  chat."
+  Le mode par défaut pour la liste noire est *warn*, qui supprime le message et avertit l'utilisateur."
 blacklists_ls_bl_list_bl: "Ces mots sont sur la liste noire de ce chat :"
 blacklists_ls_bl_no_blacklisted: Il n'y a pas de mots sur la liste noire dans ce chat.
 blacklists_rm_all_bl_ask: |
@@ -1389,6 +1388,7 @@ mute_reply_to_dmute: Vous devez répondre à un message pour le supprimer et ren
 bot_updates_need_admin: Vous devez être admin pour faire cela !
 bot_updates_need_supergroup: "Désolé, mais pour utiliser toutes mes fonctionnalités, vous devez convertir ce groupe en supergroupe."
 bot_updates_thanks_for_adding: "Merci de m'avoir ajouté à votre groupe !"
+bot_updates_make_me_admin: "Nommez-moi administrateur pour utiliser toutes mes fonctionnalités !"
 bot_updates_button_expired: "Ce bouton a expiré. Veuillez utiliser la commande à nouveau."
 bot_updates_convert_instruction: "Après avoir converti ce groupe en supergroupe, vous pouvez m'ajouter à nouveau pour m'utiliser.\n"
 bot_updates_convert_howto: "Pour convertir ce groupe en supergroupe, veuillez suivre les instructions ici :\n"

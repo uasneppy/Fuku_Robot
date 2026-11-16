@@ -42,6 +42,7 @@
 - [Структура проєкту](#структура-проєкту)
 - [Розробка](#розробка)
 - [Документація](#документація)
+- [Авторство й подяки](#авторство-й-подяки)
 - [Ліцензія](#ліцензія)
 
 ## Можливості
@@ -1046,6 +1047,13 @@ CGO_ENABLED=0 go build ./...                                         # quick com
 
 - **У цьому репозиторії:** джерела сайту документації лежать у [`docs/`](docs/README.md). Добрі відправні точки: [Docker](docs/src/content/docs/self-hosting/docker.mdx), [із вихідного коду](docs/src/content/docs/self-hosting/source.mdx), [база даних](docs/src/content/docs/self-hosting/database.md), [усунення несправностей](docs/src/content/docs/self-hosting/troubleshooting.md), [посібник із вебкапчі](docs/src/content/docs/self-hosting/captcha-web.md), [довідник змінних середовища](docs/src/content/docs/api-reference/environment.md), [кешування](docs/src/content/docs/architecture/caching.md) і [потік запиту](docs/src/content/docs/architecture/request-flow.mdx).
 - **Правила для контриб'юторів:** [AGENTS.md](AGENTS.md).
+
+## Авторство й подяки
+
+- **Персонаж і світ.** Ім'я, персонаж і голос Xenobot-72 взято з *Mau Makan Apa?*, вебкоміксу й анімаційного серіалу Labirhin ([X](https://x.com/LabiLabirhin), [сайт](https://maumakanapa.art/)). Дякуємо Labirhin за такого чудового персонажа.
+- **Оригінальний бот.** Цей проєкт — форк [Alita_Robot](https://github.com/Divkix/Alita_Robot) від [Divkix](https://github.com/Divkix). Його повідомлення про авторські права за ліцензією MIT збережено в [`LICENSE`](LICENSE).
+
+Цей проєкт — фанатська робота. Він не пов'язаний із Labirhin і не має схвалення Labirhin. Права на Xenobot-72 і Jaya Abadi належать Labirhin.
 
 ## Ліцензія
 

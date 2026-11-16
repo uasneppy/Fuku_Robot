@@ -42,6 +42,22 @@ func TestNewBackupFormat(t *testing.T) {
 	}
 }
 
+// TestBackupFormat_ValidateAcceptsLegacyBotName keeps backups exported under the
+// bot's earlier name importable after the rename.
+func TestBackupFormat_ValidateAcceptsLegacyBotName(t *testing.T) {
+	bf := &BackupFormat{
+		Version:    legacyFormatVersion,
+		BotName:    "FukuRobot",
+		ChatID:     123,
+		Modules:    []string{"admin"},
+		Data:       map[string]interface{}{"admin": map[string]interface{}{}},
+		ExportedAt: time.Now(),
+	}
+	if err := bf.Validate(); err != nil {
+		t.Fatalf("Validate() on a backup named FukuRobot = %v, want nil", err)
+	}
+}
+
 func TestBackupFormat_Validate(t *testing.T) {
 
 	now := time.Now().UTC()

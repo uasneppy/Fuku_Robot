@@ -144,7 +144,7 @@ blacklists_blacklist_already_blacklisted: "Эти слова уже в чёрн�
 blacklists_blacklist_give_bl_word: Пожалуйста, дайте мне слово для добавления в чёрный список!
 blacklists_blacklist_word_too_long: "Эти слова слишком длинные (максимум 100 символов): %s"
 blacklists_blacklist_word_too_broad: "Эти слова слишком общие (одна буква, цифра или знак препинания совпадали бы почти с каждым сообщением): %s"
-blacklists_help_msg: "*Пользовательские команды:*\n\n  × /blacklists: Проверить все чёрные списки в чате.\n\n\n  *Команды администратора:*\n\n  × /addblacklist `<trigger>`: Добавляет слово в чёрный список в текущем чате.\n\n  × /rmblacklist `<trigger>`: Удаляет слово из чёрного списка в текущем чате.\n\n  × /blaction `<mute/kick/ban/warn/none>`: Устанавливает действие, выполняемое ботом при обнаружении слова из чёрного списка.\n\n  × /blacklistaction: То же, что и выше\n\n\n  *Только для владельца:*\n\n  × /remallbl: Удаляет все слова из чёрного списка чата\n\n\n  *Примечание:*\n\n  Режим по умолчанию для Чёрного списка *none*, который просто удаляет сообщения из чата."
+blacklists_help_msg: "*Пользовательские команды:*\n\n  × /blacklists: Проверить все чёрные списки в чате.\n\n\n  *Команды администратора:*\n\n  × /addblacklist `<trigger>`: Добавляет слово в чёрный список в текущем чате.\n\n  × /rmblacklist `<trigger>`: Удаляет слово из чёрного списка в текущем чате.\n\n  × /blaction `<mute/kick/ban/warn/none>`: Устанавливает действие, выполняемое ботом при обнаружении слова из чёрного списка.\n\n  × /blacklistaction: То же, что и выше\n\n\n  *Только для владельца:*\n\n  × /remallbl: Удаляет все слова из чёрного списка чата\n\n\n  *Примечание:*\n\n  Режим по умолчанию для Чёрного списка *warn*: сообщение удаляется, пользователь получает предупреждение."
 blacklists_ls_bl_list_bl: "Эти слова в чёрном списке в этом чате:"
 blacklists_ls_bl_no_blacklisted: В этом чате нет слов в чёрном списке.
 blacklists_rm_all_bl_ask: |
@@ -1336,6 +1336,7 @@ language_invalid_selection: "Неверный выбор языка."
 # Bot updates module additional strings
 bot_updates_need_supergroup: "Извините, но чтобы использовать все мои функции, вам нужно преобразовать эту группу в супергруппу."
 bot_updates_thanks_for_adding: "Спасибо, что добавили меня в вашу группу!"
+bot_updates_make_me_admin: "Сделайте меня администратором, чтобы использовать все мои возможности!"
 bot_updates_button_expired: "Эта кнопка истекла, пожалуйста, используйте команду снова."
 
 # Formatting module additional strings

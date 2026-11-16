@@ -44,6 +44,7 @@ If you run several groups, one Staff Group of trusted admins can act on all of t
 - [Project structure](#project-structure)
 - [Development](#development)
 - [Documentation](#documentation)
+- [Attributions](#attributions)
 - [License](#license)
 
 ## Features
@@ -1049,8 +1050,13 @@ CGO_ENABLED=0 go build ./...                                         # quick com
 - **In this repository:** the docs site sources live in [`docs/`](docs/README.md). Good starting points are [Docker](docs/src/content/docs/self-hosting/docker.mdx), [from source](docs/src/content/docs/self-hosting/source.mdx), [database](docs/src/content/docs/self-hosting/database.md), [troubleshooting](docs/src/content/docs/self-hosting/troubleshooting.md), [the web captcha guide](docs/src/content/docs/self-hosting/captcha-web.md), [environment reference](docs/src/content/docs/api-reference/environment.md), [caching](docs/src/content/docs/architecture/caching.md) and [request flow](docs/src/content/docs/architecture/request-flow.mdx).
 - **Contributor rules:** [AGENTS.md](AGENTS.md).
 
+## Attributions
+
+- **Character and setting.** The name, character and voice of Xenobot-72 come from *Mau Makan Apa?*, the webcomic and animated series by Labirhin ([X](https://x.com/LabiLabirhin), [website](https://maumakanapa.art/)). Thank you to Labirhin for creating such an amazing character.
+- **Original bot.** This project is a fork of [Alita_Robot](https://github.com/Divkix/Alita_Robot) by [Divkix](https://github.com/Divkix). Its MIT copyright notice is kept in [`LICENSE`](LICENSE).
+
+This project is a fan work. It is not affiliated with or endorsed by Labirhin. Xenobot-72 and Jaya Abadi belong to their creator.
+
 ## License
 
 [MIT](LICENSE). The full text and the copyright notice are in [`LICENSE`](LICENSE). I rely on [gotgbot](https://github.com/PaulSonOfLars/gotgbot) and [gotg_md2html](https://github.com/PaulSonOfLars/gotg_md2html) by PaulSonOfLars, and on the other open-source libraries listed in [`go.mod`](go.mod).
-
-Props to Labirhin for creating such an amazing character! 
