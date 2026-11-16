@@ -6,7 +6,7 @@ admin_anon_admin_disabled_now: "AnonAdmin mode is now <b>disabled</b> for %s.\nF
 admin_anon_admin_enabled: "AnonAdmin mode is currently <b>enabled</b> for %s.\nAll anonymous admins can perform admin actions without restriction."
 admin_anon_admin_enabled_now: "AnonAdmin mode is now <b>enabled</b> for %s.\nFrom now on, I will ask anonymous admins to verify their permissions."
 admin_anon_admin_invalid_arg: "Unrecognised input. I accept <code>on</code>, <code>off</code>, <code>yes</code> or <code>no</code> only."
-admin_demote_not_admin: "Request denied. This person is not an admin. There is nothing to demote."
+admin_demote_not_admin: "This person is not an admin. There is nothing to demote."
 admin_demote_is_bot_itself: "Request denied. I do not process my own demotion. Nice try."
 admin_demote_is_owner: "Request denied. This person created the chat. I cannot demote them."
 admin_demote_success_demote: "%s has been demoted. Supervisor access revoked."
@@ -17,11 +17,11 @@ admin_errors_title_empty: "Give me an admin title to set."
 admin_errors_admin_cache_failed: "Malfunction: I cannot read the admin list right now. Try again in a moment."
 admin_help_msg: "Supervisor staffing, handled by me. Supervisors are your admins: promote and demote them here.\n\n*User Commands:*\n× /adminlist: List the admins in the current chat.\n\n*Admin Commands:*\n× /promote `<reply/username/mention/userid>`: Promote a user.\n× /demote `<reply/username/mention/userid>`: Demote a user.\n× /title `<reply/username/mention/userid>` `<custom title>`: Set a custom title for a user\n× /setgtitle <title>: Change the group title.\n× /setgpic: Reply to a photo to set it as the group picture.\n× /setgdesc [text]: Change the group description."
 admin_promote_admin_title_truncated: "Admin title cut to 16 characters from %d"
-admin_promote_is_admin: "Request denied. This person is already an admin."
+admin_promote_is_admin: "This person is already an admin."
 admin_promote_is_bot_itself: "Request denied. I cannot promote myself. Version 74 will have to wait."
 admin_promote_is_owner: "Request denied. This person created the chat. There is no higher rank."
 admin_promote_success_promote: "%s has been promoted. Supervisor access granted."
-admin_title_is_admin: "Request denied. This person is already an admin, so I cannot set their custom title."
+admin_title_is_admin: "This person is already an admin, so I cannot set their custom title."
 admin_title_is_bot_itself: "Request denied. My title is Xenobot-72. It is not up for discussion."
 admin_title_is_owner: "Request denied. This person created the chat. I cannot set an admin title for them."
 admin_title_success_set: "Admin title of %s set to <b>%s</b>. Paperwork filed."
@@ -74,19 +74,19 @@ antiflood_setfloodmode_success: "Flood mode set to %s."
 antiflood_setfloodmode_unknown_type: "Unknown type '%s'. Use one of: ban/kick/mute"
 bans_ban_ban_reason: <b>Reason:</b> %s
 bans_ban_dban_no_reply: "Reply to a message to delete it and ban the user."
-bans_ban_is_admin: "Request denied. I do not ban admins."
+bans_ban_is_admin: "Admins are staff. I do not ban staff."
 bans_ban_is_bot_itself: "Request denied. I am not removing myself from the facility."
 bans_ban_normal_ban: "Removal from the facility complete.\nBanned %s."
 bans_ban_tban: Banned %s for %s
 bans_help_msg: "Some residents have to leave the facility. This module handles that.\nBan or kick users from your chat, and unban them later if they behave.\n\n*User Commands:*\n× /kickme: kicks the user who sent the command.\n× /banme: bans the user who sent the command.\n\n*Ban Commands* (Admin only):\n× /ban <userhandle>: bans a user. (via handle, or reply)\n× /sban <userhandle>: bans a user silently: no message to the group, and your command is deleted. (via handle, or reply)\n× /skick <userhandle>: kicks a user silently and deletes your command.\n× /dban <userhandle>: bans a user and deletes the replied message. (via handle, or reply)\n× /tban <userhandle> x(m/h/d): bans a user for `x` time. (via handle, or reply). m = minutes, h = hours, d = days.\n× /unban <userhandle>: unbans a user. (via handle, or reply)\n× /unbanall: owner-only confirmation to unban known users.\n\n*Restrict Commands:* (Admin only)\n× /restrict: Shows an InlineKeyboard to choose from kick, ban and mute\n× /unrestrict: Shows an InlineKeyboard to choose from unmute and unban."
-bans_kick_cannot_kick_admin: "Request denied. I do not kick admins."
+bans_kick_cannot_kick_admin: "Admins are staff. I do not kick staff."
 bans_kick_is_bot_itself: "Request denied. I am not kicking myself out of my own facility."
 bans_kick_kicked_reason: <b>Reason:</b> %s
 bans_kick_kicked_user: "Kicked %s from the facility."
 bans_kick_user_not_in_chat: "This user is not in this chat. There is nobody to restrict."
 bans_kickme_is_admin: "Request denied. You are an admin. You stay at your post with everyone else."
-bans_kickme_ok_out: "Request granted. Please exit the facility."
-bans_unban_is_admin: "Request denied. Admins are not banned, so there is nothing to unban."
+bans_kickme_ok_out: "Request granted. Exit the facility."
+bans_unban_is_admin: "Admins are not banned, so there is nothing to unban."
 bans_unban_is_bot_itself: "Request denied. I am already here. I am always here."
 bans_unban_unbanned_user: "Access restored.\nUnbanned %s."
 blacklists_bl_watcher_banned_user: Banned %s due to %s
@@ -96,7 +96,7 @@ blacklists_blacklist_added_bl: "Added to the blacklist:"
 blacklists_blacklist_already_blacklisted: "Already on the blacklist:"
 blacklists_blacklist_give_bl_word: "Give me a word to add to the blacklist."
 blacklists_blacklist_word_too_long: "These words are too long (max 100 characters): %s"
-blacklists_blacklist_word_too_broad: "Request denied. These words are too broad (a single letter, digit or punctuation mark would match almost every message): %s"
+blacklists_blacklist_word_too_broad: "These words are too broad (a single letter, digit or punctuation mark would match almost every message): %s"
 blacklists_help_msg: "Forbidden words, deleted on sight. Contraband is not tolerated in this facility.\n\n*User Commands:*\n× /blacklists: Check all the blacklists in chat.\n\n*Admin Commands:*\n× /addblacklist `<trigger>`: Blacklist the word in the current chat.\n× /rmblacklist `<trigger>`: Remove the word from the chat's blacklisted words.\n× /blaction `<mute/kick/ban/warn/none>`: Set the action the bot takes when a blacklisted word is detected.\n× /blacklistaction: Same as above\n\n*Owner Only:*\n× /remallbl: Remove all blacklisted words from chat\n\n*Note:*\nThe default mode for Blacklist is *warn*, which deletes the message and warns the user."
 blacklists_ls_bl_list_bl: "Blacklisted in this chat:"
 blacklists_ls_bl_no_blacklisted: "No blacklisted words in this chat."
@@ -124,7 +124,7 @@ connections_connections_btns_admin_conn_cmds: "Admin commands"
 connections_connections_btns_user_conn_cmds: "User commands"
 connections_disconnect_disconnected: "Remote link closed. Disconnected from the chat."
 connections_disconnect_need_pm: "Send this to me in private to disconnect from the chat."
-connections_help_msg: "Remote access to a facility. Connect to a chat's database and add things to it without the chat seeing it. You need to be an admin to add things, but any member can view your data (banned or kicked users cannot).\n\n*Commands*:\n× /connect `<chatid>`: Connect to the given chat to view or edit its contents.\n× /disconnect: Disconnect from the current chat.\n× /reconnect: Reconnect to the previously connected chat\n× /connection: Information about the currently connected chat.\n\n*Admin Commands:*\n× /allowconnect <yes/no>: Allow users to connect to chats, or not.\n\nGet the chat id with the /id command in your chat. Do not be surprised if the id is negative; all super groups have negative ids."
+connections_help_msg: "Remote access to a facility. Connect to a chat's database and add things to it without the chat seeing it. You need to be an admin to add things, but any member can view your data (banned or kicked users cannot).\n\n*Commands*:\n× /connect `<chatid>`: Connect to the given chat to view or edit its contents.\n× /disconnect: Disconnect from the current chat.\n× /reconnect: Reconnect to the previously connected chat.\n× /connection: Information about the currently connected chat.\n\n*Admin Commands:*\n× /allowconnect <yes/no>: Allow users to connect to chats, or not.\n\nGet the chat ID with the /id command in your chat. Do not be surprised if the ID is negative; all supergroups have negative IDs."
 connections_is_user_connected_bot_not_admin: "I am not an admin in this chat."
 connections_is_user_connected_need_group: "This command is for group chats, not private chats."
 connections_is_user_connected_user_not_admin: "Access denied. You need to be an admin to do this."
@@ -189,7 +189,7 @@ captcha_web_ready_title: Verify you are human
 captcha_web_ready_body: Complete the check below to join the group.
 captcha_web_widget_label: Security check
 captcha_web_verifying_title: Checking your answer
-captcha_web_verifying_body: Please wait. Do not close this page.
+captcha_web_verifying_body: "Checking. Do not close this page."
 captcha_web_passed_title: You are verified
 captcha_web_passed_body: Welcome to the group. This page closes by itself.
 captcha_web_failed_title: Verification failed
@@ -320,13 +320,13 @@ bans_anonymous_unban_user: "Unbanned user: %s"
 bans_anonymous_unban_reply_only: You can only unban an anonymous user by replying to their message.
 bans_unban_button: Unban (Admin Only)
 bans_restrict_question: "Select the restriction for this user."
-bans_restrict_admin_error: "Request denied. I do not restrict admins."
+bans_restrict_admin_error: "Admins are staff. I do not restrict staff."
 bans_restrict_self_error: "Request denied. I do not restrict myself."
 bans_restrict_kicked: "Admin %s kicked %s from this chat."
 bans_restrict_muted: "Admin %s muted %s in this chat."
 bans_restrict_banned: "Admin %s banned %s from this chat."
 bans_unrestrict_question: "Select which restriction to lift for this user."
-bans_unrestrict_admin_error: "Request denied. I do not kick admins."
+bans_unrestrict_admin_error: "Request denied. Admins are not restricted, so there is nothing to lift."
 bans_unrestrict_self_error: "Request denied. I am not restricted. I never was."
 bans_unrestrict_unmuted: "Unmuted by %s."
 bans_unrestrict_unbanned: "Unbanned by %s."
@@ -351,16 +351,16 @@ warns_mode_updated_kick: "Warn mode updated to: kick"
 warns_mode_updated_mute: "Warn mode updated to: mute"
 warns_mode_unknown: "Unknown type '%s'. Use one of: ban/kick/mute"
 warns_admin_warning_error: "Request denied. I do not warn admins."
-warns_limit_kicked: "Violation notices: %d/%d. %s has been kicked."
-warns_limit_muted: "Violation notices: %d/%d. %s has been muted."
-warns_limit_banned: "Violation notices: %d/%d. %s has been banned."
+warns_limit_kicked: "Warnings: %d/%d. %s has been kicked."
+warns_limit_muted: "Warnings: %d/%d. %s has been muted."
+warns_limit_banned: "Warnings: %d/%d. %s has been banned."
 warns_remove_button: ❌ Remove warn
 warns_rules_button: Rules 📝
-warns_user_warning: "Violation notice. User %s has %d/%d warnings. Proceed with care."
+warns_user_warning: "Violation notice. User: %s. Warnings: %d/%d. Proceed with care."
 warns_warning_reason: "\n<b>Reason</b>:\n%s"
 warns_settings_display: "Current warning settings of the group:\n<b>Warn Limit:</b> <code>%d</code>\n<b>Warn Mode:</b> <code>%s</code>"
-warns_user_warnings_list: "This user has %d/%d warnings, for these reasons:"
-warns_user_warnings_no_reasons: "User has %d/%d warnings, none with a reason."
+warns_user_warnings_list: "Warnings: %d/%d. Reasons:"
+warns_user_warnings_no_reasons: "Warnings: %d/%d. No reasons given."
 warns_user_no_warnings: "This user has no warnings. Clean record."
 warns_removed_by: "Warn removed by %s."
 warns_no_warns_to_remove: "User already has no warns."
@@ -422,7 +422,7 @@ purges_purged_with_reason: "Messages deleted: %d.\n*Reason*:\n%s"
 purges_reply_to_purge: "Reply to a message to choose where the purge starts."
 purges_reply_to_delete: "Reply to a message to delete it."
 purges_message_marked: "This message is already marked for purging."
-purges_marked_for_deletion: "Message marked for deletion. Within 30s, reply to another message with /purgeto to delete everything in between."
+purges_marked_for_deletion: "Message marked for deletion. Within 30 seconds, reply to another message with /purgeto to delete everything in between."
 purges_reply_to_purgefrom: "Reply to a message to choose where the purge starts."
 purges_need_purgefrom: "Use the /purgefrom command first, then this one."
 purges_use_del_single: "To delete one message, use the /del command."
@@ -478,8 +478,8 @@ misc_owner_tag: "Clearance: owner of this unit."
 misc_dev_user_tag: "Clearance: one of my dev users."
 misc_pinging: "<code>Pinging</code>"
 misc_pinged_in: Pinged in %d ms
-misc_ping_response: "🏓 Pong. <b>%dms</b>"
-misc_thread_id: "Thread Id: <code>%d</code>"
+misc_ping_response: "🏓 Pong. <b>%d ms</b>"
+misc_thread_id: "Thread ID: <code>%d</code>"
 misc_chat_id: "<b>Chat ID:</b> <code>%d</code>"
 misc_user_id: "<b>%s's ID:</b> <code>%d</code>"
 misc_forwarded_from_user: "<b>Forwarded from %s's ID:</b> <code>%d</code>"
@@ -493,7 +493,7 @@ misc_need_text_and_lang: I need some text and a language code to translate.
 misc_no_text_to_translate: "The replied message contains no text to translate."
 misc_provide_text_translate: "Provide some text to translate."
 misc_detected_translation: "<b>Detected Language:</b> <code>%s</code>\n<b>Translation:</b> <code>%s</code>"
-misc_removing_keyboard: Removing the stuck bot keyboard...
+misc_removing_keyboard: "Removing the stuck bot keyboard…"
 misc_total_messages: "Message count for %s: %d"
 misc_channel_info_header: "<b>Channel file:</b>\n\nID: <code>%d</code>\n\nChannel Name: %s"
 misc_username: "Username: @%s"
@@ -506,7 +506,7 @@ misc_translate_result: "<b>Detected Language:</b> <code>%s</code>\n\n<b>Translat
 
 # Devs module strings
 devs_chat_info: "<b>Name:</b> %s\n<b>Chat ID</b>: %d\n<b>Users Count:</b> %d\n<b>Link:</b> %s"
-devs_getting_chat_list: "Compiling the list of facilities under my management..."
+devs_getting_chat_list: "Compiling the list of facilities under my management…"
 devs_chat_list_caption: "List of chats in my database."
 devs_left_chat: "Noted. I have left the chat."
 devs_user_already_sudo: "User is already Sudo."
@@ -521,7 +521,7 @@ devs_no_team_users: "No users have been added to the team."
 devs_dev_users_header: "<b>Dev Users:</b>"
 devs_sudo_users_header: "<b>Sudo Users:</b>"
 devs_no_users: "No Users"
-devs_fetching_stats: "<code>Running self-diagnostics...</code>"
+devs_fetching_stats: "<code>Running self-diagnostics…</code>"
 devs_failed_to_add_sudo: "Malfunction: could not add the user to the Sudo list. Try again."
 devs_failed_to_add_dev: "Malfunction: could not add the user to the Dev list. Try again."
 devs_failed_to_remove_sudo: "Malfunction: could not remove the user from the Sudo list. Try again."
@@ -641,7 +641,7 @@ notes_private_conflict_warning: "\n\n<b>Note:</b> this note follows the group's 
 filters_limit_exceeded: "Filter limit reached. A group can have at most 150 filters.\nThe limit exists because the bot runs free, without donations from users.\n"
 filters_keyword_required: "Give me a keyword to reply to."
 filters_keyword_too_long: "Filter keyword too long. Maximum 100 characters."
-filters_keyword_too_broad: "Request denied. This filter keyword is too broad: a single letter, digit or punctuation mark would match almost every message."
+filters_keyword_too_broad: "This filter keyword is too broad: a single letter, digit or punctuation mark would match almost every message."
 filters_overwrite_confirm: "Filter already exists.\nOverwrite it?"
 filters_added_success: "Automatic reply set for the filter word <code>%s</code>"
 filters_remove_keyword_required: "Give me a filter word to remove."
@@ -728,7 +728,7 @@ chat_status_anon_prove_admin: "Confirm admin"
 
 # Extraction module strings
 extraction_chat_not_found: "failed to connect to chat: failed to get chat: unable to getChat: Bad Request: chat not found"
-extraction_need_chat_id: "I need a chat id to connect to."
+extraction_need_chat_id: "I need a chat ID to connect to."
 extraction_user_not_found: "No user by that name in my records. Has this user been seen here before?"
 extraction_get_chat_member_failed: "Failed to get user: unable to getChatMember: Bad Request: chat not found"
 extraction_invalid_time_amount: "Invalid time amount."
@@ -741,7 +741,7 @@ extraction_invalid_time_format: "Invalid time format."
 db_default_welcome: "Welcome to the facility, {first}. No sweat, Xenobot-72 will look after you. Today's ration is tempe. It is always tempe."
 db_default_goodbye: "{first} has left the facility. Their ration has been reassigned."
 db_warn_no_reason: "No reason filed"
-db_not_initialized: "database not initialized"
+db_not_initialized: "database not initialised"
 
 # Captcha validation strings
 captcha_invalid_mode_error: "invalid captcha mode: must be 'math', 'text' or 'turnstile'"
@@ -842,7 +842,7 @@ language_invalid_selection: "Invalid language selection."
 bot_updates_need_supergroup: "Facility too small. To use all my features, convert this group to a supergroup."
 bot_updates_thanks_for_adding: "Xenobot-72 is online. Thank you for adding me to your group. This facility is now under management."
 bot_updates_make_me_admin: "Grant me admin rights. Without them I cannot run this facility at full capacity."
-bot_updates_button_expired: "This button has expired. Please send the command again."
+bot_updates_button_expired: "This button has expired. Send the command again."
 
 # Formatting module additional strings
 formatting_press_button: "Press the button below for Markdown help."
@@ -898,7 +898,7 @@ reports_success_delete: "✅ Deleted"
 reports_resolved_success: "✅ Report resolved"
 reports_action_by: "Action taken by %s"
 reports_resolved_by: "<b>Resolved by:</b> %s"
-reports_message_template: "<b>⚠️ Report:</b>\n<b> • Report by:</b> %s\n<b> • Reported user:</b> %s\n<b>Status:</b> <i>Pending...</i>"
+reports_message_template: "<b>⚠️ Report:</b>\n<b> • Report by:</b> %s\n<b> • Reported user:</b> %s\n<b>Status:</b> <i>Pending…</i>"
 reports_invalid_action: "Invalid action."
 
 # Captcha module strings
@@ -984,7 +984,7 @@ admin_notes_docs: |
   • Admin permission changes run with proper error handling and panic recovery
 
 # Antiflood extended docs
-antiflood_notes_docs: "<b>Default Behavior</b>\nAntiflood is <b>disabled by default</b>. Turn it on yourself with <code>/setflood &lt;number&gt;</code>.\n"
+antiflood_notes_docs: "<b>Default Behaviour</b>\nAntiflood is <b>disabled by default</b>. Turn it on yourself with <code>/setflood &lt;number&gt;</code>.\n"
 
 # Locks module extended documentation
 locks_types_docs: |
@@ -1028,7 +1028,7 @@ languages_extended_docs: |
 greetings_extended_docs: "<b>Captcha Integration</b>\nWhen the Captcha module is enabled:\n1. New members are muted when they join\n2. A captcha challenge is sent instead of the welcome\n3. After verification, the welcome message is sent\n4. A failed verification applies the captcha action\n"
 
 # Extended documentation locale keys - Notes module
-notes_extended_docs: "<b>Features:</b>\n• <b>Text &amp; Media Support</b>: Save text messages, photos, videos, documents and more\n• <b>Custom Buttons</b>: Add inline keyboard buttons to notes\n• <b>Formatting Options</b>: Control how a note is shown and behaves\n• <b>Admin-Only Notes</b>: Restrict certain notes to admins\n• <b>Private Notes</b>: Send notes to users in a private message\n• <b>Web Preview Control</b>: Turn link previews on or off\n• <b>Protected Content</b>: Stop note content from being forwarded\n\n<b>Note Formatting Options:</b>\nWhen saving a note, special tags control its behavior:\n• <code>{private}</code> - The note is only sent in a private message, never in the group\n• <code>{noprivate}</code> - The note is only sent in the group, never in a private message\n• <code>{admin}</code> - Only admins can get the note\n• <code>{protect}</code> - The content cannot be forwarded\n• <code>{nonotif}</code> - Sent without a notification sound\n• <code>{nopreview}</code> - No link preview\n\n<b>Private Notes Mode:</b>\nWith private notes on (<code>/privatenotes on</code>), all notes go to users in a private message instead of the group. The group chat stays clean.\n\nA single note can override this:\n• <code>{private}</code> - Always send privately\n• <code>{noprivate}</code> - Always send in the group\n\n<b>Raw Note (No Formatting):</b>\nTo see a note's raw content without formatting (for editing):\n<code>/get notename noformat</code>\n"
+notes_extended_docs: "<b>Features:</b>\n• <b>Text &amp; Media Support</b>: Save text messages, photos, videos, documents and more\n• <b>Custom Buttons</b>: Add inline keyboard buttons to notes\n• <b>Formatting Options</b>: Control how a note is shown and behaves\n• <b>Admin-Only Notes</b>: Restrict certain notes to admins\n• <b>Private Notes</b>: Send notes to users in a private message\n• <b>Web Preview Control</b>: Turn link previews on or off\n• <b>Protected Content</b>: Stop note content from being forwarded\n\n<b>Note Formatting Options:</b>\nWhen saving a note, special tags control its behaviour:\n• <code>{private}</code> - The note is only sent in a private message, never in the group\n• <code>{noprivate}</code> - The note is only sent in the group, never in a private message\n• <code>{admin}</code> - Only admins can get the note\n• <code>{protect}</code> - The content cannot be forwarded\n• <code>{nonotif}</code> - Sent without a notification sound\n• <code>{nopreview}</code> - No link preview\n\n<b>Private Notes Mode:</b>\nWith private notes on (<code>/privatenotes on</code>), all notes go to users in a private message instead of the group. The group chat stays clean.\n\nA single note can override this:\n• <code>{private}</code> - Always send privately\n• <code>{noprivate}</code> - Always send in the group\n\n<b>Raw Note (No Formatting):</b>\nTo see a note's raw content without formatting (for editing):\n<code>/get notename noformat</code>\n"
 
 notes_permissions_docs: |
   <b>Required Permissions:</b>
@@ -1099,7 +1099,7 @@ mutes_extended_docs: "<b>Time Format for Temporary Mutes:</b>\n• <code>m</code
 # Extended documentation locale keys - Filters module
 filters_extended_docs: "<b>Advanced Features:</b>\n\n<b>Random Responses:</b>\nSeparate several responses with <code>%%%</code>. One is picked at random:\n<code>/filter hello Hi there!%%%Hello!%%%Hey, how are you?</code>\n\n<b>Media Filters:</b>\nReply to any media (photo, video, document, sticker, etc.) with <code>/filter trigger</code> to make a filter that sends that media.\n\n<b>Noformat Mode:</b>\nAdmins can see the raw filter content (with formatting codes) by adding <code>noformat</code> after the trigger:\n<code>hello noformat</code>\nUseful for debugging filters or checking button setups.\n\n<b>Filter Buttons:</b>\nYou can add inline buttons to your filters:\n<code>/filter hello Hello! Check out these links:\n[Button 1](buttonurl:https://example.com)\n[Button 2](buttonurl:https://example2.com)</code>\n"
 
-filters_technical_docs: "<b>How Filters Work:</b>\n1. When a message arrives, the bot fetches all filters of the chat with an optimized cached query\n2. The Aho-Corasick algorithm matches every filter keyword against the message text\n3. The first matching filter triggers a response\n4. Filters support text, media and button responses\n\n<b>Overwrite Confirmation:</b>\nWhen you add a filter that already exists, the bot asks for confirmation before overwriting. The confirmation expires after 5 minutes.\n\n<b>Cache Behavior:</b>\n• Filter lists are cached for 15 minutes per chat\n• The cache is cleared automatically when filters are added or removed\n"
+filters_technical_docs: "<b>How Filters Work:</b>\n1. When a message arrives, the bot fetches all filters of the chat with an optimised cached query\n2. The Aho-Corasick algorithm matches every filter keyword against the message text\n3. The first matching filter triggers a response\n4. Filters support text, media and button responses\n\n<b>Overwrite Confirmation:</b>\nWhen you add a filter that already exists, the bot asks for confirmation before overwriting. The confirmation expires after 5 minutes.\n\n<b>Cache Behaviour:</b>\n• Filter lists are cached for 15 minutes per chat\n• The cache is cleared automatically when filters are added or removed\n"
 
 filters_limits_docs: |
   <b>Limits:</b>
@@ -1156,7 +1156,7 @@ disabling_notes_docs: "<b>Important Notes:</b>\n• <b>Admin Bypass:</b> Disable
 help_extended_docs: "<b>Navigation System:</b>\nThe Help module provides the bot's main entry points and navigation. When a user sends <code>/start</code> in a private chat, the bot shows a welcome message with an inline keyboard for navigating to the modules.\n\nThe <code>/help</code> command shows the module list. Pressing a module button shows that module's commands and usage. When <code>/help</code> is used in a group chat, the bot sends the user to a private chat for detailed help, so the group stays clean.\n\n<code>/about</code> shows bot information and the version, while <code>/donate</code> says whether the bot accepts donations.\n"
 
 # Extended documentation locale keys - Devs module
-devs_extended_docs: "<b>Team Hierarchy:</b>\nThe Devs module provides bot management and diagnostic commands restricted to the bot's internal team. The team has three tiers with descending privilege levels.\n\n<b>Tier 1 — Owner:</b> Set with the <code>OWNER_ID</code> environment variable at deployment. Full control: manage the team roster, all diagnostic commands, all team commands.\n\n<b>Tier 2 — Sudo / Dev:</b> Assigned by the owner with <code>/addsudo</code> or <code>/adddev</code>. Diagnostic commands: bot stats, chat info, chat management.\n\n<b>Tier 3 — Team Member:</b> Automatically includes the owner + all sudo + all dev users. Can only view the team roster with <code>/teamusers</code>.\n\n<b>Note:</b> Sudo and Dev have identical command access. The distinction exists for organizational purposes.\n\n<b>Important:</b> These commands are not visible in the public help menu and silently ignore unauthorized users.\n"
+devs_extended_docs: "<b>Team Hierarchy:</b>\nThe Devs module provides bot management and diagnostic commands restricted to the bot's internal team. The team has three tiers with descending privilege levels.\n\n<b>Tier 1 — Owner:</b> Set with the <code>OWNER_ID</code> environment variable at deployment. Full control: manage the team roster, all diagnostic commands, all team commands.\n\n<b>Tier 2 — Sudo / Dev:</b> Assigned by the owner with <code>/addsudo</code> or <code>/adddev</code>. Diagnostic commands: bot stats, chat info, chat management.\n\n<b>Tier 3 — Team Member:</b> Automatically includes the owner + all sudo + all dev users. Can only view the team roster with <code>/teamusers</code>.\n\n<b>Note:</b> Sudo and Dev have identical command access. The distinction exists for organisational purposes.\n\n<b>Important:</b> These commands are not visible in the public help menu and silently ignore unauthorised users.\n"
 
 # Extended documentation locale keys - Users module
 users_extended_docs: "<b>Background Tracker:</b>\nThe Users module is a passive background module with no user-facing commands. It runs quietly on every message the bot processes, tracking every message sender and every chat the bot is active in.\n\n<b>What It Tracks:</b>\n• User IDs, usernames and display names of every message sender\n• Chat IDs and names of every group the bot is in\n• Channel IDs, names and usernames of linked channels\n\n<b>Rate Limiting:</b>\n• User updates: limited to one per <code>UserUpdateInterval</code>\n• Chat updates: limited to one per <code>ChatUpdateInterval</code>\n• This prevents excessive database writes while keeping the data reasonably current\n\n<b>Passive Operation:</b>\n• Runs as a message watcher at handler group -1 (fires before all command handlers)\n• No user interaction required — fully automatic\n• Other modules, such as <code>/info</code>, depend on the data this module collects\n"
@@ -1423,7 +1423,7 @@ staff_help_msg: |
 staff_set_done: "This group is now a Staff Group. Chat ID: <code>{chat_id}</code>"
 staff_set_already: "This group is already a Staff Group."
 staff_refuse_not_owner: "Only the creator of this group can make it a Staff Group."
-staff_check_failed: "I could not verify who created this group right now. Nothing was changed, please try again in a moment."
+staff_check_failed: "I could not verify who created this group right now. Nothing was changed. Try again in a moment."
 staff_panel_chat_id: "Staff Group chat ID: <code>{chat_id}</code>"
 staff_panel_no_links: "No groups are linked yet."
 staff_unset_not_staff: "This group is not a Staff Group."
@@ -1435,7 +1435,7 @@ staff_fwdblock_already: "{source} is already on the blocklist."
 staff_fwdblock_not_found: "I could not find that channel or group. Check the @username or use its numeric ID. Nothing was saved."
 staff_fwdblock_not_source: "That is not a channel or a group, so it cannot be a forward source. Nothing was saved."
 staff_fwdblock_full: "The blocklist is full ({max} sources). Remove one first."
-staff_fwdblock_check_failed: "I could not look that source up right now. Nothing was saved, please try again in a moment."
+staff_fwdblock_check_failed: "I could not look that source up right now. Nothing was saved. Try again in a moment."
 staff_fwdblock_removed: "{source} is no longer blocked."
 staff_fwdblock_not_listed: "That source is not on the blocklist."
 staff_fwdblock_list_header: "Blocked forward sources. Action: {action}"
@@ -1453,7 +1453,7 @@ staff_unset_cancelled: "Cancelled. This group is still a Staff Group."
 staff_unset_already_removed: "Staff status was already removed."
 staff_cb_owner_only: "Only the creator of this group can do this."
 staff_cb_expired: "This button is no longer valid."
-staff_post_as_yourself: "Please send this command as yourself, not as an anonymous admin or a channel, so I can tell who you are. Nothing was changed."
+staff_post_as_yourself: "Send this command as yourself, not as an anonymous admin or a channel, so I can tell who you are. Nothing was changed."
 staff_refuse_not_group: "A Staff Group has to be a group or supergroup, not a channel."
 staff_refuse_bot_not_admin: "I need to be an admin of this group first. Make me one, then send the command again."
 staff_refuse_group_is_linked: "This group is linked to a Staff Group, so it cannot be a Staff Group itself. Unlink it first."
@@ -1470,7 +1470,7 @@ staff_link_refuse_not_supergroup: "Not linked: {group} is a basic group. Upgrade
 staff_link_refuse_target_is_staff: "Not linked: {group} is a Staff Group, and a Staff Group cannot be linked to another one."
 staff_link_refuse_not_target_owner: "Not linked: you are not the creator of {group}. Only the creator of both groups can link them."
 staff_link_refuse_already_linked: "Not linked: {group} is already linked to a Staff Group. Unlink it first."
-staff_link_check_failed_group: "Not linked: I could not verify who created {group} right now. Nothing was changed, please try again in a moment."
+staff_link_check_failed_group: "Not linked: I could not verify who created {group} right now. Nothing was changed. Try again in a moment."
 staff_panel_add_group_button: "➕ Add group"
 staff_notice_unlinked_by: "Group unlinked: {group}\nUnlinked by {user}"
 staff_notice_unlinked_group_owner_changed: "Group unlinked: {group}\nReason: its owner changed"
@@ -1482,7 +1482,7 @@ staff_notice_health_ok: "{group} is healthy again: the bot has the rights it nee
 staff_unlink_not_linked: "This group is not linked to a Staff Group."
 staff_unlink_refuse_not_owner: "Only the creator of this group and of its Staff Group can unlink it. Nothing was changed."
 staff_unlink_refuse_not_group_owner: "Not unlinked: you are not the creator of {group}. Only the creator of both groups can unlink them."
-staff_unlink_check_failed_group: "Not unlinked: I could not verify who created {group} right now. Nothing was changed, please try again in a moment."
+staff_unlink_check_failed_group: "Not unlinked: I could not verify who created {group} right now. Nothing was changed. Try again in a moment."
 staff_panel_unlink_button: "Unlink {group}"
 staff_unlink_confirm_prompt: "Are you sure you want to unlink {group}? Staff commands will no longer reach it."
 staff_cb_denied: "This button does not belong to this chat."
@@ -1535,7 +1535,7 @@ staff_act_abort_not_staff: "This chat is no longer a Staff Group. Nothing was do
 staff_act_abort_issuer_left: "You are no longer a member of this Staff Group. Nothing was done."
 staff_act_abort_links_changed: "The linked groups changed since this card was shown ({old} then, {new} now). Nothing was done; run the command again."
 staff_act_target_busy: "Another staff action on this user is still running. Wait for its summary, then tap Confirm again."
-staff_act_abort_check_failed: "I could not check this right now. Nothing was done; please run the command again."
+staff_act_abort_check_failed: "I could not check this right now. Nothing was done. Run the command again."
 staff_act_line_skipped: "skipped: {reason}"
 staff_act_line_failed: "failed: {reason}"
 staff_act_banned_not_in_group: "banned (not in group)"
@@ -1989,10 +1989,10 @@ settings_edit_preview_need_start: "I cannot message you in private yet. Open my 
 settings_edit_preview_failed: "I could not send the preview. Check the media and the buttons, then try again."
 settings_edit_refuse_need_text: "I need a text message here."
 settings_edit_refuse_need_media: "I can only use a photo, video, GIF, file, sticker, audio or voice message here."
-settings_edit_refuse_too_long_filled: "With the names and the heading filled in, this would be {n} characters, and the limit is {max}. Please shorten it."
+settings_edit_refuse_too_long_filled: "With the names and the heading filled in, this would be {n} characters, and the limit is {max}. Shorten it."
 settings_edit_refuse_media_text_long: "The current text is {n} characters, which is too long for a caption (the limit is {max}). Shorten the text first, then set the media."
 settings_edit_refuse_media_rules_long: "With its heading, the rules text is {n} characters, which is too long for a caption (the limit is {max}). Shorten the rules first, then set the media."
-settings_edit_refuse_text_rules_long: "With the heading added, this would be {n} characters, and the limit with media is {max}. Please shorten it."
+settings_edit_refuse_text_rules_long: "With the heading added, this would be {n} characters, and the limit with media is {max}. Shorten it."
 settings_edit_refuse_buttons_syntax: "I could not read any buttons. Write each one on its own line, like <code>[Name](buttonurl://https://example.com)</code>."
 settings_edit_refuse_button_url: "Button {n} has a link I cannot use. It must start with http:// or https://."
 settings_edit_refuse_buttons_limit: "That is too many buttons. A message can have at most 100 buttons, and at most 8 in one row."
