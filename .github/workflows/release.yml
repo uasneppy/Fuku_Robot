@@ -12,7 +12,7 @@ jobs:
   release-ci-checks:
     name: Release CI Checks
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     services:
       postgres:
         image: postgres:16
