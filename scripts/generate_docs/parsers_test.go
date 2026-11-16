@@ -47,6 +47,49 @@ func LoadBlacklists(dispatcher) {
 	}
 }
 
+func TestParseCommands_BotCommandShim(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	goFile := filepath.Join(tmpDir, "rules.go")
+	content := `package modules
+
+var rulesModule = moduleStruct{moduleName: "Rules"}
+
+func LoadRules(dispatcher) {
+	dispatcher.AddHandler(helpers.NewBotCommand("rules", rulesModule.sendRules))
+	helpers.AddCmdToDisableable("rules")
+	dispatcher.AddHandler(helpers.NewBotCommand("ping", func(b *gotgbot.Bot, ctx *ext.Context) error { return nil }))
+	dispatcher.AddHandler(handlers.NewCommand("legacy", rulesModule.legacy))
+}
+`
+	if err := os.WriteFile(goFile, []byte(content), 0644); err != nil {
+		t.Fatalf("Failed to write temp file: %v", err)
+	}
+
+	commands, err := parseCommands(tmpDir)
+	if err != nil {
+		t.Fatalf("parseCommands returned error: %v", err)
+	}
+
+	found := make(map[string]Command)
+	for _, cmd := range commands {
+		found[cmd.Name] = cmd
+	}
+	rules, ok := found["rules"]
+	if !ok {
+		t.Fatalf("command 'rules' registered through the shim was not found: %+v", commands)
+	}
+	if rules.Module != "rules" || rules.Handler != "sendRules" || !rules.Disableable {
+		t.Errorf("rules = %+v, want module rules, handler sendRules, disableable", rules)
+	}
+	if ping, ok := found["ping"]; !ok || ping.Handler != "anonymous" {
+		t.Errorf("ping = %+v (found %v), want the func form found as anonymous", ping, ok)
+	}
+	if _, ok := found["legacy"]; ok {
+		t.Error("a registration that bypasses the shim must not be listed: the guard test rejects it")
+	}
+}
+
 func TestParseMessageWatchers_Basic(t *testing.T) {
 	tmpDir := t.TempDir()
 

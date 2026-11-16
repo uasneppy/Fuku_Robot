@@ -1,0 +1,22 @@
+-- Member requirements, the AI spam-name rule.
+--
+-- chat_requirements gets one more action column next to the five name rules and the two
+-- lookup rules, with the same values: 0 off, 1 warn, 2 kick, 3 ban, 4 mute.
+--
+--   ai_action  the punishment for a member whose name the AI judges to be spam (an
+--              advertising account), asked of the AI provider with the names alone
+--
+-- The column is NOT NULL DEFAULT 0 under its own named CHECK (0..4). A chat that has no
+-- row, and a row written before this file, therefore reads the rule off, so no group
+-- screens anybody for it until its owner chooses a punishment. The CHECK is part of the
+-- column definition because PostgreSQL has no ADD CONSTRAINT IF NOT EXISTS, which is what
+-- keeps the statement idempotent: ADD COLUMN IF NOT EXISTS skips the whole clause, the
+-- constraint included, when the column already exists.
+--
+-- The table is still read through the cache, every write still invalidates its key, and
+-- it is never part of backup, export, import or reset.
+--
+-- The Go runner and scripts/migrate_psql.sh both run this file unchanged; the runner
+-- applies each file once inside a transaction and records its sha256 in schema_migrations.
+
+ALTER TABLE chat_requirements ADD COLUMN IF NOT EXISTS ai_action SMALLINT NOT NULL DEFAULT 0 CONSTRAINT chk_chat_requirements_ai CHECK (ai_action BETWEEN 0 AND 4);

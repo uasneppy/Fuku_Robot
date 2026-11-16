@@ -1,6 +1,7 @@
 package backup
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -37,7 +38,7 @@ func TestBackupTypes(t *testing.T) {
 		backup := NewBackupFormat(12345, "Test Chat", 67890, []string{"notes", "filters"})
 
 		assert.Equal(t, BackupFormatVersion, backup.Version)
-		assert.Equal(t, BackupBotName, backup.BotName)
+		assert.Equal(t, "Xenobot-72", backup.BotName)
 		assert.Equal(t, int64(12345), backup.ChatID)
 		assert.Equal(t, "Test Chat", backup.ChatName)
 		assert.Equal(t, int64(67890), backup.ExportedBy)
@@ -145,7 +146,7 @@ func TestBackupTypes(t *testing.T) {
 		jsonData, err := backup.ToJSON()
 		require.NoError(t, err)
 		assert.NotNil(t, jsonData)
-		assert.Contains(t, string(jsonData), BackupBotName)
+		assert.Contains(t, string(jsonData), "Xenobot-72")
 		assert.Contains(t, string(jsonData), "notes")
 	})
 
@@ -428,6 +429,28 @@ func TestImportChatData_SingleModule(t *testing.T) {
 	require.NotNil(t, settings)
 	assert.Equal(t, 7, settings.WarnLimit)
 	assert.Equal(t, "kick", settings.WarnMode)
+}
+
+func TestImportChatData_EarlierBotNameExport(t *testing.T) {
+	skipIfNoDb(t)
+
+	chatID := time.Now().UnixNano()
+	require.NoError(t, chats.EnsureChatInDb(chatID, "test_import_chat_earlier_name"))
+	t.Cleanup(func() { cleanupBackupChat(t, chatID) })
+
+	// The bot_name below is what exports carried before the bot was renamed; import must not care.
+	raw := fmt.Sprintf(`{"version":"1.0","bot_name":"FukuRobot","chat_id":%d,"chat_name":"Test","exported_by":1,`+
+		`"modules":["warns"],"data":{"warns":{"warn_settings":{"chat_id":%d,"warn_limit":6,"warn_mode":"ban"}}},`+
+		`"exported_at":"2024-01-01T00:00:00Z"}`, chatID, chatID)
+	backup, err := BackupFormatFromJSON([]byte(raw))
+	require.NoError(t, err)
+	require.NoError(t, backup.Validate())
+	require.NoError(t, ImportChatData(chatID, backup, []string{BackupModuleWarns}))
+
+	settings := warns.GetWarnSetting(chatID)
+	require.NotNil(t, settings)
+	assert.Equal(t, 6, settings.WarnLimit)
+	assert.Equal(t, "ban", settings.WarnMode)
 }
 
 func TestClearChatData_SpecificModules(t *testing.T) {

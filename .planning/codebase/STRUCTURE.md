@@ -226,7 +226,8 @@ last_mapped_at: 2026-10-04
 │   └── ... (other packages)
 │
 ├── locales/                        # Embedded i18n files
-│   ├── en.yml                      # English (default, used by docs generator)
+│   ├── uk.yml                      # Ukrainian (default)
+│   ├── en.yml                      # English (used by docs generator)
 │   ├── es.yml                      # Spanish
 │   ├── fr.yml                      # French
 │   ├── hi.yml                      # Hindi
@@ -300,7 +301,7 @@ last_mapped_at: 2026-10-04
 **`fuku/i18n/`:**
 - Purpose: Localization system
 - Contains: Translator (per-language instance), Manager (loads and parses YAML)
-- Embedded locales: `locales/` directory (7 languages + config.yml)
+- Embedded locales: `locales/` directory (8 languages + config.yml)
 
 **`fuku/modules/`:**
 - Purpose: Bot feature implementations (30+ feature modules)
@@ -326,8 +327,8 @@ last_mapped_at: 2026-10-04
   - Others: cache, constants, content, errors, keyboard, etc.
 
 **`locales/`:**
-- Purpose: Embedded i18n files (7 languages)
-- Files: `en.yml` (default), `es.yml`, `fr.yml`, `hi.yml`, `id.yml`, `pt.yml`, `ru.yml`, `config.yml`
+- Purpose: Embedded i18n files (8 languages)
+- Files: `uk.yml` (default), `en.yml`, `es.yml`, `fr.yml`, `hi.yml`, `id.yml`, `pt.yml`, `ru.yml`, `config.yml`
 - Referenced by: `i18n.Manager` loads from embedded `locales/` directory at runtime
 
 **`scripts/`:**
@@ -420,7 +421,7 @@ last_mapped_at: 2026-10-04
      - Handler methods with value receiver on `moduleStruct`
    
 3. **Localization:**
-   - Add keys to all 7 locale files: `locales/{en,es,fr,hi,id,pt,ru}.yml`
+   - Add keys to all 8 locale files: `locales/{en,es,fr,hi,id,pt,ru,uk}.yml`
    - Key format: `reputation_<context>` (e.g., `reputation_info`, `reputation_added`)
    - Run `make check-translations` to verify
    
@@ -466,7 +467,7 @@ last_mapped_at: 2026-10-04
 - Generated: No (hand-edited YAML)
 - Committed: Yes
 - Key: go:embed directive in main.go embeds all files at compile time
-- Constraint: Must include all 7 language files + config.yml; missing keys break at runtime
+- Constraint: Must include all 8 language files + config.yml; missing keys break at runtime
 
 **`fuku/db/cache/`:**
 - Purpose: Cache layer (distinct from `fuku/utils/cache/`)

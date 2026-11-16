@@ -3,6 +3,7 @@
 package modules
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -74,6 +75,10 @@ func TestSettingsStartDeepLink(t *testing.T) {
 			t.Fatal("the private Main page has no buttons")
 		}
 		for _, button := range buttons {
+			if strings.HasPrefix(button.CallbackData, settingsHubNamespace+"|") {
+				// Groups, the way back to the list, is the hub's and names no group.
+				continue
+			}
 			fields := settingsButtonFields(t, button)
 			if fields["c"] != fmt.Sprint(env.chat.Id) {
 				t.Errorf("button %q has c = %q, want the group's chat ID %d", button.Text, fields["c"], env.chat.Id)
@@ -173,6 +178,20 @@ func TestSettingsStartDeepLink(t *testing.T) {
 				want: "settings_check_failed",
 			},
 			{
+				name: "a rate limited member lookup",
+				script: func(env *settingsEnv) {
+					env.fake.script("getChatMember", env.chat.Id, staffFake429(5))
+				},
+				want: "settings_check_failed",
+			},
+			{
+				name: "a transport error at the member lookup",
+				script: func(env *settingsEnv) {
+					env.fake.script("getChatMember", env.chat.Id, errors.New("connection reset by peer"))
+				},
+				want: "settings_check_failed",
+			},
+			{
 				name: "the bot is not a member of the group",
 				script: func(env *settingsEnv) {
 					env.fake.script("getChatMember", env.chat.Id, staffFakeError(403, "Forbidden: bot is not a member of the supergroup chat"))
@@ -182,11 +201,32 @@ func TestSettingsStartDeepLink(t *testing.T) {
 				want: "settings_start_not_admin",
 			},
 			{
+				name: "the group is gone at the member lookup",
+				script: func(env *settingsEnv) {
+					env.fake.script("getChatMember", env.chat.Id, staffFakeError(400, "Bad Request: chat not found"))
+				},
+				want: "settings_start_not_admin",
+			},
+			{
+				name: "an unrecognised 400 wording at the member lookup",
+				script: func(env *settingsEnv) {
+					env.fake.script("getChatMember", env.chat.Id, staffFakeError(400, "Bad Request: some wording nobody listed"))
+				},
+				want: "settings_start_not_admin",
+			},
+			{
+				name: "an unrecognised 403 wording at the member lookup",
+				script: func(env *settingsEnv) {
+					env.fake.script("getChatMember", env.chat.Id, staffFakeError(403, "Forbidden: some wording nobody listed"))
+				},
+				want: "settings_start_not_admin",
+			},
+			{
 				name: "the group is gone at getChat",
 				script: func(env *settingsEnv) {
 					env.fake.script("getChat", env.chat.Id, staffFakeError(400, "Bad Request: chat not found"))
 				},
-				want: "settings_cannot_open",
+				want: "settings_start_not_admin",
 			},
 			{
 				name: "a failed getChat",
@@ -196,11 +236,25 @@ func TestSettingsStartDeepLink(t *testing.T) {
 				want: "settings_check_failed",
 			},
 			{
+				name: "a rate limited getChat",
+				script: func(env *settingsEnv) {
+					env.fake.script("getChat", env.chat.Id, staffFake429(5))
+				},
+				want: "settings_check_failed",
+			},
+			{
+				name: "a transport error at getChat",
+				script: func(env *settingsEnv) {
+					env.fake.script("getChat", env.chat.Id, errors.New("i/o timeout"))
+				},
+				want: "settings_check_failed",
+			},
+			{
 				name: "a channel",
 				script: func(env *settingsEnv) {
 					env.fake.setChatType(env.chat.Id, "channel")
 				},
-				want: "settings_cannot_open",
+				want: "settings_start_not_admin",
 			},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
@@ -212,12 +266,185 @@ func TestSettingsStartDeepLink(t *testing.T) {
 				if !strings.Contains(fmt.Sprint(msg.Params["text"]), staffMarker(tc.want)) {
 					t.Errorf("got %q, want %s", msg.Params["text"], tc.want)
 				}
+				if strings.Contains(fmt.Sprint(msg.Params["text"]), staffMarker("settings_cannot_open")) {
+					t.Errorf("got %q, the deep link no longer answers settings_cannot_open", msg.Params["text"])
+				}
 				if keyboard := staffKeyboardOf(msg.Params["reply_markup"]); len(keyboard) != 0 {
 					t.Errorf("a refusal sent a keyboard %+v", keyboard)
 				}
 			})
 		}
 	})
+
+	t.Run("the owner gate", func(t *testing.T) {
+		wantRefusal := func(t *testing.T, env *settingsEnv, want string) {
+			t.Helper()
+			msg := settingsPrivateOnlySent(t, env, env.admin)
+			text := fmt.Sprint(msg.Params["text"])
+			if !strings.Contains(text, staffMarker(want)) {
+				t.Errorf("got %q, want %s", text, want)
+			}
+			if strings.Contains(text, staffMarker("settings_header_main")) {
+				t.Errorf("a refused administrator got the Main page: %q", text)
+			}
+			if keyboard := staffKeyboardOf(msg.Params["reply_markup"]); len(keyboard) != 0 {
+				t.Errorf("a refusal sent a keyboard %+v", keyboard)
+			}
+			for _, leak := range []string{"Test Chat", "Lock Chat", fmt.Sprint(env.chat.Id)} {
+				if strings.Contains(text, leak) {
+					t.Errorf("the refusal %q names %q", text, leak)
+				}
+			}
+		}
+
+		t.Run("an administrator is refused while the switch is off and an owner exists", func(t *testing.T) {
+			resetSettingsOwnerMemo(t)
+			env := newSettingsEnv(t)
+			env.newOwner(env.chat)
+			env.setAdminsAllowed(env.chat.Id, false)
+			chats := len(env.fake.callsFor("getChat"))
+
+			env.sendPrivate(env.admin, fmt.Sprintf("/start settings_%d", env.chat.Id))
+
+			wantRefusal(t, env, "settings_start_owner_only")
+			if got := len(env.fake.callsFor("getChat")) - chats; got != 0 {
+				t.Errorf("a gated administrator cost %d getChat calls, want none", got)
+			}
+		})
+
+		t.Run("a chat with no switch row is owner only", func(t *testing.T) {
+			resetSettingsOwnerMemo(t)
+			env := newSettingsEnv(t)
+			env.newOwner(env.chat)
+			settingsDropAccessRow(t, env.chat.Id)
+
+			env.sendPrivate(env.admin, fmt.Sprintf("/start settings_%d", env.chat.Id))
+
+			wantRefusal(t, env, "settings_start_owner_only")
+		})
+
+		t.Run("an owner list that cannot be read refuses with settings_check_failed", func(t *testing.T) {
+			resetSettingsOwnerMemo(t)
+			env := newSettingsEnv(t)
+			env.newOwner(env.chat)
+			env.setAdminsAllowed(env.chat.Id, false)
+			env.fake.script("getChatAdministrators", env.chat.Id, staffFakeError(500, "Internal Server Error"))
+
+			env.sendPrivate(env.admin, fmt.Sprintf("/start settings_%d", env.chat.Id))
+
+			wantRefusal(t, env, "settings_check_failed")
+		})
+
+		t.Run("an unreadable switch refuses with settings_check_failed", func(t *testing.T) {
+			resetSettingsOwnerMemo(t)
+			env := newSettingsEnv(t)
+			env.newOwner(env.chat)
+			installGateSeams(t, gateTestSeams{accessErr: errors.New("database unavailable")})
+
+			env.sendPrivate(env.admin, fmt.Sprintf("/start settings_%d", env.chat.Id))
+
+			wantRefusal(t, env, "settings_check_failed")
+		})
+
+		wantMain := func(t *testing.T, env *settingsEnv, from gotgbot.User) {
+			t.Helper()
+			msg := settingsPrivateOnlySent(t, env, from)
+			if !strings.Contains(fmt.Sprint(msg.Params["text"]), staffMarker("settings_header_main")) {
+				t.Errorf("got %q, want the Main page", msg.Params["text"])
+			}
+		}
+
+		t.Run("the owner gets the Main page with the switch off", func(t *testing.T) {
+			resetSettingsOwnerMemo(t)
+			env := newSettingsEnv(t)
+			owner := env.newOwner(env.chat)
+			env.setAdminsAllowed(env.chat.Id, false)
+
+			env.sendPrivate(owner, fmt.Sprintf("/start settings_%d", env.chat.Id))
+
+			wantMain(t, env, owner)
+		})
+
+		t.Run("an administrator the owner let in gets the Main page", func(t *testing.T) {
+			resetSettingsOwnerMemo(t)
+			env := newSettingsEnv(t)
+			env.newOwner(env.chat)
+			env.setAdminsAllowed(env.chat.Id, true)
+
+			env.sendPrivate(env.admin, fmt.Sprintf("/start settings_%d", env.chat.Id))
+
+			wantMain(t, env, env.admin)
+		})
+
+		t.Run("an administrator of a group with no live owner gets the Main page", func(t *testing.T) {
+			resetSettingsOwnerMemo(t)
+			env := newSettingsEnv(t)
+			env.fake.clearCreator(env.chat.Id)
+			env.listAdmin(env.chat.Id, env.admin.Id)
+			env.setAdminsAllowed(env.chat.Id, false)
+
+			env.sendPrivate(env.admin, fmt.Sprintf("/start settings_%d", env.chat.Id))
+
+			wantMain(t, env, env.admin)
+		})
+	})
+}
+
+// settingsDeepLinkReply runs the deep link for env.admin after script and returns the text
+// and the reply markup of the one reply, for a comparison between outcomes.
+func settingsDeepLinkReply(t *testing.T, script func(env *settingsEnv)) (string, string) {
+	t.Helper()
+	env := newSettingsEnv(t)
+	script(env)
+	env.sendPrivate(env.admin, fmt.Sprintf("/start settings_%d", env.chat.Id))
+	msg := settingsPrivateOnlySent(t, env, env.admin)
+	return fmt.Sprint(msg.Params["text"]), fmt.Sprint(msg.Params["reply_markup"])
+}
+
+// TestSettingsStartDeepLinkSameAnswer proves that the payload is no oracle: every outcome that
+// could tell a stranger whether the bot is in a chat, or whether the chat exists or is a
+// group, is answered with the plain member's reply byte for byte.
+func TestSettingsStartDeepLinkSameAnswer(t *testing.T) {
+	wantText, wantMarkup := settingsDeepLinkReply(t, func(env *settingsEnv) {
+		env.fake.setMember(env.chat.Id, env.admin.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+	})
+	if !strings.Contains(wantText, staffMarker("settings_start_not_admin")) {
+		t.Fatalf("the plain member's reply %q is not settings_start_not_admin", wantText)
+	}
+
+	for _, tc := range []struct {
+		name   string
+		script func(env *settingsEnv)
+	}{
+		{"the bot is not in the chat", func(env *settingsEnv) {
+			env.fake.script("getChatMember", env.chat.Id, staffFakeError(403, "Forbidden: bot is not a member of the supergroup chat"))
+		}},
+		{"the chat is gone at getChatMember", func(env *settingsEnv) {
+			env.fake.script("getChatMember", env.chat.Id, staffFakeError(400, "Bad Request: chat not found"))
+		}},
+		{"an unrecognised 400 wording at getChatMember", func(env *settingsEnv) {
+			env.fake.script("getChatMember", env.chat.Id, staffFakeError(400, "Bad Request: some wording nobody listed"))
+		}},
+		{"an unrecognised 403 wording at getChatMember", func(env *settingsEnv) {
+			env.fake.script("getChatMember", env.chat.Id, staffFakeError(403, "Forbidden: some wording nobody listed"))
+		}},
+		{"the chat is gone at getChat", func(env *settingsEnv) {
+			env.fake.script("getChat", env.chat.Id, staffFakeError(400, "Bad Request: chat not found"))
+		}},
+		{"the chat is a channel", func(env *settingsEnv) {
+			env.fake.setChatType(env.chat.Id, "channel")
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			text, markup := settingsDeepLinkReply(t, tc.script)
+			if text != wantText {
+				t.Errorf("outcome %q answered %q, the plain member got %q", tc.name, text, wantText)
+			}
+			if markup != wantMarkup {
+				t.Errorf("outcome %q sent reply markup %q, the plain member got %q", tc.name, markup, wantMarkup)
+			}
+		})
+	}
 }
 
 func TestSettingsPrivateRoundTrip(t *testing.T) {

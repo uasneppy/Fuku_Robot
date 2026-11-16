@@ -17,6 +17,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
+	"github.com/uasneppy/fuku_robot/fuku/db/cache"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
 	"github.com/uasneppy/fuku_robot/fuku/utils/helpers"
@@ -51,6 +52,11 @@ type staffBotClient struct {
 	members map[[2]int64]string
 	// failures maps "method:chatID" to a scripted error.
 	failures map[string]error
+	// listed maps a chat to the administrators getChatAdministrators names besides the
+	// creator and the bot, in the order they were added. A chat absent here lists none.
+	listed map[int64][]int64
+	// deletedCreator marks a chat whose creator entry is a deleted account.
+	deletedCreator map[int64]bool
 }
 
 func newStaffBotClient() *staffBotClient {
@@ -60,6 +66,8 @@ func newStaffBotClient() *staffBotClient {
 		botRole:         make(map[int64]string),
 		members:         make(map[[2]int64]string),
 		failures:        make(map[string]error),
+		listed:          make(map[int64][]int64),
+		deletedCreator:  make(map[int64]bool),
 	}
 }
 
@@ -67,6 +75,27 @@ func (c *staffBotClient) setCreator(chatID, userID int64) {
 	c.smu.Lock()
 	defer c.smu.Unlock()
 	c.creators[chatID] = userID
+}
+
+// listAdministrator opts userID in as an administrator entry (can_restrict_members true)
+// of the chat's getChatAdministrators answer. A chat that never calls it lists none.
+func (c *staffBotClient) listAdministrator(chatID, userID int64) {
+	c.smu.Lock()
+	defer c.smu.Unlock()
+	for _, existing := range c.listed[chatID] {
+		if existing == userID {
+			return
+		}
+	}
+	c.listed[chatID] = append(c.listed[chatID], userID)
+}
+
+// setDeletedCreator renders the chat's creator entry as a deleted account: first name
+// "Deleted Account", no last name and no username.
+func (c *staffBotClient) setDeletedCreator(chatID int64) {
+	c.smu.Lock()
+	defer c.smu.Unlock()
+	c.deletedCreator[chatID] = true
 }
 
 func (c *staffBotClient) setFailure(method string, chatID int64, err error) {
@@ -125,7 +154,15 @@ func (c *staffBotClient) botMemberStatus(chatID int64) (status string, canRestri
 func (c *staffBotClient) adminList(chatID int64) json.RawMessage {
 	entries := make([]string, 0, 2)
 	if creator, ok := c.creators[chatID]; ok {
-		entries = append(entries, string(staffMemberJSON(creator, false, "creator", false)))
+		if c.deletedCreator[chatID] {
+			entries = append(entries, fmt.Sprintf(
+				`{"status":"creator","user":{"id":%d,"is_bot":false,"first_name":"Deleted Account"}}`, creator))
+		} else {
+			entries = append(entries, string(staffMemberJSON(creator, false, "creator", false)))
+		}
+	}
+	for _, listed := range c.listed[chatID] {
+		entries = append(entries, string(staffMemberJSON(listed, false, "administrator", true)))
 	}
 	if status, canRestrict, present := c.botMemberStatus(chatID); present && status == "administrator" {
 		entries = append(entries, string(staffMemberJSON(staffTestBotID, true, "administrator", canRestrict)))
@@ -275,5 +312,10 @@ func staffCleanup(t *testing.T, chatIDs ...int64) {
 		db.DB.Where("staff_chat_id IN ? OR summary_chat_id IN ?", chatIDs, chatIDs).Delete(&models.StaffAction{})
 		db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.StaffGroup{})
 		db.DB.Where("group_chat_id IN ? OR staff_chat_id IN ?", chatIDs, chatIDs).Delete(&models.StaffGroupLink{})
+		db.DB.Where("staff_chat_id IN ?", chatIDs).Delete(&models.StaffForwardBlock{})
+		db.DB.Where("staff_chat_id IN ?", chatIDs).Delete(&models.StaffForwardBlockSettings{})
+		for _, id := range chatIDs {
+			cache.DeleteCache(cache.CacheKey("staff_forward_block", id))
+		}
 	})
 }

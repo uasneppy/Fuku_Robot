@@ -13,10 +13,6 @@ import (
 const (
 	BackupFormatVersion = "1.1"
 	legacyFormatVersion = "1.0"
-
-	// BackupBotName is written into every exported backup. Import only requires a
-	// non-empty name, so files exported under the bot's earlier name still load.
-	BackupBotName = "Xenobot-72"
 )
 
 type BackupFormat struct {
@@ -34,7 +30,7 @@ func NewBackupFormat(chatID int64, chatName string, exportedBy int64, modules []
 	return &BackupFormat{
 		Version:    BackupFormatVersion,
 		ExportedAt: time.Now().UTC(),
-		BotName:    BackupBotName,
+		BotName:    "Xenobot-72",
 		ChatID:     chatID,
 		ChatName:   chatName,
 		ExportedBy: exportedBy,
@@ -43,6 +39,9 @@ func NewBackupFormat(chatID int64, chatName string, exportedBy int64, modules []
 	}
 }
 
+// Validate checks the structure of a backup before it is imported. The bot name is informational
+// only: it must be present, and it must stay unchecked against any constant, so that exports made
+// under the bot's earlier name keep importing.
 func (b *BackupFormat) Validate() error {
 	if b == nil {
 		return fmt.Errorf("backup cannot be nil")

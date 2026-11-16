@@ -64,6 +64,14 @@ func settingsCardObjectID(fields map[string]string, key string) (id int64, ok bo
 // settingsCardRows adds the card's rows: Yes, carrying yes plus a fresh expiry, and No, which
 // returns to page noPage, then the navigation row.
 func settingsCardRows(k *settingsKeyboard, yes map[string]string, noPage string) {
+	settingsCardRowsTo(k, yes, map[string]string{"a": settingsActCancel, "p": noPage})
+}
+
+// settingsCardRowsTo adds the card's rows with the No fields the caller chooses: Yes, carrying yes
+// plus a fresh expiry, and No, carrying exactly the fields in no (the settings keyboard adds the
+// owner field to both), then the navigation row. The list pages pass their pager action and the
+// page the ask came from, so a cancelled delete returns to the page the owner was reading (M40).
+func settingsCardRowsTo(k *settingsKeyboard, yes, no map[string]string) {
 	yesFields := make(map[string]string, len(yes)+1)
 	for key, value := range yes {
 		yesFields[key] = value
@@ -74,8 +82,7 @@ func settingsCardRows(k *settingsKeyboard, yes map[string]string, noPage string)
 	if button, ok := k.button(settingsText(k.view.Tr, "settings_btn_yes"), yesFields); ok {
 		row = append(row, button)
 	}
-	if button, ok := k.button(settingsText(k.view.Tr, "settings_btn_no"),
-		map[string]string{"a": settingsActCancel, "p": noPage}); ok {
+	if button, ok := k.button(settingsText(k.view.Tr, "settings_btn_no"), no); ok {
 		row = append(row, button)
 	}
 	k.row(row...)

@@ -1,6 +1,7 @@
 package reports
 
 import (
+	"context"
 	"errors"
 	"slices"
 
@@ -33,6 +34,21 @@ func GetChatReportSettings(chatID int64) (reportsrc *models.ReportChatSettings) 
 		log.Error(err)
 	}
 	return
+}
+
+// LoadChatStatusContext reads whether reports are on for a chat with one plain SELECT. Unlike
+// GetChatReportSettings it creates no chats or report row and returns the read error instead of
+// hiding it; a chat with no row reads as on, the model default. The table is uncached.
+func LoadChatStatusContext(ctx context.Context, chatID int64) (bool, error) {
+	var settings models.ReportChatSettings
+	err := db.DB.WithContext(ctx).Select("status").Where("chat_id = ?", chatID).Take(&settings).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return settings.Status, nil
 }
 
 func SetChatReportStatus(chatID int64, pref bool) error {

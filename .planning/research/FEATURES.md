@@ -1,367 +1,530 @@
-# Feature Research
+# Feature Landscape
 
-**Domain:** Telegram group-management bot (GroupHelp-style): Staff Group multi-group moderation, raid lockdown, Mini App (Cloudflare Turnstile) captcha, inline-button settings menu
-**Researched:** 2026-10-04
-**Confidence:** MEDIUM overall. Staff Group and settings-menu behaviour in GroupHelp and Rose is mostly from training knowledge and search snippets, because the egress proxy blocked teletype.in, missrose.org, core.telegram.org and developers.cloudflare.com. Turnstile token rules and Mini App constraints were confirmed by search results. Per-area confidence is marked below.
+**Domain:** GroupHelp-style Telegram group management: PM settings hub, owner gate, message editor, member requirements, message deletion (milestone v1.1)
+**Researched:** 2026-11-02
+**Scope:** only the NEW v1.1 features. Existing behaviour (Phase 9 menu, captcha, lockdown, staff, greetings, rules, locks, filters, notes, warns, reports, log channels) is context, not re-researched.
 
-**Scope note:** PROJECT.md decisions are treated as fixed. This file says how each area typically works, what users of such bots expect, and what PROJECT.md misses. Anything missing is in "Gaps in PROJECT.md" at the end.
+## Evidence and confidence
 
-**What already exists (from ARCHITECTURE.md and a code check):**
-- `antiraid` is Redis-only, time-limited, with an auto-threshold. It will be replaced.
-- Captcha has `captcha_mode` of `math` or `text`, a 1-10 minute timeout, a `kick`/`ban`/`mute` failure action, and `max_attempts`.
-- `aispam`, `antiflood` (per-replica counters), federations (`applyActiveFban` is the fan-out model), log channels, `/connect` (PM management) and `callbackcodec` all exist.
-- There is no settings menu and no `web_app` or Mini App code.
+| Source | What it gave | Confidence |
+|--------|--------------|------------|
+| Owner's 11 GroupHelp screenshots (PM list, main menu, rules/welcome editors, member requirements, deletion menu, service messages, scheduled deletion) | The exact UX the owner wants: layout, labels, which toggles exist | HIGH for what is visible; the meaning of two glyph buttons is inferred (see Open questions) |
+| Local code: `greetings.go`, `rules.go`, `membership.go`, `settings_pages.go`, `models/greetings.go`, `models/rules.go`, AGENTS.md | What exists today and which seams the new features must use | HIGH |
+| Local gotgbot v2.0.0-rc.36 source (`gen_types.go`, `gen_methods.go`) | Bot API field list for service messages, `DeleteMessage` limits, `DeleteMessages`, `ShowCaptionAboveMedia`, `ChatFullInfo.LinkedChatId`, `GetUserProfilePhotos`, `Community*` service types | HIGH (it is the Bot API text the code compiles against) |
+| Search summaries of Rose docs (`/cleanservice`, `/cleancommand`, `/cleanwelcome`) | Rose's cleaning model: per-type `cleanservice`, `cleancommand user/admin/other/all` | MEDIUM (docs host was unreachable from this session; only search summaries) |
+| Shieldy issue tracker via search | Shieldy deletes the entry (join) message of captcha failures, kicks on timeout | LOW (old, unofficial) |
+| GroupHelp, Combot, Group Butler behaviour beyond the screenshots | Web search returned nothing usable; those bots' docs are not indexed | LOW. Statements about them below are marked as recall, not verified |
 
-## Feature Landscape
+The `research-plan` seam could not run in this session (`gsd-tools.cjs` fails on a missing `./vendor/re2js.cjs`), and `core.telegram.org` and `missrose.org` are outside the session's network allow-list. Bot API facts therefore rest on the vendored gotgbot source, which is current. If the owner wants the missing GroupHelp detail (button grammar, what the glyph buttons do), a live look at the real bot is the only reliable source.
 
-### Area 1: Staff Group (multi-group moderation) — confidence MEDIUM
+---
 
-How it typically works. GroupHelp has a "Staff Group" concept: a group of trusted people linked to the managed groups. Rose and Combot have no equivalent; they use federations (a shared ban list), which is a different model and is correctly kept separate. Typical flow:
-1. The owner designates the group.
-2. Managed groups link to it.
-3. A staff member runs a moderation command in the staff room.
-4. The bot fans the action out and reports back.
+## 1. PM settings hub and discovery
 
-#### Table Stakes (Users Expect These)
+### How it works in GroupHelp (screenshot 3, HIGH)
 
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| `/ban /mute /kick /unban /unmute` with timed variants, by `@username`, ID, or reply | Same verbs as per-group moderation; staff already know them | MEDIUM | Reuse the existing duration parser and target extraction. Telegram treats `until_date` under 30 s or over 366 days as permanent. `banChatMember` works on user IDs that are not in the chat, so staff bans work for people who never joined that group. This is different from `/fban`, which only touches chats where the user is "known". |
-| Per-group admin + right check before acting (fixed by PROJECT.md) | The whole safety model | MEDIUM | Check the issuer live via `getChatMember` on each target group. Do not use the 10 s cached admin list as the authority for a destructive cross-group action. Needed right is `can_restrict_members`. Creator always passes. |
-| Per-group result summary (done / skipped / failed + reason) | Partial success must be visible | MEDIUM | Post one message and edit it as groups complete, rather than N messages. Keep it under 4096 characters; truncate with a count. |
-| Protect untouchable targets | Every moderation bot refuses these; the bot must not let staff ban admins, the owner, other staff members, itself, or other bots it manages | LOW | Skip per group with the reason "target is an admin there". Telegram also rejects banning a group owner or admin, so handle that error as a skip, not a failure. |
-| Live Staff Group membership check at command time | Removing someone from the Staff Group must revoke their power immediately | LOW | Use `getChatMember` on the Staff Group, status `member`/`administrator`/`creator`. Do not cache. Reject `left`/`kicked`/`restricted` (unless restricted but still a member). |
-| Anonymous-admin handling | Anonymous staff cannot be authorised per group | LOW | Reply once: "post as yourself". Do not guess. Already in PROJECT.md Context. |
-| Bot-side failure classification | "Bot lacks rights" differs from "you lack rights" | LOW | Telegram errors map to failed (bot-side) vs skipped (user-side). The summary distinguishes them. |
-| Rate-limit-safe fan-out | 20+ groups x many API calls hits 429 | MEDIUM | Sequential or small worker pool, honour `retry_after`, retry once. Report "failed: rate limited" rather than dropping. Telegram's global limit is roughly 30 requests per second. |
-| Reason shown in the summary and posted to each affected group's log channel | Audit expectation | LOW | Existing `logchannels` repo. Post only to groups where the action was applied. |
-| `/staff` panel showing linked groups and status | Owner needs to see what is linked and what is broken | LOW-MEDIUM | Status per group: linked, bot admin yes/no, `can_restrict_members` yes/no, owner still matches. |
-| Link / unlink flow with owner-only gating (fixed by PROJECT.md) | Authority safety | MEDIUM | The link command runs in the group being linked, issued by a user who owns both. Check the creator of both groups via `getChatMember`. |
-| Auto-unlink when ownership no longer matches | Fixed by PROJECT.md | MEDIUM | Event-driven (`chat_member` updates, which need `allowed_updates` to include `chat_member` and the bot to be admin) plus a lazy re-verify on each fan-out. The lazy check is what actually guarantees the rule. |
-| Persistent audit record of staff actions | Without it you cannot answer "who banned X everywhere, when, why" and cannot build undo | MEDIUM | New table (migration + model + repo per AGENTS.md). Store issuer, target, action, reason, expiry, per-group outcomes. Not in PROJECT.md; needed anyway for the summary. |
-| Handle chat migration (group becomes supergroup, chat ID changes) | A basic group upgrading to a supergroup gets a new ID and the old link goes dead silently | MEDIUM | Handle `migrate_to_chat_id`/`migrate_from_chat_id`: re-key the link rows. Applies to the Staff Group and to linked groups. Not in PROJECT.md. |
+- `/settings` in the bot's private chat sends one message: "Group settings: choose the group whose settings you want to change", then one full-width button per group, in a single column, titled with the group's name. One button carries a corner-arrow glyph, which is a URL button (a link that opens the group), so the list is a mix of callback and URL buttons.
+- The same message carries the troubleshooting text that doubles as the discovery contract: "If a group where you are an administrator is not shown: send `/reload` in the group and retry; send `/settings` in the group, then press Open in private."
+- So discovery is by the bot's own memory, never by a Telegram query. Two feeders: `/reload` (refresh the admin list of this group) and the in-group `/settings` -> Open in private deep link. The Bot API cannot list a user's groups (confirmed in PROJECT.md context).
+- Picking a group opens that group's main menu (screenshot 5): title "PARAMETERS", the group's name, "Choose one of the parameters", two-column grid of page buttons, the last row Lang / Close / Other. The same message is edited in place; every page has Back.
 
-#### Differentiators (Competitive Advantage)
+### Behaviour users expect
 
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| "Undo everywhere" button on the summary | One tap reverses a mistaken ban across all groups | LOW-MEDIUM | Needs the audit record. Callback carries a short token (64-byte cap), full state in Redis/DB. Gate to Staff Group members, re-check live. |
-| Silent mode: delete the staff command message after acting | Keeps the staff room clean (GroupHelp offers silent variants) | LOW | Needs the bot to have delete rights in the Staff Group. |
-| Staff Group as the alert sink (lockdown alerts, later reports) | Core value: "protect everything from one place" | LOW (given Phase 1) | Already planned for lockdown. Reports and AI-spam notices can reuse the same sink later. |
-| Re-apply active timed actions to a newly linked group | A user banned yesterday is not banned in a group linked today | MEDIUM | Only meaningful if the audit table stores permanent/active bans. Makes it behave like a ban list, which blurs the line with federations. Recommend defer; decide at roadmap time. |
-| Progress edit during long fan-out | Staff see it working instead of silence | LOW | Comes free with the single-message-edited summary. |
-| `/staff` also shows recent staff actions | Accountability | LOW | Reads the audit table. |
+| Behaviour | Expectation | Confidence |
+|-----------|-------------|------------|
+| List shows only groups the bot is in and the user administers | A group the bot was removed from disappears; a user demoted disappears | HIGH (Phase 9's live check already enforces it per press) |
+| Self-service repair for a missing group | One obvious action (`/reload` or `/settings` in the group) makes it appear | HIGH |
+| Pagination | A user with 15+ groups still gets a working list; Telegram caps a keyboard at 100 buttons and the message at 4096 chars | HIGH |
+| Group title only, no IDs | Titles are escaped; two groups with the same title are distinguishable (suffix with a short ID tail or member count) | MEDIUM |
+| A fresh pick shows current state | The Main page header shows the group's name; every button shows a state suffix (Fuku already does this) | HIGH |
 
-#### Anti-Features (Commonly Requested, Often Problematic)
+### Table stakes
 
-| Feature | Why Requested | Why Problematic | Alternative |
-|---------|---------------|-----------------|-------------|
-| Staff members can change settings, promote or demote in linked groups | "Staff group means full control" | Authority creep. The safety model rests on per-group admin rights. | Staff commands stay limited to restrict-type actions. Settings changes stay with each group's own admins (and the settings menu). |
-| Staff Group auto-grants itself admin in linked groups | Convenience | Defeats the ownership guarantee | Bot never promotes anyone. |
-| Confirmation dialog before every staff action | Safety | Slows the incident response this feature exists for | Undo button plus the per-group summary. |
-| Merging with federations | Overlap in function | Out of Scope in PROJECT.md. Different trust model. | Leave `/fban` untouched. |
-| Cross-group message deletion | Spam cleanup | Out of Scope for v1 | Revisit after the lockdown "ban recent joiners" action exists. |
-| Per-action group selection | Flexibility | Out of Scope in PROJECT.md | All linked groups, always. |
+| Feature | Why expected | Complexity | Depends on |
+|---------|--------------|------------|------------|
+| `/settings` in PM lists manageable groups, one button each, paged at about 8 | The headline feature; without it the owner still types commands in groups | Med | New persisted "who administers what" index (below); `settings_pages.go` renderer; `callbackcodec` |
+| Persisted user-to-group admin index, fed by `/admincache` (add a `/reload` alias), every admin-cache refresh, `chat_member` promote/demote updates and the in-group Open in private path; pruned by `my_chat_member` when the bot leaves | The only discovery mechanism Telegram allows | High (new table, migration, repo with `cache.DeleteCache`, test fixtures, harness `AutoMigrate` lists) | `fuku/utils/cache/adminCache.go` (`loadAdminCacheFromTelegram` is the natural write hook), `chat_member` already in `AllowedUpdates` |
+| Every pick re-checks live (`getChatMember`) and prunes the stale row on a definite "not an admin / bot not in chat" | The index is a hint, never an authority (existing Phase 9 rule D-04) | Low (the press pipeline step 4 exists; add the prune) | `settingsPress.verify`, `chat_status.IsBotMissingError` |
+| Anonymous admins appear in their PM list | `getChatAdministrators` returns the real user ID even for an anonymous admin; in PM they are a normal user | Low | admin cache stores user IDs |
+| Same Main page and Back/Close behaviour as the in-group menu | Pages are reused; only the entry differs | Low | `settingsMainEntries`, `registerSettingsPage` |
+| Empty-state text when the list is empty ("Send /reload in your group, or /settings there") | Prevents the dead-end the owner will otherwise hit on day one | Low | locale keys x7 |
 
-### Area 2: Raid / anti-spam lockdown — confidence MEDIUM
+### Differentiators
 
-How it typically works. Rose's antiraid is time-boxed: it bans every new join for a configurable period (default 6 hours) and can auto-enable at N joins per minute. GroupHelp and similar bots add a flood and spam layer on top. The decided design here differs deliberately: it kicks joiners, mutes non-admins, never auto-lifts, and has a manual-only lift. That is closer to Discord "lockdown" semantics.
+| Feature | Value | Complexity | Notes |
+|---------|-------|------------|-------|
+| State badge on each list row (lockdown lock icon, Staff Group linked, bot-not-admin warning) | Owner sees at a glance which of many groups need attention | Med | `lockdown.ListActiveByChatsFresh` exists (one query for many chats); bot-admin state needs a cheap cached check. Never name the Staff Group (D-21) |
+| Recently-opened first ordering | Owner mostly toggles the same three groups | Low | needs a `last_opened_at` column on the index |
+| Bounded live refresh of visible rows (max 8 `getChatMember` calls per page, 60 s Redis memo) | Removes stale rows before the user taps | Med | Optional; the live check on pick already makes stale rows harmless |
 
-#### Table Stakes (Users Expect These)
+### Anti-features
 
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| Manual `/lockdown` and `/unlockdown` (or `/lockdown off`) plus status | Staff need a panic button and a plain-text path besides the button | LOW | Admin of that group only (rights check, not Staff Group). Keep the button path from PROJECT.md. |
-| Auto-trigger on join surge (N joins in T seconds, configurable) | The classic raid signal; Rose already offers it, so the existing `AutoAntiRaidThreshold` setting must carry over | MEDIUM | Sliding window in Redis (sorted set per chat). Minimum sample size and a per-group enable switch to avoid false positives on legitimate spikes (an event or channel promotion). |
-| Auto-trigger on message or media flood from new members | Raids that already joined (or slipped in) flood text, photos, GIFs, stickers | MEDIUM-HIGH | Needs chat-level aggregate counters, not antiflood's per-user, per-replica ones. Use Redis. Needs a "new member" notion: join time per user per chat (see Gaps). |
-| Auto-trigger on burst of AI spam verdicts | Already decided | MEDIUM | Count `aispam` positive verdicts per chat per window. Rules fire, AI assists (decided). |
-| Lockdown action: kick (not permanent ban) every joiner | Decided. Kick means ban then unban so honest users can come back | MEDIUM | Process through a paced queue; hundreds of joins per minute is plausible. Delete the join service message too. |
-| Lockdown action: mute everyone except admins and approved users | Decided | MEDIUM-HIGH | The reliable mechanism is a chat-level default permissions flip (`setChatPermissions`, one call), which admins ignore. Approved users then need per-user permission overrides, or they are muted too. Snapshot the previous default permissions and restore them on lift. A restore that guesses defaults is a classic bug. |
-| Durable lockdown state | A lockdown that never expires must survive a restart | MEDIUM | DB row (migration) as the source of truth, Redis as accelerator. The old antiraid was Redis-only; reusing that would lose lockdown on a Redis flush. |
-| Alert with trigger reason, counts, window, and a sample list of joiners | Staff must know why it fired and who | MEDIUM | Telegram messages cap at 4096 characters: cap the sample and show "+N more". Full list as a document if needed. |
-| Alert to Staff Group and the attacked group's log channel (decided) | Core value | LOW | One alert per lockdown, then edit it with updated counters (throttled), rather than re-alerting every join. |
-| "Lift lockdown" button, admin of the locked group only, from anywhere (decided) | Decided | MEDIUM | The callback must verify admin rights in the locked chat, not the chat where the button was pressed. Callback data carries a short token; the chat ID lives in the DB or Redis (64-byte cap). Re-check on every press. |
-| "Ban N recent joiners" button (decided) | The standard post-raid cleanup | MEDIUM | Join log per chat (Redis sorted set or DB) with retention at least as long as the longest window. Exclude admins and approved users and anyone who joined before the burst window. Admin-gated like lift. Show the result summary and offer undo (unban list). |
-| Exempt admins and approved users | Repo rule: approved users skip antiflood, locks, blacklists, captcha | LOW | Applies to detection counters as well as the mute. |
-| One active lockdown per chat, idempotent trigger | Concurrent triggers (surge plus flood) must not double-alert or double-snapshot permissions | LOW-MEDIUM | Compare-and-set on the state row. |
-| Migrate or replace legacy `/antiraid` settings | Existing users of `raidtime`, `raidactiontime`, auto threshold | LOW-MEDIUM | Keep the auto-threshold meaning, retire the temp-ban timing, and reply to old commands with a pointer. |
+| Anti-feature | Why avoid | Instead |
+|--------------|-----------|---------|
+| Live-checking every group on every list open | N groups x Telegram calls per `/settings`; rate limits and slow list | Index plus live check on pick |
+| Listing groups from the `connections` table | Connections are a different relationship (a user chose to connect), not "administers" | Keep connections as is; build the index separately. A pick in the hub does not need to write a connection |
+| Showing a group to a non-owner admin as a read-only entry | Owner decided hiding beats read-only | Hide it (section 2) |
 
-#### Differentiators (Competitive Advantage)
+---
 
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| Alert-only (dry-run) mode for auto triggers | Lets the owner tune thresholds without taking a false-positive lockdown | LOW | One extra setting. Recommended: it is the cheapest false-positive control. |
-| Invite-link attribution in the alert | `ChatMemberUpdated` carries `invite_link`; showing "N of the burst joined through link X" and offering "revoke link" is very actionable | MEDIUM | Needs the bot to see chat-member updates. Strong differentiator; optional first-release add. |
-| Periodic "lockdown still active" reminder | Because nothing auto-lifts, a forgotten lockdown silently mutes a community | LOW | Edit/re-post the alert at intervals (for example 1 h, then daily). It respects "never auto-lifts". |
-| Lockdown banner in `/staff` panel | One place to see which groups are locked | LOW | Depends on Phase 1 panel. |
-| Account-signal scoring (no username, no photo, very new ID, same-name pattern) feeding rules | Raiders share traits; this narrows "ban N recent joiners" to likely bots | MEDIUM | Keep as rule signals, not a black box. Telegram user IDs increase over time, so a high ID is a usable "new account" heuristic. Defer past first release. |
-| External reputation lookup on join (for example the CAS database) | Cheap extra signal | LOW-MEDIUM | External dependency and privacy trade-off. Defer. |
-| Cross-group correlation: a raid on group A raises sensitivity on linked group B | Natural fit with the Staff Group | MEDIUM | Out of Scope today ("applies only to the attacked group"). Mention only. |
+## 2. Owner gate
 
-#### Anti-Features
+### How it works (owner decision plus common practice)
 
-| Feature | Why Requested | Why Problematic | Alternative |
-|---------|---------------|-----------------|-------------|
-| Auto-lift after a timer | Convenience | Out of Scope: an admin must decide | Periodic reminder. |
-| Permanent-banning every joiner during lockdown | Strong stop | Honest joiners lose access forever, and lifting needs mass unban | Kick, as decided. |
-| Send every message to AI for raid detection | "Smarter" | Out of Scope: slow and costly | Rules first, AI on borderline items only. |
-| Lockdown across all linked groups at once | Seems protective | Out of Scope; one attacked group should not silence the rest | Alert the Staff Group and let staff lock others by hand. |
-| Lockdown that mutes admins or approved users | Simplicity | Locks out the people who must fix it | Always exempt. |
-| Public "raid mode" announcement spam in the group | Transparency | Tells raiders it worked and adds noise | Alert staff and log channel only. |
+GroupHelp and Rose let any admin (Rose: any admin with the relevant right) change settings. An owner-only default with an opt-in "let admins in" switch is the owner's own policy, not a copied GroupHelp behaviour, so there is no reference behaviour to match: this is a Fuku design. The closest precedent in the codebase is Phase 9's `settingsView.Creator` and `requireLockdownAuthority` (live creator check) and the staff link's "live owner of both groups" rule.
 
-### Area 3: Mini App captcha with Cloudflare Turnstile — confidence MEDIUM-HIGH for constraints, MEDIUM for UX norms
+### Behaviour that must hold
 
-How it typically works. Classic Telegram bots (Shieldy, GroupHelp, Rose) use in-chat challenges: a button press, a math question, or an image. A Mini App captcha moves the challenge to a web page opened from the group.
+| Surface | Owner | Admin, toggle off (default) | Admin, toggle on | Non-admin |
+|---------|-------|-----------------------------|------------------|-----------|
+| PM `/settings` list | listed | not listed | listed | not listed |
+| In-group `/settings` | menu choice (group / private) | refused with one plain line, no menu | as today | as today (refused) |
+| Deep link `/start settings_<id>` | opens | `settings_start_not_admin` (the same words a plain member gets) | opens | `settings_start_not_admin` |
+| Every callback press | allowed | refused (alert), including a menu opened before the owner flipped the switch | allowed | refused |
+| The toggle itself | changeable by owner only, always | cannot see the control | cannot change it even when on | n/a |
+| In-group setting commands (`/captchamode`, `/setflood`, ...) | unchanged | unchanged | unchanged | unchanged |
 
-Hard constraints (confirmed by search results):
-- Inline `web_app` buttons are available only in private chats between a user and the bot. They are not usable in groups.
-- In a group, the only route is a URL button pointing to a direct Mini App link (`https://t.me/<bot>/<appshortname>?startapp=<param>`). The Mini App has to be registered once with BotFather (`/newapp`), which is a manual deployment step.
-- `initData` is signed with an HMAC derived from the bot token and carries `auth_date`; the server must validate the signature and reject stale `auth_date`.
-- Turnstile tokens expire after 300 seconds and are single-use; a replay returns `timeout-or-duplicate`. Server-side siteverify (POST `https://challenges.cloudflare.com/turnstile/v0/siteverify`) is mandatory.
+Rules that follow from it:
 
-#### Table Stakes (Users Expect These)
+- The gate is decided from the press's own live `getChatMember` record (creator vs administrator), never the admin cache, exactly like Phase 9 step 4. The toggle read must be fresh or `skipLocal`-listed so another replica never serves a stale "admins allowed" from the in-process layer (AGENTS.md data rule).
+- A refusal in the PM must not reveal whether the bot is in a group (existing `settings_start_not_admin` reasoning). Refusing an admin of a group they can already see in-group may say "only the owner" because they already know the group exists and that they are an admin there.
+- The toggle row lives on its own small page (Access) visible only to the creator; other admins never see the button.
 
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| Restrict on join, unrestrict on pass | Standard captcha contract; the existing flow already mutes pending users | LOW (exists) | Webapp becomes a new `captcha_mode` value (requires a migration changing the `chk_captcha_mode` check constraint, and a new migration file, never an edit). |
-| Challenge message with a URL button (not `web_app`) in the group | Only option that works in groups | LOW-MEDIUM | `startapp` param is an opaque short nonce, not user or chat data. Param limits are small. |
-| Challenge bound to one `(user, chat)` and one nonce | Other members must not be able to verify for the target, and a nonce must not be replayable | MEDIUM | Nonce row in Redis/DB with TTL equal to the captcha timeout. The server checks `initData.user.id` equals the challenge's user. Mark the nonce used atomically on success. |
-| Server-side validation of both `initData` and the Turnstile token | Mandatory; client-side is spoofable | MEDIUM | Check HMAC signature, `auth_date` freshness, user ID match, then siteverify. Verify `success`, the hostname, and bind the Turnstile `cdata`/action to the nonce so a token solved elsewhere cannot be reused. |
-| Timeout then kick, rejoin allowed (decided) | Matches existing sweeper | LOW (exists) | Existing `timeout` (1-10 min) and `failure_action` settings continue to apply. |
-| Delete challenge message and join service message on result | Keeps the chat clean | LOW | Already done by the math/text flow. |
-| Pending-message replay and greeting after pass | Existing behaviour in group `-10` and greetings | MEDIUM | The HTTP handler must hand off into the same "verified" code path rather than duplicating it. Unify on a single function. |
-| Retry inside the page without consuming the attempt | Turnstile can fail transiently (network, widget error) | LOW-MEDIUM | The existing "one attempt per user per chat" rule must be read as one challenge window, not one widget solve. Decide explicitly. |
-| Rate limit and size limit on the verify endpoint | A public endpoint on the bot's HTTP server | LOW-MEDIUM | Per-IP and per-nonce limits. Unknown nonce returns the same response as an invalid one. |
-| HTTPS public hostname with correct CSP and Turnstile domain allow-list | Mini Apps require HTTPS; Turnstile checks the hostname | LOW (ops) | Polling-mode deployments may not expose a public port today. This is a deployment prerequisite; flag it. |
-| Register the Turnstile secret with `logredact.RegisterSecret` | Repo rule | LOW | Also never log the token or `initData`. |
-| Keep math/text captcha as selectable fallback | The Mini App cannot be a single point of failure (Cloudflare outage, misconfigured domain, bot hosting down) | LOW | The PROJECT.md wording ("fit that flow or replace it cleanly") should resolve to "add a mode, keep the old ones". |
+### Table stakes
 
-#### Differentiators (Competitive Advantage)
+| Feature | Why expected | Complexity | Depends on |
+|---------|--------------|------------|------------|
+| Per-group `admins_may_configure` flag, default false, one apply function, `cache.DeleteCache` on write | Owner's explicit requirement | Low-Med (migration, model, repo, cache key in `skipLocal`) | Phase 9 "one setting one code path" rule |
+| Gate applied in all three entries (PM list filter, in-group `/settings`, deep link) and in the press pipeline | A gate enforced in only some places is no gate | Med | `settingsPress.verify`, `settingsStartDeepLink`, `requireLockdownAuthority(false)` path, the `settings|` callback |
+| `settingsRight` gains an owner dimension, so per-control rights stack on top of the gate | Controls keep their own right (restrict, bot admin) | Low | `settingsRight*` constants |
+| Parity/drift/authority tests for the gate | Repo convention for every setting | Med | `settings_env_test.go` toolkit |
 
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| Invisible / managed Turnstile mode so most real users see no puzzle | The privacy and low-friction reason Turnstile was chosen | LOW | A widget setting. |
-| Mini App localised via Telegram `language_code` (7 locales) | Existing 7-locale promise | MEDIUM | The page needs its own small string table; the repo's `check-translations` does not cover it. |
-| Theme-aware UI, auto-close after success | Feels native | LOW | `Telegram.WebApp.themeParams`, `close()`. |
-| Join-request mode: verify before admission | User never enters the group, so there is nothing to clean up on failure | MEDIUM-HIGH | Uses `chat_join_request`. Needs a different state machine. Defer. |
-| Verify-time metrics (pass rate, median time, timeouts) | Tune timeouts, detect Turnstile outages | LOW | Existing Prometheus endpoint. |
+### Edge cases the requirements must decide (flagged, not resolved)
 
-#### Anti-Features
+- **No live creator.** Telegram can have a group with no owner (the owner deleted their account or left; gotgbot has `ChatOwnerLeft` and `ChatOwnerChanged` service types). Default-deny then locks everyone out. Suggested rule: when `getChatAdministrators` shows no creator, admins are treated as allowed, still checked live. MEDIUM confidence that this case occurs; the fallback is a design call for the owner.
+- **Ownership transfer.** The new owner appears only after an admin-cache refresh or an in-group `/settings`. A live check on pick covers it; the index must also accept a creator row appearing for a user who was an admin before.
+- **Staff Group.** Its own page is read-only for its members; the gate does not hide a Staff Group from its creator, and nobody but the creator sees the linked groups.
 
-| Feature | Why Requested | Why Problematic | Alternative |
-|---------|---------------|-----------------|-------------|
-| Google reCAPTCHA | Familiar | Out of Scope; privacy | Turnstile. |
-| `web_app` inline button in the group | Looks native | Telegram does not allow it in groups | URL button to the direct Mini App link. |
-| Trusting client-reported success (page POSTs "passed") | Simple | Trivially forged | Server-side siteverify plus `initData` validation only. |
-| Fingerprinting, IP storage, or passing `remoteip` as a tracking tool | Stronger bot detection | Privacy cost, contradicts the reason for choosing Turnstile | Do not store IPs; use IP only for transient rate limiting. |
-| Re-verifying existing members | Completeness | Hostile, no value | Applies to new joiners only; approved users skip (repo rule). |
-| Self-hosting `telegram-web-app.js` | Offline control | Telegram expects its hosted script; self-hosted copies go stale | Load from Telegram, keep CSP narrow. |
-| Full web admin dashboard on the same server | "While we have a web server" | Attack surface and scope creep | Settings menu stays in Telegram. |
+### Differentiators
 
-### Area 4: Inline-button settings menu — confidence MEDIUM
+| Feature | Value | Complexity | Notes |
+|---------|-------|------------|-------|
+| Audit line in the group's log channel when the owner flips the switch | Admins learn why access changed | Low | `actionlog.Destination`, admin category |
 
-How it typically works. GroupHelp's `/settings` opens a menu of buttons. Pages cover language, welcome, rules, captcha, antiflood, warns, locks, blocks, and so on. Navigation edits one message in place with a back button. Toggles show a check or cross. Numeric values use stepper buttons or presets. In GroupHelp, setup happens mostly in the bot's private chat; Rose's help and `/connect` use the same private-chat model. This codebase already has `/connect` for PM management, so a PM menu bound to a connected chat is the natural fit.
+### Anti-features
 
-#### Table Stakes (Users Expect These)
+| Anti-feature | Why avoid | Instead |
+|--------------|-----------|---------|
+| Per-page or per-setting owner/admin granularity | Owner asked for one switch; a matrix is a support burden | One group-level switch |
+| Making in-group commands owner-only too | Out of scope by the owner's statement; would break existing moderators | Leave commands alone |
 
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| `/settings` in a group, opening the menu for that group | The entry point everyone looks for | MEDIUM | Either edit inline in the group (only invoker may press) or send a deep-link button (`?start=settings_<token>`) to the bot's PM. Recommended: PM menu, because group chat stays clean and it fits the existing connections model. |
-| Admin check on open and on every press | Buttons can be pressed by anyone who sees the message or after an admin is demoted | LOW-MEDIUM | The check is `getChatMember` on the target chat at press time. Callback data carries a token or chat reference, never a trusted role claim. |
-| Edit in place, Back / Close navigation | Standard UX | MEDIUM | Swallow Telegram's "message is not modified" 400 error, which happens when a press re-renders identical content. |
-| Toggle state visible on the button | Users must see current state | LOW | Re-render from the DB each press so two admins editing at once see current data. |
-| Steppers or presets for numeric and duration values | Free-text input is awkward | LOW-MEDIUM | Use presets (for example captcha timeout 1/2/5/10). Respect the existing DB check-constraint ranges. |
-| Callback data via `callbackcodec`, 64-byte cap | Repo rule; an overflow ships a dead button | LOW | Keep payloads to `page` + `action` + short chat token. Anything larger sits behind a Redis token. |
-| Writes go through the repository layer with cache invalidation | Repo rule | LOW | Menu must call the same repo functions as the commands, so settings made by command and by menu agree. Never write directly. |
-| Pages for features this milestone touches: Staff Group, Lockdown/raid, Captcha, Antiflood | Menu must cover what is new | MEDIUM | Staff Group page is owner-only for link and unlink; admins can view status. |
-| Localised labels in all 7 locale files | Repo rule | MEDIUM | Large key count; run `make check-translations`. |
-| Group picker when opened in PM with several manageable groups | Admins of many groups need to choose | MEDIUM | Reuse `/connect`. A full "all groups I admin" list needs a reverse lookup from admin caches; consider listing only connected or recently active groups. |
+---
 
-#### Differentiators (Competitive Advantage)
+## 3. Message editor (Rules, Welcome, Goodbye)
 
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| Settings changes posted to the group's log channel | Audit trail; GroupHelp-style logging | LOW | Existing log channel plumbing. |
-| Staff Group page doubles as the `/staff` panel (decided) | Single place to see links and status | LOW (given Phase 1) | `/staff` remains as a shortcut. |
-| Lockdown page with current state and Lift button | One place to react | LOW (given Phase 2) | Reuses the lift callback. |
-| Free-text edit flows (welcome text, rules) with a Redis "awaiting reply" state | Full GroupHelp parity | MEDIUM-HIGH | Needs a pending-input state machine with TTL and cancel. Defer. |
-| Reset-to-defaults per page with confirmation | Safety net | LOW-MEDIUM | Defer unless requested. |
+### How it works in GroupHelp (screenshots 2, 6, 7, 8, HIGH)
 
-#### Anti-Features
-
-| Feature | Why Requested | Why Problematic | Alternative |
-|---------|---------------|-----------------|-------------|
-| Porting every command into menu pages (filters, notes, blacklist editing) | "Everything in the menu" | Large content-editing UX with high key count and low value | Keep list-style content as commands. |
-| Menu actions that bypass command-level checks | Shortcut | Two inconsistent permission models | Share the permission predicates and repo calls with commands. |
-| Menu state stored only in the callback data | Statelessness | 64-byte cap and spoofable | Short token plus server-side lookup. |
-| Settings menu usable by non-admins in read-only mode | Transparency | Leaks config and adds a second render path | Admins only. |
-| Auto-closing and deleting the menu on timers | Tidiness | Races with users mid-edit | Explicit Close button. |
-
-## Feature Dependencies
+One editor screen per message (Rules, Welcome, Goodbye share the shape):
 
 ```
-Staff link (owner-of-both check, migration, repo)
-    └──requires──> Live ownership/membership verification helper (getChatMember, uncached)
-    └──requires──> Chat-migration re-keying (group -> supergroup)
-
-Staff actions (/ban /mute /kick /unban /unmute)
-    └──requires──> Staff link
-    └──requires──> Target resolution (ID / known @username / reply)
-    └──requires──> Paced fan-out worker (429 handling)
-    └──enhances──> Audit table  ──enables──> Undo button, /staff recent actions
-
-/staff panel ──requires──> Staff link, per-group status probe
-Settings menu "Staff Group" page ──requires──> /staff panel logic
-
-Lockdown state (durable DB row + Redis accelerator)
-    └──requires──> Snapshot/restore of chat default permissions
-    └──requires──> Join log (per chat, timestamps)  ──enables──> "Ban N recent joiners"
-    └──requires──> Chat-level aggregate counters (Redis) for flood/media triggers
-Lockdown triggers (join surge, flood, AI burst, manual) ──require──> Lockdown state
-Lockdown alert ──requires──> Staff link (Staff Group sink) + log channel
-Lift / Ban-joiners buttons ──require──> callbackcodec token store + live admin check on the locked chat
-Lockdown replaces legacy antiraid ──conflicts──> old temp-ban timing (retire raidtime / raidactiontime)
-
-Mini App captcha
-    └──requires──> New captcha_mode value (migration)
-    └──requires──> Public HTTPS route on bot HTTP server + BotFather /newapp registration + Turnstile site/secret keys
-    └──requires──> Challenge nonce store (bound to user+chat, TTL)
-    └──requires──> Shared "verified" code path with existing captcha (replay, greeting, cleanup)
-Lockdown ──interacts──> Captcha: joiners are kicked before a captcha starts; running captchas are left alone
-
-Settings menu ──requires──> callbackcodec, live admin re-check, repo layer
-Settings menu pages for Lockdown / Captcha / Staff ──require──> those features exist (hence the decided order)
+Rules
+Text            [done]
+Media           [done]
+URL buttons     [done]
+Use the buttons below to choose what to set
+[ Text ]          [ Preview ]
+[ Media ]         [ Preview ]
+[ URL buttons ]   [ Preview ]
+[ Media under text: off ]
+[ Full version (preview) ]
+[ Back ]
 ```
 
-### Dependency Notes
+- The three checkmark lines show which parts are set. Each part has a set button and its own preview button, and "Full version" previews the whole message the way members will see it.
+- "Media under text" is a toggle that places the media below the text. In Telegram terms this is `show_caption_above_media` (gotgbot `ShowCaptionAboveMedia` exists on `SendPhoto/Video/Animation` options) for captioned media, and the link-preview "above text" placement for a media link. It does not apply to documents, audio, voice or stickers.
+- The Rules menu sits one level above: "Group rules, shown with /rules", [Set message], [Allowed commands], [Back]. The "Allowed commands" button belongs to GroupHelp's per-command permission feature and is out of scope here.
+- The Welcome menu (screenshot 6): Status Active/Off, Mode "send welcome at every join", [Turn off][Turn on], [Set message], [Always send][Greet once], [Delete last message: on/off], [Back]. A "Choose topic" button exists in newer builds (screenshot 8); the owner already ruled it out of v1.1.
+- Input flow (recall of how all bots in this class behave, MEDIUM; the screenshots show only the menu): tapping Text, Media or URL buttons replaces the menu with a prompt ("send the new text, or press Cancel"); the user's next message in the PM is consumed as the value; the menu is shown again with the checkmark updated. Preview buttons send a real rendered copy into the PM.
 
-- **Audit table sits under Staff actions, not in PROJECT.md:** the summary, undo button and "recent actions" all read from it. Add it in Phase 1 even if only the summary uses it at first.
-- **Join log is shared by two features:** "Ban N recent joiners" and "new-member flood" detection both need it. Build it once in Phase 2, not per trigger.
-- **Durable lockdown state conflicts with reusing legacy antiraid storage:** the legacy path is Redis-only with expiry; the new one is never expiring and DB-backed.
-- **Captcha and lockdown order matters:** group `-10` (captcha sweeper) runs before antiraid at `-5`. The lockdown kick must not trigger the captcha timeout failure action twice, or leave a pending captcha row that later replays messages.
-- **Settings menu last (decided):** it only wraps repos and permission checks that already exist. The one reason to pull part of it forward is a `/staff` panel built with menu primitives, so build the `/staff` panel with `callbackcodec` and in-place editing from the start.
+### What users expect from each part
 
-## MVP Definition
+| Part | Expectation | Telegram constraint |
+|------|-------------|---------------------|
+| Text | Formatting typed in Telegram (bold, links, spoilers, custom emoji) survives; placeholders such as the member's name and the group title work; "remove" is possible | Capture entities from the message, not raw text. Fuku stores HTML today (`tgmd2html.MD2HTMLV2(OriginalMDV2)`). Text length limit is 4096 characters, but 1024 once media is attached because it becomes the caption: the editor must refuse or warn at save, not fail at send time |
+| Media | Send a photo, video, GIF, sticker, document, audio or voice; the bot keeps its `file_id`; one media only; replacing and removing both work | `file_id` is per bot, fine here. Stickers and video notes cannot carry a caption: text must then go in a separate message or be refused (decision needed) |
+| URL buttons | A simple grammar, multiple per row, several rows; invalid URLs are rejected with a reason | Only `http(s)://`, `tg://` and `t.me` links are valid; no callback buttons from a user; Telegram answers 400 for a bad URL when the message is sent, so the preview send is also the validation |
+| Preview per part | Shows that part alone (text only, media only, buttons only) | Buttons-only preview needs a placeholder text because a message cannot be only a keyboard |
+| Full preview | The real rendered message with the opener's name filled in, sent as a new PM message | Same send path as production (`media.SendGreeting`, `FormattingReplacer`) so the preview cannot differ from the real send |
+| Media under text | A toggle | Only for photo, video, animation; hide or disable the toggle for other media types |
+| Cancel | Cancel button on the prompt, plus `/cancel`; any other menu tap also clears the waiting state | State must expire (about 10 minutes) so a user is not trapped |
 
-### Launch With (v1) — maps to PROJECT.md order
+### The input state
 
-Staff Group (Phase 1):
-- [ ] Designate, link, unlink and auto-unlink with live owner checks. Reason: the safety model.
-- [ ] `/ban /mute /kick /unban /unmute` (timed) fan-out with live per-group admin-right check. Reason: core value.
-- [ ] Single edited summary message (done / skipped / failed). Reason: decided.
-- [ ] Protected targets, anonymous-admin refusal, 429-safe pacing, chat-migration re-keying. Reason: table stakes missing from PROJECT.md.
-- [ ] Audit table written on every action. Reason: cheap now, painful to retrofit.
-- [ ] Reason posted to log channels; `/staff` panel with status.
+A "waiting for your message" state is required and is new infrastructure (PROJECT.md says free-text editing was deferred in v1.0 as MENU2-02).
 
-Raid protection (Phase 2):
-- [ ] Durable lockdown state with permission snapshot and restore.
-- [ ] Kick joiners; mute non-admin, non-approved members.
-- [ ] Triggers: manual, join surge, flood/media, AI burst; legacy threshold carried over.
-- [ ] Alert to Staff Group and log channel with Lift and "Ban N recent joiners".
-- [ ] Manual `/lockdown`, `/unlockdown`, status.
+- Key by `(user, private chat)`, value holds group ID, field (`text`, `media`, `buttons`, `filter_trigger`, ...), the menu message ID to edit, and an expiry. Redis, short TTL, `SET` overwrite so a new prompt replaces the old one; outside the `fuku:cache:` prefix like the other operational keys.
+- It must work across replicas, so it cannot be in memory. Without Redis the editor should say plainly that editing needs Redis; the stateless pages keep working.
+- A watcher at a new private-chat-only handler position consumes the next message when a state exists and returns `ext.EndGroups`; with no state it returns `ext.ContinueGroups` and does nothing. Slash-prefixed text (other than `/cancel`) cancels and passes through so commands still work. The group number must be added to the AGENTS.md handler list; it must run before any PM handler that could swallow a free message (greetings/notes/filters do not act in PM, but connections might).
+- The press pipeline's live admin check runs at the prompt and again when the message is saved: an admin demoted between the two must be refused.
+- Albums arrive as several updates; accept the first item and ignore the rest (Fuku already handles media groups elsewhere, `g:<media group id>`).
+- The user's reply must never be echoed back with HTML unescaped; the saved text is rendered by the same sanitising path as today.
 
-Web captcha (Phase 3):
-- [ ] New `webapp` captcha mode alongside math/text.
-- [ ] Nonce-bound challenge, `initData` validation, Turnstile siteverify, shared verified path.
-- [ ] Timeout then kick, rejoin allowed.
+### Table stakes
 
-Settings menu (Phase 4):
-- [ ] `/settings` with admin re-check on each press.
-- [ ] Pages: Staff Group, Lockdown, Captcha, Antiflood.
+| Feature | Why expected | Complexity | Depends on |
+|---------|--------------|------------|------------|
+| Rules/Welcome/Goodbye pages with the three-part editor and checkmarks | The headline of feature 3 | High | Input-state infrastructure; new pages via `registerSettingsPage` |
+| Text edit with entity capture, length checks (4096 / 1024 with media) | Core | Med | `formatting.FormattingReplacer`, `tgmd2html` |
+| One media edit and remove | Core | Med | `media.SendGreeting` already sends the types Welcome supports; Rules needs it added |
+| URL buttons edit and remove with validation | Core | Med | Existing welcome button storage (`ButtonArray`) and `keyboard.BuildKeyboard`; Rules needs the same |
+| Per-part preview and Full preview | The owner named it; it is also the only safe way to catch a bad URL or a too-long caption | Med | Same send path as production |
+| "Media under text" toggle | In the screenshots and the owner's list | Low-Med | `ShowCaptionAboveMedia`; storage column per message |
+| Cancel and expiry | A prompt with no exit is a trap | Low | input state |
+| Welcome: "Greet once" vs "Always send" | In the owner's list. Meaning: a member who leaves and re-joins is not greeted again | Med-High | Needs a persistent "already greeted" record. Recommend a table with `INSERT ... ON CONFLICT DO NOTHING` and `RowsAffected == 1` deciding, so two replicas never both greet; a Redis-only set would re-greet after a flush. Growth is one row per member per group; acceptable, document it |
+| Welcome: Delete last welcome | In the owner's list | Low | Already exists as `clean_old` / `CleanWelcome` (`SetCleanWelcomeSetting`); the page only exposes it through the same apply function |
+| Goodbye gets the same editor | In the owner's list | Low once Welcome exists | `GoodbyeSettings` has the same columns |
+| Rules gain media and buttons, with a migration, and `/rules` plus the `start rules_<id>` deep link render them | Owner's list; today Rules are text only (`RulesSettings`: rules, rules_btn, private) | Med | New columns (file ID, type, buttons JSON, media-under-text), `sendRules` and `rulesDeepLinkHandler` both change; the `rules` row is part of backup/export so the legacy backup module needs the new fields |
+| Enable/disable switch and status text on Welcome and Goodbye (exists as `/welcome on|off`) | Visible in screenshot 6 | Low | `greetingToggle` apply function |
+| Every save goes through one apply function that the command also calls (`/setwelcome`, `/setrules`) | Phase 9 rule: one setting, one code path | Med | The existing `set*` commands must be refactored to call it |
 
-### Add After Validation (v1.x)
+### Differentiators
 
-- [ ] Undo-everywhere button on staff summaries, once the audit table has real data.
-- [ ] Alert-only (dry-run) mode and periodic lockdown reminder, after the first real raid shows what needs tuning.
-- [ ] Invite-link attribution with "revoke link" in the alert.
-- [ ] Settings-change logging to log channel.
-- [ ] Silent staff commands (delete the command message).
+| Feature | Value | Complexity | Notes |
+|---------|-------|------------|-------|
+| Reuse the same editor for filter replies and notes ("add by typing") | One component serves feature 3 and feature 6; avoids a second input flow | Med | Design the editor as "a message slot" (text, media, buttons, flag) from the start; filters and notes already store type, file ID and buttons |
+| Auto-delete the previous preview message when a new one is sent or the menu closes | A PM with 12 stale previews is noisy | Low-Med | Track the preview message ID in the same Redis state |
+| "Send test to me" using the real placeholders (the opener's name, the group's member count) | Confidence before publishing | Low | Same as Full preview |
+| Remove-this-part buttons with a Yes tap | Avoids an accidental wipe of a long text | Low | `settings_card.go` two-tap card |
 
-### Future Consideration (v2+)
+### Anti-features
 
-- [ ] Join-request (pre-admission) captcha.
-- [ ] Free-text settings editing flows.
-- [ ] Account-signal scoring and external reputation lookups.
-- [ ] Re-applying staff bans to newly linked groups (revisit alongside whether this blurs into federations).
-- [ ] Staff-driven message deletion across groups.
+| Anti-feature | Why avoid | Instead |
+|--------------|-----------|---------|
+| A draft / publish step | GroupHelp saves immediately; a draft doubles state and the "which version is live" question | Save on receipt; the preview shows what is saved |
+| Multiple media or albums in one welcome | Owner asked for one media; albums complicate captions and deletion | One media |
+| Storing media bytes or re-uploading | `file_id` is enough and cheaper | Keep `file_id` and type |
+| A new templating language | Existing placeholders (`FormattingReplacer`) already work and members' texts are migrated | Keep them; list the supported ones in the prompt text |
+| Topic (forum thread) picker for the welcome | Owner ruled it out for v1.1 | Welcome goes where the join happened (already `threadID`) |
+| Letting arbitrary members open the editor from the in-group `/rules` | Editing belongs behind the gate | Menu only |
 
-## Feature Prioritization Matrix
+---
 
-| Feature | User Value | Implementation Cost | Priority |
-|---------|------------|---------------------|----------|
-| Staff link/unlink with live ownership check | HIGH | MEDIUM | P1 |
-| Staff fan-out ban/mute/kick (+ un-) with per-group rights check | HIGH | MEDIUM | P1 |
-| Per-group summary message | HIGH | MEDIUM | P1 |
-| 429-safe paced fan-out | HIGH | MEDIUM | P1 |
-| Protected targets and anonymous-admin refusal | HIGH | LOW | P1 |
-| Audit table | MEDIUM | MEDIUM | P1 |
-| Chat-migration re-keying | MEDIUM | MEDIUM | P1 |
-| `/staff` panel | MEDIUM | LOW | P1 |
-| Durable lockdown state + permission snapshot/restore | HIGH | MEDIUM-HIGH | P1 |
-| Join surge trigger + manual lockdown | HIGH | MEDIUM | P1 |
-| Flood/media trigger from new members | HIGH | MEDIUM-HIGH | P1 |
-| AI-verdict burst trigger | MEDIUM | MEDIUM | P1 |
-| Alert + Lift + Ban N recent joiners | HIGH | MEDIUM | P1 |
-| Turnstile Mini App captcha (full server-side validation) | HIGH | HIGH | P1 |
-| Math/text fallback retained | MEDIUM | LOW | P1 |
-| Settings menu with live admin re-check | MEDIUM | MEDIUM | P1 |
-| Undo-everywhere button | MEDIUM | LOW-MEDIUM | P2 |
-| Alert-only mode | MEDIUM | LOW | P2 |
-| Lockdown reminder | MEDIUM | LOW | P2 |
-| Invite-link attribution | MEDIUM | MEDIUM | P2 |
-| Settings-change log posts | LOW | LOW | P2 |
-| Silent staff commands | LOW | LOW | P3 |
-| Join-request captcha | MEDIUM | HIGH | P3 |
-| Account-signal scoring | MEDIUM | MEDIUM | P3 |
-| Free-text settings editing | LOW | HIGH | P3 |
+## 4. Member requirements and name blocks
 
-**Priority key:**
-- P1: Must have for the milestone
-- P2: Should have, add when possible
-- P3: Nice to have, future consideration
+### How it works in GroupHelp (screenshots 4 and 9, HIGH)
 
-## Competitor Feature Analysis
+Two screens:
 
-Competitor claims are from training knowledge and search snippets, not fetched documentation (see Sources). Treat as MEDIUM at best.
+1. Summary screen: "REQUIREMENTS FOR..." with five lines, each "name: current action" (Last name: Off; Username: Mute; Profile photo: Off; Channel subscription: Off; Must add members: Off). "BLOCKS..." with four lines (Arabic name, Chinese name, Russian name, Spam name: each Off or an action). Then two shared toggles with their own explanation and status:
+   - "Check on join. If on, the bot checks requirements and blocks even when users join, and when they send a message." Status Active.
+   - "Delete messages. If on, the bot deletes messages of users who do not meet the Required conditions or are subject to a block." Status Active.
+   Top buttons switch between [REQUIREMENTS] and [NAME BLOCKS].
+2. Per-requirement screen (screenshot 4): header shows the current state, a blue selected tab, then the rule being edited ("Required last name") and a punishment row: [Off][Warn][Kick] / [Kick (?)][Mute][Ban] (the selected one is green, the others grey), then the other rules as buttons (Username, Profile photo, Must add, Channel subscription), then Back. The punishment set is exactly the owner's: off, warn, kick, ban, mute (plus the "delete" the second toggle covers).
 
-| Feature | Rose / Miss Rose | GroupHelp | Shieldy / Group Butler / Combot | Our Approach |
-|---------|------------------|-----------|---------------------------------|--------------|
-| Multi-group moderation | Federations (shared ban list; users must be known) | Staff Group concept; a staff command list exists in its docs (for example `multiban`, max 20) | Combot offers cross-chat anti-spam database; others are single-group | Staff Group fan-out with live per-group rights check; federations untouched |
-| Raid response | `/antiraid`: temp-ban new joins for a set time (default 6 h), auto at N joins per minute | Flood, join and spam layers; settings via menu | Mostly captcha-only; spam bots lean on global ban lists | Lockdown: kick joiners and mute non-admins, never auto-lifts, admin-only lift, alerts to staff and log channel |
-| Captcha | Button / math / text modes | Captcha with several modes | Shieldy: button, digits, image; Combot has a CAS global check | Cloudflare Turnstile via bot-hosted Mini App, server-side verified, old modes kept as fallback |
-| Settings UI | Command-driven; help menu buttons | `/settings` button menu, mostly in PM | Mixed; Shieldy uses commands | PM menu with in-place edits, live admin re-check, callbackcodec |
-| Alerts to a staff channel | Log channels | Staff/log groups | Log channels | Alert to Staff Group and log channel with action buttons |
+"Must add members" is out of scope.
 
-## Gaps in PROJECT.md
+### When checks run (recall from how GroupHelp-class bots behave, MEDIUM, plus constraints from this codebase)
 
-Items users of these bots treat as table stakes that PROJECT.md does not mention, in rough order of risk:
+- **On join** (only if "check on join" is on): from the `chat_member` update and from the `new_chat_members` service message. They are two deliveries of one join; use the existing `claimRecentJoinProcessing` dedupe (the lockdown guard dedupes by its own row instead).
+- **On every message** from a member, always, regardless of the join toggle? The screenshot text says the toggle adds join-time checking "even when joining, and when sending a message", so message-time checking is the base behaviour and the join check is the extra. Fuku should do the same: message-time is always on when a rule has an action; "check on join" adds the join-time pass.
+- **On name change**: caught at the next message (the message carries the current name) or for the AI spam-name rule through the users tracker noticing a changed name.
 
-1. **Chat migration (group to supergroup ID change).** Links, lockdown state and nonces keyed by chat ID go stale. Add re-keying to Phase 1 and test it for the Staff Group too.
-2. **Chat-level permission snapshot and restore for lockdown.** "Mute everyone" via a default-permissions flip must save the previous permissions and restore exactly those on lift. Approved users need per-user overrides. Specify in Phase 2.
-3. **Durable lockdown state.** The legacy antiraid is Redis-only and expires. A never-expiring lockdown needs a DB row. Specify in Phase 2.
-4. **Join log and "new member" definition.** "Mostly from new members" and "Ban N recent joiners" both need per-chat join timestamps. Confirm whether the users tracker (group `-1`) records joins per chat; if not, add it in Phase 2 before the flood trigger.
-5. **Chat-level, multi-replica flood counters.** Existing antiflood is per-user and per-replica; lockdown flood detection needs aggregate Redis counters.
-6. **Staff audit record.** Needed for the summary, undo, and accountability.
-7. **Protected targets** (admins, owner, other staff, bot) and 429-aware pacing in staff fan-out.
-8. **Bot-removed or bot-demoted handling** for linked groups, surfaced in `/staff` instead of silently failing every action.
-9. **Command alternatives to every button** (`/unlockdown`, `/lockdown status`) so a stale or lost alert never traps a group.
-10. **Mini App deployment prerequisites.** BotFather `/newapp` registration, public HTTPS hostname, Turnstile domain allow-list and keys. Polling-mode deployments may need a new public port. Capture in Phase 3 setup and docs.
-11. **Captcha retry semantics.** "One attempt per user per chat" needs an explicit rule for in-page Turnstile retries.
-12. **`allowed_updates` must include `chat_member`** for event-driven ownership change and invite-link attribution. The bot must be admin to receive those updates.
-13. **Legacy `/antiraid` migration.** Define what happens to existing `raidtime`, `raidactiontime`, and auto-threshold settings.
+### Per-rule behaviour users expect
+
+| Rule | What is checked | Data source | Cost per check | Known false results |
+|------|-----------------|-------------|----------------|--------------------|
+| Last name | `last_name` empty | `message.From` / `chat_member.new_chat_member.user` | free | none |
+| Username | `username` empty | same | free | none; a user with only collectible usernames is fine |
+| Profile photo | member has at least one photo | `getUserProfilePhotos(user, limit 1)` | one API call; must be cached | Privacy: a user who hides their photo from "everyone" looks photo-less to the bot (PROJECT.md). The notice text should say so; this is an accepted false positive |
+| Channel subscription | member of the group's linked channel | `getChat(group).LinkedChatId` (verified in gotgbot `ChatFullInfo`) then `getChatMember(channel, user)` | one or two API calls; cache | The bot must be an administrator of the channel to read members; if not, the check cannot run and must fail open with a visible status line on the page ("bot is not an admin of the linked channel"). A group with no linked channel: the rule cannot be turned on, show why |
+| Arabic / Chinese / Russian name | script of first and last name | pure Go, `unicode.Arabic`, `unicode.Han`, `unicode.Cyrillic` range tables | free | See "Name blocks" |
+| AI spam name | a spam-looking nickname | Claude Haiku, name only | one provider call; cache by name hash | See "Name blocks" |
+
+Message-time checks run on every message of a large group, so the design must keep a compliant member's message to roughly one cache hit: a short-lived "passed" memo per `(chat, user)` (a couple of minutes) in Redis or the local layer, invalidated by a per-chat settings generation so a rule change takes effect at once. Photo and channel lookups get their own result cache (longer positive TTL, short negative TTL so "I fixed it" is not fooled by a stale "no photo").
+
+### Exemptions (who is never checked)
+
+Mirror `aispamCarvedOut` and the raid sender filter, the existing patterns:
+
+- Administrators and the creator (cached admin list on the message hot path; a live check only on the punishing path), approved users (`IsApprovedForUpdate`, the repo rule that approved users skip captcha, antiflood, locks, blacklists), the bot, other bots, Telegram service IDs (`staffServiceUserIDs`), senders with `sender_chat` (anonymous admins, a channel's automatic forward in a comment group: these are the most important exemption for the channel-subscription rule, otherwise the channel's own posts are "unsubscribed").
+- Members with a pending captcha (the captcha already mutes and holds their messages; do not stack a second punishment) and members in a lockdown (the join guard at group `-7` ends the update first, so a join-time check is never reached; message-time checks of a muted lockdown member are moot).
+- Edited messages and service messages are not message-time checks.
+
+### Punishments and the notice
+
+| Action | Behaviour | Notes |
+|--------|-----------|-------|
+| Off | No check | Default for every rule |
+| Warn | Adds one warning through the existing warn path, which itself applies the group's warn-limit action | **Pitfall:** checking every message would warn on every message. Apply a punishment once per violation episode (Redis latch per `(chat, user, rule)`, cleared when the member passes or the latch expires) and let "delete messages" handle the rest |
+| Kick | Remove the member so they can rejoin | One `unbanChatMember` with `only_if_banned=false` on a current member; the member can rejoin and is checked again at join. Reuse the staff `decideStaffAction` idea: the call depends on the live status, never lift a ban by accident |
+| Ban | Permanent until an admin acts | Waits for an admin; no "I fixed it" button (a banned member cannot see the group) |
+| Mute | Restrict until the requirement is met; shows the "I fixed it" button | Must not replace an existing admin mute or captcha mute (see below) |
+
+**The notice** (recall of the common shape, MEDIUM): one message in the group that mentions the member, names what is missing ("you need a username and a profile photo"), says what happens, and for a mute carries one callback button "I fixed it". It should be:
+
+- sent once per member per window (the same latch as the punishment), not once per message;
+- auto-deleted after the group's "punishments" delay from section 5;
+- localised per group language, and escaped (names are attacker-controlled);
+- optional per group ("notice in the group" on/off), because some owners prefer silent enforcement.
+
+**"I fixed it" verification:**
+
+1. Callback data carries only numbers or a token (`callbackcodec`, 64 bytes): chat ID and user ID fit; no names.
+2. Only the muted member may press. Anyone else gets an alert "not for you" and nothing changes (the same pattern as the Phase 9 "not your menu" and the captcha button). A restricted member can still tap inline buttons, so the mute does not block the press.
+3. The handler re-checks every requirement that applies to that user now, live, without trusting the cache: re-reads the member's current name/username from a fresh `getChatMember`, then a fresh photo and channel lookup. If anything is still missing the answer is an alert naming what is missing (not an edit), the member stays muted, and a short cooldown (a few seconds, Redis) stops tap spam against the API.
+4. If everything passes it unmutes only when all of these hold: the bot's own requirement-mute record exists for that user, the live status is still restricted, no captcha attempt is pending, no lockdown is active for the group (an active lockdown mutes everyone with default permissions; an unmute during it must use the stored pre-lockdown permissions through `resolveUnmutePermissions`, the one choke point), and the user was not muted by an admin or staff action afterwards. Then edit or delete the notice.
+5. The press is answered exactly once; failure to unmute (missing rights) is reported honestly and keeps the record so a later press retries.
+
+A bot-owned record of "muted by requirements" (one row per member and group, with the rule names) is therefore needed; without it the button cannot distinguish its own mute from an admin's, and it would be an unmute-anyone button. This is the main complexity driver of the whole feature.
+
+### Interaction with captcha and lockdown
+
+| Situation | Recommended behaviour | Why |
+|-----------|----------------------|-----|
+| Captcha enabled and the member just joined | Run the join-time requirement check after the captcha pass, from the pass path (`finishCaptchaPass`), not in parallel with the challenge | Both mute the joiner; whichever unmutes first would lift the other. `ProcessSingleJoin` in `membership.go` is the seam: Challenge returns before Welcome |
+| Captcha off | Run the check in `ProcessSingleJoin` before the welcome | A member who is kicked or banned should not be greeted |
+| Failed requirement on join, action mute | Welcome is held back until "I fixed it" passes, then sent | A greeting for a muted, non-compliant member is noise; this is a decision for the owner |
+| Message-time check on a member who passed captcha but fails a rule | Apply the rule's punishment | Safety net for the join path |
+| Lockdown active | No join-time check (the guard ends the update); "I fixed it" unmute goes through `resolveUnmutePermissions` | AGENTS.md: every unmute path goes through it |
+| A captcha pass unmutes a member who is under a requirement mute | Must not happen silently: on a pass, if a requirement-mute record exists, keep them muted | Otherwise captcha pass bypasses the requirement until their next message |
+| Admin's `/mute` or staff `/mute` on someone | The requirement system never overwrites a mute that is not its own | Use the live-status decision table idea from `decideStaffAction` |
+| Rejoin after kick | Checked again at join | Owner's decision |
+| Existing members when a rule is switched on | Not mass-processed; checked on their next message | Mass processing would be a bulk moderation job; the owner excluded mass tools |
+
+### Name blocks: language checks
+
+| Block | Detection | False positives to disclose | Confidence |
+|-------|-----------|-----------------------------|-----------|
+| Arabic name | Any letter in `unicode.Arabic` in first/last name | Also hits Persian and Urdu names, which use the same script | HIGH (stdlib) |
+| Chinese name | Any `unicode.Han` letter | Also hits Japanese names written in kanji and Korean hanja. Treat "Han and no kana/hangul" as the narrower variant if Japanese members matter | HIGH (stdlib) |
+| Russian name | Cyrillic text containing one of the letters ы ъ э ё (either case) and none of the Ukrainian-only letters і ї є ґ | Belarusian, Kazakh, Kyrgyz and other Cyrillic languages also use ы, э, ё; ъ appears in Bulgarian. A Ukrainian name with no distinctive letter is invisible to the check, and so is a Russian name without those letters. The setting is a heuristic and the page must say so | HIGH that this is the only reliable script-level signal (matches PROJECT.md); MEDIUM on recall of false-positive languages |
+| Spam name | Claude Haiku (the existing `fuku/utils/claude` client and `ANTHROPIC_API_KEY`), sending only the name | See below | MEDIUM |
+
+Scope of the text checked: first name plus last name; the owner may decide whether the username counts. Normalise with NFKC and strip zero-width and bidi control characters before checking, otherwise a trivial insertion defeats script detection (and many spam names use lookalike letters, which is also what the AI check is for).
+
+**AI spam-name check** (new, but with strong precedent in this codebase from the raid image path):
+
+- Trigger: at join and when a name changes, never per message. Key the verdict by a hash of the normalised name; cache it in Redis (the verdict depends on the name, not the group, so one cache serves all groups). A repeat of a known spam name costs nothing.
+- Guards to copy from `raid_ai_image.go`: kill switch `ENABLE_AISPAM`, no key means off with a visible "not set up" line on the page (like `lockdown_auto_ai_unavailable`), an hourly budget per group and global, a provider breaker, a shared or separate bounded pool, a request with a forced strict tool returning one number, no sampling parameters, derived from the cancellable AI context, drained at shutdown. Fail open: no verdict means no punishment.
+- It must not run inline on the join handler (a provider call blocks the update); enqueue it and apply the rule's punishment from the worker, which needs the same live-status decision as every other punishment. A member who is already gone by then is a no-op.
+- A named false-positive risk: legitimate names in other scripts or with emoji can score high. Use a high bar (a code constant, like `raidAIImageBar` 0.85) and recommend warn or mute rather than ban as the default choice in the page text, though all five actions stay selectable because the owner asked for them.
+- Privacy statement for the page: only the name leaves the server.
+- No test may call the real provider (AGENTS.md); `httptest` servers only.
+
+### Table stakes
+
+| Feature | Why expected | Complexity | Depends on |
+|---------|--------------|------------|------------|
+| Summary page with the current action of each rule, plus the two shared toggles (check on join, delete messages) | Screenshots 4 and 9 | Med | `registerSettingsPage`; new settings table with one row per chat |
+| Per-rule punishment picker: off, warn, kick, mute, ban | Owner's list | Med | One apply function per rule |
+| Last name, username, profile photo checks | Core of the feature | Med (photo needs caching) | `getUserProfilePhotos`, Redis memo |
+| Linked-channel subscription | Owner's list | Med-High | `getChat.LinkedChatId`, `getChatMember(channel)`, a visible "bot not admin of the channel" status |
+| Arabic, Chinese, Russian name blocks | Owner's list | Low | stdlib `unicode` tables; unit tests over a name table |
+| Notice in the group, once per episode, auto-deleted | Users must know why they were muted | Med | Latch key, scheduled deletion (section 5) |
+| "I fixed it" for mutes with a live re-check and ownership of the mute | Owner's list | High | Requirement-mute record, `resolveUnmutePermissions`, captcha pending check, lockdown check |
+| Delete messages toggle | Owner's list | Low-Med | Bot needs `can_delete_messages`; report in the page if not |
+| Exemptions (admins, approved, bots, service IDs, `sender_chat`, pending captcha) | Without them the bot mutes its own admins and the channel | Med | `IsApprovedForUpdate`, admin cache, captcha pending flag |
+| Kick lets the member rejoin and be checked again; ban waits for an admin; warn only warns | Owner's list | Low | existing kick/ban/warn paths |
+| Everything inert and honest when the bot lacks the needed right | A silent no-op is worse than a refusal | Low | `chat_status` live bot checks |
+
+### Differentiators
+
+| Feature | Value | Complexity | Notes |
+|---------|-------|------------|-------|
+| AI spam-name check (Haiku) | Catches lookalike and promo nicknames that script checks never will | High | Reuses `fuku/utils/claude`; new name-only instruction; budgets and breaker as above |
+| Custom notice text per group | Groups have their own tone | Med | Reuse the message editor slot |
+| Per-rule status line when a rule cannot work (no linked channel, bot not channel admin, no key) | Prevents a rule that looks on but does nothing | Low | |
+| Count of members currently muted by requirements shown on the page | Lets the owner see leftover mutes | Low | The requirement-mute record gives it |
+
+### Anti-features
+
+| Anti-feature | Why avoid | Instead |
+|--------------|-----------|---------|
+| "Must add members" | Out of scope (owner) | Omit |
+| Lifting a ban or kick through "I fixed it" | A banned member cannot see the group's button; a kicked one rejoins | Only mutes get the button |
+| Mass re-check of all existing members when a rule is enabled | A bulk moderation job; Bot API cannot list members | Check on next message |
+| Sending message text to an AI | Out of scope in PROJECT.md | Name only |
+| Treating a hidden profile photo as a certain violation | Telegram hides it from bots; users cannot fix it from their side if privacy blocks it | Tell the user in the notice how to allow the bot to see it (set photo visible) or accept the false positive |
+| Banning on an AI verdict by default | A wrong ban is not undoable by "I fixed it" | Default off; recommend warn or mute |
+| Per-rule custom thresholds or scoring | Over-engineering for one owner | One action per rule |
+
+---
+
+## 5. Message deletion
+
+### How it works in GroupHelp (screenshots 1, 10, 11, HIGH for the menus; semantics of two glyph buttons are inferred)
+
+The deletion menu (screenshot 1): Commands, Global silence, Edited messages, Service messages, Deletion time, Mass deletion, Delete all messages, Self-destruct of messages, Back. Out of scope for v1.1: Global silence, Mass deletion, Delete all messages.
+
+**Service messages** (screenshot 11): per type, a status line ("Joined: delete immediately", "Left: delete immediately", "Photo changed", "Title changed" ... off for the last two) and a three-row control block per type: label | off | on, then a stepper row ( ➥ , -1 , (0) , +1 ). The `(0)` is the current delay in seconds (0 means immediately); -1 and +1 move it. The first glyph button is not explained by the screenshot (see Open questions). Types shown: Joined, Left, Photos, Title (named "description" in the status text: a mismatch in GroupHelp's own labels), Pinned message, Topics, Boosts, Voice chat invitations, Checklist, Community.
+
+**Scheduled deletion of the bot's own messages** (screenshot 10): header "Scheduled deletion: choose which messages you want deleted a while after they were sent, and the period." A "Current state" list: Welcome: in 10 minutes, Goodbye: off, Rules: in 10 minutes, Own commands: off, Punishments: in 2 minutes, Manual punishments: in 5 minutes. Per kind: label | on/off, then a stepper row ( ➥ , -5 , -1 , +1 , +5 ) in minutes.
+
+Mapping to this milestone's owner list: Welcome, Goodbye, Rules (welcome/goodbye/rules), Punishments (automatic punishments: requirement and AI actions, captcha failures, antiflood), Manual punishments (replies to `/ban`, `/mute`, `/warn` by admins). "Own commands" appears in the screenshot but not in the owner's text; treat it as "the bot's replies to commands" and ask the owner (Open questions).
+
+### Telegram facts that shape every item (HIGH, from gotgbot source)
+
+- `DeleteMessage`: only messages sent less than 48 hours ago; service messages are deletable except supergroup/channel/forum-topic creation; in a group the bot needs `can_delete_messages` for others' messages; it can always delete its own. `DeleteMessages` deletes up to 100 messages of one chat in one call.
+- Service message fields the Bot API exposes today (these are the deletable types): `new_chat_members`, `left_chat_member`, `new_chat_title`, `new_chat_photo`, `delete_chat_photo`, `pinned_message`, `forum_topic_created/edited/closed/reopened`, `general_forum_topic_hidden/unhidden`, `video_chat_scheduled/started/ended/participants_invited`, `boost_added`, `checklist_tasks_done/added`, `message_auto_delete_timer_changed`, `chat_background_set`, `community_chat_added/joined/removed`. The Community types exist in the vendored Bot API, which resolves what GroupHelp's "Community" row means (the Community service messages, not a rename of join).
+- The `allowed_updates` list already contains `message`, `edited_message` and `chat_member`; service messages arrive as ordinary `message` updates.
+- Because deletion cannot reach past 48 hours, every delay must be capped below that (suggest at most 24 hours for service messages, 47 hours absolute for bot messages and self-destruct, shown in the UI as a bound; GroupHelp's own steppers are minutes).
+
+### Per feature: expected behaviour
+
+| Feature | Expectation | Notes and pitfalls |
+|---------|-------------|--------------------|
+| Service message deletion per type, immediate or after N seconds | Immediate is the default when on. After N seconds the message stays visible briefly (useful for the "X pinned a message" notice) | Immediate: delete inline in the handler. Delayed: must be durable, see below. `pinned_message` service: deleting the notice does not unpin |
+| Overlap with existing `cleanservice` | Today `/cleanservice` deletes join and leave notices at once (`ShouldCleanService`, `cleanService` in `greetings.go`) | The new page must read and write the same field for join and leave, or `/cleanservice` and the page drift apart. Join and leave keep their current column; new types get new columns. `cleanService` also drives join processing (the welcome and captcha path reads `NewChatMembers` there), so the deletion refactor must not skip that path |
+| Bot messages deleted after N minutes (welcome, goodbye, rules, automatic punishments, manual punishments) | The notice vanishes on its own; a rule reply after 10 minutes; the punishment line after 2 | Every site that sends one of those kinds must schedule its own message; this touches `SendWelcomeMessage`, `leftMember`, `sendRules`, the new requirement notice, captcha failure notices, warn/ban/mute replies, antiflood replies. Add one helper, `scheduleBotMessageDelete(kind, chat, msg)`, so each site is one line |
+| Interplay with "Delete last welcome" (`clean_old`) | Both can be on: the newest welcome stays until its timer or the next welcome | The delayed delete finding a message already gone is success (`DeleteMessageWithErrorHandling` already treats "not found" as non-error) |
+| Members' commands | A member's `/rules`, `/id`, `/notes` message is deleted after the bot answers | Rose has per-class choices: `cleancommand user`, `admin`, `other`, `all` (MEDIUM). Recommend exactly two choices at first: members' commands and admins' commands, because a deleted admin command hides the audit trail from other admins. Do not delete before the handler ran: delete after the command handler returns, not at group `-10`. Needs `can_delete_messages`; exempt nothing else |
+| Edited messages | The bot deletes a message when its author edits it (stops post-then-edit-to-link). Admins and approved users are exempt | Needs a handler for the `edited_message` update, which no module handles today (`edited_message` is in `AllowedUpdates` but the raid flood watchers note gotgbot drops edited messages for ordinary handlers: a handler must be registered with the edited-message filter). Telegram can also deliver an `edited_message` when only a link preview loads or a media caption is touched, so not every edit is an author's rewrite. Options to avoid false deletes: ignore edits within a short grace window after sending (typo fixes) as a differentiator, and ignore edits whose text and entities are unchanged. The bot cannot see the old text, so "unchanged" needs a stored hash per message, which is expensive; recommend the grace window plus an age cutoff instead |
+| Self-destruct of every member message after N minutes | A "this group is ephemeral" mode | One scheduled-deletion row per message from every non-exempt member: the highest-volume write in the whole milestone. Needs batching and `DeleteMessages` (100 per call), pacing across replicas (a fleet-wide pacer like `staffPaced` and `lockdownPaced`), and the 48-hour cap. Admins and approved users should be exempt, and the bot's own messages follow the other rules |
+
+### Durable scheduling (the structural dependency)
+
+Existing code uses `time.AfterFunc` for small things (`misc.go`); that loses everything on a restart and is wrong for 10-minute and multi-hour delays on several replicas. Scheduled deletions need:
+
+- A PostgreSQL table `scheduled_deletions (chat_id, message_id, delete_at, kind, claimed_at, attempts)`, unique on `(chat_id, message_id)`, indexed on `delete_at`. Same approach as the lockdown worker: a DB-driven loop on every replica that claims rows with conditional updates, so two replicas never double-delete, a restart resumes, and Redis loss changes nothing (a Redis sorted set would lose pending deletions on a flush; for the self-destruct feature that means messages that never disappear).
+- Insert on send for bot messages (cheap, low volume). For self-destruct, insert per member message; consider batching inserts and a retention rule (delete the row once handled).
+- A worker that groups due rows by chat, calls `DeleteMessages` for up to 100 ids, treats "message not found" and "can't be deleted" as done, backs off on 429 through a fleet-wide pacer, gives up after N attempts (bot lost the right) and logs once per chat.
+- A shutdown drain registered after DB-close (AGENTS.md rule); the delete is idempotent, so a cut-off cycle loses nothing.
+- Rows older than 48 hours cannot be deleted: expire them rather than retrying forever.
+- Backup/export/import/reset must leave the table alone (like the staff and lockdown tables).
+- Per-group enable flags are read on the hot message path; keep them in one cached settings row.
+
+### Table stakes
+
+| Feature | Why expected | Complexity | Depends on |
+|---------|--------------|------------|------------|
+| Deletion hub page with Service messages, Scheduled deletion, Commands, Edited messages, Self-destruct and Back | Screenshot 1 | Low | `registerSettingsPage` |
+| Service message page: types join, leave, photo, title, pinned, topics, boosts, voice chat invites, checklist, community; per type off, immediate or after N seconds | Owner's list and screenshot 11 | Med | New settings columns; a single dispatcher handler for service messages; join and leave tie into the existing `cleanservice` |
+| Scheduled deletion page: welcome, goodbye, rules, automatic punishments, manual punishments; per kind off or N minutes | Screenshot 10 | Med | Durable scheduler; send-site hooks |
+| Durable scheduler (table, worker, drain, pacer) | Everything delayed depends on it | High | Lockdown worker pattern, `staffPaced`-style pacer, shutdown registration |
+| Members' commands deletion | Owner's list | Low-Med | Run after the command; needs delete right |
+| Edited messages deletion with admin/approved exemption | Owner's list | Med | New edited-message handler at a new group number (document it) |
+| Self-destruct after N minutes with exemptions | Owner's list | High (volume) | Scheduler batching and pacing |
+| Stepper buttons send the absolute target value, never a delta | Existing settings rule (`v`) | Low | Existing stepper helper |
+| Visible warning when the bot lacks `can_delete_messages` | Otherwise every toggle is a silent no-op | Low | live bot check |
+
+### Differentiators
+
+| Feature | Value | Complexity | Notes |
+|---------|-------|------------|-------|
+| Presets (immediately, 5 s, 30 s, 1 min, 10 min, 1 h) plus the +/- stepper | A stepper at +1 second is slow to reach a minute | Low | Absolute target values keep callbacks safe |
+| Grace window before an edit is deleted | Typo fixes are not punished | Low | A per-group number; default a few minutes |
+| Exempt approved users and admins from self-destruct and command deletion explicitly | Matches the repo's "approved users skip" rule | Low | Already needed |
+
+### Anti-features
+
+| Anti-feature | Why avoid | Instead |
+|--------------|-----------|---------|
+| Global silence, mass deletion, delete all messages | Owner excluded them | Omit |
+| Delay above 48 hours | The Bot API will refuse the delete | Cap and say so on the page |
+| `time.AfterFunc` for scheduled deletes | Lost on restart, per-process, no pacing | The durable scheduler |
+| Redis-only scheduling for self-destruct | A flush or restart silently leaves messages | PostgreSQL rows |
+| Deleting a member's command before the handler ran | Breaks the command | Delete after the handler returns |
+| Deleting the Staff Group's own messages by group settings | A Staff Group is also a group; its commands and summaries must not vanish | Exclude Staff Groups from self-destruct and command deletion, or at least from bot summaries; flag for the roadmap |
+| Deleting log-channel copies or alert copies | Lockdown alert copies are edited, never deleted | Keep them out of every deletion kind |
+
+---
+
+## 6. Remaining pages
+
+Each page is a thin menu over the existing command's apply function (Phase 9 rule: one setting, one code path, plus parity, drift and authority-parity tests). The gate from section 2 applies to all of them.
+
+| Page | Expected controls (recall of GroupHelp, MEDIUM, adjusted to Fuku's existing commands) | Complexity | Notes |
+|------|-------------------------------------------------------------------------------------|------------|-------|
+| Warnings | Warn limit stepper, action choice (ban/kick/mute/tmute...), warn time if the module has it, reset | Low-Med | `warns.go` apply functions must be extracted from the commands |
+| Reports | `/report` on or off, maybe who is notified | Low | `reports.go` |
+| Language | Choice of the 7 UI languages for the group, a Lang button on Main | Low | `language.go`; the Main page has a Lang button in the screenshot |
+| Log channel and categories | Show the linked channel, toggle each category, an Unset card. Setting the channel stays a command flow because it needs a message in the channel (`/setlog` in the channel, then forward) | Med | `logchannels.go`; the page explains the two-step flow rather than inventing a new one |
+| Anonymous-admin mode | One toggle (the existing `AnonAdmin` setting) | Low | Security-relevant: on means anonymous admin commands skip the proof tap. Show a plain explanation; the gate already limits it to the owner by default |
+| Locks | A paged list of lock types with a toggle per type, plus allow-list entries | Med | ~30 lock types; callback data per type must fit 64 bytes; page size about 8 |
+| Blacklists | Browse triggers (paged), delete one with a Yes tap, add by typing | Med | Uses the input state from section 3 |
+| Filters | Browse, delete, add by typing (trigger, then reply message) | Med-High | Filters carry media and buttons; reuse the editor slot |
+| Notes | Browse, delete, add by typing (name, then content) | Med-High | Same; private-note flag exists |
+
+Table stakes: browse plus delete plus add-by-typing for blacklists, filters, notes; every control calls the command's apply function. Differentiators: search within a list, edit a filter's reply with the full editor. Anti-features: bulk import by pasting hundreds of lines in a menu flow (use the backup import), per-trigger permissions.
+
+Main page: grows from 4 pages (Staff, Lockdown, Captcha, Antiflood) to about 16. Use the two-column layout of screenshot 5 and a bottom row of Lang / Close / Other. The Main renderer asks every page for a state suffix on each open, so reads must be cached (Phase 9 pages already read through cached getters) and a failed read shows the "unknown" mark, not an error.
+
+---
+
+## Feature dependencies
+
+```
+Persisted user->group admin index (new table)
+   -> PM group list
+        -> Owner gate in list filter
+Owner gate flag + live creator check
+   -> in-group /settings gate, deep link gate, press pipeline gate
+   -> every new page (all pages assume the gate)
+
+Redis input state ("waiting for your message") + private-chat watcher group
+   -> Message editor (text, media, buttons)
+        -> Rules media+buttons (migration, sendRules, deep link rules_<id>)
+        -> Welcome/Goodbye editor
+        -> Notices with custom text (differentiator)
+   -> Add-by-typing for blacklists, filters, notes
+
+Greeted-members table -> Welcome "greet once"
+Existing clean_old -> Welcome "delete last welcome" (page only)
+
+Durable scheduled-deletion table + worker + pacer + shutdown drain
+   -> Bot messages deleted after N minutes (welcome, goodbye, rules, punishments)
+   -> Service messages "after N seconds"
+   -> Self-destruct
+   -> Requirement notices auto-delete
+
+Requirement settings table (one row per chat, per-rule action + 2 toggles)
+   -> join-time check (hook in ProcessSingleJoin / finishCaptchaPass)
+   -> message-time check (new watcher, own group number, ContinueGroups)
+   -> Requirement-mute record (new table)
+        -> "I fixed it" callback (live re-check, resolveUnmutePermissions, captcha pending, lockdown)
+   -> Punishment episode latch (Redis) -> warn/notice once per episode
+   -> Photo/channel lookup cache (Redis)
+   -> AI spam-name: fuku/utils/claude + budgets + breaker + name-hash verdict cache
+   -> Name-block detectors (stdlib unicode, no dependency)
+
+Existing cleanservice (ShouldCleanService) <-> new service-message page (must share storage for join and leave)
+Existing handler group list in AGENTS.md -> new groups for: private input watcher, requirement watcher, edited-message handler, service-message deleter (all documented there)
+```
+
+Cross-module collisions to design for from the start:
+
+1. Captcha and requirements both mute a joiner.
+2. A captcha pass, `/unmute`, and "I fixed it" are three unmute paths; all go through `resolveUnmutePermissions`.
+3. Lockdown overrides everything at group `-7`.
+4. `/cleanservice`, the new service page and the `cleanService` join-processing path are one code site.
+5. Every bot message that gets a delay needs its send site changed.
+
+---
+
+## MVP recommendation (ordering by dependency, in the owner's priority)
+
+1. **Persisted admin index, PM group list, owner gate.** One migration (index table, access flag). Everything else is a page reached through it; the gate must exist before the new pages so no page ever ships ungated. Reuse `/admincache` as `/reload`.
+2. **Input-state infrastructure and the message editor** for Welcome, Goodbye and Rules (text, media, URL buttons, previews, media under text), including the Rules migration. Build the editor around a generic "message slot" so filters and notes can use it later. Add "greet once" and expose `clean_old` as "delete last welcome".
+3. **Requirement settings, detectors and punishments**: last name, username, photo, channel subscription, Arabic/Chinese/Russian blocks, notice, the requirement-mute record and "I fixed it". Add the AI spam-name rule last inside this phase, because it needs the most guards; the five script and field rules stand alone.
+4. **Durable scheduler, then deletion pages**: service messages (immediate first, delays second), scheduled deletion of bot messages, members' commands, edited messages, then self-destruct last (highest volume). Wire the requirement notice to the scheduler.
+5. **Remaining pages**: warnings, reports, language, log channel, anonymous-admin mode, locks, then blacklists/filters/notes browse-delete-add.
+
+Defer or cut if the milestone runs long: self-destruct (volume and pacing risk), per-part custom notice text, AI spam names (needs the owner's accuracy spike like the raid image check), a grace window for edits, list search.
+
+## Open questions for the owner (not blockers for research)
+
+- GroupHelp's glyph button in each stepper row (the arrow before -1/+1): does it mean "type a custom value", "reset" or "go to default"? The screenshots do not show it. Suggest "type a number" via the input state.
+- "Own commands" in the scheduled-deletion list: the bot's replies to commands? Not in the owner's list; confirm before building.
+- Welcome for a member who fails a requirement and is muted: hold it until the member passes? Suggested yes.
+- A group with no live owner: allow admins? Suggested yes, still live-checked.
+- Should the Staff Group be exempt from deletion kinds (summaries and cards)? Suggested yes.
 
 ## Sources
 
-- GroupHelp features overview and command list (staff, multiban): search results via MetricGram and Teletype command list; the teletype.in pages themselves were blocked, so detail is MEDIUM-LOW.
-  - https://www.metricgram.com/alternatives/grouphelp
-  - https://teletype.in/@grouphelp/security
-  - https://teletype.in/@emiliandev/Liste-der-Group-Help-Befehle-10-14
-- Rose antiraid behaviour (default 6 h temp-ban, auto-enable on join rate): search snippets of https://missrose.org/docs/anti-spam/antiraid/ (page blocked; MEDIUM).
-- Telegram Mini App initData validation (HMAC with "WebAppData" key, `auth_date` freshness): https://docs.telegram-mini-apps.com/platform/init-data (search snippet, HIGH-MEDIUM).
-- `web_app` inline buttons are private-chat only; `?startapp=` direct links: python-telegram-bot and aiogram `InlineKeyboardButton` docs plus Telegram bug tracker snippets (HIGH-MEDIUM). Primary page https://core.telegram.org/bots/webapps was blocked.
-- Cloudflare Turnstile server-side validation (300 s validity, single use, `timeout-or-duplicate`, siteverify endpoint): https://developers.cloudflare.com/turnstile/get-started/server-side-validation/ (search snippet, HIGH-MEDIUM). The `idempotency_key` parameter was not confirmed; do not rely on it.
-- Codebase facts: `/home/user/Fuku_Robot/.planning/PROJECT.md`, `/home/user/Fuku_Robot/.planning/codebase/ARCHITECTURE.md`, `fuku/db/models/captcha.go`, `fuku/modules/antiraid.go`, `fuku/modules/connections.go`.
-
----
-*Feature research for: Telegram group-management bot (Staff Group, lockdown, Mini App captcha, settings menu)*
-*Researched: 2026-10-04*
+- Owner screenshots, images 1 to 11 (UX reference, HIGH for the visible UI)
+- `/home/user/Fuku_Robot/.planning/PROJECT.md`, `/home/user/Fuku_Robot/AGENTS.md`
+- `/home/user/Fuku_Robot/fuku/modules/greetings.go`, `rules.go`, `membership.go`, `settings_pages.go`; `fuku/db/models/greetings.go`, `rules.go`; `fuku/config/config.go` (`AllowedUpdates`); `fuku/utils/helpers/telegram_helpers.go` (HIGH)
+- gotgbot v2.0.0-rc.36 source in the module cache: `gen_types.go` (Message service fields, `Community*`, `ChatFullInfo.LinkedChatId`), `gen_methods.go` (`DeleteMessage` limits, `DeleteMessages`, `ShowCaptionAboveMedia`, `GetUserProfilePhotos`) (HIGH)
+- Search summaries of Rose docs: [clean command](https://missrose.org/docs/cleaning/clean-command/), [advanced greetings](https://missrose.org/docs/greetings/advanced/), [clean message](https://missrose.org/docs/cleaning/clean-message/) (MEDIUM; pages could not be fetched)
+- Search summary of the Shieldy issue [1inch/shieldy#52](https://github.com/1inch/shieldy/issues/52) (LOW)
+- GroupHelp Combot, Group Butler: no usable sources found; no claims here depend on them (LOW)

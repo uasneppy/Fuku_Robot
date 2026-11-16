@@ -91,7 +91,7 @@ Fuku Robot is a Telegram group-management bot built on a layered event-driven ar
 | Command Pipeline | Builds context, checks permissions, invokes command handler | `fuku/utils/helpers/command_pipeline.go` |
 | Database Repos | Read via cache layer; write with cache invalidation | `fuku/db/<domain>/` (30+ files) |
 | Cache Layer | Two-tier: local in-process LRU + Redis; generation-based invalidation | `fuku/db/cache/` |
-| i18n Translator | Loads 7 locales; translates strings on-demand | `fuku/i18n/` |
+| i18n Translator | Loads 8 locales; translates strings on-demand | `fuku/i18n/` |
 | HTTP Server | Health checks, metrics, webhook (or polling health) | `fuku/utils/httpserver/` |
 | Shutdown Manager | LIFO drain of goroutines and resources within 60s | `fuku/utils/shutdown/` |
 | Monitoring | Stats collection, error tracking, activity monitoring, performance remediation | `fuku/utils/monitoring/` |
@@ -132,7 +132,7 @@ Fuku Robot is a Telegram group-management bot built on a layered event-driven ar
 - Used by: Command pipeline, handlers via predicates or PermissionResponder
 
 **Internationalization Layer:**
-- Purpose: Localize messages across 7 languages (en, es, fr, hi, id, pt, ru)
+- Purpose: Localize messages across 8 languages (en, es, fr, hi, id, pt, ru, uk)
 - Location: `fuku/i18n/`, `locales/` (embedded), `fuku/db/lang/`
 - Contains: Translator (stateful per language), cache of parsed YAML, fallback to English
 - Depends on: Embedded locale files, user language preference from DB
@@ -250,7 +250,7 @@ Fuku Robot is a Telegram group-management bot built on a layered event-driven ar
 - Responsibilities:
   1. Parse CLI flags (--version, --health, normal startup)
   2. Initialize cache (Redis + local LRU)
-  3. Initialize i18n (embed 7 locales)
+  3. Initialize i18n (embed 8 locales)
   4. Initialize tracing (OpenTelemetry)
   5. Create gotgbot.Bot with HTTP/2 pooling
   6. Setup dispatcher and register handlers
@@ -322,7 +322,7 @@ Fuku Robot is a Telegram group-management bot built on a layered event-driven ar
 
 **Why it's wrong:** User sees empty message; message appears to be a bot bug.
 
-**Do this instead:** Copy key from `locales/en.yml` exactly. Verify key exists in all 7 locale files before merging. Run `make check-translations` in CI.
+**Do this instead:** Copy key from `locales/en.yml` exactly. Verify key exists in all 8 locale files before merging. Run `make check-translations` in CI.
 
 ### Unguarded i18n Fallback to Empty String
 

@@ -428,8 +428,66 @@ mirrors, and a control the presser lacks the right for is still drawn and its pr
 | Captcha on/off | Admin, and the bot an admin | `/captcha` |
 | Captcha mode, time limit and failure action | Admin | `/captchamode`, `/captchatime`, `/captchaaction` |
 | Antiflood limit, action and delete switch | Admin, and the bot an admin | `/setflood`, `/setfloodmode`, `/delflood` |
+| Warnings: limit and action at the limit | Admin, and the bot an admin | `/setwarnlimit`, `/setwarnmode` |
+| Locks: each lock on or off | Admin, and the bot an admin | `/lock`, `/unlock` |
+| Switches: Reports | Admin, and the bot an admin | `/reports` |
+| Switches: AI spam filter | Admin | `/aispam` |
+| Switches: Auto-approve joins | Creator, or an admin who can change info, and the bot an admin | `/autoapprove` |
+| Language: the group's language | Admin | the language buttons of `/lang` |
+| Log channel: each category on or off | Admin | `/log`, `/nolog` |
+| Anonymous admins: the mode on or off | Creator, and the bot an admin; any admin may view, also while the bot is not an admin (looser than the command's view) | `/anonadmin` |
 | Lockdown Lift, trigger switches and thresholds | Creator, or an admin who can restrict members | `/unlockdown`, `/autolockdown` |
 | Staff Group link and unlink | Live creator of both groups | `/linkstaff`, `/unlinkstaff` |
+| Blacklist: open the page, page through it, open the action screen (private menu only) | Admin (and the owner gate above) | no command |
+| Blacklist: delete a word, Add words, set the action | Creator, or an admin who can restrict members, and the bot an admin who can restrict members (judged at the ask and again at the Yes; a typed reply is judged again at each step) | `/rmblacklist`, `/addblacklist`, `/blacklistaction` |
+| Filters: open the page and page through it (private menu only) | Admin (and the owner gate above) | no command |
+| Filters: delete a filter, Add (keyword, then reply) | Creator, or an admin who can change info | `/stop`, `/filter` |
+| Notes: open the page and page through it (private menu only) | Admin (and the owner gate above) | no command |
+| Notes: delete a note, Add (name, then content) | Creator, or an admin who can change info, and the bot an admin | `/clear`, `/save` |
+| Welcome and Goodbye: Set text, media or buttons, Remove, Delete last | Creator, or an admin who can change info | `/setwelcome`, `/setgoodbye`, `/resetwelcome`, `/resetgoodbye`, `/cleanwelcome`, `/cleangoodbye` |
+| Rules: Set and Remove of the text, the media and the buttons | Admin, and the bot an admin | `/setrules`, `/clearrules` |
+| Media under text: Welcome and Goodbye | Creator, or an admin who can change info | no command |
+| Media under text: Rules | Admin, and the bot an admin | no command |
+| Greet once (Welcome) | Admin | no command; the on/off switch of `/welcome` |
+| Welcome and Goodbye on/off switch, every Preview and Full preview, Cancel | Admin | `/welcome`, `/goodbye` |
+| Member requirements: open the page and a rule screen (the profile photo, channel and AI spam-name rules included) | Admin (and the owner gate above) | no command |
+| Member requirements: every punishment choice, the card's Yes, Check on join, Delete messages (the profile photo, channel and AI spam-name rules included) | Creator, or an admin who can restrict members | no command |
+| Member requirements: a punishing value for the channel rule | The same, and the group must have a linked channel (a live check at the press) | no command |
+| Member requirements: a punishing value for the AI spam-name rule | The same, and the bot's AI must be configured (`ENABLE_AISPAM` on and an Anthropic key set; a check of the server, made after the right) | no command |
+| Deletion: open the hub, a list and a row screen | Admin (and the owner gate above); the page does not exist in a Staff Group | no command |
+| Deletion: every choice (Keep, Off, Delete now, a delay) | Creator, or an admin who can change info | `/cleanservice` (joined and left) |
+| Member messages: open the section, a list and a row screen | Admin (and the owner gate above); the section does not exist in a Staff Group | no command |
+| Member messages: every choice of Commands, Edited messages and Self-destruct (Off included) and the Self-destruct card's Yes | Creator, or an admin who can change info (judged again at the Yes) | no command |
+| Member requirements: I fixed it | Only the held member; an administrator who presses it is refused and uses `/unmute`. An approved member is freed at the tap, once the live marker proves the mute is the requirements' own. A member held for a spam-like name frees themselves by renaming (the button judges the new name once) or by an admin's approval | no command |
+
+### Typing a message into the editor
+
+After Set the bot waits ten minutes for your next private message. That message is judged like a button press: a live
+check that you are still the creator or an administrator of the group, the owner gate above, the right of the part from
+the table, and a live look at the group. If you lost access in between, the wait ends and the bot says so; if the bot
+cannot tell, it says the check failed and keeps waiting. Nothing is saved on a guess. `/cancel` in the bot's private chat
+ends the wait.
+
+The typed adds of the Blacklist, Filters and Notes pages are judged the same way at every step, with the right of the page from
+the table. Filters and Notes take two messages (the keyword or name, then the reply or content): the first is kept in the wait
+for at most its ten minutes, never logged, and the second is checked again against a fresh read, so a keyword or name another
+admin stored in between is refused and nothing is overwritten.
+
+### Who can open the menu
+
+By default only the group's owner (its creator) can open the settings menu, whichever way they come in: the `/settings`
+command in the group, the Open in private button and the buttons of a menu that is already open. An administrator who is
+not the owner is told that only the owner can open it, and an open menu stops answering such an administrator at their
+next press.
+
+- The owner can let the group's administrators in from the menu's Access page, and take that back at any time. The
+  switch is off until the owner turns it on.
+- A group with no live owner (the owner's account was deleted) lets its administrators in, because nobody is left who
+  could grant it.
+- If the bot cannot tell whether the switch is on or whether the group has an owner, it refuses and says the check
+  failed. It never lets someone in on a guess.
+- The setting commands themselves (`/setrules`, `/setwelcome`, `/captchamode`, `/setflood` and the rest) are not
+  affected. They work for administrators exactly as before.
 
 ## Special Telegram IDs
 

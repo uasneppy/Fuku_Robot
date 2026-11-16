@@ -389,3 +389,43 @@ func TestCachedMemberCountReplacesStaleEntryOnRead(t *testing.T) {
 		t.Fatalf("stored entry = %#v, want count 42", v)
 	}
 }
+
+func TestFormattingRulesButtonMediaOnly(t *testing.T) {
+	originalDB := db.DB
+	sqliteDB, err := gorm.Open(sqlite.Open("file:formatting_rules_media?mode=memory&cache=shared"), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	db.DB = sqliteDB
+	t.Cleanup(func() {
+		if sqlDB, sqlErr := db.DB.DB(); sqlErr == nil {
+			_ = sqlDB.Close()
+		}
+		db.DB = originalDB
+	})
+	if err := db.DB.AutoMigrate(&db.Chat{}, &models.RulesSettings{}); err != nil {
+		t.Fatalf("AutoMigrate: %v", err)
+	}
+	bot := &gotgbot.Bot{
+		Token:     "123:test",
+		BotClient: formattingBotClient{},
+		User:      gotgbot.User{Id: 123, IsBot: true, Username: "FormatBot"},
+	}
+	user := &gotgbot.User{Id: 5, FirstName: "Ada"}
+
+	empty := &gotgbot.Chat{Id: -100778, Type: "supergroup", Title: "Empty Rules"}
+	if _, buttons := FormattingReplacer(bot, empty, user, "Hi {rules}", nil); len(buttons) != 0 {
+		t.Fatalf("buttons for a chat with no rules content = %#v, want none", buttons)
+	}
+
+	mediaOnly := &gotgbot.Chat{Id: -100779, Type: "supergroup", Title: "Media Rules"}
+	if err := rules.SetRulesMediaOnly(mediaOnly.Id, "rules-file", db.PHOTO); err != nil {
+		t.Fatalf("SetRulesMediaOnly: %v", err)
+	}
+	_, buttons := FormattingReplacer(bot, mediaOnly, user, "Hi {rules}", nil)
+	if len(buttons) != 1 || buttons[0].Url != "https://t.me/FormatBot?start=rules_-100779" {
+		t.Fatalf("buttons for media-only rules = %#v, want the rules button", buttons)
+	}
+}

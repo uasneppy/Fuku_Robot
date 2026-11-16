@@ -85,10 +85,12 @@ func TestAllModulesRoundTripEveryMeaningfulField(t *testing.T) {
 		WelcomeSettings: &models.WelcomeSettings{
 			CleanWelcome: true, LastMsgId: 111, ShouldWelcome: true,
 			WelcomeText: "welcome", FileID: "welcome-file", WelcomeType: 2, Button: buttons,
+			MediaBelow: true, Once: true,
 		},
 		GoodbyeSettings: &models.GoodbyeSettings{
 			CleanGoodbye: true, LastMsgId: 222, ShouldGoodbye: true,
 			GoodbyeText: "goodbye", FileID: "goodbye-file", GoodbyeType: 3, Button: buttons,
+			MediaBelow: true,
 		},
 	}).Error)
 	require.NoError(t, db.DB.Model(&models.GreetingSettings{}).
@@ -120,6 +122,7 @@ func TestAllModulesRoundTripEveryMeaningfulField(t *testing.T) {
 		Updates(map[string]interface{}{"enabled": false, "status": false}).Error)
 	require.NoError(t, db.DB.Create(&models.RulesSettings{
 		ChatId: srcChat, Rules: "be kind", RulesBtn: "Read", Private: true,
+		FileID: "rules-file", MediaType: 4, Buttons: buttons, MediaBelow: true,
 	}).Error)
 	require.NoError(t, db.DB.Create(&models.WarnSettings{
 		ChatId: srcChat, WarnLimit: 7, WarnMode: "tmute",
@@ -235,6 +238,8 @@ func TestAllModulesRoundTripEveryMeaningfulField(t *testing.T) {
 	assert.Equal(t, "welcome-file", greetingsData.Settings.WelcomeSettings.FileID)
 	assert.Equal(t, 2, greetingsData.Settings.WelcomeSettings.WelcomeType)
 	assert.Equal(t, buttons, greetingsData.Settings.WelcomeSettings.Button)
+	assert.True(t, greetingsData.Settings.WelcomeSettings.MediaBelow)
+	assert.True(t, greetingsData.Settings.WelcomeSettings.Once)
 	require.NotNil(t, greetingsData.Settings.GoodbyeSettings)
 	assert.True(t, greetingsData.Settings.GoodbyeSettings.CleanGoodbye)
 	assert.Equal(t, int64(222), greetingsData.Settings.GoodbyeSettings.LastMsgId)
@@ -243,6 +248,7 @@ func TestAllModulesRoundTripEveryMeaningfulField(t *testing.T) {
 	assert.Equal(t, "goodbye-file", greetingsData.Settings.GoodbyeSettings.FileID)
 	assert.Equal(t, 3, greetingsData.Settings.GoodbyeSettings.GoodbyeType)
 	assert.Equal(t, buttons, greetingsData.Settings.GoodbyeSettings.Button)
+	assert.True(t, greetingsData.Settings.GoodbyeSettings.MediaBelow)
 
 	locksData, err := exportLocksData(dstChat)
 	require.NoError(t, err)
@@ -294,6 +300,10 @@ func TestAllModulesRoundTripEveryMeaningfulField(t *testing.T) {
 	assert.Equal(t, "be kind", rulesData.Settings.Rules)
 	assert.Equal(t, "Read", rulesData.Settings.RulesBtn)
 	assert.True(t, rulesData.Settings.Private)
+	assert.Equal(t, "rules-file", rulesData.Settings.FileID)
+	assert.Equal(t, 4, rulesData.Settings.MediaType)
+	assert.Equal(t, buttons, rulesData.Settings.Buttons)
+	assert.True(t, rulesData.Settings.MediaBelow)
 
 	warnsData, err := exportWarnsData(dstChat)
 	require.NoError(t, err)

@@ -196,13 +196,15 @@ type Config struct {
 	MetricsAuthToken string
 
 	// AI spam filter (TypeSafe Jev). EnableAISpam is the global AI kill switch: when
-	// false it stops /aispam and every raid AI check, text (TypeSafe) and image
-	// (Anthropic Claude) alike. The text feature is inert without TypeSafeAPIKey.
+	// false it stops /aispam, every raid AI check, text (TypeSafe) and image
+	// (Anthropic Claude) alike, and the AI spam-name rule of the member
+	// requirements. The text feature is inert without TypeSafeAPIKey.
 	EnableAISpam   bool
 	TypeSafeAPIKey string
 
-	// Image checks of the AI raid trigger, through the Anthropic API. The feature
-	// is inert without AnthropicAPIKey (with no key no image leaves the server)
+	// Image checks of the AI raid trigger and the AI spam-name rule of the member
+	// requirements, through the Anthropic API. The feature is inert without
+	// AnthropicAPIKey (with no key no image and no name leaves the server)
 	// and while EnableAISpam is false. The key is a secret and is registered with
 	// logredact.RegisterSecret. AnthropicModel is checked against the claude
 	// package's model-name rule in setDefaults, so a pasted secret or odd value
@@ -397,7 +399,7 @@ func LoadConfig() (*Config, error) {
 
 	cfg := &Config{
 		BotToken:    os.Getenv("BOT_TOKEN"),
-		BotVersion:  "2.23.14",
+		BotVersion:  "2.24.0",
 		ApiServer:   os.Getenv("API_SERVER"),
 		WorkingMode: "worker",
 		Debug:       typeConvertor{str: os.Getenv("DEBUG")}.Bool(),

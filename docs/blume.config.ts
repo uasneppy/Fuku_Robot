@@ -5,9 +5,9 @@ import { defineConfig } from "blume";
 export default defineConfig({
 	title: "Xenobot-72",
 	description:
-		"A modern Telegram group management bot built with Go — 30+ modules, 159+ commands, 7+ languages, and blazing-fast performance powered by Redis caching and PostgreSQL.",
+		"A modern Telegram group management bot built with Go — 39 modules, 231 command names, 8 languages, and blazing-fast performance powered by Redis caching and PostgreSQL.",
 	logo: { image: "/favicon.svg", text: "Xenobot-72" },
-	github: { owner: "uasneppy", repo: "Fuku_Robot" },
+	github: { owner: "uasneppy", repo: "fuku_robot" },
 
 	// Content stays where Starlight had it; the Go docs generator still
 	// writes here (output path unchanged).

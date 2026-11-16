@@ -38,7 +38,7 @@ func lockdownKeys(data map[string]any) map[string]struct{} {
 	return keys
 }
 
-// TestLockdownLocaleKeys guards every lockdown string across all 7 locales: parity
+// TestLockdownLocaleKeys guards every lockdown string across all 8 locales: parity
 // with en.yml in both directions, non-empty values, and identical placeholder sets.
 // make check-translations only sees literal GetString keys, so it cannot catch a
 // lockdown_ key that is missing, empty or has a renamed placeholder.
@@ -107,7 +107,7 @@ var lockdownWarningKeys = []string{
 }
 
 // TestLockdownWarningLines checks that every failure line starts with the warning
-// marker in all 7 locales, so a failure reads differently from a routine line.
+// marker in all 8 locales, so a failure reads differently from a routine line.
 func TestLockdownWarningLines(t *testing.T) {
 	var failures []string
 	for _, lang := range staffLocales {
@@ -125,7 +125,7 @@ func TestLockdownWarningLines(t *testing.T) {
 	}
 }
 
-// TestLockdownStringsHaveBalancedTags checks the HTML in the lockdown strings in all 7
+// TestLockdownStringsHaveBalancedTags checks the HTML in the lockdown strings in all 8
 // locales. An unbalanced <b> or <code> makes Telegram refuse the whole message, which
 // would fail silently in production. Each help bullet must also start with a <code>
 // span, so a tap on the command copies it instead of sending it.

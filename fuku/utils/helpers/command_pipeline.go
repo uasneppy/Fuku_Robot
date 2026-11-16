@@ -73,9 +73,9 @@ func register(dispatcher *ext.Dispatcher, desc CommandDescriptor, h handlers.Res
 	cmds := append([]string{desc.Name}, desc.Aliases...)
 	for _, c := range cmds {
 		if desc.Group != 0 {
-			dispatcher.AddHandlerToGroup(handlers.NewCommand(c, h), desc.Group)
+			dispatcher.AddHandlerToGroup(NewBotCommand(c, h), desc.Group)
 		} else {
-			dispatcher.AddHandler(handlers.NewCommand(c, h))
+			dispatcher.AddHandler(NewBotCommand(c, h))
 		}
 		if desc.Disableable {
 			AddCmdToDisableable(c)

@@ -1,58 +1,63 @@
 {
   "contract": "1.0.0",
   "flavor": "core",
-  "milestone": null,
+  "milestone": "v1.1 — PM Settings Hub & Member Screening",
   "phases": [
     {
-      "number": "1",
-      "name": "Staff Group Links",
-      "status": "complete"
+      "number": "10",
+      "name": "PM Settings Hub and Owner Gate",
+      "status": "in_progress"
     },
     {
-      "number": "2",
-      "name": "Staff Actions Across Groups",
-      "status": "complete"
+      "number": "11",
+      "name": "Message Editor",
+      "status": "in_progress"
     },
     {
-      "number": "3",
-      "name": "Staff Audit and Undo",
-      "status": "complete"
+      "number": "12",
+      "name": "Rules Media, Media Under Text and Greet Once",
+      "status": "in_progress"
     },
     {
-      "number": "4",
-      "name": "Manual Lockdown",
-      "status": "complete"
+      "number": "13",
+      "name": "Member Requirements",
+      "status": "in_progress"
     },
     {
-      "number": "5",
-      "name": "Lockdown Alerts and Response",
-      "status": "complete"
+      "number": "14",
+      "name": "Profile Photo and Channel Rules",
+      "status": "in_progress"
     },
     {
-      "number": "6",
-      "name": "Automatic Raid Detection",
-      "status": "complete"
+      "number": "15",
+      "name": "AI Spam-Name Check",
+      "status": "in_progress"
     },
     {
-      "number": "7",
-      "name": "AI-Assisted Raid Detection",
-      "status": "complete"
+      "number": "16",
+      "name": "Scheduled Deletion of Service and Bot Messages",
+      "status": "in_progress"
     },
     {
-      "number": "8",
-      "name": "Turnstile Web Captcha",
-      "status": "complete"
+      "number": "17",
+      "name": "Command, Edit and Self-Destruct Deletion",
+      "status": "in_progress"
     },
     {
-      "number": "9",
-      "name": "Settings Menu",
-      "status": "complete"
+      "number": "18",
+      "name": "Remaining Settings Pages",
+      "status": "in_progress"
+    },
+    {
+      "number": "19",
+      "name": "Blacklist, Filter and Note Pages",
+      "status": "in_progress"
     }
   ],
   "next": {
-    "command": "/gsd:new-milestone",
-    "label": "Start a new milestone",
-    "reason": "All phases complete — start a new milestone"
+    "command": "/gsd-progress",
+    "label": "Show progress",
+    "reason": "Unsure of state — showing progress"
   },
-  "updated_at": "2026-10-30T13:21:07.075Z"
+  "updated_at": "2026-11-13T20:10:50.865Z"
 }

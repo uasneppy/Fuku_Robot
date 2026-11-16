@@ -1,6 +1,7 @@
 package modules
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"slices"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
 	"github.com/uasneppy/fuku_robot/fuku/db/lang"
+	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/db/notes"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
 	"github.com/uasneppy/fuku_robot/fuku/utils/chat_status"
@@ -44,6 +46,235 @@ func consumeNoteOverwriteCache(token string) (*overwriteNote, error) {
 
 func deleteNoteOverwriteCache(token string) {
 	deleteOverwriteCache(noteOverwriteCacheKey(token))
+}
+
+// noteWriteSeams are the repository calls the note apply functions make, a variable so a test can make one
+// fail.
+type noteWriteSeams struct {
+	// Add stores one note and reports whether a row was inserted (false: the name was already there).
+	Add    func(ctx context.Context, chatID int64, noteName, replyText, fileID string, buttons models.ButtonArray, filtType int, pvtOnly, grpOnly, adminOnly, webPrev, isProtected, noNotif bool) (bool, error)
+	Remove func(ctx context.Context, chatID int64, noteName string) error
+	// RemoveByID deletes one row by ID only when it belongs to the chat and returns its name.
+	RemoveByID func(ctx context.Context, chatID, id int64) (name string, removed bool, err error)
+	Exists     func(ctx context.Context, chatID int64, noteName string) (bool, error)
+}
+
+// noteWrites is the one place the note commands reach the repository through.
+var noteWrites = noteWriteSeams{
+	Add:        notes.AddNoteContext,
+	Remove:     notes.RemoveNoteContext,
+	RemoveByID: notes.RemoveNoteByID,
+	Exists:     notes.NoteExistsContext,
+}
+
+// noteAddOutcome is what applyNoteAdd did; its zero value is a stored note.
+type noteAddOutcome int
+
+const (
+	// noteAdded means the note was stored (and, from checkNoteName, that no check refused it).
+	noteAdded noteAddOutcome = iota
+	// noteNameBlank means the name is empty.
+	noteNameBlank
+	// noteNameBadShape means the name has white space or a leading # or is over listKeywordMaxRunes code
+	// points (noteNameInvalid): it could never be fetched by #name or /get.
+	noteNameBadShape
+	// noteExists means the chat already has a note with this name; the command offers to overwrite it.
+	noteExists
+	// noteRaced means another writer stored the name between the check and the insert; /save answers it
+	// like a stored note, as it always did.
+	noteRaced
+	// noteSaveFailed means a database call failed and nothing was stored.
+	noteSaveFailed
+)
+
+// noteAddInput is the note content applyNoteAdd stores.
+type noteAddInput struct {
+	Name        string
+	Text        string
+	FileID      string
+	Buttons     models.ButtonArray
+	DataType    int
+	PvtOnly     bool
+	GrpOnly     bool
+	AdminOnly   bool
+	WebPrev     bool
+	IsProtected bool
+	NoNotif     bool
+}
+
+// noteAddResult is what applyNoteAdd and checkNoteName return for the caller to word.
+type noteAddResult struct {
+	Outcome noteAddOutcome
+	Err     error
+}
+
+// noteRemoveOutcome is what applyNoteRemove did; its zero value is a removed note.
+type noteRemoveOutcome int
+
+const (
+	// noteRemoved means the delete ran (a name that is not stored is not an error).
+	noteRemoved noteRemoveOutcome = iota
+	// noteRemoveSaveFailed means the delete failed.
+	noteRemoveSaveFailed
+)
+
+// noteRemoveResult is what applyNoteRemove returns.
+type noteRemoveResult struct {
+	Outcome noteRemoveOutcome
+	Err     error
+}
+
+// checkNoteName runs the checks every note add shares, in order: a blank name, a name that could never be
+// fetched (noteNameInvalid), then a name the chat already has. It returns a result whose outcome is noteAdded
+// when nothing refuses the name; a lookup that fails refuses it as noteSaveFailed (nothing is stored on a
+// guess). It logs the chat ID and the error only, never the name.
+func checkNoteName(ctx context.Context, chatID int64, name string) noteAddResult {
+	if strings.TrimSpace(name) == "" {
+		return noteAddResult{Outcome: noteNameBlank}
+	}
+	if noteNameInvalid(name) {
+		return noteAddResult{Outcome: noteNameBadShape}
+	}
+	exists, err := noteWrites.Exists(ctx, chatID, name)
+	if err != nil {
+		log.Errorf("[Notes] Existing name lookup failed for chat %d: %v", chatID, err)
+		return noteAddResult{Outcome: noteSaveFailed, Err: err}
+	}
+	if exists {
+		return noteAddResult{Outcome: noteExists}
+	}
+	return noteAddResult{}
+}
+
+// applyNoteAdd stores one note for the chat after checkNoteName accepts the name. The name is lower-cased
+// here as the command always did. A name stored by another writer in the meantime is noteRaced. It judges no
+// person's rights and logs the chat ID and the error only.
+func applyNoteAdd(ctx context.Context, chatID int64, in noteAddInput) noteAddResult {
+	name := strings.ToLower(in.Name)
+	if refusal := checkNoteName(ctx, chatID, name); refusal.Outcome != noteAdded {
+		return refusal
+	}
+	inserted, err := noteWrites.Add(ctx, chatID, name, in.Text, in.FileID, in.Buttons, in.DataType, in.PvtOnly, in.GrpOnly, in.AdminOnly, in.WebPrev, in.IsProtected, in.NoNotif)
+	if err != nil {
+		log.Errorf("[Notes] AddNote failed for chat %d: %v", chatID, err)
+		return noteAddResult{Outcome: noteSaveFailed, Err: err}
+	}
+	if !inserted {
+		return noteAddResult{Outcome: noteRaced}
+	}
+	return noteAddResult{}
+}
+
+// applyNoteRemove deletes the chat's note with this name (lower-cased here). It logs the chat ID and the error
+// only.
+func applyNoteRemove(ctx context.Context, chatID int64, name string) noteRemoveResult {
+	if err := noteWrites.Remove(ctx, chatID, strings.ToLower(name)); err != nil {
+		log.Errorf("[Notes] RemoveNote failed for chat %d: %v", chatID, err)
+		return noteRemoveResult{Outcome: noteRemoveSaveFailed, Err: err}
+	}
+	return noteRemoveResult{}
+}
+
+// noteRemoveByIDOutcome is what applyNoteRemoveByID did; its zero value is a removed note.
+type noteRemoveByIDOutcome int
+
+const (
+	// noteRemovedByID means the row went.
+	noteRemovedByID noteRemoveByIDOutcome = iota
+	// noteRemoveByIDGone means no row of this chat has that ID (already removed, or another chat's).
+	noteRemoveByIDGone
+	// noteRemoveByIDSaveFailed means the delete failed.
+	noteRemoveByIDSaveFailed
+)
+
+// noteRemoveByIDResult is what applyNoteRemoveByID returns.
+type noteRemoveByIDResult struct {
+	Outcome noteRemoveByIDOutcome
+	// Name is the stored name of the removed note.
+	Name string
+	Err  error
+}
+
+// applyNoteRemoveByID deletes one note by its row ID, only when the row belongs to the chat, so an ID of
+// another chat deletes nothing. It judges no person's rights and logs the chat ID and the error only, never
+// the name.
+func applyNoteRemoveByID(ctx context.Context, chatID, id int64) noteRemoveByIDResult {
+	name, removed, err := noteWrites.RemoveByID(ctx, chatID, id)
+	if err != nil {
+		log.Errorf("[Notes] RemoveNoteByID failed for chat %d: %v", chatID, err)
+		return noteRemoveByIDResult{Outcome: noteRemoveByIDSaveFailed, Err: err}
+	}
+	if !removed {
+		return noteRemoveByIDResult{Outcome: noteRemoveByIDGone}
+	}
+	return noteRemoveByIDResult{Outcome: noteRemovedByID, Name: name}
+}
+
+// resolveNotePrivateConflict is the rule /save and the Notes page share for the two private-notes directives: a
+// note that asks to be sent to the private chat ({private}) and to the group ({noprivate}) at once keeps neither, so
+// it follows the group's own setting, and the caller says so (conflict true). Any other combination is unchanged.
+func resolveNotePrivateConflict(pvtOnly, grpOnly bool) (pvt, grp, conflict bool) {
+	if pvtOnly && grpOnly {
+		return false, false, true
+	}
+	return pvtOnly, grpOnly, false
+}
+
+// offerNoteOverwrite answers /save for a name the chat already has with the overwrite card: the new content
+// is cached under a fresh token and the Yes and No buttons carry only that token.
+func offerNoteOverwrite(b *gotgbot.Bot, ctx *ext.Context, data overwriteNote) error {
+	msg := ctx.EffectiveMessage
+	token, tokenErr := newOverwriteToken()
+	if tokenErr != nil {
+		log.Errorf("[Notes] Failed to generate overwrite token: %v", tokenErr)
+		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
+		errorText, _ := tr.GetString("notes_overwrite_token_failed")
+		_, _ = msg.Reply(b, errorText, formatting.Shtml())
+		return ext.EndGroups
+	}
+	if err := setNoteOverwriteCache(token, data); err != nil {
+		log.Errorf("[Notes] Failed to cache overwrite data: %v", err)
+		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
+		errorText, _ := tr.GetString("notes_overwrite_token_failed")
+		_, _ = msg.Reply(b, errorText, formatting.Shtml())
+		return ext.EndGroups
+	}
+	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
+	overwriteText, _ := tr.GetString("notes_overwrite_confirm")
+	yesText, _ := tr.GetString("button_yes")
+	noText, _ := tr.GetString("button_no")
+	_, err := msg.Reply(b,
+		overwriteText,
+		&gotgbot.SendMessageOpts{
+			ParseMode: formatting.HTML,
+			ReplyMarkup: gotgbot.InlineKeyboardMarkup{
+				InlineKeyboard: [][]gotgbot.InlineKeyboardButton{
+					{
+						{
+							Text: yesText,
+							CallbackData: encodeCallbackData("notes.overwrite", map[string]string{
+								"a": "yes",
+								"t": token,
+							}),
+						},
+						{
+							Text: noText,
+							CallbackData: encodeCallbackData("notes.overwrite", map[string]string{
+								"a": "no",
+								"t": token,
+							}),
+						},
+					},
+				},
+			},
+		},
+	)
+	if err != nil {
+		deleteNoteOverwriteCache(token)
+		log.Error(err)
+		return err
+	}
+	return ext.EndGroups
 }
 
 //nolint:dupl // addNote shares validation logic with filters module by design
@@ -100,24 +331,35 @@ func (m moduleStruct) addNote(b *gotgbot.Bot, ctx *ext.Context) error {
 		return ext.EndGroups
 	}
 
-	if grpOnly && pvtOnly {
-		grpOnly, pvtOnly = false, false
+	var conflict bool
+	pvtOnly, grpOnly, conflict = resolveNotePrivateConflict(pvtOnly, grpOnly)
+	if conflict {
 		noteConflictText, _ := tr.GetString("notes_private_conflict_warning")
 		noteString += noteConflictText
 	}
 
 	noteWord = strings.ToLower(noteWord)
 
-	if notes.DoesNoteExists(chat.Id, noteWord) {
-		token, tokenErr := newOverwriteToken()
-		if tokenErr != nil {
-			log.Errorf("[Notes] Failed to generate overwrite token: %v", tokenErr)
-			tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-			errorText, _ := tr.GetString("notes_overwrite_token_failed")
-			_, _ = msg.Reply(b, errorText, formatting.Shtml())
-			return ext.EndGroups
-		}
-		if err := setNoteOverwriteCache(token, overwriteNote{
+	added := applyNoteAdd(tracing.UpdateContext(ctx), chat.Id, noteAddInput{
+		Name:        noteWord,
+		Text:        text,
+		FileID:      fileid,
+		Buttons:     buttons,
+		DataType:    dataType,
+		PvtOnly:     pvtOnly,
+		GrpOnly:     grpOnly,
+		AdminOnly:   adminOnly,
+		WebPrev:     webPrev,
+		IsProtected: isProtected,
+		NoNotif:     noNotif,
+	})
+	switch added.Outcome {
+	case noteNameBlank:
+		return replyNoteKey(b, ctx, "notes_keyword_required")
+	case noteNameBadShape:
+		return replyNoteKey(b, ctx, "notes_name_invalid")
+	case noteExists:
+		return offerNoteOverwrite(b, ctx, overwriteNote{
 			overwriteBase: overwriteBase{
 				ChatID:   chat.Id,
 				UserID:   user.Id,
@@ -133,60 +375,9 @@ func (m moduleStruct) addNote(b *gotgbot.Bot, ctx *ext.Context) error {
 			WebPrev:     webPrev,
 			IsProtected: isProtected,
 			NoNotif:     noNotif,
-		}); err != nil {
-			log.Errorf("[Notes] Failed to cache overwrite data: %v", err)
-			errorText, _ := tr.GetString("notes_overwrite_token_failed")
-			_, _ = msg.Reply(b, errorText, formatting.Shtml())
-			return ext.EndGroups
-		}
-		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-		overwriteText, _ := tr.GetString("notes_overwrite_confirm")
-		yesText, _ := tr.GetString("button_yes")
-		noText, _ := tr.GetString("button_no")
-		_, err := msg.Reply(b,
-			overwriteText,
-			&gotgbot.SendMessageOpts{
-				ParseMode: formatting.HTML,
-				ReplyMarkup: gotgbot.InlineKeyboardMarkup{
-					InlineKeyboard: [][]gotgbot.InlineKeyboardButton{
-						{
-							{
-								Text: yesText,
-								CallbackData: encodeCallbackData("notes.overwrite", map[string]string{
-									"a": "yes",
-									"t": token,
-								}),
-							},
-							{
-								Text: noText,
-								CallbackData: encodeCallbackData("notes.overwrite", map[string]string{
-									"a": "no",
-									"t": token,
-								}),
-							},
-						},
-					},
-				},
-			},
-		)
-		if err != nil {
-			deleteNoteOverwriteCache(token)
-			log.Error(err)
-			return err
-		}
-		return ext.EndGroups
-	}
-
-	if err := notes.AddNote(chat.Id, noteWord, text, fileid, buttons, dataType, pvtOnly, grpOnly, adminOnly, webPrev, isProtected, noNotif); err != nil {
-		log.Errorf("[Notes] Failed to add note %s in chat %d: %v", noteWord, chat.Id, err)
-		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-		errorText, _ := tr.GetString("notes_save_failed")
-		_, err := msg.Reply(b, errorText, formatting.Shtml())
-		if err != nil {
-			log.Error(err)
-			return err
-		}
-		return ext.EndGroups
+		})
+	case noteSaveFailed:
+		return replyNoteKey(b, ctx, "notes_save_failed")
 	}
 
 	_, err := msg.Reply(b, fmt.Sprintf(noteString, noteWord, noteWord, noteWord), formatting.Shtml())
@@ -195,6 +386,18 @@ func (m moduleStruct) addNote(b *gotgbot.Bot, ctx *ext.Context) error {
 		return err
 	}
 
+	return ext.EndGroups
+}
+
+// replyNoteKey answers a refused note command with the translated text of one locale key.
+func replyNoteKey(b *gotgbot.Bot, ctx *ext.Context, key string) error {
+	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
+	text, _ := tr.GetString(key)
+	_, err := ctx.EffectiveMessage.Reply(b, text, formatting.Shtml())
+	if err != nil {
+		log.Error(err)
+		return err
+	}
 	return ext.EndGroups
 }
 
@@ -246,16 +449,8 @@ func (moduleStruct) rmNote(b *gotgbot.Bot, ctx *ext.Context) error {
 	}
 	noteWord, _ = extraction.ExtractQuotes(noteWord, false, true)
 
-	if err := notes.RemoveNote(chat.Id, strings.ToLower(noteWord)); err != nil {
-		log.Errorf("[Notes] Failed to remove note %s in chat %d: %v", noteWord, chat.Id, err)
-		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-		errorText, _ := tr.GetString("error_generic")
-		_, err := msg.Reply(b, errorText, formatting.Shtml())
-		if err != nil {
-			log.Error(err)
-			return err
-		}
-		return ext.EndGroups
+	if removed := applyNoteRemove(tracing.UpdateContext(ctx), chat.Id, noteWord); removed.Outcome == noteRemoveSaveFailed {
+		return replyNoteKey(b, ctx, "error_generic")
 	}
 
 	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
@@ -940,14 +1135,14 @@ func LoadNotes(dispatcher *ext.Dispatcher) {
 			},
 		},
 	})
-	dispatcher.AddHandler(handlers.NewCommand("save", notesModule.addNote))
-	dispatcher.AddHandler(handlers.NewCommand("addnote", notesModule.addNote))
-	dispatcher.AddHandler(handlers.NewCommand("clear", notesModule.rmNote))
-	dispatcher.AddHandler(handlers.NewCommand("rmnote", notesModule.rmNote))
-	dispatcher.AddHandler(handlers.NewCommand("notes", notesModule.notesList))
-	dispatcher.AddHandler(handlers.NewCommand("saved", notesModule.notesList))
+	dispatcher.AddHandler(helpers.NewBotCommand("save", notesModule.addNote))
+	dispatcher.AddHandler(helpers.NewBotCommand("addnote", notesModule.addNote))
+	dispatcher.AddHandler(helpers.NewBotCommand("clear", notesModule.rmNote))
+	dispatcher.AddHandler(helpers.NewBotCommand("rmnote", notesModule.rmNote))
+	dispatcher.AddHandler(helpers.NewBotCommand("notes", notesModule.notesList))
+	dispatcher.AddHandler(helpers.NewBotCommand("saved", notesModule.notesList))
 	helpers.AddCmdToDisableable("notes")
-	dispatcher.AddHandler(handlers.NewCommand("clearall", notesModule.rmAllNotes))
+	dispatcher.AddHandler(helpers.NewBotCommand("clearall", notesModule.rmAllNotes))
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("rmAllNotes"), notesModule.notesButtonHandler))
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("notes.overwrite"), notesModule.noteOverWriteHandler))
 	dispatcher.AddHandler(
@@ -959,7 +1154,7 @@ func LoadNotes(dispatcher *ext.Dispatcher) {
 		),
 	)
 	helpers.MultiCommand(dispatcher, []string{"privnote", "privatenotes"}, notesModule.privNote)
-	dispatcher.AddHandler(handlers.NewCommand("get", notesModule.getNotes))
+	dispatcher.AddHandler(helpers.NewBotCommand("get", notesModule.getNotes))
 	helpers.AddCmdToDisableable("get")
 }
 

@@ -97,6 +97,9 @@ func writeCSV(w io.Writer, results []result) error {
 // summary is the confusion matrix and its rates at one bar. An image counts
 // as flagged when its probability is at least the bar.
 type summary struct {
+	// Unit is what a row is called in the printed summary: "" means images,
+	// the names mode sets "names".
+	Unit              string
 	Bar               float64
 	TP, FP, TN, FN    int
 	Scored            int
@@ -198,6 +201,9 @@ func costPer1000(cost float64, images int) float64 {
 
 // totals are the latency, token and cost figures of a run.
 type totals struct {
+	// Unit is what a request is called in the printed figures: "" means
+	// images, the names mode sets "names".
+	Unit              string
 	Images            int
 	P50, P95, Max     time.Duration
 	Input, Output     int
@@ -233,13 +239,22 @@ func totalsOf(results []result, priceIn, priceOut float64) totals {
 // writing, and thinking is billed as output.
 const pricingNote = "list prices for prompts up to 100K tokens at the time of writing, thinking is billed as output; verify on Anthropic's pricing page"
 
+// unitOrImages is the printed name of a row: the unit, or "images" when none is set.
+func unitOrImages(unit string) string {
+	if unit == "" {
+		return "images"
+	}
+	return unit
+}
+
 // writeSummary prints the confusion matrix at the chosen bar, the sweep of
 // bars, and the latency, token and cost figures.
 func writeSummary(w io.Writer, s summary, rows []summary, t totals) {
 	p := func(format string, args ...any) { _, _ = fmt.Fprintf(w, format, args...) }
+	unit, rowUnit := unitOrImages(s.Unit), unitOrImages(t.Unit)
 
 	p("Summary at bar %.2f\n", s.Bar)
-	p("  images scored: %d (blocked: %d, failed: %d; these stay out of the matrix)\n", s.Scored, s.Blocked, s.Failed)
+	p("  %s scored: %d (blocked: %d, failed: %d; these stay out of the matrix)\n", unit, s.Scored, s.Blocked, s.Failed)
 	p("  confusion matrix (flagged when probability >= bar):\n")
 	p("                 flagged  not flagged\n")
 	p("    spam         %7d  %11d\n", s.TP, s.FN)
@@ -253,7 +268,7 @@ func writeSummary(w io.Writer, s summary, rows []summary, t totals) {
 	}
 
 	p("\nLatency (all %d requests): p50 %s, p95 %s, max %s\n", t.Images, t.P50.Round(time.Millisecond), t.P95.Round(time.Millisecond), t.Max.Round(time.Millisecond))
-	p("Tokens: input %d, output %d (blocked or failed images add none: %d)\n", t.Input, t.Output, t.TokenlessImages)
-	p("Estimated cost: $%.4f for %d images, $%.4f per 1000 images\n", t.Cost, t.Images, t.CostPer1000)
+	p("Tokens: input %d, output %d (blocked or failed %s add none: %d)\n", t.Input, t.Output, rowUnit, t.TokenlessImages)
+	p("Estimated cost: $%.4f for %d %s, $%.4f per 1000 %s\n", t.Cost, t.Images, rowUnit, t.CostPer1000, rowUnit)
 	p("  at $%.2f per million input tokens and $%.2f per million output tokens; %s\n", t.PriceIn, t.PriceOut, pricingNote)
 }

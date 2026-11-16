@@ -1,6 +1,7 @@
 package modules
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -25,7 +26,14 @@ import (
 var bansModule = moduleStruct{moduleName: "Bans"}
 
 func kickMember(b *gotgbot.Bot, chatID, userID int64) error {
-	_, err := b.UnbanChatMember(chatID, userID, &gotgbot.UnbanChatMemberOpts{OnlyIfBanned: false})
+	return kickMemberContext(context.Background(), b, chatID, userID)
+}
+
+// kickMemberContext removes a member with the member-removing unbanChatMember the Bot API
+// defines (only_if_banned false): a current member is removed from the group and can join again.
+// It is the kick of /kick, the captcha and the member requirements, bounded by ctx.
+func kickMemberContext(ctx context.Context, b *gotgbot.Bot, chatID, userID int64) error {
+	_, err := b.UnbanChatMemberWithContext(ctx, chatID, userID, &gotgbot.UnbanChatMemberOpts{OnlyIfBanned: false})
 	return err
 }
 
@@ -53,7 +61,7 @@ func kickReply(c *moderationCtx, t *target) error {
 		}
 	}
 
-	_, err = c.Msg.Reply(c.Bot,
+	err = c.replySuccess(
 		fmt.Sprintf(baseStr, formatting.MentionHtml(kickuser.Id, kickuser.FirstName)),
 		formatting.Shtml(),
 	)
@@ -118,7 +126,7 @@ func moderationTban(m *moduleStruct) *moderationCommand {
 				}
 			}
 
-			_, err = c.Msg.Reply(c.Bot, baseStr, formatting.Shtml())
+			err = c.replySuccess(baseStr, formatting.Shtml())
 			if err != nil {
 				log.Error(err)
 				return err
@@ -144,7 +152,7 @@ func banReplyWithButton(c *moderationCtx, t *target) error {
 
 	text := fmt.Sprintf(baseStr, formatting.MentionHtml(banUser.Id, banUser.FirstName))
 
-	_, err = c.Msg.Reply(c.Bot, text,
+	err = c.replySuccess(text,
 		&gotgbot.SendMessageOpts{
 			ParseMode: formatting.HTML,
 			ReplyMarkup: gotgbot.InlineKeyboardMarkup{
@@ -215,12 +223,13 @@ func moderationBan(m *moduleStruct) *moderationCommand {
 					text = fmt.Sprintf(temp, formatting.MentionHtml(t.userID, c.Msg.ReplyToMessage.GetSender().Name()))
 				} else {
 					text, _ = c.Tr.GetString("bans_anonymous_ban_reply_only")
+					return logReplyError(c.replyHint(text, formatting.Shtml()))
 				}
 				sendMsgOptns = formatting.Shtml()
 			} else {
 				return banReplyWithButton(c, t)
 			}
-			_, err := c.Msg.Reply(c.Bot, text, sendMsgOptns)
+			err := c.replySuccess(text, sendMsgOptns)
 			if err != nil {
 				log.Error(err)
 				return err
@@ -399,6 +408,7 @@ func moderationUnban(m *moduleStruct) *moderationCommand {
 					text = fmt.Sprintf(temp, formatting.MentionHtml(t.userID, c.Msg.ReplyToMessage.GetSender().Name()))
 				} else {
 					text, _ = c.Tr.GetString("bans_anonymous_unban_reply_only")
+					return logReplyError(c.replyHint(text, formatting.Shtml()))
 				}
 			} else {
 				banUser, err := c.Bot.GetChat(t.userID, nil)
@@ -409,7 +419,7 @@ func moderationUnban(m *moduleStruct) *moderationCommand {
 				temp, _ := c.Tr.GetString(strings.ToLower(c.Module.moduleName) + "_unban_unbanned_user")
 				text = fmt.Sprintf(temp, formatting.MentionHtml(banUser.Id, banUser.FirstName))
 			}
-			_, err := c.Msg.Reply(c.Bot, text, formatting.Shtml())
+			err := c.replySuccess(text, formatting.Shtml())
 			if err != nil {
 				log.Error(err)
 				return err
@@ -1140,4 +1150,12 @@ func init() {
 	RegisterAnonymousAdminHandler("skick", anonPipelineHandler(skickDesc, bansModule.sKick))
 	RegisterAnonymousAdminHandler("restrict", anonPipelineHandler(restrictDesc, bansModule.restrict))
 	RegisterAnonymousAdminHandler("unrestrict", anonPipelineHandler(unrestrictDesc, bansModule.unrestrict))
+}
+
+// logReplyError logs a reply's error as the reply funcs always have and returns it unchanged.
+func logReplyError(err error) error {
+	if err != nil {
+		log.Error(err)
+	}
+	return err
 }

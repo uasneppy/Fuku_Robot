@@ -41,9 +41,6 @@ USER nonroot
 ENTRYPOINT ["./fuku_robot"]
 
 # Metadata
-LABEL org.opencontainers.image.authors="Divanshu Chauhan <divkix@divkix.me>"
-LABEL org.opencontainers.image.url="https://divkix.me"
 LABEL org.opencontainers.image.source="https://github.com/uasneppy/fuku_robot"
-LABEL org.opencontainers.image.title="Fuku Go Robot - PR Build"
-LABEL org.opencontainers.image.description="Pull Request build of Fuku Go Robot"
-LABEL org.opencontainers.image.vendor="Divkix"
+LABEL org.opencontainers.image.title="Xenobot-72 - PR Build"
+LABEL org.opencontainers.image.description="Pull Request build of Xenobot-72"

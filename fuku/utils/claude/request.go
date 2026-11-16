@@ -50,7 +50,8 @@ type Options struct {
 	Thinking string
 	// Effort is "" to send no output_config, else output_config.effort.
 	Effort string
-	// MaxTokens is 0 for the production cap of 256.
+	// MaxTokens is 0 for the production cap of the request (256 for an
+	// image, 128 for names).
 	MaxTokens int
 }
 
@@ -90,14 +91,14 @@ type imageSource struct {
 
 // inputSchema is the JSON Schema of the only call the model may make. Strict
 // schemas do not support minimum and maximum, so the range is checked when the
-// answer is parsed.
-func inputSchema() map[string]any {
+// answer is parsed. description says what 0 and 1 mean for the request.
+func inputSchema(description string) map[string]any {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
 			"spam_probability": map[string]any{
 				"type":        "number",
-				"description": "0 means the image is certainly not spam, 1 means it is certainly spam",
+				"description": description,
 			},
 		},
 		"required":             []any{"spam_probability"},
@@ -105,10 +106,22 @@ func inputSchema() map[string]any {
 	}
 }
 
-// buildRequest assembles the Messages body for one image. The zero Options
-// value gives the production request.
-func buildRequest(model string, opts Options, img Image) *request {
-	maxTokens := maxOutputTokens
+// requestSpec is what differs between the image request and the names request:
+// the instruction, the words the tool and its number are described with, the
+// default output cap and the content of the one user message.
+type requestSpec struct {
+	system            string
+	toolDescription   string
+	schemaDescription string
+	maxTokens         int
+	content           []contentBlock
+}
+
+// newRequest assembles the Messages body of a spec. It is the one place that
+// applies Options, so the image and the names request cannot drift apart. The
+// zero Options value gives the production request.
+func newRequest(model string, opts Options, spec requestSpec) *request {
+	maxTokens := spec.maxTokens
 	if opts.MaxTokens > 0 {
 		maxTokens = opts.MaxTokens
 	}
@@ -130,26 +143,35 @@ func buildRequest(model string, opts Options, img Image) *request {
 	return &request{
 		Model:        model,
 		MaxTokens:    maxTokens,
-		System:       SystemInstruction,
+		System:       spec.system,
 		Thinking:     think,
 		OutputConfig: output,
 		Tools: []tool{{
 			Name:        ToolName,
-			Description: "Report how likely the image is spam.",
+			Description: spec.toolDescription,
 			Strict:      true,
-			InputSchema: inputSchema(),
+			InputSchema: inputSchema(spec.schemaDescription),
 		}},
 		ToolChoice: choice,
-		Messages: []message{{
-			Role: "user",
-			Content: []contentBlock{
-				{Type: "image", Source: &imageSource{
-					Type:      "base64",
-					MediaType: img.MIMEType,
-					Data:      base64.StdEncoding.EncodeToString(img.Data),
-				}},
-				{Type: "text", Text: userPrompt},
-			},
-		}},
+		Messages:   []message{{Role: "user", Content: spec.content}},
 	}
+}
+
+// buildRequest assembles the Messages body for one image. The zero Options
+// value gives the production request.
+func buildRequest(model string, opts Options, img Image) *request {
+	return newRequest(model, opts, requestSpec{
+		system:            SystemInstruction,
+		toolDescription:   "Report how likely the image is spam.",
+		schemaDescription: "0 means the image is certainly not spam, 1 means it is certainly spam",
+		maxTokens:         maxOutputTokens,
+		content: []contentBlock{
+			{Type: "image", Source: &imageSource{
+				Type:      "base64",
+				MediaType: img.MIMEType,
+				Data:      base64.StdEncoding.EncodeToString(img.Data),
+			}},
+			{Type: "text", Text: userPrompt},
+		},
+	})
 }

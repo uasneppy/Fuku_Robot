@@ -698,6 +698,15 @@ func importGreetings(tx *gorm.DB, chatID int64, payload interface{}) ([]string, 
 	}
 	if data.Settings != nil {
 		data.Settings.ChatID = chatID
+		// replaceChatSetting writes SQL NULL for every column of a nil embedded block, which the NOT NULL
+		// switch columns of migration 20261105120000 refuse (SQLSTATE 23502). An empty block writes the
+		// zero values those NULLs always read as.
+		if data.Settings.WelcomeSettings == nil {
+			data.Settings.WelcomeSettings = &models.WelcomeSettings{}
+		}
+		if data.Settings.GoodbyeSettings == nil {
+			data.Settings.GoodbyeSettings = &models.GoodbyeSettings{}
+		}
 	}
 	if err := replaceChatSetting(tx, chatID, data.Settings); err != nil {
 		return nil, err

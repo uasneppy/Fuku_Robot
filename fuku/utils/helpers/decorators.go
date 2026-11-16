@@ -14,7 +14,7 @@ var (
 
 func MultiCommand(dispatcher *ext.Dispatcher, alias []string, r handlers.Response) {
 	for _, cmd := range alias {
-		dispatcher.AddHandler(handlers.NewCommand(cmd, r))
+		dispatcher.AddHandler(NewBotCommand(cmd, r))
 	}
 }
 

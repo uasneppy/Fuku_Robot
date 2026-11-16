@@ -11,7 +11,7 @@ release:
 
   footer: |
     Docker 🐳 images are available at:
-    `docker pull ghcr.io/divkix/{{ .ProjectName }}:{{ .Tag }}`
+    `docker pull ghcr.io/uasneppy/{{ .ProjectName }}:{{ .Tag }}`
 
 gomod:
   env:
@@ -97,7 +97,7 @@ snapshot:
 dockers_v2:
   - dockerfile: docker/goreleaser
     images:
-      - "ghcr.io/divkix/{{ .ProjectName }}"
+      - "ghcr.io/uasneppy/{{ .ProjectName }}"
     tags:
       - "{{ .Tag }}"
       - "{{ .Version }}"
@@ -107,12 +107,10 @@ dockers_v2:
       - linux/arm64
     labels:
       "org.opencontainers.image.created": "{{.Date}}"
-      "org.opencontainers.image.title": "{{ .ProjectName }}"
+      "org.opencontainers.image.title": "Xenobot-72"
       "org.opencontainers.image.revision": "{{.FullCommit}}"
       "org.opencontainers.image.version": "{{.Version}}"
       "org.opencontainers.image.source": "https://github.com/uasneppy/fuku_robot"
-      "org.opencontainers.image.description": "Official Fuku Go Robot Docker Image"
-      "org.opencontainers.image.vendor": "Divkix"
-      "org.opencontainers.image.authors": "Divanshu Chauhan <divkix@divkix.me>"
+      "org.opencontainers.image.description": "Xenobot-72 Docker Image"
     extra_files:
       - migrations

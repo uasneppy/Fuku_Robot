@@ -10,7 +10,10 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf16"
 	"unicode/utf8"
+
+	tgmd2html "github.com/PaulSonOfLars/gotg_md2html"
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
 	"github.com/uasneppy/fuku_robot/fuku/db/rules"
@@ -215,12 +218,17 @@ func replaceFormatPlaceholders(s string, values [len(formatPlaceholderTokens)]st
 	}
 }
 
-func FormattingReplacer(b *gotgbot.Bot, chat *gotgbot.Chat, user *gotgbot.User, oldMsg string, buttons []db.Button) (res string, btns []db.Button) {
+// FillPlaceholders fills {first} {last} {fullname} {username} {mention} {id} {count} {chatname} in one
+// left-to-right pass, escapes every substituted value for HTML and strips {rules}, {rules:same} and {rules:up}
+// (the rules button is the caller's business). The member count comes in as an argument. It makes no Telegram
+// call and no database read, so the settings editor's dry run fills a message exactly as a real join does
+// without side effects; FormattingReplacer builds its text through it. A text with no '{' is returned as is.
+func FillPlaceholders(oldMsg string, user *gotgbot.User, chatTitle, memberCount string) string {
 	const language = "uk"
 
 	if strings.IndexByte(oldMsg, '{') < 0 {
 		// No '{' means no placeholder can match: the body is returned untouched.
-		return oldMsg, buttons
+		return oldMsg
 	}
 
 	var (
@@ -264,32 +272,51 @@ func FormattingReplacer(b *gotgbot.Bot, chat *gotgbot.Chat, user *gotgbot.User, 
 		userId = user.Id
 	}
 
-	countStr := "0"
-	if strings.Contains(oldMsg, "{count}") {
-		countStr = cachedMemberCount(b, chat)
-	}
-
 	values := [len(formatPlaceholderTokens)]string{
 		html.EscapeString(firstName),
 		html.EscapeString(lastName),
 		html.EscapeString(fullName),
 		username,
 		username,
-		countStr,
-		html.EscapeString(chat.Title),
+		memberCount,
+		html.EscapeString(chatTitle),
 		strconv.Itoa(int(userId)),
 	}
 
-	response := rulesBtnRegex.FindStringSubmatch(oldMsg)
-	if response == nil {
-		return replaceFormatPlaceholders(oldMsg, values), buttons
+	return replaceFormatPlaceholders(rulesBtnRegex.ReplaceAllString(oldMsg, ""), values)
+}
+
+// VisibleLength is the length, in UTF-16 code units, of the text a member sees for a stored HTML message: tags
+// are dropped and entities decoded, and an emoji outside the basic plane counts as two units, the way Telegram
+// counts message length. The editor uses it to hold a dry-run result to Telegram's limits.
+func VisibleLength(markup string) int {
+	return len(utf16.Encode([]rune(tgmd2html.StripHTMLV2(markup))))
+}
+
+func FormattingReplacer(b *gotgbot.Bot, chat *gotgbot.Chat, user *gotgbot.User, oldMsg string, buttons []db.Button) (res string, btns []db.Button) {
+	const language = "uk"
+
+	if strings.IndexByte(oldMsg, '{') < 0 {
+		// No '{' means no placeholder can match: the body is returned untouched.
+		return oldMsg, buttons
 	}
 
-	res = replaceFormatPlaceholders(rulesBtnRegex.ReplaceAllString(oldMsg, ""), values)
+	countStr := "0"
+	if strings.Contains(oldMsg, "{count}") {
+		countStr = cachedMemberCount(b, chat)
+	}
+
+	res = FillPlaceholders(oldMsg, user, chat.Title, countStr)
+
+	response := rulesBtnRegex.FindStringSubmatch(oldMsg)
+	if response == nil {
+		return res, buttons
+	}
+
 	btns = append([]db.Button(nil), buttons...)
 
 	rulesDb := rules.GetChatRulesInfo(chat.Id)
-	if rulesDb.Rules == "" {
+	if !rulesDb.HasContent() {
 		return res, btns
 	}
 

@@ -10,7 +10,6 @@ import (
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
-	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/uasneppy/fuku_robot/fuku/db/chats"
@@ -301,15 +300,15 @@ func (moduleStruct) runs(b *gotgbot.Bot, ctx *ext.Context) error {
 }
 
 func registerMiscExtras(dispatcher *ext.Dispatcher) {
-	dispatcher.AddHandler(handlers.NewCommand("stickerid", miscModule.stickerID))
+	dispatcher.AddHandler(helpers.NewBotCommand("stickerid", miscModule.stickerID))
 	helpers.AddCmdToDisableable("stickerid")
-	dispatcher.AddHandler(handlers.NewCommand("zombies", miscModule.zombies))
-	dispatcher.AddHandler(handlers.NewCommand("github", miscModule.github))
+	dispatcher.AddHandler(helpers.NewBotCommand("zombies", miscModule.zombies))
+	dispatcher.AddHandler(helpers.NewBotCommand("github", miscModule.github))
 	helpers.AddCmdToDisableable("github")
-	dispatcher.AddHandler(handlers.NewCommand("wiki", miscModule.wiki))
+	dispatcher.AddHandler(helpers.NewBotCommand("wiki", miscModule.wiki))
 	helpers.AddCmdToDisableable("wiki")
-	dispatcher.AddHandler(handlers.NewCommand("ud", miscModule.urbanDict))
+	dispatcher.AddHandler(helpers.NewBotCommand("ud", miscModule.urbanDict))
 	helpers.AddCmdToDisableable("ud")
-	dispatcher.AddHandler(handlers.NewCommand("runs", miscModule.runs))
+	dispatcher.AddHandler(helpers.NewBotCommand("runs", miscModule.runs))
 	helpers.AddCmdToDisableable("runs")
 }

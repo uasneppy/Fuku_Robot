@@ -1,6 +1,7 @@
 package modules
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"slices"
@@ -26,6 +27,64 @@ import (
 var reportsModule = moduleStruct{
 	moduleName:   "Reports",
 	handlerGroup: 8,
+}
+
+// reportsWrites holds the report repository write the apply function calls. It is a variable
+// only so a test can make the write fail.
+var reportsWrites = struct {
+	ChatStatus func(chatID int64, on bool) error
+}{
+	ChatStatus: reports.SetChatReportStatus,
+}
+
+// reportsApplyOutcome is the result of applyReportsEnabled. The zero value is a stored write.
+type reportsApplyOutcome int
+
+const (
+	reportsApplied reportsApplyOutcome = iota
+	reportsSaveFailed
+)
+
+// reportsApplyResult is what applyReportsEnabled returns: the outcome, the locale key the
+// command replies with, the stored status read back (the requested value when the read-back
+// failed, because the write succeeded) and the repository error.
+type reportsApplyResult struct {
+	Outcome reportsApplyOutcome
+	Key     string
+	Status  bool
+	Err     error
+}
+
+// applyReportsEnabled stores whether members of a group may report messages. It writes enabled
+// and status together (the /report path reads status), the table is uncached so there is no key to
+// drop, and the value is absolute, so a repeated call stores the same row. It is the one write
+// path of the group branch of /reports on|off and the menu; the private-chat branch writes the
+// user's own preference and stays in the command.
+func applyReportsEnabled(ctx context.Context, chatID int64, on bool) reportsApplyResult {
+	if err := reportsWrites.ChatStatus(chatID, on); err != nil {
+		// reports.SetChatReportStatus has already logged the failure.
+		return reportsApplyResult{Outcome: reportsSaveFailed, Key: "common_settings_save_failed", Err: err}
+	}
+	key := "reports_turned_off_group"
+	if on {
+		key = "reports_turned_on_group"
+	}
+	readCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), greetingApplyTimeout)
+	defer cancel()
+	status, err := reports.LoadChatStatusContext(readCtx, chatID)
+	if err != nil {
+		log.Warnf("[Reports] read back status of chat %d: %v", chatID, err)
+		status = on
+	}
+	return reportsApplyResult{Outcome: reportsApplied, Key: key, Status: status}
+}
+
+// reportsGroupApplyKey runs applyReportsEnabled for the group branch of /reports under the
+// commands' apply timeout and returns the locale key of its reply.
+func reportsGroupApplyKey(chatID int64, on bool) string {
+	applyCtx, cancel := greetingApplyContext()
+	defer cancel()
+	return applyReportsEnabled(applyCtx, chatID, on).Key
 }
 
 var adminMentionRegex = regexp.MustCompile(`(?i)(^|\s)@admins?(\s|$)`)
@@ -295,12 +354,7 @@ func (moduleStruct) reports(b *gotgbot.Bot, ctx *ext.Context) error {
 					replyText, _ = tr.GetString("reports_turned_on_personal")
 				}
 			} else {
-				err := reports.SetChatReportStatus(chat.Id, true)
-				if err != nil {
-					replyText, _ = tr.GetString("common_settings_save_failed")
-				} else {
-					replyText, _ = tr.GetString("reports_turned_on_group")
-				}
+				replyText, _ = tr.GetString(reportsGroupApplyKey(chat.Id, true))
 			}
 		case "off", "no", "false":
 			tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
@@ -312,12 +366,7 @@ func (moduleStruct) reports(b *gotgbot.Bot, ctx *ext.Context) error {
 					replyText, _ = tr.GetString("reports_turned_off_personal")
 				}
 			} else {
-				err := reports.SetChatReportStatus(chat.Id, false)
-				if err != nil {
-					replyText, _ = tr.GetString("common_settings_save_failed")
-				} else {
-					replyText, _ = tr.GetString("reports_turned_off_group")
-				}
+				replyText, _ = tr.GetString(reportsGroupApplyKey(chat.Id, false))
 			}
 		case "block":
 			tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
@@ -568,9 +617,9 @@ func LoadReports(dispatcher *ext.Dispatcher) {
 		reportsModule.handlerGroup,
 	)
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("report"), reportsModule.markResolvedButtonHandler))
-	dispatcher.AddHandler(handlers.NewCommand("report", reportsModule.report))
+	dispatcher.AddHandler(helpers.NewBotCommand("report", reportsModule.report))
 	helpers.AddCmdToDisableable("report")
-	dispatcher.AddHandler(handlers.NewCommand("reports", reportsModule.reports))
+	dispatcher.AddHandler(helpers.NewBotCommand("reports", reportsModule.reports))
 }
 
 func init() {

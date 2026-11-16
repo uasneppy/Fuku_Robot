@@ -283,12 +283,12 @@ func TestExcludedKeysNeverServedLocally(t *testing.T) {
 }
 
 func TestSkipLocalMatchesFreshnessCriticalKeys(t *testing.T) {
-	for _, prefix := range []string{"captcha_pending", "staff_group", "staff_link_of", "raid_detection"} {
+	for _, prefix := range []string{"captcha_pending", "staff_group", "staff_link_of", "raid_detection", "member_requirements", "delete_rules", "staff_forward_block"} {
 		if !skipLocal(CacheKey(prefix, int64(-1001))) {
 			t.Errorf("%s key not excluded from the local layer", prefix)
 		}
 	}
-	for _, prefix := range []string{"captcha_settings", "staff_groupx", "staff_link_ofx", "raid_detectionx"} {
+	for _, prefix := range []string{"captcha_settings", "staff_groupx", "staff_link_ofx", "raid_detectionx", "member_requirementsx", "delete_rulesx", "staff_forward_blockx"} {
 		if skipLocal(CacheKey(prefix, int64(-1001))) {
 			t.Errorf("%s key excluded, want it cached locally", prefix)
 		}
@@ -302,6 +302,18 @@ func TestSkipLocalRaidDetectionSettingsKey(t *testing.T) {
 	for _, chatID := range []int64{1, -1001234567890} {
 		if !skipLocal(CacheKey("raid_detection", chatID)) {
 			t.Errorf("raid detection settings key of chat %d is served from the local layer", chatID)
+		}
+	}
+}
+
+// TestSkipLocalMemberRequirementsKey pins the exact key the member requirements repository
+// reads and invalidates (cache.CacheKey("member_requirements", chat)): the message watcher
+// reads it on every supergroup message, and a rule switched off must stop punishing on every
+// replica at the next message, not after CACHE_LOCAL_TTL (D-20).
+func TestSkipLocalMemberRequirementsKey(t *testing.T) {
+	for _, chatID := range []int64{1, -1001234567890} {
+		if !skipLocal(CacheKey("member_requirements", chatID)) {
+			t.Errorf("member requirements key of chat %d is served from the local layer", chatID)
 		}
 	}
 }
