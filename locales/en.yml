@@ -78,7 +78,7 @@ bans_ban_is_admin: "Admins are staff. I do not ban staff."
 bans_ban_is_bot_itself: "Request denied. I am not removing myself from the facility."
 bans_ban_normal_ban: "Removal from the facility complete.\nBanned %s."
 bans_ban_tban: "Temporary removal from the facility.\nBanned %s for %s."
-bans_help_msg: "Some residents have to leave the facility. This module handles that.\nBan or kick users from your chat, and unban them later if they behave.\n\n*User Commands:*\n× /kickme: kicks the user who sent the command.\n× /banme: bans the user who sent the command.\n\n*Ban Commands* (Admin only):\n× /ban <userhandle>: bans a user. (via handle, or reply)\n× /sban <userhandle>: bans a user silently: no message to the group, and your command is deleted. (via handle, or reply)\n× /skick <userhandle>: kicks a user silently and deletes your command.\n× /dban <userhandle>: bans a user and deletes the replied message. (via handle, or reply)\n× /tban <userhandle> x(m/h/d): bans a user for `x` time. (via handle, or reply). m = minutes, h = hours, d = days.\n× /unban <userhandle>: unbans a user. (via handle, or reply)\n× /unbanall: owner-only confirmation to unban known users.\n\n*Restrict Commands:* (Admin only)\n× /restrict: Shows an InlineKeyboard to choose from kick, ban and mute\n× /unrestrict: Shows an InlineKeyboard to choose from unmute and unban."
+bans_help_msg: "Some residents have to leave the facility. This module handles that.\nBan or kick users from your chat, and unban them later if they behave.\n\n*User Commands:*\n× /kickme: kicks the user who sent the command.\n× /banme: bans the user who sent the command.\n\n*Ban Commands* (Admin only):\n× /ban <userhandle>: bans a user. (via handle, or reply)\n× /sban <userhandle>: bans a user silently: no message to the group, and your command is deleted. (via handle, or reply)\n× /skick <userhandle>: kicks a user silently and deletes your command.\n× /dban <userhandle>: bans a user and deletes the replied message. (via handle, or reply)\n× /tban <userhandle> x(m/h/d): bans a user for `x` time. (via handle, or reply). m = minutes, h = hours, d = days.\n× /unban <userhandle>: unbans a user. (via handle, or reply)\n× /unbanall: unbans every known user, after the owner confirms.\n\n*Restrict Commands:* (Admin only)\n× /restrict: Shows buttons to choose from kick, ban and mute.\n× /unrestrict: Shows buttons to choose from unmute and unban."
 bans_kick_cannot_kick_admin: "Admins are staff. I do not kick staff."
 bans_kick_is_bot_itself: "Request denied. I am not kicking myself out of my own facility."
 bans_kick_kicked_reason: "\n<b>Reason:</b> %s"
@@ -211,7 +211,7 @@ captcha_web_close_button: Close
 captcha_web_refuse_not_configured: "Turnstile captcha is not set up for me yet. Ask my operator to finish the web captcha setup. Math and text captcha still work."
 captcha_web_refuse_no_redis: "Turnstile captcha is unavailable right now because my shared storage is down. Try again later, or use math or text captcha."
 captcha_web_refuse_no_rights: "I need to be an admin with the Restrict members right to run the Turnstile captcha. Give me that right and try again."
-captcha_failed_verify: "Verification malfunction. Contact an admin."
+captcha_failed_verify: "Malfunction: could not verify you. Contact an admin."
 captcha_wait_refresh: "Wait a few seconds before requesting a new image."
 captcha_failed_generate: "Malfunction: could not generate a new image. Try again."
 captcha_failed_send: "Malfunction: could not send a new captcha image."
@@ -318,7 +318,7 @@ bans_anonymous_ban_user: "Banned user: %s"
 bans_anonymous_ban_reply_only: You can only ban an anonymous user by replying to their message.
 bans_anonymous_unban_user: "Unbanned user: %s"
 bans_anonymous_unban_reply_only: You can only unban an anonymous user by replying to their message.
-bans_unban_button: Unban (Admin Only)
+bans_unban_button: "Unban (admins only)"
 bans_restrict_question: "Select the restriction for this user."
 bans_restrict_admin_error: "Admins are staff. I do not restrict staff."
 bans_restrict_self_error: "Request denied. I do not restrict myself."
@@ -595,7 +595,7 @@ captcha_timeout_failure_muted: "❌ %s did not complete captcha verification and
 captcha_timeout_with_messages: "❌ %s did not complete captcha verification and has been %s.\n\n📝 %d message(s) were sent before verification and deleted."
 captcha_stored_messages_summary: "📝 %s tried to send %d message(s) (%s) before verification"
 captcha_pending_usage: "Usage: <code>/captchapending @user</code> or <code>/captchapending user_id</code>."
-captcha_no_pending_messages: "No pending messages found for this user."
+captcha_no_pending_messages: "No held messages found for this user."
 captcha_clear_usage: "Usage: <code>/captchaclear @user</code> or <code>/captchaclear user_id</code>."
 captcha_clear_failed: "Malfunction: could not clear the stored messages. Try again."
 captcha_clear_success: "✅ Cleared all stored messages for user %d."
@@ -866,10 +866,10 @@ captcha_status_disabled: "disabled"
 button_yes: "Yes"
 button_no: "No"
 button_back: "Back"
-button_unmute_admin: "Unmute (Admin Only)"
-button_unban_admin: "Unban (Admin Only)"
-button_unmute_admins: "Unmute (Admins Only)"
-button_unban_admins: "Unban (Admins Only)"
+button_unmute_admin: "Unmute (admins only)"
+button_unban_admin: "Unban (admins only)"
+button_unmute_admins: "Unmute (admins only)"
+button_unban_admins: "Unban (admins only)"
 button_connect_to_chat: "Connect to chat"
 button_formatting: "Formatting"
 button_click_me: "Open"
@@ -908,7 +908,7 @@ captcha_mode_turnstile_desc: "Cloudflare Turnstile web check"
 captcha_mode_set_formatted: "✅ Captcha mode set to <b>%s</b> (%s)."
 captcha_welcome_text_detailed: "👋 Welcome, %s.\n\nSelect the text shown in the image to verify you are human:\n\n⏱ You have <b>%d minutes</b> to answer."
 captcha_welcome_math_detailed: "👋 Welcome, %s.\n\nSolve the problem in the image and select the correct answer:\n\n⏱ You have <b>%d minutes</b> to answer."
-captcha_pending_messages_header: "📋 <b>Pending messages from user %d:</b>\n\n"
+captcha_pending_messages_header: "📋 <b>Held messages from user %d:</b>\n\n"
 captcha_pending_message_type: "%d. Type: %s\n"
 captcha_pending_message_caption: "   Caption: %s\n"
 captcha_pending_message_content: "   Content: %s\n"
@@ -934,7 +934,7 @@ bot_updates_convert_instruction: "Once this group is a supergroup, add me again 
 bot_updates_convert_howto: "To convert this group to a supergroup, follow the instructions here:\n"
 
 # Antiflood module strings
-antiflood_button_unban_admins: "Unban (Admins Only)"
+antiflood_button_unban_admins: "Unban (admins only)"
 
 # Helpers module strings
 helpers_notes_current_header: "Notes on file in this chat:\n"
@@ -959,15 +959,7 @@ aispam_status_enabled: "The AI spam filter is <b>on</b> in this chat."
 aispam_status_disabled: "The AI spam filter is <b>off</b> in this chat. Turn it on with <code>/aispam on</code>."
 aispam_status_key_missing: "⚠️ Unavailable: my operator has not configured an API key, so no message is being checked."
 aispam_status_globally_disabled: "⚠️ Unavailable: my operator has switched the AI spam filter off globally, so no message is being checked."
-aispam_data_notice: |
-  <b>What is sent for each checked message:</b>
-  • The chat's title, description, rules and language
-  • The sender's profile: days since the bot first saw them, messages in the last hour, warn count
-  • The message text or caption, the domains it links to, and whether it is a forward or a reply
-  • The sender's few most recent messages in this chat
-
-
-  No names, usernames, user IDs, phone numbers or messages from other chats are sent.
+aispam_data_notice: "<b>What is sent for each checked message:</b>\n• The chat's title, description, rules and language\n• The sender's profile: days since I first saw them, messages in the last hour, warn count\n• The message text or caption, the domains it links to, and whether it is a forward or a reply\n• The sender's few most recent messages in this chat\n\n\nNo names, usernames, user IDs, phone numbers or messages from other chats are sent.\n"
 aispam_enabled_success: "✅ The AI spam filter is now <b>on</b>. Messages the model is confident are spam will be deleted."
 aispam_disabled_success: "❌ The AI spam filter is now <b>off</b>."
 aispam_no_key: "❌ I cannot turn the AI spam filter on: my operator has not configured an API key. Nothing has changed."
