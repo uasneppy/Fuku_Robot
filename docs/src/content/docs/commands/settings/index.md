@@ -5,14 +5,14 @@ description: Complete guide to Settings module commands and features
 
 # 📦 Settings Commands
 
-Manage this group from one button menu.
+One control panel for the whole facility.
 
 **Admin commands**:
 - `/settings`: Open the settings menu. In the group it opens here or in private; in a private chat with me it lists the groups you can manage.
 
-The menu covers the Staff Group link, lockdown (state, lift and the automatic triggers), captcha, antiflood, member requirements, and the welcome, goodbye and rules messages: set one by sending it to me in private. Every change made in it is the same as the matching command: /linkstaff, /unlinkstaff, /unlockdown, /autolockdown, /captcha, /captchamode, /captchatime, /captchaaction, /setflood, /setfloodmode, /delflood, /setwelcome, /setgoodbye and /setrules. Member requirements have no command: the menu is the only way to set them.
+Pages: Staff Group, blocked sources, lockdown, captcha, antiflood, warnings, locks, blacklist, filters, welcome, goodbye, rules, notes, member requirements, deletion, switches, language, log channel, anonymous admins and access. Lists and messages are set by sending them to me in private. A change in the menu is the same as its command: /linkstaff, /unlinkstaff, /unlockdown, /autolockdown, /captcha, /captchamode, /captchatime, /captchaaction, /setflood, /setfloodmode, /delflood, /setwelcome, /setgoodbye, /setrules and the rest. Member requirements have no command: the menu is the only way to set them.
 
-Only the group's owner can open the menu, unless the owner lets admins in. The setting commands themselves work for admins as before. A menu opened in the group answers only to the person who opened it. Every press checks that you are still allowed in, and each change needs at least the right its command needs.
+Only the owner can open the menu, unless the owner lets admins in. The commands still work for admins. A menu opened in the group answers only to whoever opened it. Every press checks that you are still allowed in and have the right its command needs.
 
 
 ## Module Aliases

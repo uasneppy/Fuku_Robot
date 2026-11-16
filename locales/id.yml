@@ -189,31 +189,7 @@ blacklists_blacklist_already_blacklisted: "Kata-kata ini sudah ada di daftar hit
 blacklists_blacklist_give_bl_word: Berikan saya kata untuk ditambahkan ke daftar hitam!
 blacklists_blacklist_word_too_long: "Kata-kata ini terlalu panjang (maks 100 karakter): %s"
 blacklists_blacklist_word_too_broad: "Kata-kata ini terlalu umum (satu huruf, angka, atau tanda baca saja akan cocok dengan hampir semua pesan): %s"
-blacklists_help_msg: "*Perintah Pengguna:*
-
-  × /blacklists: Periksa semua daftar hitam di obrolan.
-
-
-  *Perintah Admin:*
-
-  × /addblacklist `<trigger>`: Menambahkan kata ke daftar hitam di obrolan saat ini.
-
-  × /rmblacklist `<trigger>`: Menghapus kata dari Kata-kata yang Didaftar Hitam di Obrolan saat ini.
-
-  × /blaction `<mute/kick/ban/warn/none>`: Mengatur tindakan yang akan dilakukan oleh bot
-  ketika kata daftar hitam terdeteksi.
-
-  × /blacklistaction: Sama seperti di atas
-
-
-  *Khusus Pemilik:*
-
-  × /remallbl: Menghapus semua kata yang didaftar hitam dari obrolan
-
-
-  *Catatan:*
-
-  Mode default untuk Daftar Hitam adalah *warn*, yang menghapus pesan dan memperingatkan pengguna."
+blacklists_help_msg: "*Perintah Pengguna:*\n× /blacklists: Lihat kata-kata daftar hitam di obrolan ini.\n\n*Perintah Admin:*\n× /addblacklist `<trigger>`: Menambahkan kata ke daftar hitam di obrolan saat ini.\n× /rmblacklist `<trigger>`: Menghapus kata dari Kata-kata yang Didaftar Hitam di Obrolan saat ini.\n× /blaction `<mute/kick/ban/warn/none>`: Mengatur tindakan yang akan dilakukan oleh bot ketika kata daftar hitam terdeteksi.\n× /blacklistaction: Sama seperti di atas\n\n*Khusus Pemilik:*\n× /remallbl: Menghapus semua kata yang didaftar hitam dari obrolan\n\n*Catatan:*\nMode default untuk Daftar Hitam adalah *warn*, yang menghapus pesan dan memperingatkan pengguna."
 blacklists_ls_bl_list_bl: "Kata-kata ini didaftar hitam di obrolan ini:"
 blacklists_ls_bl_no_blacklisted: Tidak ada kata yang didaftar hitam di obrolan ini.
 blacklists_rm_all_bl_ask: |
@@ -572,28 +548,7 @@ help_configuration_step-1: "Selamat datang di Konfigurasi Xenobot-72
 
   Hal pertama yang harus dilakukan adalah menambahkan Xenobot-72 ✨ ke grup Anda! Untuk melakukan itu, tekan
   tombol di bawah dan pilih grup Anda, lalu tekan Selesai untuk melanjutkan tutorial."
-help_configuration_step-2: "Ok, bagus!
-
-
-  Sekarang untuk membiarkan saya bekerja dengan benar, Anda perlu menjadikan saya Admin dari Grup Anda!
-
-  Untuk melakukan itu, ikuti langkah-langkah mudah ini:
-
-  ▫️ Pergi ke grup Anda
-
-  ▫️ Tekan Nama Grup
-
-  ▫️ Tekan Modifikasi
-
-  ▫️ Tekan pada Administrator
-
-  ▫️ Tekan Tambah Administrator
-
-  ▫️ Tekan Kaca Pembesar
-
-  ▫️ Cari @%s
-
-  ▫️ Konfirmasi"
+help_configuration_step-2: "Ok, bagus!\n\nSekarang untuk membiarkan saya bekerja dengan benar, Anda perlu menjadikan saya Admin dari Grup Anda!\nUntuk melakukan itu, ikuti langkah-langkah mudah ini:\n▫️ Pergi ke grup Anda\n▫️ Tekan Nama Grup\n▫️ Tekan Edit\n▫️ Tekan pada Administrator\n▫️ Tekan Tambah Administrator\n▫️ Tekan Kaca Pembesar\n▫️ Cari @%s\n▫️ Konfirmasi"
 help_configuration_step-3: "Sangat bagus!\n\nSekarang Bot siap digunakan!\nSemua perintah dapat digunakan dengan / atau !"
 help_donatetext: "Bot ini tidak punya halaman donasi.\nTidak ada tujuan untuk berdonasi."
 help_help_msg: "Titik masuk utama dan sistem navigasi untuk Xenobot-72.\n*Perintah Navigasi:*\n× /start: Tampilkan pesan selamat datang dengan menu navigasi.\n× /help: Tampilkan menu bantuan dengan daftar modul; gunakan /help <modul> untuk detail.\n× /about: Tampilkan informasi bot dan versi.\n× /donate: Tampilkan apakah bot ini menerima donasi."
@@ -653,32 +608,7 @@ mutes_help_msg: |
   m = menit, h = jam, d = hari.
 
   × /unmute <userhandle>: membuka bisu pengguna. (melalui handle, atau balasan)"
-notes_help_msg: 'Simpan data untuk pengguna masa depan dengan catatan!
-
-  Catatan bagus untuk menyimpan potongan informasi acak; nomor telepon, gif bagus,
-  gambar lucu - apa saja!
-
-  *Perintah Pengguna:*
-
-  - /get <namacatatan>: Dapatkan catatan.
-
-  - #namacatatan: Sama seperti /get.
-
-  Perintah Admin:
-
-  - /save <namacatatan> <teks catatan>: Simpan catatan baru bernama "kata". Membalas pesan
-  akan menyimpan pesan itu. Bahkan berfungsi pada media!
-
-  - /clear <namacatatan>: Hapus catatan terkait.
-
-  - /notes: Daftar semua catatan di obrolan saat ini.
-
-  - /saved: Sama seperti /notes.
-
-  - /clearall: Hapus SEMUA catatan di obrolan. Ini tidak dapat dibatalkan.
-
-  - /privatenotes: Apakah akan mengirim catatan di PM atau tidak. Akan mengirim pesan dengan
-  tombol yang dapat diklik pengguna untuk mendapatkan catatan di PM.'
+notes_help_msg: "Simpan data untuk pengguna masa depan dengan catatan!\nCatatan bagus untuk menyimpan potongan informasi acak; nomor telepon, gif bagus, gambar lucu - apa saja!\n*Perintah Pengguna:*\n- /get <namacatatan>: Dapatkan catatan.\n- #namacatatan: Sama seperti /get.\nPerintah Admin:\n- /save <namacatatan> <teks catatan>: Simpan catatan baru dengan nama itu. Membalas pesan akan menyimpan pesan itu. Bahkan berfungsi pada media!\n- /clear <namacatatan>: Hapus catatan terkait.\n- /notes: Daftar semua catatan di obrolan saat ini.\n- /saved: Sama seperti /notes.\n- /clearall: Hapus SEMUA catatan di obrolan. Ini tidak dapat dibatalkan.\n- /privatenotes: Apakah akan mengirim catatan di PM atau tidak. Akan mengirim pesan dengan tombol yang dapat diklik pengguna untuk mendapatkan catatan di PM."
 pins_help_msg: |
   "Semua perintah terkait pin dapat ditemukan di sini; jaga obrolan Anda tetap
   up to date dengan pesan pin sederhana!
@@ -1022,7 +952,7 @@ bans_restrict_kicked: "Admin %s menendang %s dari obrolan ini!"
 bans_restrict_muted: "Admin %s membisukan %s di obrolan!"
 bans_restrict_banned: "Admin %s memblokir %s dari obrolan ini!"
 bans_unrestrict_question: Bagaimana saya bisa membuka pembatasan pengguna ini?
-bans_unrestrict_admin_error: Mengapa saya menendang admin? Itu terdengar seperti ide yang sangat bodoh.
+bans_unrestrict_admin_error: "Saya tidak membatasi admin, jadi tidak ada yang perlu dicabut."
 bans_unrestrict_self_error: Tidak, Anda
 bans_unrestrict_unmuted: "Dibuka bisunya oleh %s!"
 bans_unrestrict_unbanned: "Dibuka blokirnya oleh %s !"
@@ -1137,7 +1067,7 @@ rules_for_chat_header: "Aturan untuk <b>%s</b> adalah:"
 rules_no_rules_set: Obrolan ini sepertinya belum memiliki aturan yang diatur... Saya tidak akan menganggap itu sebagai undangan.
 rules_click_for_rules: Klik tombol untuk melihat aturan obrolan!
 rules_set_successfully: Berhasil mengatur aturan untuk grup ini!
-rules_button_too_long: Nama tombol khusus yang Anda masukkan terlalu panjang. Silakan masukkan teks dengan kurang dari 30 karakter.
+rules_button_too_long: "Nama tombol khusus yang Anda masukkan terlalu panjang. Silakan masukkan teks dengan paling banyak 30 karakter."
 rules_button_set_successfully: "Berhasil mengatur tombol aturan menjadi: <b>%s</b>"
 rules_button_not_set: 'Anda belum mengatur tombol aturan khusus. Teks default "%s" akan digunakan.'
 rules_button_current: "Tombol aturan saat ini diatur ke teks berikut:\n%s"
@@ -1156,7 +1086,7 @@ disabling_delete_current_enabled: Penghapusan Perintah yang Dinonaktifkan *diakt
 disabling_delete_current_disabled: Penghapusan Perintah yang Dinonaktifkan *dinonaktifkan*, perintah yang dinonaktifkan dari pengguna *tidak* akan dihapus!
 disabling_enabled_successfully: "Mengaktifkan kembali penggunaan berikut di obrolan ini:%s"
 disabling_unknown_reenable: "Perintah tidak dikenal untuk Diaktifkan Kembali:\n-%s\nPeriksa /disableable!"
-disabling_no_command_reenable: Anda belum menentukan perintah untuk dinonaktifkan.
+disabling_no_command_reenable: "Anda belum menentukan perintah untuk diaktifkan kembali."
 disabling_invalid_option: "Saya hanya mengerti opsi dari: `yes`/`no`/`on`/`off`"
 
 # Misc module strings
@@ -1257,10 +1187,10 @@ greetings_clean_goodbye_status_not: "Saya saat ini tidak menghapus pesan selamat
 greetings_clean_goodbye_disabled: "Saya tidak akan menghapus pesan selamat tinggal lama!"
 greetings_clean_goodbye_enabled: "Saya akan mencoba menghapus pesan selamat tinggal lama!"
 greetings_clean_goodbye_invalid_option: "Saya hanya mengerti 'on/yes' atau 'off/no'!"
-greetings_clean_service_enabled: "Saya seharusnya menghapus pesan 'pengguna bergabung' sekarang."
-greetings_clean_service_disabled: "Saya saat ini tidak menghapus pesan bergabung."
-greetings_clean_service_disable: "Saya tidak akan menghapus pesan bergabung."
-greetings_clean_service_enable: "Saya akan mencoba menghapus pesan bergabung!"
+greetings_clean_service_enabled: "Saya sekarang menghapus pesan layanan bergabung dan keluar."
+greetings_clean_service_disabled: "Saya saat ini tidak menghapus pesan bergabung dan keluar."
+greetings_clean_service_disable: "Saya tidak akan menghapus pesan bergabung dan keluar."
+greetings_clean_service_enable: "Saya akan mencoba menghapus pesan bergabung dan keluar!"
 greetings_clean_service_invalid_option: "Saya hanya mengerti 'on/yes' atau 'off/no'!"
 greetings_captcha_verified_success: "✅ %s telah terverifikasi dan sekarang dapat mengobrol!"
 greetings_join_request_new: "Pengguna baru telah meminta untuk bergabung dengan obrolan!"
@@ -1351,9 +1281,7 @@ notes_admin_only_access: "Catatan ini hanya dapat diakses oleh admin!"
 notes_private_conflict_warning: "\n\n<b>Catatan:</b> Catatan ini akan dikirim ke pengaturan default catatan grup, karena memiliki <code>{private}</code> dan <code>{noprivate}</code>."
 
 # Filters module strings
-filters_limit_exceeded: |
-  Batas filter terlampaui, grup hanya dapat memiliki maksimum 150 filter!
-  Pembatasan ini karena bot berjalan gratis tanpa donasi dari pengguna.
+filters_limit_exceeded: "Batas filter terlampaui, grup hanya dapat memiliki maksimum 150 filter!\nPenyimpanan dibatasi. Hapus satu filter untuk menambah yang baru.\n"
 filters_keyword_required: "Silakan berikan kata kunci untuk dibalas!"
 filters_keyword_too_long: "Kata kunci filter terlalu panjang! Maksimal 100 karakter diizinkan."
 filters_keyword_too_broad: "Kata kunci filter ini terlalu umum: satu huruf, angka, atau tanda baca saja akan cocok dengan hampir semua pesan."
@@ -1484,8 +1412,8 @@ greetings_clean_goodbye_should: "Saya seharusnya menghapus pesan selamat tinggal
 greetings_clean_goodbye_not: "Saya saat ini tidak menghapus pesan selamat tinggal lama!"
 greetings_clean_goodbye_disable: "Saya tidak akan menghapus pesan selamat tinggal lama!"
 greetings_clean_goodbye_enable: "Saya akan mencoba menghapus pesan selamat tinggal lama!"
-greetings_clean_service_should: "Saya seharusnya menghapus pesan 'pengguna bergabung dengan obrolan' sekarang."
-greetings_clean_service_not: "Saya saat ini tidak menghapus pesan bergabung."
+greetings_clean_service_should: "Saya sekarang menghapus pesan layanan bergabung dan keluar."
+greetings_clean_service_not: "Saya saat ini tidak menghapus pesan bergabung dan keluar."
 
 # Helpers utility strings
 helpers_admin_commands: "Perintah admin"
@@ -1527,8 +1455,8 @@ reports_cannot_report_channel: "Anda tidak dapat melaporkan posting kanal."
 reports_cannot_report_self: "Anda tidak dapat melaporkan pesan Anda sendiri!"
 reports_special_account: "Ini adalah akun khusus telegram!"
 reports_admin_report: "Anda adalah admin, kepada siapa saya akan melaporkan masalah Anda?"
-reports_why_report_myself: "Mengapa saya melaporkan diri saya sendiri?"
-reports_why_report_admin: "Mengapa saya melaporkan admin?"
+reports_why_report_myself: "Laporan terhadap saya tidak diterima."
+reports_why_report_admin: "Laporan terhadap admin tidak diterima."
 reports_turned_on_personal: "Melaporkan diaktifkan! Anda akan diberitahu setiap kali seseorang melaporkan sesuatu di grup tempat Anda admin."
 reports_turned_on_group: "Pengguna sekarang akan dapat melaporkan pesan."
 reports_turned_off_personal: "Pelaporan dimatikan! Anda tidak akan lagi diberitahu setiap kali seseorang melaporkan sesuatu di grup tempat Anda admin."
@@ -1892,24 +1820,7 @@ purges_notes_docs: |
   • Bot menangani pesan yang sudah dihapus dengan anggun tanpa kesalahan
 
 # Extended documentation locale keys - Reports module
-reports_extended_docs: |
-  <b>Cara Kerja:</b>
-
-  <b>Melaporkan Pesan:</b>
-  1. <b>Balas ke pesan yang melanggar</b> dengan <code>/report</code> atau sebutkan <code>@admin</code>
-  2. Bot mengirim notifikasi menyebut semua admin yang mengaktifkan laporan
-  3. Notifikasi menyertakan tombol tindakan untuk moderasi cepat
-
-  <b>Tombol Tindakan Admin:</b>
-  • <b>📩 Pesan</b> - Tautan ke pesan yang dilaporkan
-  • <b>👢 Tendang</b> - Tendang pengguna yang dilaporkan (mereka dapat bergabung kembali)
-  • <b>🚫 Blokir</b> - Blokir pengguna yang dilaporkan secara permanen
-  • <b>🗑 Hapus</b> - Hapus pesan yang dilaporkan
-  • <b>✅ Selesai</b> - Tandai laporan sebagai selesai tanpa tindakan
-
-  <b>Pengaturan Pribadi vs Grup:</b>
-  • <b>Di PM:</b> <code>/reports on/off</code> mengalihkan apakah ANDA menerima notifikasi laporan
-  • <b>Di Grup:</b> <code>/reports on/off</code> mengalihkan apakah pelaporan diaktifkan untuk grup itu
+reports_extended_docs: "<b>Cara Kerja:</b>\n\n<b>Melaporkan Pesan:</b>\n1. <b>Balas ke pesan yang melanggar</b> dengan <code>/report</code> atau sebutkan <code>@admin</code>\n2. Bot mengirim notifikasi menyebut semua admin yang mengaktifkan laporan\n3. Notifikasi menyertakan tombol tindakan untuk moderasi cepat\n\n<b>Tombol Tindakan Admin:</b>\n• <b>➡ Pesan</b> - Tautan ke pesan yang dilaporkan\n• <b>⚠ Keluarkan</b> - Tendang pengguna yang dilaporkan (mereka dapat bergabung kembali)\n• <b>⛔️ Blokir</b> - Blokir pengguna yang dilaporkan secara permanen\n• <b>❎ Hapus Pesan</b> - Hapus pesan yang dilaporkan\n• <b>✔️ Tandai Selesai</b> - Tandai laporan sebagai selesai tanpa tindakan\n\n<b>Pengaturan Pribadi vs Grup:</b>\n• <b>Di PM:</b> <code>/reports on/off</code> mengalihkan apakah ANDA menerima notifikasi laporan\n• <b>Di Grup:</b> <code>/reports on/off</code> mengalihkan apakah pelaporan diaktifkan untuk grup itu\n"
 
 reports_permissions_docs: |
   <b>Siapa yang Dapat Melaporkan?</b>
@@ -2051,24 +1962,7 @@ filters_limits_docs: |
   • <code>/filters</code>: Tersedia untuk semua pengguna
 
 # Extended documentation locale keys - Captcha module
-captcha_extended_docs: |
-  <b>Cara Kerja:</b>
-  1. Ketika captcha diaktifkan, anggota baru secara otomatis dibisukan saat bergabung
-  2. Tantangan captcha dikirim ke anggota baru
-  3. Pengguna harus memilih jawaban yang benar dari opsi yang disediakan
-  4. Jika berhasil, pengguna dibuka bisunya dan dapat berpartisipasi di grup
-  5. Jika mereka gagal atau batas waktu habis, tindakan yang dikonfigurasi diambil (tendang, blokir, atau bisu)
-
-  <b>Tipe Captcha:</b>
-  • <b>Matematika</b>: Selesaikan masalah aritmatika sederhana (penjumlahan, pengurangan, perkalian)
-  • <b>Teks</b>: Identifikasi teks yang ditampilkan dalam gambar yang terdistorsi
-
-  <b>Fitur Pesan Tertunda:</b>
-  Ketika pengguna menyelesaikan captcha, pesan apa pun yang mereka coba kirim disimpan dan dihapus. Admin dapat:
-  • Melihat pesan apa yang dicoba dikirim pengguna menggunakan <code>/captchapending</code>
-  • Menghapus pesan yang disimpan menggunakan <code>/captchaclear</code>
-
-  Ini membantu mengidentifikasi upaya spam potensial sebelum pengguna menyelesaikan verifikasi.
+captcha_extended_docs: "<b>Cara Kerja:</b>\n1. Ketika captcha diaktifkan, anggota baru secara otomatis dibisukan saat bergabung\n2. Tantangan captcha dikirim ke anggota baru\n3. Pengguna harus memilih jawaban yang benar dari opsi yang disediakan atau lolos pemeriksaan web\n4. Jika berhasil, pengguna dibuka bisunya dan dapat berpartisipasi di grup\n5. Jika mereka gagal atau batas waktu habis, tindakan yang dikonfigurasi diambil (tendang, blokir, atau bisu)\n\n<b>Tipe Captcha:</b>\n• <b>Matematika</b>: Selesaikan masalah aritmatika sederhana (penjumlahan, pengurangan, perkalian)\n• <b>Teks</b>: Identifikasi teks yang ditampilkan dalam gambar yang terdistorsi\n• <b>Turnstile</b>: Lolos pemeriksaan Cloudflare di halaman web\n\n<b>Fitur Pesan Tertunda:</b>\nKetika pengguna menyelesaikan captcha, pesan apa pun yang mereka coba kirim disimpan dan dihapus. Admin dapat:\n• Melihat pesan apa yang dicoba dikirim pengguna menggunakan <code>/captchapending</code>\n• Menghapus pesan yang disimpan menggunakan <code>/captchaclear</code>\n\nIni membantu mengidentifikasi upaya spam potensial sebelum pengguna menyelesaikan verifikasi.\n"
 
 captcha_permissions_docs: |
   <b>Persyaratan Bot:</b>
@@ -3118,8 +3012,8 @@ settings_edit_media_voice: "Suara"
 settings_edit_media_video_note: "Pesan video"
 settings_edit_media_animation: "GIF"
 settings_edit_note_no_caption: "Jenis media ini dikirim tanpa teks, jadi teksnya tidak ditampilkan."
-settings_edit_hint_greeting: "Atur mengambil pesan pribadi saya berikutnya sebagai bagian itu. Pratinjau menampilkan satu bagian. Pratinjau penuh menampilkan seluruh pesan seperti yang dilihat anggota."
-settings_edit_hint_rules: "Atur mengambil pesan pribadi saya berikutnya sebagai bagian itu. Pratinjau menampilkan satu bagian. Pratinjau penuh menampilkan apa yang dikirim <code>/rules</code>."
+settings_edit_hint_greeting: "Atur mengambil pesan Anda berikutnya di obrolan pribadi saya sebagai bagian itu. Pratinjau menampilkan satu bagian. Pratinjau penuh menampilkan seluruh pesan seperti yang dilihat anggota."
+settings_edit_hint_rules: "Atur mengambil pesan Anda berikutnya di obrolan pribadi saya sebagai bagian itu. Pratinjau menampilkan satu bagian. Pratinjau penuh menampilkan apa yang dikirim <code>/rules</code>."
 settings_edit_hint_once: "Sambut sekali: saat aktif, saya menyambut setiap anggota hanya pada saat pertama kali bergabung. Anggota yang bergabung sebelum ini diaktifkan akan disambut satu kali lagi."
 settings_edit_hint_below_file: "Media di bawah teks berfungsi untuk foto, video, atau GIF. Jika file ini adalah GIF yang disimpan sebelumnya, atur ulang agar bisa dipakai."
 settings_edit_clean_hint_welcome: "Hapus sambutan terakhir: saya menghapus sambutan sebelumnya saat mengirim yang baru (hanya pesan yang berusia maksimal dua hari)."
@@ -3409,12 +3303,4 @@ settings_lock_media: "Semua media"
 settings_lock_other: "Gim/stiker/GIF"
 settings_lock_previews: "Pratinjau tautan"
 settings_lock_all: "Semuanya"
-settings_help_msg: |
-  Kelola grup ini dari satu menu tombol.
-
-  <b>Perintah admin</b>:
-  × /settings: Buka menu pengaturan. Di grup, menu terbuka di sini atau secara pribadi; di chat pribadi dengan saya, menu menampilkan grup yang bisa Anda kelola.
-
-  Menu ini mencakup tautan Grup Staf, lockdown (status, pencabutan, dan pemicu otomatis), captcha, antiflood, persyaratan anggota, serta pesan sambutan, perpisahan, dan aturan: atur salah satunya dengan mengirimkannya kepada saya secara pribadi. Setiap perubahan di dalamnya sama dengan perintah yang sesuai: /linkstaff, /unlinkstaff, /unlockdown, /autolockdown, /captcha, /captchamode, /captchatime, /captchaaction, /setflood, /setfloodmode, /delflood, /setwelcome, /setgoodbye, dan /setrules. Persyaratan anggota tidak punya perintah: menu adalah satu-satunya cara untuk mengaturnya.
-
-  Hanya pemilik grup yang bisa membuka menu, kecuali pemilik mengizinkan admin. Perintah pengaturan sendiri tetap berfungsi untuk admin seperti sebelumnya. Menu yang dibuka di grup hanya menjawab orang yang membukanya. Setiap penekanan memeriksa bahwa Anda masih diizinkan, dan setiap perubahan butuh minimal hak yang dibutuhkan perintahnya.
+settings_help_msg: "Kelola grup ini dari satu menu tombol.\n\n<b>Perintah admin</b>:\n× /settings: Buka menu pengaturan. Di grup, menu terbuka di sini atau secara pribadi; di chat pribadi dengan saya, menu menampilkan grup yang bisa Anda kelola.\n\nMenu ini punya halaman: Grup Staf, sumber diblokir, lockdown, captcha, antiflood, peringatan, kunci, daftar hitam, filter, sambutan, perpisahan, aturan, catatan, persyaratan anggota, penghapusan, sakelar, bahasa, kanal log, admin anonim, dan akses. Daftar dan pesan diatur dengan mengirimkannya kepada saya secara pribadi. Setiap perubahan di dalamnya sama dengan perintah yang sesuai: /linkstaff, /unlinkstaff, /unlockdown, /autolockdown, /captcha, /captchamode, /captchatime, /captchaaction, /setflood, /setfloodmode, /delflood, /setwelcome, /setgoodbye, dan /setrules. Persyaratan anggota tidak punya perintah: menu adalah satu-satunya cara untuk mengaturnya.\n\nHanya pemilik grup yang bisa membuka menu, kecuali pemilik mengizinkan admin. Perintah pengaturan sendiri tetap berfungsi untuk admin seperti sebelumnya. Menu yang dibuka di grup hanya menjawab orang yang membukanya. Setiap penekanan memeriksa bahwa Anda masih diizinkan, dan setiap perubahan butuh minimal hak yang dibutuhkan perintahnya.\n"
