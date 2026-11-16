@@ -182,31 +182,7 @@ blacklists_blacklist_already_blacklisted: "Estas palavras já estão na lista ne
 blacklists_blacklist_give_bl_word: Por favor, me dê uma palavra para adicionar à lista negra!
 blacklists_blacklist_word_too_long: "Estas palavras são muito longas (máx 100 caracteres): %s"
 blacklists_blacklist_word_too_broad: "Estas palavras são amplas demais (uma única letra, dígito ou sinal de pontuação corresponderia a quase todas as mensagens): %s"
-blacklists_help_msg: "*Comandos de Usuário:*
-
-  × /blacklists: Verifique todas as listas negras no chat.
-
-
-  *Comandos de Admin:*
-
-  × /addblacklist `<trigger>`: Adiciona a palavra na lista negra do chat atual.
-
-  × /rmblacklist `<trigger>`: Remove a palavra da Lista de Palavras Proibidas no Chat.
-
-  × /blaction `<mute/kick/ban/warn/none>`: Define a ação a ser executada pelo bot
-  quando uma palavra da lista negra for detectada.
-
-  × /blacklistaction: O mesmo que acima
-
-
-  *Apenas Dono:*
-
-  × /remallbl: Remove todas as palavras da lista negra do chat
-
-
-  *Nota:*
-
-  O modo padrão para Lista Negra é *warn*, que apaga a mensagem e adverte o usuário."
+blacklists_help_msg: "*Comandos de Usuário:*\n× /blacklists: Ver as palavras da lista negra deste chat.\n\n*Comandos de Admin:*\n× /addblacklist `<trigger>`: Adiciona a palavra na lista negra do chat atual.\n× /rmblacklist `<trigger>`: Remove a palavra da Lista de Palavras Proibidas no Chat.\n× /blaction `<mute/kick/ban/warn/none>`: Define a ação a ser executada pelo bot quando uma palavra da lista negra for detectada.\n× /blacklistaction: O mesmo que acima\n\n*Apenas Dono:*\n× /remallbl: Remove todas as palavras da lista negra do chat\n\n*Nota:*\nO modo padrão para Lista Negra é *warn*, que apaga a mensagem e adverte o usuário."
 blacklists_ls_bl_list_bl: "Estas palavras estão na lista negra neste chat:"
 blacklists_ls_bl_no_blacklisted: Não há palavras na lista negra neste chat.
 blacklists_rm_all_bl_ask:
@@ -563,28 +539,7 @@ help_configuration_step-1: "Bem-vindo à Configuração do Xenobot-72
 
   A primeira coisa a fazer é adicionar Xenobot-72 ✨ ao seu grupo! Para fazer isso, pressione o
   botão abaixo e selecione seu grupo, depois pressione Concluído para continuar o tutorial."
-help_configuration_step-2: "Ok, muito bem!
-
-
-  Agora para me deixar funcionar corretamente, você precisa me tornar Administrador do seu Grupo!
-
-  Para fazer isso, siga estes passos fáceis:
-
-  ▫️ Vá para seu grupo
-
-  ▫️ Pressione o Nome do Grupo
-
-  ▫️ Pressione Modificar
-
-  ▫️ Pressione em Administrador
-
-  ▫️ Pressione Adicionar Administrador
-
-  ▫️ Pressione a Lupa
-
-  ▫️ Pesquise @%s
-
-  ▫️ Confirmar"
+help_configuration_step-2: "Ok, muito bem!\n\nAgora para me deixar funcionar corretamente, você precisa me tornar Administrador do seu Grupo!\nPara fazer isso, siga estes passos fáceis:\n▫️ Vá para seu grupo\n▫️ Pressione o Nome do Grupo\n▫️ Pressione Editar\n▫️ Pressione em Administrador\n▫️ Pressione Adicionar Administrador\n▫️ Pressione a Lupa\n▫️ Pesquise @%s\n▫️ Confirmar"
 help_configuration_step-3: "Excelente!\n\nAgora o Bot está pronto para usar!\nTodos os comandos podem ser usados com / ou !"
 help_donatetext: "Este bot não tem página de doações.\nNão há onde doar."
 help_help_msg: "O ponto de entrada principal e sistema de navegação do Xenobot-72.\n*Comandos de Navegação:*\n× /start: Mostrar a mensagem de boas-vindas com menu de navegação.\n× /help: Mostrar menu de ajuda com lista de módulos; use /help <módulo> para detalhes.\n× /about: Mostrar informações do bot e versão.\n× /donate: Mostrar se este bot aceita doações."
@@ -645,32 +600,7 @@ mutes_help_msg:
   m = minutos, h = horas, d = dias.
 
   × /unmute <userhandle>: desmuta um usuário. (via handle, ou reply)"
-notes_help_msg: 'Guarde dados para usuários futuros com notas!
-
-  Notas são ótimas para salvar pedacinhos de informação; um número de telefone, um gif legal,
-  uma foto engraçada - qualquer coisa!
-
-  *Comandos de Usuário:*
-
-  - /get <notename>: Obtém uma nota.
-
-  - #notename: Mesmo que /get.
-
-  Comandos de Admin:
-
-  - /save <notename> <texto da nota>: Salva uma nova nota chamada "word". Respondendo a uma mensagem
-  vai salvar aquela mensagem. Funciona até em mídia!
-
-  - /clear <notename>: Deleta a nota associada.
-
-  - /notes: Lista todas as notas no chat atual.
-
-  - /saved: Mesmo que /notes.
-
-  - /clearall: Deleta TODAS as notas em um chat. Isso não pode ser desfeito.
-
-  - /privatenotes: Enviar ou não notas no PM. Enviará uma mensagem com um
-  botão que usuários podem clicar para obter a nota no PM.'
+notes_help_msg: "Guarde dados para usuários futuros com notas!\nNotas são ótimas para salvar pedacinhos de informação; um número de telefone, um gif legal, uma foto engraçada - qualquer coisa!\n*Comandos de Usuário:*\n- /get <notename>: Obtém uma nota.\n- #notename: Mesmo que /get.\nComandos de Admin:\n- /save <notename> <texto da nota>: Salva uma nova nota com esse nome. Respondendo a uma mensagem vai salvar aquela mensagem. Funciona até em mídia!\n- /clear <notename>: Deleta a nota associada.\n- /notes: Lista todas as notas no chat atual.\n- /saved: Mesmo que /notes.\n- /clearall: Deleta TODAS as notas em um chat. Isso não pode ser desfeito.\n- /privatenotes: Enviar ou não notas no PM. Enviará uma mensagem com um botão que usuários podem clicar para obter a nota no PM."
 pins_help_msg:
   "Todos os comandos relacionados a fixar mensagens podem ser encontrados aqui; mantenha seu chat atualizado
   com as últimas notícias com uma simples mensagem fixada!
@@ -1012,7 +942,7 @@ bans_restrict_kicked: "Admin %s expulsou %s deste chat!"
 bans_restrict_muted: "Admin %s silenciou %s no chat!"
 bans_restrict_banned: "Admin %s baniu %s deste chat!"
 bans_unrestrict_question: Como posso desrestringir este usuário?
-bans_unrestrict_admin_error: Por que eu expulsaria um admin? Isso parece uma ideia bem idiota.
+bans_unrestrict_admin_error: "Eu não restrinjo admins, então não há nada para remover."
 bans_unrestrict_self_error: Não você
 bans_unrestrict_unmuted: "Desmutado por %s!"
 bans_unrestrict_unbanned: "Desbanido por %s !"
@@ -1127,7 +1057,7 @@ rules_for_chat_header: "As regras para <b>%s</b> são:"
 rules_no_rules_set: Este chat ainda não parece ter regras definidas... Eu não tomaria isso como um convido though.
 rules_click_for_rules: Clique no botão para ver as regras do chat!
 rules_set_successfully: Regras definidas com sucesso para este grupo!
-rules_button_too_long: O nome de botão personalizado que você inseriu é muito longo. Por favor insira um texto com menos de 30 caracteres.
+rules_button_too_long: "O nome de botão personalizado que você inseriu é muito longo. Por favor insira um texto com no máximo 30 caracteres."
 rules_button_set_successfully: "Botão de regras definido com sucesso para: <b>%s</b>"
 rules_button_not_set: "Você ainda não definiu um botão de regras personalizado. O texto padrão '%s' será usado."
 rules_button_current: "O botão de regras está atualmente definido para o seguinte texto:\n%s"
@@ -1146,7 +1076,7 @@ disabling_delete_current_enabled: Exclusão de Comando Desativado está *ativada
 disabling_delete_current_disabled: Exclusão de Comando Desativado está *desativada*, comandos desativados de usuários *não* serão deletados!
 disabling_enabled_successfully: "Re-Ativado o uso do seguinte neste chat:%s"
 disabling_unknown_reenable: "Comando desconhecido para Re-Ativar:\n-%s\nVerifique /disableable!"
-disabling_no_command_reenable: Você não especificou um comando para desativar.
+disabling_no_command_reenable: "Você não especificou um comando para reativar."
 disabling_invalid_option: "Eu só entendo uma opção de: `yes`/`no`/`on`/`off`"
 
 # Misc module strings
@@ -1247,10 +1177,10 @@ greetings_clean_goodbye_status_not: "Atualmente não estou deletando mensagens d
 greetings_clean_goodbye_disabled: "Não vou deletar mensagens de adeus antigas!"
 greetings_clean_goodbye_enabled: "Vou tentar deletar mensagens de adeus antigas!"
 greetings_clean_goodbye_invalid_option: "Eu entendo 'on/yes' ou 'off/no' apenas!"
-greetings_clean_service_enabled: "Eu deveria estar deletando mensagens de 'usuário' entrou no chat agora."
-greetings_clean_service_disabled: "Atualmente não estou deletando mensagens de entrada."
-greetings_clean_service_disable: "Não vou deletar mensagens de entrada."
-greetings_clean_service_enable: "Vou tentar deletar mensagens de entrada!"
+greetings_clean_service_enabled: "Agora estou deletando as mensagens de serviço de entrada e saída."
+greetings_clean_service_disabled: "Atualmente não estou deletando mensagens de entrada e saída."
+greetings_clean_service_disable: "Não vou deletar mensagens de entrada e saída."
+greetings_clean_service_enable: "Vou tentar deletar mensagens de entrada e saída!"
 greetings_clean_service_invalid_option: "Eu entendo 'on/yes' ou 'off/no' apenas!"
 greetings_captcha_verified_success: "✅ %s foi verificado e agora pode conversar!"
 greetings_join_request_new: "Um novo usuário solicitou entrar no chat!"
@@ -1341,9 +1271,7 @@ notes_admin_only_access: "Esta nota só pode ser acessada por um admin!"
 notes_private_conflict_warning: "\n\n<b>Nota:</b> Esta nota será enviada para a configuração padrão de notas de grupo, porque tem ambos <code>{private}</code> e <code>{noprivate}</code>."
 
 # Filters module strings
-filters_limit_exceeded: |
-  Limite de filtros excedido, um grupo só pode ter no máximo 150 filtros!
-  Esta limitação é devido ao bot rodar de graça sem nenhuma doação de usuários.
+filters_limit_exceeded: "Limite de filtros excedido, um grupo só pode ter no máximo 150 filtros!\nO espaço é racionado. Remova um filtro para adicionar um novo.\n"
 filters_keyword_required: "Por favor dê uma palavra-chave para responder!"
 filters_keyword_too_long: "Palavra-chave do filtro é muito longa! Máximo de 100 caracteres permitidos."
 filters_keyword_too_broad: "Esta palavra-chave do filtro é ampla demais: uma única letra, dígito ou sinal de pontuação corresponderia a quase todas as mensagens."
@@ -1472,8 +1400,8 @@ greetings_clean_goodbye_should: "Eu deveria estar deletando mensagens de adeus c
 greetings_clean_goodbye_not: "Atualmente não estou deletando mensagens de adeus antigas!"
 greetings_clean_goodbye_disable: "Não vou deletar mensagens de adeus antigas!"
 greetings_clean_goodbye_enable: "Vou tentar deletar mensagens de adeus antigas!"
-greetings_clean_service_should: "Eu deveria estar deletando mensagens de 'usuário' entrou no chat agora."
-greetings_clean_service_not: "Atualmente não estou deletando mensagens de entrada."
+greetings_clean_service_should: "Agora estou deletando as mensagens de serviço de entrada e saída."
+greetings_clean_service_not: "Atualmente não estou deletando mensagens de entrada e saída."
 
 # Helpers utility strings
 helpers_admin_commands: "Comandos de admin"
@@ -1515,8 +1443,8 @@ reports_cannot_report_channel: "Você não pode reportar um post de canal."
 reports_cannot_report_self: "Você não pode reportar sua própria mensagem!"
 reports_special_account: "É uma conta especial do telegram!"
 reports_admin_report: "Você é admin, para quem vou reportar seus problemas?"
-reports_why_report_myself: "Por que eu me reportaria?"
-reports_why_report_admin: "Por que eu reportaria um admin?"
+reports_why_report_myself: "Reports contra mim não são aceitos."
+reports_why_report_admin: "Reports contra admins não são aceitos."
 reports_turned_on_personal: "Relatórios ativados! Você será notificado sempre que alguém reportar algo em grupos onde é admin."
 reports_turned_on_group: "Usuários agora poderão reportar mensagens."
 reports_turned_off_personal: "Relatórios desativados! Você não será mais notificado quando alguém reportar algo em grupos onde é admin."
@@ -1882,24 +1810,7 @@ purges_notes_docs: |
   • O bot lida com mensagens já deletadas graciosamente sem erros
 
 # Extended documentation locale keys - Reports module
-reports_extended_docs: |
-  <b>Como Funciona:</b>
-
-  <b>Reportando uma Mensagem:</b>
-  1. <b>Responda à mensagem ofensiva</b> com <code>/report</code> ou mencione <code>@admin</code>
-  2. O bot envia uma notificação mencionando todos os admins que têm relatórios ativados
-  3. A notificação inclui botões de ação para moderação rápida
-
-  <b>Botões de Ação de Admin:</b>
-  • <b>📩 Mensagem</b> - Link para a mensagem reportada
-  • <b>👢 Expulsar</b> - Expulsar o usuário reportado (eles podem reentrar)
-  • <b>🚫 Banir</b> - Banir permanentemente o usuário reportado
-  • <b>🗑 Deletar</b> - Deletar a mensagem reportada
-  • <b>✅ Resolvido</b> - Marcar o report como resolvido sem ação
-
-  <b>Configurações Pessoais vs Grupo:</b>
-  • <b>Em PM:</b> <code>/reports on/off</code> alterna se VOCÊ recebe notificações de report
-  • <b>Em Grupo:</b> <code>/reports on/off</code> alterna se relatórios estão ativados para aquele grupo
+reports_extended_docs: "<b>Como Funciona:</b>\n\n<b>Reportando uma Mensagem:</b>\n1. <b>Responda à mensagem ofensiva</b> com <code>/report</code> ou mencione <code>@admin</code>\n2. O bot envia uma notificação mencionando todos os admins que têm relatórios ativados\n3. A notificação inclui botões de ação para moderação rápida\n\n<b>Botões de Ação de Admin:</b>\n• <b>➡ Mensagem</b> - Link para a mensagem reportada\n• <b>⚠ Expulsar</b> - Expulsar o usuário reportado (eles podem reentrar)\n• <b>⛔️ Banir</b> - Banir permanentemente o usuário reportado\n• <b>❎ Deletar Mensagem</b> - Deletar a mensagem reportada\n• <b>✔️ Marcar Resolvido</b> - Marcar o report como resolvido sem ação\n\n<b>Configurações Pessoais vs Grupo:</b>\n• <b>Em PM:</b> <code>/reports on/off</code> alterna se VOCÊ recebe notificações de report\n• <b>Em Grupo:</b> <code>/reports on/off</code> alterna se relatórios estão ativados para aquele grupo\n"
 
 reports_permissions_docs: |
   <b>Quem Pode Reportar?</b>
@@ -2041,24 +1952,7 @@ filters_limits_docs: |
   • <code>/filters</code>: Disponível para todos os usuários
 
 # Extended documentation locale keys - Captcha module
-captcha_extended_docs: |
-  <b>Como Funciona:</b>
-  1. Quando captcha está ativado, novos membros são automaticamente mutados ao entrar
-  2. Um desafio de captcha é enviado ao novo membro
-  3. O usuário deve selecionar a resposta correta das opções fornecidas
-  4. Se bem-sucedido, o usuário é desmutado e pode participar do grupo
-  5. Se falhar ou expirar, a ação configurada é tomada (kick, ban, ou mute)
-
-  <b>Tipos de Captcha:</b>
-  • <b>Matemática</b>: Resolva problemas aritméticos simples (adição, subtração, multiplicação)
-  • <b>Texto</b>: Identifique texto mostrado em uma imagem distorcida
-
-  <b>Funcionalidade de Mensagens Pendentes:</b>
-  Quando um usuário está completando o captcha, quaisquer mensagens que tentarem enviar são armazenadas e deletadas. Admins podem:
-  • Ver quais mensagens um usuário tentou enviar usando <code>/captchapending</code>
-  • Limpar mensagens armazenadas usando <code>/captchaclear</code>
-
-  Isso ajuda a identificar tentativas de spam potenciais antes de usuários completarem a verificação.
+captcha_extended_docs: "<b>Como Funciona:</b>\n1. Quando captcha está ativado, novos membros são automaticamente mutados ao entrar\n2. Um desafio de captcha é enviado ao novo membro\n3. O usuário deve selecionar a resposta correta das opções fornecidas ou passar na verificação web\n4. Se bem-sucedido, o usuário é desmutado e pode participar do grupo\n5. Se falhar ou expirar, a ação configurada é tomada (kick, ban, ou mute)\n\n<b>Tipos de Captcha:</b>\n• <b>Matemática</b>: Resolva problemas aritméticos simples (adição, subtração, multiplicação)\n• <b>Texto</b>: Identifique texto mostrado em uma imagem distorcida\n• <b>Turnstile</b>: Passar em uma verificação da Cloudflare em uma página web\n\n<b>Funcionalidade de Mensagens Pendentes:</b>\nQuando um usuário está completando o captcha, quaisquer mensagens que tentarem enviar são armazenadas e deletadas. Admins podem:\n• Ver quais mensagens um usuário tentou enviar usando <code>/captchapending</code>\n• Limpar mensagens armazenadas usando <code>/captchaclear</code>\n\nIsso ajuda a identificar tentativas de spam potenciais antes de usuários completarem a verificação.\n"
 
 captcha_permissions_docs: |
   <b>Requisitos do Bot:</b>
@@ -3109,8 +3003,8 @@ settings_edit_media_voice: "Voz"
 settings_edit_media_video_note: "Mensagem de vídeo"
 settings_edit_media_animation: "GIF"
 settings_edit_note_no_caption: "Este tipo de mídia é enviado sem texto, então o texto não é mostrado."
-settings_edit_hint_greeting: "Definir usa minha próxima mensagem privada como essa parte. Ver mostra uma parte. Prévia completa mostra a mensagem inteira como os membros a veem."
-settings_edit_hint_rules: "Definir usa minha próxima mensagem privada como essa parte. Ver mostra uma parte. Prévia completa mostra o que <code>/rules</code> envia."
+settings_edit_hint_greeting: "Definir usa sua próxima mensagem no meu chat privado como essa parte. Ver mostra uma parte. Prévia completa mostra a mensagem inteira como os membros a veem."
+settings_edit_hint_rules: "Definir usa sua próxima mensagem no meu chat privado como essa parte. Ver mostra uma parte. Prévia completa mostra o que <code>/rules</code> envia."
 settings_edit_hint_once: "Saudar uma vez: quando ativado, dou boas-vindas a cada membro só na primeira vez que entra. Membros que entraram antes de ativar receberão boas-vindas mais uma vez."
 settings_edit_hint_below_file: "Mídia sob o texto funciona com foto, vídeo ou GIF. Se este arquivo for um GIF salvo antes, defina-o de novo para usá-lo."
 settings_edit_clean_hint_welcome: "Apagar última boas-vindas: apago minha boas-vindas anterior quando envio uma nova (só mensagens de até dois dias)."
@@ -3400,12 +3294,4 @@ settings_lock_media: "Toda mídia"
 settings_lock_other: "Jogo/figurinha/GIF"
 settings_lock_previews: "Prévia de links"
 settings_lock_all: "Tudo"
-settings_help_msg: |
-  Gerencie este grupo a partir de um único menu de botões.
-
-  <b>Comandos de admin</b>:
-  × /settings: Abre o menu de configurações. No grupo, abre aqui ou no privado; em um chat privado comigo, lista os grupos que você pode gerenciar.
-
-  O menu cobre o vínculo com o Grupo de Staff, o bloqueio (estado, levantamento e gatilhos automáticos), o captcha, o antiflood, os requisitos de membros e as mensagens de boas-vindas, despedida e regras: defina uma enviando-a para mim no privado. Cada mudança feita nele equivale ao comando correspondente: /linkstaff, /unlinkstaff, /unlockdown, /autolockdown, /captcha, /captchamode, /captchatime, /captchaaction, /setflood, /setfloodmode, /delflood, /setwelcome, /setgoodbye e /setrules. Os requisitos de membros não têm comando: o menu é a única forma de configurá-los.
-
-  Só o dono do grupo pode abrir o menu, a menos que o dono deixe os admins entrarem. Os comandos de configuração funcionam para os admins como antes. Um menu aberto no grupo responde apenas a quem o abriu. Cada toque confere se você ainda tem permissão, e cada mudança exige pelo menos o direito que o seu comando exige.
+settings_help_msg: "Gerencie este grupo a partir de um único menu de botões.\n\n<b>Comandos de admin</b>:\n× /settings: Abre o menu de configurações. No grupo, abre aqui ou no privado; em um chat privado comigo, lista os grupos que você pode gerenciar.\n\nO menu tem estas páginas: Grupo de Staff, fontes bloqueadas, bloqueio, captcha, antiflood, avisos, bloqueios, lista negra, filtros, boas-vindas, despedida, regras, notas, requisitos de membros, exclusão, interruptores, idioma, canal de logs, admins anônimos e acesso. Listas e mensagens são definidas enviando-as para mim no privado. Cada mudança feita nele equivale ao comando correspondente: /linkstaff, /unlinkstaff, /unlockdown, /autolockdown, /captcha, /captchamode, /captchatime, /captchaaction, /setflood, /setfloodmode, /delflood, /setwelcome, /setgoodbye e /setrules. Os requisitos de membros não têm comando: o menu é a única forma de configurá-los.\n\nSó o dono do grupo pode abrir o menu, a menos que o dono deixe os admins entrarem. Os comandos de configuração funcionam para os admins como antes. Um menu aberto no grupo responde apenas a quem o abriu. Cada toque confere se você ainda tem permissão, e cada mudança exige pelo menos o direito que o seu comando exige.\n"
