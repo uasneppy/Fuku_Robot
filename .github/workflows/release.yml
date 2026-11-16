@@ -12,43 +12,16 @@ jobs:
   release-ci-checks:
     name: Release CI Checks
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: fuku_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres -d fuku_test"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
-      redis:
-        image: redis:7
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping || exit 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
-    env:
-      BOT_TOKEN: test-token
-      OWNER_ID: "1"
-      MESSAGE_DUMP: "1"
-      REDIS_ADDRESS: "localhost:6379"
-      DATABASE_URL: "postgres://postgres:postgres@localhost:5432/fuku_test?sslmode=disable"
-      AUTO_MIGRATE: "false"
-      USE_WEBHOOKS: "false"
-      DEBUG: "false"
-      CGO_ENABLED: "1"
+    # The tests are not run again here: the tagged commit is on main, and CI
+    # ran every check (gosec, govulncheck, lint, the migration chain, the
+    # PostgreSQL integrity tests, make test with its coverage threshold,
+    # translations and docs drift) on its push. This job only proves that CI
+    # run succeeded. It waits while that run is still going (a tag pushed
+    # right after a merge), so the limit covers one CI run plus some slack.
+    timeout-minutes: 60
     permissions:
       contents: read
-      security-events: write
+      actions: read
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -73,57 +46,35 @@ jobs:
             exit 1
           fi
 
-      - name: Set up Go
-        uses: actions/setup-go@v7
-        with:
-          go-version: stable
-          cache: true
-
-      - name: Run Gosec Security Scanner
-        uses: securego/gosec@v2.29.0
-        with:
-          args: -no-fail ./...
-
-      - name: Run vulnerability check
-        continue-on-error: true
-        uses: golang/govulncheck-action@v1
-
-      - name: Test release build
-        run: |
-          CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o fuku_robot .
-          if [ ! -f fuku_robot ]; then
-            echo "Build failed"
-            exit 1
-          fi
-          echo "Build successful"
-
-      - name: Verify repository migration chain
+      - name: Verify CI passed on the tagged commit
         env:
-          FUKU_TEST_MIGRATION_CHAIN: "true"
-        run: go test -tags testtools -v -count=1 -run '^TestRepositoryMigrationChain$' ./fuku/db/migrations
-
-      - name: Run PostgreSQL integrity tests
-        env:
-          FUKU_TEST_DATABASE: "true"
-        run: make test-postgres-integrity
-
-      - name: Run full test suite
-        run: make test
-
-      - name: Check coverage threshold
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
         run: |
-          coverage=$(go tool cover -func=coverage.out | awk '/^total:/ {gsub(/%/, "", $3); print $3}')
-          if ! awk -v coverage="$coverage" 'BEGIN {exit !(coverage >= 78)}'; then
-            echo "Coverage ${coverage}% is below 78%"
+          set -euo pipefail
+          # Only push and workflow_dispatch runs count: they test this exact
+          # commit. A pull_request run tests the PR head, not the merge commit.
+          while :; do
+            runs=$(gh api "repos/${REPO}/actions/workflows/ci.yml/runs?head_sha=${RELEASE_SHA}&per_page=100" \
+              --jq '[.workflow_runs[] | select(.event == "push" or .event == "workflow_dispatch")]')
+            if [ "$(jq '[.[] | select(.conclusion == "success")] | length' <<<"$runs")" -gt 0 ]; then
+              url=$(jq -r '[.[] | select(.conclusion == "success")][0].html_url' <<<"$runs")
+              echo "CI passed on ${RELEASE_SHA}: ${url}"
+              exit 0
+            fi
+            if [ "$(jq '[.[] | select(.status != "completed")] | length' <<<"$runs")" -gt 0 ]; then
+              echo "CI is still running on ${RELEASE_SHA}; checking again in 60 s"
+              sleep 60
+              continue
+            fi
+            if [ "$(jq 'length' <<<"$runs")" -eq 0 ]; then
+              echo "::error::no CI run found for ${RELEASE_SHA}. Tag a commit that CI ran on after it was pushed to main, or run CI on main with workflow_dispatch and tag the commit it ran on." >&2
+            else
+              echo "::error::CI did not pass on ${RELEASE_SHA} ($(jq -r '[.[].conclusion] | join(", ")' <<<"$runs")). A newer push to main cancels the CI run of the commit before it, so tag the latest main commit whose CI passed, or re-run CI on this one." >&2
+            fi
             exit 1
-          fi
-          echo "Coverage ${coverage}% meets 78%"
-
-      - name: Check translations
-        run: make check-translations
-
-      - name: Check generated docs drift
-        run: make check-docs
+          done
 
   goreleaser:
     name: Release with GoReleaser

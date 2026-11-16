@@ -6,7 +6,8 @@ Update this file in the same commit as any change that invalidates a rule below.
 ## Commands
 
 ```bash
-make test                 # the only valid full test run (tags, race, coverage, skip gate; 40 min per package, 45 min for the CI job; fuku/modules ran 9-15 min early on and 19-30 min on CI runners by Phase 18 (the same code measured 1143 s to 1760 s on two runners), so keep a new test light: cut a cross product of languages, states and notices down to its worst cases)
+make test                 # the only valid full test run (tags, race, coverage, skip gate; 40 min per package; fuku/modules ran 9-15 min early on and 19-30 min on CI runners by Phase 18 (the same code measured 1143 s to 1760 s on two runners), so keep a new test light: cut a cross product of languages, states and notices down to its worst cases)
+make test-shard SHARD=1   # one quarter of fuku/modules (CI runs test-rest + test-shard 1..4 in parallel jobs, then coverage-merge; together exactly `make test`)
 make lint                 # golangci-lint v2
 make check-translations   # missing locale keys
 make check-docs           # generated-docs drift; fix with `make generate-docs`
@@ -4125,7 +4126,15 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `TestStaffForwardBlockMigrationStatements` is its database-free half and runs in `make test`).
   The pattern is anchored with `$`, so list the real top-level test function names and add the test's package to the
   target. Add a test there when a new guarantee rests on a partial unique index, a `CHECK` or a conditional update.
-- In CI, keep the migration-chain step before `make test`; its `schema_migrations` rows back the checksum test.
+- In CI, keep the migration-chain step before `make test-rest`; its `schema_migrations` rows back the checksum test.
+- CI does not run `make test` as one job. `test-rest` runs every package but `fuku/modules` (with the migration chain,
+  the PostgreSQL integrity tests, the captcha page script tests and `make test-shard-check`), four `test-shard` jobs
+  run `fuku/modules` split by `scripts/test_shard.sh` (its top-level tests sorted by name and dealt out round-robin, so
+  each test runs in exactly one shard), and `test` merges their coverage (`make coverage-merge`) and applies the 78%
+  threshold. A shard runs in its own process, so a test that only passed because an earlier test in the package left
+  state behind fails there: fix the test, never the split. `make test-shard-check` fails when the script's list differs
+  from `go test -list`. To change the number of shards, edit the matrix in `ci.yml` and the `SHARDS=` it passes.
+  The release workflow does not run tests; it requires a successful CI run of the tagged commit.
 - The settings menu tests share one toolkit, `fuku/modules/settings_env_test.go` (`newSettingsEnv`, `newSettingsEnvWith`
   with `RealLocale`, `openMenu`, `press`, `pressRaw`, `pressPrivate`, `pressNoMessage`, `sendIn`, `sendPrivate`, `edits`,
   `lastEdit`, `answerCount`, `settingsButtonByMarker`, `settingsButtonFields`): page tests call it by name and do not edit
