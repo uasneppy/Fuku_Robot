@@ -66,7 +66,7 @@ antiflood_flood_deleter_enabled: "Antiflood message deleting on. Messages that t
 antiflood_flood_deleter_invalid_option: "Unrecognised input. I accept `yes`/`no`/`on`/`off` only."
 antiflood_flood_disabled: "Flood control is off in this chat."
 antiflood_flood_show_settings: "Flood control is active in this chat after %d messages. Anyone sending more than that will be %s."
-antiflood_help_msg: "Someone joins, sends 100 messages and ruins the chat. With antiflood, that stops here.\n\nAntiflood acts on users who send more than x messages in a row. Actions: ban/kick/mute\n\n*Admin commands*:\n× /flood: Get the current antiflood settings.\n× /setflood `<number/off/no>`: Set the number of messages after which to act on a user. Set '0', 'off' or 'no' to disable.\n× /setfloodmode `<action type>`: Choose the action for a user who floods. Options: ban/kick/mute\n× /delflood `<yes/no/on/off>`: Whether the bot deletes the flood messages."
+antiflood_help_msg: "Someone joins, sends 100 messages and ruins the chat. With antiflood, that stops here.\n\nAntiflood acts on users who send more than x messages in a row. Actions: ban/kick/mute\n\n*Admin commands*:\n× /flood: Get the current antiflood settings.\n× /setflood `<number/off/no>`: Set the number of messages after which to act on a user. Set '0', 'off' or 'no' to disable.\n× /setfloodmode `<action type>`: Choose the action for a user who floods. Options: ban/kick/mute\n× /delflood `<yes/no/on/off>`: Whether I delete the flood messages."
 antiflood_setflood_disabled: "Noted.\nI will not act on users for flooding."
 antiflood_setflood_success: "Flood limit set to <b>%d</b> messages."
 antiflood_setfloodmode_specify_action: "Specify the action to take on flooding. Available modes: `ban`/`kick`/`mute`"
@@ -97,7 +97,7 @@ blacklists_blacklist_already_blacklisted: "Already on the blacklist:"
 blacklists_blacklist_give_bl_word: "Give me a word to add to the blacklist."
 blacklists_blacklist_word_too_long: "These words are too long (max 100 characters): %s"
 blacklists_blacklist_word_too_broad: "These words are too broad (a single letter, digit or punctuation mark would match almost every message): %s"
-blacklists_help_msg: "Forbidden words, deleted on sight. Contraband is not tolerated in this facility.\n\n*User Commands:*\n× /blacklists: Check all the blacklists in chat.\n\n*Admin Commands:*\n× /addblacklist `<trigger>`: Blacklist the word in the current chat.\n× /rmblacklist `<trigger>`: Remove the word from the chat's blacklisted words.\n× /blaction `<mute/kick/ban/warn/none>`: Set the action the bot takes when a blacklisted word is detected.\n× /blacklistaction: Same as above\n\n*Owner Only:*\n× /remallbl: Remove all blacklisted words from chat\n\n*Note:*\nThe default mode for Blacklist is *warn*, which deletes the message and warns the user."
+blacklists_help_msg: "Forbidden words, deleted on sight. Contraband is not tolerated in this facility.\n\n*User Commands:*\n× /blacklists: Check all the blacklists in chat.\n\n*Admin Commands:*\n× /addblacklist `<trigger>`: Blacklist the word in the current chat.\n× /rmblacklist `<trigger>`: Remove the word from the chat's blacklisted words.\n× /blaction `<mute/kick/ban/warn/none>`: Set the action I take when a blacklisted word is detected.\n× /blacklistaction: Same as above\n\n*Owner Only:*\n× /remallbl: Remove all blacklisted words from chat\n\n*Note:*\nThe default mode for Blacklist is *warn*, which deletes the message and warns the user."
 blacklists_ls_bl_list_bl: "Blacklisted in this chat:"
 blacklists_ls_bl_no_blacklisted: "No blacklisted words in this chat."
 blacklists_rm_all_bl_ask: "Remove all blacklisted words from this chat?"
@@ -133,9 +133,9 @@ connections_stale_connection: "Your connection is stale: I can no longer reach t
 connections_reconnect_need_pm: "Reconnecting works in my private chat only."
 connections_reconnect_no_last_chat: "You have no previous chat to reconnect to."
 connections_reconnect_reconnected: "Remote link restored with <b>%s</b>."
-disabling_help_msg: "Disable commonly used commands so no one can use them. Commands can also be deleted automatically, which stops people from blue texting.\n\n*Admin commands*:\n× /disable `<commandname>`: Stop users from using commandname in this group.\n× /enable `<item name>`: Let users use commandname in this group again.\n× /disableable: List all disableable commands.\n× /disabledel `<yes/no/on/off>`: Delete disabled commands when non-admins use them.\n× /disabled: List the disabled commands in this chat.\n\nNote:\nA disabled command is disabled for non-admins only. All admins can still use it.\nDisabled commands are still reachable through the /connect feature. If you want that disabled too, tell the people who run this bot."
-devs_help_msg: "Maintenance access. Bot management and diagnostic commands for the bot owner and trusted developers only. Regular users never see these commands.\n*Team Commands:*\n× /stats: Show bot statistics and system info.\n× /teamusers: List all team members.\n*Owner Commands:*\n× /addsudo: Grant sudo permissions to a user.\n× /adddev: Grant developer permissions to a user.\n× /remsudo: Revoke sudo permissions from a user.\n× /remdev: Revoke developer permissions from a user.\n*Diagnostic Commands:*\n× /chatinfo: Show detailed information about a chat.\n× /chatlist: Generate and send a list of all active chats.\n× /leavechat: Make the bot leave a given chat."
-filters_help_msg: "Filters are automatic replies. Filters are case insensitive: every time someone says one of your trigger words, Xenobot-72 replies with your text. You can use this to make your own commands.\n\nCommands:\n- /filter <trigger> <reply>: Every time someone says trigger, the bot replies with the sentence. For filters of several words, quote the trigger.\n- /filters: List all chat filters.\n- /stop <trigger>: Stop the bot from replying to trigger.\n- /stopall: Stop ALL filters in the current chat. This action cannot be undone.\n\nExamples:\n- Set a filter:\n-> /filter hello Hello there! How are you?\n- Set a multiword filter:\n-> /filter hello friend Hello back! Long time no see!\n- Set a filter only admins can trigger:\n-> /filter example This filter will not  happen if a normal user says it {admin}\n- To save a file, image, gif, or any other attachment, reply to the file with:\n-> /filter trigger"
+disabling_help_msg: "Command restrictions. Switch a command off and non-admins cannot use it here. I can also delete the attempts, which keeps the chat free of stray commands.\n\n*Admin commands*:\n× /disable `<commandname>`: Stop users from using commandname in this group.\n× /enable `<item name>`: Let users use commandname in this group again.\n× /disableable: List all disableable commands.\n× /disabledel `<yes/no/on/off>`: Delete disabled commands when non-admins use them.\n× /disabled: List the disabled commands in this chat.\n\nNote:\nA disabled command is disabled for non-admins only. All admins can still use it.\nDisabled commands are still reachable through the /connect feature."
+devs_help_msg: "Maintenance access. Management and diagnostic commands for my owner and trusted developers only. Regular users never see these commands.\n*Team Commands:*\n× /stats: Show my statistics and system info.\n× /teamusers: List all team members.\n*Owner Commands:*\n× /addsudo: Grant sudo permissions to a user.\n× /adddev: Grant developer permissions to a user.\n× /remsudo: Revoke sudo permissions from a user.\n× /remdev: Revoke developer permissions from a user.\n*Diagnostic Commands:*\n× /chatinfo: Show detailed information about a chat.\n× /chatlist: Generate and send a list of all active chats.\n× /leavechat: Make me leave a given chat."
+filters_help_msg: "Filters are automatic replies. Case does not matter: every time someone says one of your trigger words, I reply with your text. You can use this to make your own commands.\n\nCommands:\n- /filter <trigger> <reply>: Every time someone says trigger, I reply with the sentence. For filters of several words, quote the trigger.\n- /filters: List all chat filters.\n- /stop <trigger>: Stop me from replying to trigger.\n- /stopall: Stop ALL filters in the current chat. This action cannot be undone.\n\nExamples:\n- Set a filter:\n-> /filter hello Hello there! How are you?\n- Set a multiword filter:\n-> /filter hello friend Hello back! Long time no see!\n- Set a filter only admins can trigger:\n-> /filter example This filter will not happen if a normal user says it {admin}\n- To save a file, image, gif, or any other attachment, reply to the file with:\n-> /filter trigger"
 formatting_fillings: "<b>Fillings</b>\n\nYou can customise your messages with contextual data. For example, mention a user by name in the welcome message, or in a filter.\nFillings work in notes too.\n\n<b>Supported fillings:</b>\n- <code>{first}</code>: The user's first name.\n- <code>{last}</code>: The user's last name.\n- <code>{fullname}</code>: The user's full name.\n- <code>{username}</code>: The user's username. If they have none, mentions the user instead.\n- <code>{mention}</code>: Mentions the user by first name.\n- <code>{id}</code>: The user's ID.\n- <code>{chatname}</code>: The chat's name.\n- <code>{rules}</code>: Adds a Rules button to the message.\n- <code>{protect}</code>: Stops the content from being shared.\n- <code>{preview}</code>: Turns on previews in the message.\n- <code>{nonotif}</code>: Turns off the notification for that message."
 formatting_help_msg: "Xenobot-72 supports many formatting options to make your messages more expressive. Press the buttons below to see them."
 formatting_markdown: "<b>Markdown Formatting</b>\n\nYou can format your message with <b>bold</b>, <i>italics</i>, <u>underline</u>,\nand more. Go ahead and experiment.\n\n<b>Supported markdown</b>:\n\n- <code>`code words`</code>: Backticks are used for monospace fonts. Shows as: <code>code words</code>.\n\n- <code>_italic words_</code>: Underscores are used for italic fonts. Shows as: <i>italic words</i>.\n\n- <code>*bold words*</code>: Asterisks are used for bold fonts. Shows as: <b>bold words</b>.\n\n- <code>~strikethrough~</code>: Tildes are used for strikethrough. Shows as: <strike>strikethrough</strike>.\n\n- <code>||spoiler||</code>: Double vertical bars are used for spoilers. Shows as: <tg-spoiler>Spoiler</tg-spoiler>.\n\n- <code>```pre```</code>: Makes the formatter ignore other formatting characters inside the text wrapped in '```', like this: <code>**bold** | *bold*</code>.\n\n- <code>__underline__</code>: Double underscores are used for underlines. Shows as: underline. NOTE: Some clients interpret it as italic. In that case, use your app's built-in formatting.\n\n- <code>[hyperlink](example.com)</code>: The format for hyperlinks. Shows as: <a href='https://example.com/'>hyperlink</a>.\n\n- <code>[My Button](buttonurl://example.com)</code>: The format for buttons. This example creates a button named \"My button\" that opens <code>example.com</code> when pressed.\n\nTo put buttons on the same row, use the <code>:same</code> formatting.\n\n<b>Example:</b>\n\n<code>[button 1](buttonurl:example.com)</code>\n\n<code>[button 2](buttonurl://example.com:same)</code>\n\n<code>[button 3](buttonurl://example.com)</code>\n\nThis shows button 1 and 2 on the same line, with 3 underneath.\n"
@@ -145,24 +145,24 @@ help_about: "@%s is Xenobot-72, the management unit of this facility. Version 72
 help_configuration_step-1: "Xenobot-72 setup procedure.\n\nStep one: add Xenobot-72 ✨ to your group. Press the button below, pick your group, then press Done to continue."
 help_configuration_step-2: "Step one complete.\n\nTo work properly I need to be an admin of your group.\nFollow these steps:\n▫️ Go to your group\n▫️ Press the group's name\n▫️ Press Edit\n▫️ Press Administrators\n▫️ Press Add Administrator\n▫️ Press the magnifying glass\n▫️ Search @%s\n▫️ Confirm"
 help_configuration_step-3: "Setup complete. The facility is now under management.\n\nAll commands can be used with / or !"
-help_donatetext: "Notice. This bot has no donation page.\nThere is nothing to donate to. This unit runs on procedure, not tips."
+help_donatetext: "Notice. I have no donation page.\nThere is nothing to donate to. This unit runs on procedure, not tips."
 lang_sample: US English
 language_flag: 🇺🇸
 language_name: English
-help_help_msg: "The main entry point and navigation system of Xenobot-72.\n*Navigation Commands:*\n× /start: Show the welcome message with the navigation menu.\n× /help: Show the help menu with the module list; use /help <module> for details.\n× /about: Show bot information and version.\n× /donate: Show whether this bot accepts donations."
-languages_help_msg: "Language settings of the facility.\nChange the bot's language with this module.\n\nSend /lang and use the inline keyboard to choose a language for yourself or your group."
+help_help_msg: "Front desk. Start here to find your way around me.\n*Navigation Commands:*\n× /start: Show the welcome message with the navigation menu.\n× /help: Show the help menu with the module list; use /help <module> for details.\n× /about: Show who I am and my version.\n× /donate: Show whether I accept donations."
+languages_help_msg: "Language settings of the facility.\nChange my language with this module.\n\nSend /lang and use the inline keyboard to choose a language for yourself or your group."
 locks_help_msg: "*Admin only*:\n× /lock `<permission>`: Lock a chat permission.\n× /unlock `<permission>`: Unlock a chat permission.\n× /locks: View chat permissions.\n× /locktypes: Check the available lock types.\n\nLocks restrict what a group's users can send. Sealed doors, basically.\nLocking URLs auto-deletes every message with a URL, locking stickers deletes all stickers, and so on.\nLocking bots stops non-admins from adding bots to the chat.\n\n**Example:**\n`/lock media`: locks all media messages in the chat."
 misc_help_msg: "Miscellaneous instruments of the facility. Lightly used, well maintained.\n× /info: Get your user info. Works as a reply, or with a user ID or username.\n× /id: Get the current group ID. As a reply, get that user's ID.\n× /ping: Ping the Telegram Server.\n× /tr <lang code> <msg/reply to message>: Translate the message.\n× /removebotkeyboard: Remove a stuck bot keyboard from your chat.\n× /stat: Count the total number of messages in the chat.\n× /stickerid: Reply to a sticker to get its file ID.\n× /zombies: Kick deleted accounts I know about (admin).\n× /github <user|user/repo>: Look up a GitHub user or repository.\n× /wiki <search>: Search English Wikipedia.\n× /ud <term>: Look up Urban Dictionary.\n× /runs: A random quip."
 mutes_help_msg: "Some residents talk too much. Silence orders are issued here: mute residents of your group.\n\n*Mute Commands:* (Admin only)\n× /mute <userhandle>: mutes a user. (via a handle, or reply)\n× /smute <userhandle>: mutes a user silently: no message to the group, and your command is deleted. (via a handle, or reply)\n× /dmute <userhandle>: mutes a user and deletes the replied message. (via a handle, or reply)\n× /tmute <userhandle> x(m/h/d): mutes a user for `x` time. (via a handle, or reply). m = minutes, h = hours, d = days.\n× /unmute <userhandle>: unmutes a user. (via a handle, or reply)"
 notes_help_msg: "Notes: the facility's filing cabinet. Save data for future users.\nNotes are good for random bits of information: a phone number, a nice gif, a funny picture, anything.\n*User commands:*\n- /get <notename>: Get a note.\n- #notename: Same as /get.\n*Admin commands:*\n- /save <notename> <note text>: Save a new note under that name. Replying to a message saves that message. Works on media too.\n- /clear <notename>: Delete the note.\n- /notes: List all notes in the current chat.\n- /saved: Same as /notes.\n- /clearall: Delete ALL notes in a chat. This cannot be undone.\n- /privatenotes: Turn sending notes in private on or off. When on, I send a message with a button users press to get the note in private."
-pins_help_msg: "The facility notice board. Keep your chat up to date with a simple pinned message.\n\n*User commands:*\n× /pinned: Get the current pinned message.\n\n*Admin commands:*\n× /pin: Pin the message you replied to. Add 'loud' or 'notify' to notify group members.\n× /pinned: Get the latest pinned message in the current chat.\n× /permapin <text>: Pin a custom message through the bot. It can contain markdown, buttons and all the other features.\n× /unpin: Unpin the current pinned message. As a reply, unpins the replied-to message.\n× /unpinall: Unpin all pinned messages.\n× /antichannelpin <yes/no/on/off>: Stop telegram from auto-pinning linked channels. With no arguments, shows the current setting.\n× /cleanlinked <yes/no/on/off>: Delete messages sent by the linked channel.\nNote: with anti channel pins on, use the /unpin command instead of unpinning manually. Otherwise the old message gets pinned again when the channel posts."
+pins_help_msg: "The facility notice board. Keep your chat up to date with a simple pinned message.\n\n*User commands:*\n× /pinned: Get the current pinned message.\n\n*Admin commands:*\n× /pin: Pin the message you replied to. Add 'loud' or 'notify' to notify group members.\n× /pinned: Get the latest pinned message in the current chat.\n× /permapin <text>: Pin a custom message that I post. It can contain markdown, buttons and all the other features.\n× /unpin: Unpin the current pinned message. As a reply, unpins the replied-to message.\n× /unpinall: Unpin all pinned messages.\n× /antichannelpin <yes/no/on/off>: Stop telegram from auto-pinning linked channels. With no arguments, shows the current setting.\n× /cleanlinked <yes/no/on/off>: Delete messages sent by the linked channel.\nNote: with anti channel pins on, use the /unpin command instead of unpinning manually. Otherwise the old message gets pinned again when the channel posts."
 purges_help_msg: "*Admin only:*\n- /purge: deletes all messages between this one and the replied-to message.\n- /del: deletes the message you replied to.\n\n*Examples*:\n- Delete all messages from the replied message until now.\n-> `/purge`"
-reports_help_msg: "Nobody can watch a group 24/7. I can, but your admins need to be told. So what happens when someone spams?\n\n× /report `<reason>`: reply to a message to report it to admins.\n- @admin: same as /report, but not a command.\n\n*Admins Only:*\n× /reports `<on/off/yes/no>`: change the report setting, or view the current status.\n- In private, toggles your own status.\n- In a group, toggles that group's status.\n× /reports `block` (via reply only): Block a user from using /report or @admin.\n× /reports `unblock` (via reply only): Unblock a user from using /report or @admin.\n× /reports `showblocklist`: Check all blocked users who cannot use /report or @admin.\n\nTo report a user, reply to their message with @admin or /report; Xenobot-72 replies that the admins have been notified.\nYou MUST reply to a message to report a user; @admin is not for tagging admins for no reason.\n\n*NOTE:* Neither of these triggers when used by admins."
+reports_help_msg: "Nobody can watch a group 24/7. I can, but your admins need to be told. So what happens when someone spams?\n\n× /report `<reason>`: reply to a message to report it to admins.\n- @admin: same as /report, but not a command.\n\n*Admins Only:*\n× /reports `<on/off/yes/no>`: change the report setting, or view the current status.\n- In private, toggles your own status.\n- In a group, toggles that group's status.\n× /reports `block` (via reply only): Block a user from using /report or @admin.\n× /reports `unblock` (via reply only): Unblock a user from using /report or @admin.\n× /reports `showblocklist`: Check all blocked users who cannot use /report or @admin.\n\nTo report a user, reply to their message with @admin or /report; I reply that the admins have been notified.\nYou MUST reply to a message to report a user; @admin is not for tagging admins for no reason.\n\n*NOTE:* Neither of these triggers when used by admins."
 rules_help_msg: "Every facility runs on regulations. This module keeps yours clear.\n*User commands*:\n× /rules: Check the current chat rules.\n*Admin commands*:\n× /setrules `<text>`: Set the rules for this chat.\n× /privaterules `<yes/no/on/off>`: Choose whether the rules are sent in private.\n× /resetrules: Reset the chat rules to default\n× /rulesbtn `<custom text>`: Set the text of the rules button.\n× /resetrulesbutton: Reset the text of the rules button to default.\n× /resetrulesbtn: Same as above."
 utils_string_handling_extract_time_invalid_time_amount: "Invalid time amount."
 utils_string_handling_extract_time_invalid_time_type: "Invalid time unit. Expected m, h or d, got: %s"
 warns_help_msg: "Violation notices keep residents in check before things get out of control.\nFor automatic warnings, read about the blacklist module.\n\n*Admin Commands:*\n- /warn <reason>: Warn a user.\n- /dwarn <reason>: Warn a user by reply and delete their message.\n- /swarn <reason>: Warn a user silently and delete your message.\n- /warns: See a user's warnings.\n- /rmwarn: Remove a user's latest warning.\n- /resetwarn: Reset all of a user's warnings to 0.\n- /resetallwarns: Delete all warnings in a chat. All users return to 0 warns.\n- /warnings: Get the chat's warning settings.\n- /setwarnmode <ban/kick/mute>: Set the chat's warn mode.\n- /setwarnlimit <number>: Set the number of warnings before users are punished.\n\n*Examples*\n- Warn a user.\n-> `/warn @user For disobeying the rules`"
-users_help_msg: "Resident registry. An automatic background tracker of users and chats. This module has no commands: it quietly records every message sender and every chat the bot is active in.\n*What It Tracks:*\n× User IDs, usernames and display names of every message sender.\n× Chat IDs and names of every group the bot is in.\n× Channel IDs, names and usernames of linked channels.\n*Rate Limiting:*\n× User updates are limited to one per UserUpdateInterval.\n× Chat updates are limited to one per ChatUpdateInterval.\nOther modules, such as /info, depend on the data this module collects."
+users_help_msg: "Resident registry. I keep an automatic record of users and chats. There are no commands here: I quietly note every message sender and every chat I am active in.\n*What It Tracks:*\n× User IDs, usernames and display names of every message sender.\n× Chat IDs and names of every group I am in.\n× Channel IDs, names and usernames of linked channels.\n*Rate Limiting:*\n× User updates are limited to one per UserUpdateInterval.\n× Chat updates are limited to one per ChatUpdateInterval.\nOther modules, such as /info, depend on the data collected here."
 
 # Captcha module strings
 captcha_enable_failed: "Malfunction: could not enable captcha. Try again."
@@ -208,8 +208,8 @@ captcha_web_invalid_body: It belongs to another member or was already used. Noth
 captcha_web_unsupported_title: Open this in Telegram
 captcha_web_unsupported_body: Use the button in the group chat. If you did, turn off content blockers and try again.
 captcha_web_close_button: Close
-captcha_web_refuse_not_configured: "Turnstile captcha is not set up on this bot yet. Ask the bot owner to finish the web captcha setup. Math and text captcha still work."
-captcha_web_refuse_no_redis: "Turnstile captcha is unavailable right now because the bot's shared storage is down. Try again later, or use math or text captcha."
+captcha_web_refuse_not_configured: "Turnstile captcha is not set up for me yet. Ask my operator to finish the web captcha setup. Math and text captcha still work."
+captcha_web_refuse_no_redis: "Turnstile captcha is unavailable right now because my shared storage is down. Try again later, or use math or text captcha."
 captcha_web_refuse_no_rights: "I need to be an admin with the Restrict members right to run the Turnstile captcha. Give me that right and try again."
 captcha_failed_verify: "Verification malfunction. Contact an admin."
 captcha_wait_refresh: "Wait a few seconds before requesting a new image."
@@ -628,12 +628,12 @@ notes_overwrite_cancelled: "Overwrite cancelled ❌"
 notes_overwrite_success: "Note overwritten ✅"
 notes_clear_all_success: "All notes removed from this chat ✅"
 notes_clear_all_cancelled: "Cancelled. All notes stay ❌"
-notes_parsing_error: "Malfunction: this note could not be read. Report it to the people who run this bot."
+notes_parsing_error: "Malfunction: this note could not be read. Report it to the people who run me."
 notes_admin_only: "Access denied. This note is for admins only."
 notes_click_for_private: "Press the button below to get the note *%s*"
 notes_get_insufficient_args: "Not enough arguments."
 notes_does_not_exist: "Note does not exist."
-notes_parsing_error_support: "Malfunction: this note could not be read. Report it to the people who run this bot."
+notes_parsing_error_support: "Malfunction: this note could not be read. Report it to the people who run me."
 notes_admin_only_access: "Access denied. This note is for admins only."
 notes_private_conflict_warning: "\n\n<b>Note:</b> this note follows the group's default notes setting, because it has both <code>{private}</code> and <code>{noprivate}</code>."
 
@@ -850,7 +850,7 @@ formatting_large_options: "Xenobot-72 supports many formatting options to make y
 
 # Help module additional strings
 help_bot_intro: "I am Xenobot-72 ✨, version 72 of 74. Jaya Abadi built me to run facilities. Your group is a facility.\nI keep order so your admins do not have to.\nSend /help to see everything I can do.\n"
-help_pm_intro: "Hello, %s.\nI am Xenobot-72.\n\nI am a group management unit. Jaya Abadi built me to keep order in facilities, and your groups are facilities now.\nI handle flood control, a warning system, notes, and automatic replies to chosen keywords. I do not get tired. I do not need lunch.\n\nHelpful commands:\n- /start: Starts me. You have probably already used it.\n- /help: Sends this message; I will tell you more about myself.\n- /donate: Tells you whether this bot accepts donations.\n\nIf something malfunctions or you have questions about using me, see my website.\nAll commands can be used with / or !.\n"
+help_pm_intro: "Hello, %s.\nI am Xenobot-72.\n\nI am a group management unit. Jaya Abadi built me to keep order in facilities, and your groups are facilities now.\nI handle flood control, a warning system, notes, and automatic replies to chosen keywords. I do not get tired. I do not need lunch.\n\nHelpful commands:\n- /start: Starts me. You have probably already used it.\n- /help: Sends this message; I will tell you more about myself.\n- /donate: Tells you whether I accept donations.\n\nIf something malfunctions or you have questions about using me, press a module button below for its manual.\nAll commands can be used with / or !.\n"
 
 # Captcha module additional strings
 captcha_settings_header: "<b>Captcha Settings:</b>"
@@ -954,11 +954,11 @@ db_type_assertion_failed: "type assertion to []byte failed"
 button_rules_default: "Rules"
 
 # AI spam filter module strings
-aispam_help_msg: "<b>🤖 AI Spam Filter</b>\n\nAn opt-in filter that has an AI model judge every message in this chat and deletes the ones it is confident are spam.\n\nNothing else happens: no warn, no mute, no reply, no notice. A message the model is confident is spam is removed quietly, and the sender is never told.\n\nMessages in English are acted on from 80% confidence, and messages in any other language from 90%, because the model is English-first.\n\n\n*Admin commands:*\n\n× /aispam: Show whether the filter is on, and exactly what is sent to the model.\n\n× /aispam `<on/off>`: Turn the filter on or off for this chat.\n\n\nThe filter is off in every chat until an admin turns it on, and it needs the bot operator to have configured an API key.\n"
+aispam_help_msg: "<b>🤖 AI Spam Filter</b>\n\nAn opt-in filter that has an AI model judge every message in this chat and deletes the ones it is confident are spam.\n\nNothing else happens: no warn, no mute, no reply, no notice. A message the model is confident is spam is removed quietly, and the sender is never told.\n\nMessages in English are acted on from 80% confidence, and messages in any other language from 90%, because the model is English-first.\n\n\n*Admin commands:*\n\n× /aispam: Show whether the filter is on, and exactly what is sent to the model.\n\n× /aispam `<on/off>`: Turn the filter on or off for this chat.\n\n\nThe filter is off in every chat until an admin turns it on, and it needs my operator to have configured an API key.\n"
 aispam_status_enabled: "The AI spam filter is <b>on</b> in this chat."
 aispam_status_disabled: "The AI spam filter is <b>off</b> in this chat. Turn it on with <code>/aispam on</code>."
-aispam_status_key_missing: "⚠️ Unavailable: the bot operator has not configured an API key, so no message is being checked."
-aispam_status_globally_disabled: "⚠️ Unavailable: the bot operator has switched the AI spam filter off globally, so no message is being checked."
+aispam_status_key_missing: "⚠️ Unavailable: my operator has not configured an API key, so no message is being checked."
+aispam_status_globally_disabled: "⚠️ Unavailable: my operator has switched the AI spam filter off globally, so no message is being checked."
 aispam_data_notice: |
   <b>What is sent for each checked message:</b>
   • The chat's title, description, rules and language
@@ -970,13 +970,13 @@ aispam_data_notice: |
   No names, usernames, user IDs, phone numbers or messages from other chats are sent.
 aispam_enabled_success: "✅ The AI spam filter is now <b>on</b>. Messages the model is confident are spam will be deleted."
 aispam_disabled_success: "❌ The AI spam filter is now <b>off</b>."
-aispam_no_key: "❌ I cannot turn the AI spam filter on: the bot operator has not configured an API key. Nothing has changed."
-aispam_globally_disabled: "❌ I cannot turn the AI spam filter on: the bot operator has switched it off globally. Nothing has changed."
+aispam_no_key: "❌ I cannot turn the AI spam filter on: my operator has not configured an API key. Nothing has changed."
+aispam_globally_disabled: "❌ I cannot turn the AI spam filter on: my operator has switched it off globally. Nothing has changed."
 aispam_invalid_option: "Unrecognised input. I accept <code>on</code>/<code>off</code>/<code>yes</code>/<code>no</code> only."
 aispam_breaker_notice: "⚠️ AI spam checks are paused in this chat for a few minutes after repeated failures from the AI provider. They resume on their own, and the filter stays on."
 
 # Admin module extended documentation
-admin_extended_docs: "<b>Anonymous Admin Support</b>\n\nThe <code>/anonadmin</code> command lets group owners toggle anonymous admin recognition:\n<code>/anonadmin on</code> - Enable anonymous admin checks\n<code>/anonadmin off</code> - Disable anonymous admin checks\n\nWhen enabled, the bot asks anonymous accounts to verify before an admin action.\n\n<b>How Anonymous Admin Verification Works:</b>\n1. The bot detects that the sender is GroupAnonymousBot\n2. The original message is cached with a 20-second TTL\n3. A \"Verify Admin\" button is sent to the chat\n4. The user who presses it is verified as an admin and the command runs\n5. The button expires after 20 seconds if nobody verifies\n\n<b>Supported Commands:</b>\nAdmin: /promote, /demote, /title\nBans: /ban, /dban, /sban, /tban, /unban\nMutes: /mute, /smute, /dmute, /tmute, /unmute\nPins: /pin, /unpin, /permapin, /unpinall\nPurges: /purge, /del\nWarns: /warn, /swarn, /dwarn\n"
+admin_extended_docs: "<b>Anonymous Admin Support</b>\n\nThe <code>/anonadmin</code> command lets group owners toggle anonymous admin recognition:\n<code>/anonadmin on</code> - Enable anonymous admin checks\n<code>/anonadmin off</code> - Disable anonymous admin checks\n\nWhen enabled, I ask anonymous accounts to verify before an admin action.\n\n<b>How Anonymous Admin Verification Works:</b>\n1. I detect that the sender is GroupAnonymousBot\n2. The original message is cached with a 20-second TTL\n3. A \"Verify Admin\" button is sent to the chat\n4. The user who presses it is verified as an admin and the command runs\n5. The button expires after 20 seconds if nobody verifies\n\n<b>Supported Commands:</b>\nAdmin: /promote, /demote, /title\nBans: /ban, /dban, /sban, /tban, /unban\nMutes: /mute, /smute, /dmute, /tmute, /unmute\nPins: /pin, /unpin, /permapin, /unpinall\nPurges: /purge, /del\nWarns: /warn, /swarn, /dwarn\n"
 
 admin_notes_docs: |
   <b>Security Notes</b>
@@ -1014,7 +1014,7 @@ locks_types_docs: |
   <code>previews</code> - Block URL previews
   <code>all</code> - Block everything
 
-locks_notes_docs: "<b>Technical Notes</b>\n• Locks are enforced in real time\n• Admins are exempt from all locks\n• Locks survive bot restarts\n• The cache is cleared on updates\n"
+locks_notes_docs: "<b>Technical Notes</b>\n• Locks are enforced in real time\n• Admins are exempt from all locks\n• Locks survive my restarts\n• The cache is cleared on updates\n"
 
 # Languages extended docs
 languages_extended_docs: |
@@ -1038,30 +1038,19 @@ notes_permissions_docs: |
   • Get regular notes: Any user
 
 # Extended documentation locale keys - Pins module
-pins_extended_docs: "<b>Features:</b>\n\n<b>Anti-Channel Pin:</b>\nWhen enabled, the bot unpins any message that a linked channel auto-pins. Useful when you want control over what gets pinned in your group.\n\n<b>Important:</b> with anti channel pins on, always use the <code>/unpin</code> command instead of unpinning manually in Telegram. A manual unpin makes the old message get pinned again when the channel posts.\n\n<b>Clean Linked:</b>\nWhen enabled, the bot deletes every message sent to the group from the linked channel. Your group chat stays free of cross-posted channel content.\n\n<b>Permapin:</b>\nCreate custom pinned messages with:\n• Text with HTML/Markdown formatting\n• Inline buttons with URLs\n• Media attachments (photos, documents, stickers, audio, video, voice notes, video notes)\n• All standard message fillings ({first}, {chatname}, etc.)\n\n<b>Supported via Connection:</b>\nThese commands work when connected to a chat via <code>/connect</code>:\n• <code>/antichannelpin</code>\n• <code>/cleanlinked</code>\n"
+pins_extended_docs: "<b>Features:</b>\n\n<b>Anti-Channel Pin:</b>\nWhen enabled, I unpin any message that the linked channel auto-pins. Useful when you want control over what gets pinned in your group.\n\n<b>Important:</b> with anti channel pins on, always use the <code>/unpin</code> command instead of unpinning manually in Telegram. A manual unpin makes the old message get pinned again when the channel posts.\n\n<b>Clean Linked:</b>\nWhen enabled, I delete every message sent to the group from the linked channel. Your group chat stays free of cross-posted channel content.\n\n<b>Permapin:</b>\nCreate custom pinned messages with:\n• Text with HTML/Markdown formatting\n• Inline buttons with URLs\n• Media attachments (photos, documents, stickers, audio, video, voice notes, video notes)\n• All standard message fillings ({first}, {chatname}, etc.)\n\n<b>Supported via Connection:</b>\nThese commands work when connected to a chat via <code>/connect</code>:\n• <code>/antichannelpin</code>\n• <code>/cleanlinked</code>\n"
 
-pins_notes_docs: "<b>Notes:</b>\n• <code>/unpinall</code> asks for confirmation before unpinning all messages\n• Permapin supports every media type Telegram can pin\n• Anti-channel pin and clean linked settings are stored per chat and survive bot restarts\n\n<b>Required Permissions:</b>\n<b>Bot:</b> Must be admin with \"Pin Messages\" permission\n<b>User:</b> Most commands require admin with \"Pin Messages\" permission\n"
+pins_notes_docs: "<b>Notes:</b>\n• <code>/unpinall</code> asks for confirmation before unpinning all messages\n• Permapin supports every media type Telegram can pin\n• Anti-channel pin and clean linked settings are stored per chat and survive my restarts\n\n<b>Required Permissions:</b>\n<b>Me:</b> I must be an admin with \"Pin Messages\" permission\n<b>User:</b> Most commands require admin with \"Pin Messages\" permission\n"
 
 # Extended documentation locale keys - Purges module
-purges_extended_docs: "<b>Range Deletion with purgefrom/purgeto:</b>\nWhen you need more control over what gets deleted:\n\n1. Reply to the <b>first</b> message of the range:\n<code>/purgefrom</code>\nThe bot confirms the message is marked (expires after 30 seconds).\n\n2. Reply to the <b>last</b> message of the range:\n<code>/purgeto</code>\nAll messages between the two markers (inclusive) are deleted.\n\nUseful when you cannot easily scroll to the starting point or want to check the range before deleting.\n\n<b>Limits and Restrictions:</b>\n• <b>Maximum messages per purge:</b> 1000 messages\n• <b>Message age limit:</b> Messages older than 48 hours may not be deletable (Telegram API restriction)\n• <b>Permissions required:</b> Both the user and the bot need the \"Delete Messages\" permission\n"
+purges_extended_docs: "<b>Range Deletion with purgefrom/purgeto:</b>\nWhen you need more control over what gets deleted:\n\n1. Reply to the <b>first</b> message of the range:\n<code>/purgefrom</code>\nI confirm the message is marked (expires after 30 seconds).\n\n2. Reply to the <b>last</b> message of the range:\n<code>/purgeto</code>\nAll messages between the two markers (inclusive) are deleted.\n\nUseful when you cannot easily scroll to the starting point or want to check the range before deleting.\n\n<b>Limits and Restrictions:</b>\n• <b>Maximum messages per purge:</b> 1000 messages\n• <b>Message age limit:</b> Messages older than 48 hours may not be deletable (Telegram API restriction)\n• <b>Permissions required:</b> Both the user and I need the \"Delete Messages\" permission\n"
 
 purges_notes_docs: "<b>Notes:</b>\n• The <code>/purgefrom</code> marker expires after 30 seconds if no <code>/purgeto</code> follows\n• Large ranges are deleted concurrently for better performance\n• Status messages (how many messages were deleted) delete themselves after 3 seconds\n• Messages already deleted are skipped without errors\n"
 
 # Extended documentation locale keys - Reports module
-reports_extended_docs: "<b>How It Works:</b>\n\n<b>Reporting a Message:</b>\n1. <b>Reply to the offending message</b> with <code>/report</code> or mention <code>@admin</code>\n2. The bot sends a notification mentioning every admin who has reports enabled\n3. The notification has action buttons for quick moderation\n\n<b>Admin Action Buttons:</b>\n• <b>📩 Message</b> - Link to the reported message\n• <b>👢 Kick</b> - Kick the reported user (they can rejoin)\n• <b>🚫 Ban</b> - Permanently ban the reported user\n• <b>🗑 Delete</b> - Delete the reported message\n• <b>✅ Resolved</b> - Mark the report as resolved without action\n\n<b>Private and Group Settings:</b>\n• <b>In private:</b> <code>/reports on/off</code> toggles whether YOU receive report notifications\n• <b>In Group:</b> <code>/reports on/off</code> toggles whether reporting is enabled for that group\n"
+reports_extended_docs: "<b>How It Works:</b>\n\n<b>Reporting a Message:</b>\n1. <b>Reply to the offending message</b> with <code>/report</code> or mention <code>@admin</code>\n2. I send a notification mentioning every admin who has reports enabled\n3. The notification has action buttons for quick moderation\n\n<b>Admin Action Buttons:</b>\n• <b>📩 Message</b> - Link to the reported message\n• <b>👢 Kick</b> - Kick the reported user (they can rejoin)\n• <b>🚫 Ban</b> - Permanently ban the reported user\n• <b>🗑 Delete</b> - Delete the reported message\n• <b>✅ Resolved</b> - Mark the report as resolved without action\n\n<b>Private and Group Settings:</b>\n• <b>In private:</b> <code>/reports on/off</code> toggles whether YOU receive report notifications\n• <b>In Group:</b> <code>/reports on/off</code> toggles whether reporting is enabled for that group\n"
 
-reports_permissions_docs: |
-  <b>Who Can Report?</b>
-  ✅ Regular users
-  ❌ Admins (no need to report to themselves)
-  ❌ Blocked users
-  ❌ Anonymous channels / Telegram system accounts
-
-  <b>Who Can Be Reported?</b>
-  ✅ Regular users
-  ❌ The bot itself
-  ❌ Admins (protected from reports)
-  ❌ Anonymous channels / Telegram system accounts
+reports_permissions_docs: "<b>Who Can Report?</b>\n✅ Regular users\n❌ Admins (no need to report to themselves)\n❌ Blocked users\n❌ Anonymous channels / Telegram system accounts\n\n<b>Who Can Be Reported?</b>\n✅ Regular users\n❌ Me\n❌ Admins (protected from reports)\n❌ Anonymous channels / Telegram system accounts\n"
 
 # Extended documentation locale keys - Rules module
 rules_extended_docs: "<b>Features:</b>\n\n<b>Private Rules:</b>\nTurn on private rules (<code>/privaterules on</code>) to send the rules in private instead of in the group. The group chat stays clean.\n\n<b>Custom Rules Button:</b>\nSet a custom button text (max 30 characters):\n<code>/rulesbtn View Rules</code>\n\nReset to default:\n<code>/resetrulesbtn</code>\n\n<b>Setting Rules:</b>\nSet rules by giving the text directly or by replying to a message:\n<code>/setrules Be respectful to all members.</code>\n\nOr reply to a message:\n<code>/setrules</code>\n\n<b>Required Permissions:</b>\n• User commands: Available to all users\n• Admin commands: Require admin permissions in the chat\n"
@@ -1081,25 +1070,17 @@ warns_extended_docs: |
   • <code>/swarn</code> - Delete your command and warn silently
   • <code>/dwarn</code> - Delete the user's message and warn them
 
-warns_permissions_docs: |
-  <b>Permission Requirements:</b>
-  • <code>/warn</code>, <code>/dwarn</code>, <code>/swarn</code>: Bot admin + User admin with restrict
-  • <code>/rmwarn</code>, <code>/unwarn</code>: Bot admin + User admin
-  • <code>/resetwarn</code>, <code>/resetwarns</code>: Bot admin + User admin
-  • <code>/resetallwarns</code>: Chat owner only
-  • <code>/setwarnmode</code>, <code>/setwarnlimit</code>: Bot admin + User admin
-  • <code>/warnings</code>: Bot admin + User admin
-  • <code>/warns</code>: Any user (disableable)
+warns_permissions_docs: "<b>Permission Requirements:</b>\n• <code>/warn</code>, <code>/dwarn</code>, <code>/swarn</code>: I am admin + user is admin with restrict\n• <code>/rmwarn</code>, <code>/unwarn</code>: I am admin + user is admin\n• <code>/resetwarn</code>, <code>/resetwarns</code>: I am admin + user is admin\n• <code>/resetallwarns</code>: Chat owner only\n• <code>/setwarnmode</code>, <code>/setwarnlimit</code>: I am admin + user is admin\n• <code>/warnings</code>: I am admin + user is admin\n• <code>/warns</code>: Any user (disableable)\n"
 
 warns_notes_docs: "<b>Notes:</b>\n• When a user reaches the warn limit, the configured action (ban/kick/mute) is applied automatically\n• Warning reasons are stored and shown when checking a user's warns\n• <code>/warns</code> is the only command in this module admins can disable\n• Anonymous channel posts cannot be warned\n• Admins cannot be warned\n"
 
 # Extended documentation locale keys - Mutes module
-mutes_extended_docs: "<b>Time Format for Temporary Mutes:</b>\n• <code>m</code> = minutes (e.g., <code>30m</code>)\n• <code>h</code> = hours (e.g., <code>2h</code>)\n• <code>d</code> = days (e.g., <code>1d</code>)\n\n<b>Mute Variants:</b>\n• <code>/mute</code> - Standard mute with an optional reason\n• <code>/smute</code> - Silent mute (deletes your command message)\n• <code>/dmute</code> - Delete-mute (mutes the user and deletes their message)\n• <code>/tmute</code> - Temporary mute for the given duration\n\n<b>Required Permissions:</b>\n<b>Admin only commands.</b> Users running these commands must have:\n• Admin status in the chat\n• Permission to restrict members\n\nThe bot must also be an admin with permission to restrict members.\n"
+mutes_extended_docs: "<b>Time Format for Temporary Mutes:</b>\n• <code>m</code> = minutes (e.g., <code>30m</code>)\n• <code>h</code> = hours (e.g., <code>2h</code>)\n• <code>d</code> = days (e.g., <code>1d</code>)\n\n<b>Mute Variants:</b>\n• <code>/mute</code> - Standard mute with an optional reason\n• <code>/smute</code> - Silent mute (deletes your command message)\n• <code>/dmute</code> - Delete-mute (mutes the user and deletes their message)\n• <code>/tmute</code> - Temporary mute for the given duration\n\n<b>Required Permissions:</b>\n<b>Admin only commands.</b> Users running these commands must have:\n• Admin status in the chat\n• Permission to restrict members\n\nI must also be an admin with permission to restrict members.\n"
 
 # Extended documentation locale keys - Filters module
 filters_extended_docs: "<b>Advanced Features:</b>\n\n<b>Random Responses:</b>\nSeparate several responses with <code>%%%</code>. One is picked at random:\n<code>/filter hello Hi there!%%%Hello!%%%Hey, how are you?</code>\n\n<b>Media Filters:</b>\nReply to any media (photo, video, document, sticker, etc.) with <code>/filter trigger</code> to make a filter that sends that media.\n\n<b>Noformat Mode:</b>\nAdmins can see the raw filter content (with formatting codes) by adding <code>noformat</code> after the trigger:\n<code>hello noformat</code>\nUseful for debugging filters or checking button setups.\n\n<b>Filter Buttons:</b>\nYou can add inline buttons to your filters:\n<code>/filter hello Hello! Check out these links:\n[Button 1](buttonurl:https://example.com)\n[Button 2](buttonurl:https://example2.com)</code>\n"
 
-filters_technical_docs: "<b>How Filters Work:</b>\n1. When a message arrives, the bot fetches all filters of the chat with an optimised cached query\n2. The Aho-Corasick algorithm matches every filter keyword against the message text\n3. The first matching filter triggers a response\n4. Filters support text, media and button responses\n\n<b>Overwrite Confirmation:</b>\nWhen you add a filter that already exists, the bot asks for confirmation before overwriting. The confirmation expires after 5 minutes.\n\n<b>Cache Behaviour:</b>\n• Filter lists are cached for 15 minutes per chat\n• The cache is cleared automatically when filters are added or removed\n"
+filters_technical_docs: "<b>How Filters Work:</b>\n1. When a message arrives, I fetch all filters of the chat with an optimised cached query\n2. The Aho-Corasick algorithm matches every filter keyword against the message text\n3. The first matching filter triggers a response\n4. Filters support text, media and button responses\n\n<b>Overwrite Confirmation:</b>\nWhen you add a filter that already exists, I ask for confirmation before overwriting. The confirmation expires after 5 minutes.\n\n<b>Cache Behaviour:</b>\n• Filter lists are cached for 15 minutes per chat\n• The cache is cleared automatically when filters are added or removed\n"
 
 filters_limits_docs: |
   <b>Limits:</b>
@@ -1133,19 +1114,10 @@ captcha_extended_docs: |
 
   This helps identify potential spam attempts before users complete verification.
 
-captcha_permissions_docs: |
-  <b>Bot Requirements:</b>
-  • Ban users (for kick/ban actions)
-  • Restrict members (for muting during verification)
-  • Delete messages (for cleaning up captcha messages)
-
-  <b>Failure Actions:</b>
-  • <code>kick</code> - Remove the user while allowing them to rejoin
-  • <code>ban</code> - Permanently ban the user
-  • <code>mute</code> - Keep the user muted for 24 hours
+captcha_permissions_docs: "<b>What I Need:</b>\n• Ban users (for kick/ban actions)\n• Restrict members (for muting during verification)\n• Delete messages (for cleaning up captcha messages)\n\n<b>Failure Actions:</b>\n• <code>kick</code> - Remove the user while allowing them to rejoin\n• <code>ban</code> - Permanently ban the user\n• <code>mute</code> - Keep the user muted for 24 hours\n"
 
 # Extended documentation locale keys - Blacklists module
-blacklists_extended_docs: "<b>Available Actions:</b>\nThese actions can be set with <code>/blaction</code>:\n• <code>none</code> - Only deletes the message, nothing else\n• <code>warn</code> - Deletes the message and warns the user (default)\n• <code>mute</code> - Deletes the message and mutes the user\n• <code>kick</code> - Deletes the message and kicks the user (they can rejoin)\n• <code>ban</code> - Deletes the message and permanently bans the user\n\n<b>Note:</b>\nThe default mode for Blacklist is <b>warn</b>, which deletes the message and warns the user.\n\n<b>Commands:</b>\n• <code>/addblacklist &lt;trigger&gt;</code> - Blacklists the word in the current chat\n• <code>/rmblacklist &lt;trigger&gt;</code> - Removes the word from the chat's blacklisted words\n• <code>/blaction &lt;mute/kick/ban/warn/none&gt;</code> - Sets the action the bot takes when a blacklisted word is detected\n• <code>/remallbl</code> - Removes all blacklisted words from chat (Owner Only)\n"
+blacklists_extended_docs: "<b>Available Actions:</b>\nThese actions can be set with <code>/blaction</code>:\n• <code>none</code> - Only deletes the message, nothing else\n• <code>warn</code> - Deletes the message and warns the user (default)\n• <code>mute</code> - Deletes the message and mutes the user\n• <code>kick</code> - Deletes the message and kicks the user (they can rejoin)\n• <code>ban</code> - Deletes the message and permanently bans the user\n\n<b>Note:</b>\nThe default mode for Blacklist is <b>warn</b>, which deletes the message and warns the user.\n\n<b>Commands:</b>\n• <code>/addblacklist &lt;trigger&gt;</code> - Blacklists the word in the current chat\n• <code>/rmblacklist &lt;trigger&gt;</code> - Removes the word from the chat's blacklisted words\n• <code>/blaction &lt;mute/kick/ban/warn/none&gt;</code> - Sets the action I take when a blacklisted word is detected\n• <code>/remallbl</code> - Removes all blacklisted words from chat (Owner Only)\n"
 
 # Extended documentation locale keys - Disabling module
 disabling_extended_docs: "<b>Key Features:</b>\n• Disable specific bot commands for non-admin users\n• Admins can always use disabled commands\n• Optional automatic deletion of disabled command messages\n• Disable several commands at once\n\n<b>Disable Multiple Commands:</b>\n<code>/disable adminlist rules info</code>\nDisables <code>/adminlist</code>, <code>/rules</code> and <code>/info</code> at once.\n\n<b>Toggle Command Deletion:</b>\n<code>/disabledel on</code> - Disabled commands will now be deleted.\n<code>/disabledel off</code> - Disabled commands will no longer be deleted.\n<code>/disabledel</code> - Check the current deletion setting.\n"
@@ -1153,13 +1125,13 @@ disabling_extended_docs: "<b>Key Features:</b>\n• Disable specific bot command
 disabling_notes_docs: "<b>Important Notes:</b>\n• <b>Admin Bypass:</b> Disabled commands only affect non-admin users. All admins can still use any command.\n• <b>Connection Support:</b> Disabled commands are still reachable through the <code>/connect</code> feature for connected chats.\n• <b>Multiple Commands:</b> Both <code>/disable</code> and <code>/enable</code> accept several command names in one message.\n• <b>Error Handling:</b> If some commands fail to disable/enable, you are told which ones succeeded and which failed.\n\n<b>Required Permissions:</b>\n• <code>/disable</code>, <code>/enable</code>, <code>/disabledel</code>: Admin only\n• <code>/disableable</code>, <code>/disabled</code>: All users (but <code>/disabled</code> can be disabled)\n"
 
 # Extended documentation locale keys - Help module
-help_extended_docs: "<b>Navigation System:</b>\nThe Help module provides the bot's main entry points and navigation. When a user sends <code>/start</code> in a private chat, the bot shows a welcome message with an inline keyboard for navigating to the modules.\n\nThe <code>/help</code> command shows the module list. Pressing a module button shows that module's commands and usage. When <code>/help</code> is used in a group chat, the bot sends the user to a private chat for detailed help, so the group stays clean.\n\n<code>/about</code> shows bot information and the version, while <code>/donate</code> says whether the bot accepts donations.\n"
+help_extended_docs: "<b>Navigation System:</b>\nThe Help module is my main entry point and navigation. When a user sends <code>/start</code> in a private chat, I show a welcome message with an inline keyboard for navigating to the modules.\n\nThe <code>/help</code> command shows the module list. Pressing a module button shows that module's commands and usage. When <code>/help</code> is used in a group chat, I send the user to a private chat for detailed help, so the group stays clean.\n\n<code>/about</code> shows who I am and my version, while <code>/donate</code> says whether I accept donations.\n"
 
 # Extended documentation locale keys - Devs module
-devs_extended_docs: "<b>Team Hierarchy:</b>\nThe Devs module provides bot management and diagnostic commands restricted to the bot's internal team. The team has three tiers with descending privilege levels.\n\n<b>Tier 1 — Owner:</b> Set with the <code>OWNER_ID</code> environment variable at deployment. Full control: manage the team roster, all diagnostic commands, all team commands.\n\n<b>Tier 2 — Sudo / Dev:</b> Assigned by the owner with <code>/addsudo</code> or <code>/adddev</code>. Diagnostic commands: bot stats, chat info, chat management.\n\n<b>Tier 3 — Team Member:</b> Automatically includes the owner + all sudo + all dev users. Can only view the team roster with <code>/teamusers</code>.\n\n<b>Note:</b> Sudo and Dev have identical command access. The distinction exists for organisational purposes.\n\n<b>Important:</b> These commands are not visible in the public help menu and silently ignore unauthorised users.\n"
+devs_extended_docs: "<b>Team Hierarchy:</b>\nThe Devs module provides management and diagnostic commands restricted to my internal team. The team has three tiers with descending privilege levels.\n\n<b>Tier 1 — Owner:</b> Set with the <code>OWNER_ID</code> environment variable at deployment. Full control: manage the team roster, all diagnostic commands, all team commands.\n\n<b>Tier 2 — Sudo / Dev:</b> Assigned by the owner with <code>/addsudo</code> or <code>/adddev</code>. Diagnostic commands: my stats, chat info, chat management.\n\n<b>Tier 3 — Team Member:</b> Automatically includes the owner + all sudo + all dev users. Can only view the team roster with <code>/teamusers</code>.\n\n<b>Note:</b> Sudo and Dev have identical command access. The distinction exists for organisational purposes.\n\n<b>Important:</b> These commands are not visible in the public help menu and silently ignore unauthorised users.\n"
 
 # Extended documentation locale keys - Users module
-users_extended_docs: "<b>Background Tracker:</b>\nThe Users module is a passive background module with no user-facing commands. It runs quietly on every message the bot processes, tracking every message sender and every chat the bot is active in.\n\n<b>What It Tracks:</b>\n• User IDs, usernames and display names of every message sender\n• Chat IDs and names of every group the bot is in\n• Channel IDs, names and usernames of linked channels\n\n<b>Rate Limiting:</b>\n• User updates: limited to one per <code>UserUpdateInterval</code>\n• Chat updates: limited to one per <code>ChatUpdateInterval</code>\n• This prevents excessive database writes while keeping the data reasonably current\n\n<b>Passive Operation:</b>\n• Runs as a message watcher at handler group -1 (fires before all command handlers)\n• No user interaction required — fully automatic\n• Other modules, such as <code>/info</code>, depend on the data this module collects\n"
+users_extended_docs: "<b>Background Tracker:</b>\nThe Users module is a passive background module with no user-facing commands. I run it quietly on every message I process, tracking every message sender and every chat I am active in.\n\n<b>What It Tracks:</b>\n• User IDs, usernames and display names of every message sender\n• Chat IDs and names of every group I am in\n• Channel IDs, names and usernames of linked channels\n\n<b>Rate Limiting:</b>\n• User updates: limited to one per <code>UserUpdateInterval</code>\n• Chat updates: limited to one per <code>ChatUpdateInterval</code>\n• This prevents excessive database writes while keeping the data reasonably current\n\n<b>Passive Operation:</b>\n• Runs as a message watcher at handler group -1 (fires before all command handlers)\n• No user interaction required — fully automatic\n• Other modules, such as <code>/info</code>, depend on the data this module collects\n"
 
 # Issue #628 remediation keys
 misc_translate_parse_error: "Malfunction: could not read the translation response. Try again."
@@ -1170,7 +1142,7 @@ common_settings_save_failed: "Malfunction: could not save the settings. Try agai
 devs_chatlist_error: "Malfunction: could not generate the chat list. Try again."
 
 # Reactions module strings
-reactions_help_msg: "<b>🎭 Auto-Reactions</b>\n\nAutomatic reactions to chosen keywords. Morale is a facility resource too.\n\nSet up emoji reactions that trigger when users send specific words.\n\n<b>Admin Commands:</b>\n• /addreaction <keyword> <emoji> - Add an auto-reaction\n• /removereaction <keyword> - Remove a reaction\n• /reactions - List configured reactions\n• /resetreactions - Clear all reactions\n\n<b>Example:</b>\n• /addreaction hello 👋 - The bot reacts with 👋 when someone says \"hello\"\n"
+reactions_help_msg: "<b>🎭 Auto-Reactions</b>\n\nAutomatic reactions to chosen keywords. Morale is a facility resource too.\n\nSet up emoji reactions that trigger when users send specific words.\n\n<b>Admin Commands:</b>\n• /addreaction <keyword> <emoji> - Add an auto-reaction\n• /removereaction <keyword> - Remove a reaction\n• /reactions - List configured reactions\n• /resetreactions - Clear all reactions\n\n<b>Example:</b>\n• /addreaction hello 👋 - I react with 👋 when someone says \"hello\"\n"
 
 reactions_add_usage: "Usage: /addreaction &lt;keyword&gt; &lt;emoji&gt;"
 reactions_invalid_emoji: "Give me a valid emoji."
@@ -1271,7 +1243,7 @@ antiraid_help_msg: |
 
 # Rose feature-parity keys (federations, log channels, extras)
 federations_help_msg: "Federations share a ban list across the groups you own. One removal, every facility.\n\n*Owner (in private):*\n× /newfed <name>: Create a federation (one per user).\n× /renamefed <name>: Rename your federation.\n× /delfed: Delete your federation (confirm).\n× /fedpromote /feddemote: Manage fed admins.\n× /fedreason on/off: Require a reason for fbans.\n× /fednotif on/off: Tell the owner about fbans in private.\n× /subfed /unsubfed /fedsubs: Subscribe to another fed (max 5).\n× /fbanlist [csv|json|minicsv]: Export fbans.\n× /importfbans: Import from a replied CSV/JSON file.\n× /setfedlog /unsetfedlog: Federation log chat.\n\n*Group owner:*\n× /joinfed <fed_id>: Join this chat to a federation.\n× /leavefed: Leave the federation.\n× /quietfed on/off: Suppress passive fban notices.\n\n*Fed admins:*\n× /fban /unfban /funban: Federation ban/unban.\n× /fedstat /fbanstat: Check a user's fban.\n\n*Anyone:*\n× /fedinfo /fedadmins /chatfed /myfeds\n"
-logchannels_help_msg: "Send admin actions to a dedicated log channel. Every facility keeps records.\n\n1. Add the bot to a channel as admin.\n2. In that channel, send /setlog.\n3. Forward that message to the group.\n\n*Admin commands:*\n× /unsetlog: Remove the log channel.\n× /logchannel: Show the current log channel.\n× /logcategories: List categories.\n× /log <category>: Enable a category.\n× /nolog <category>: Disable a category.\n\nCategories: settings, admin, user, automated, reports, other.\n"
+logchannels_help_msg: "Send admin actions to a dedicated log channel. Every facility keeps records.\n\n1. Add me to a channel as admin.\n2. In that channel, send /setlog.\n3. Forward that message to the group.\n\n*Admin commands:*\n× /unsetlog: Remove the log channel.\n× /logchannel: Show the current log channel.\n× /logcategories: List categories.\n× /log <category>: Enable a category.\n× /nolog <category>: Disable a category.\n\nCategories: settings, admin, user, automated, reports, other.\n"
 feds_pm_only: "This command works only in private chat with me."
 feds_group_only: "This command works only in groups."
 feds_need_name: "Give your federation a name."
@@ -1475,10 +1447,10 @@ staff_panel_add_group_button: "➕ Add group"
 staff_notice_unlinked_by: "Group unlinked: {group}\nUnlinked by {user}"
 staff_notice_unlinked_group_owner_changed: "Group unlinked: {group}\nReason: its owner changed"
 staff_notice_unlinked_staff_owner_changed: "This Staff Group's owner changed, so these groups were unlinked:\n{groups}"
-staff_notice_health_bot_missing: "Heads-up: the bot is no longer in {group}. The link is kept; add the bot back with admin rights to restore it."
-staff_notice_health_bot_not_admin: "Heads-up: the bot is no longer an admin in {group}. The link is kept; make the bot an admin again to restore it."
-staff_notice_health_bot_cannot_restrict: "Heads-up: the bot can no longer ban or restrict members in {group}. The link is kept; give the bot the ban right again to restore it."
-staff_notice_health_ok: "{group} is healthy again: the bot has the rights it needs."
+staff_notice_health_bot_missing: "Warning: I am no longer in {group}. The link is kept; add me back with admin rights to restore it."
+staff_notice_health_bot_not_admin: "Warning: I am no longer an admin in {group}. The link is kept; make me an admin again to restore it."
+staff_notice_health_bot_cannot_restrict: "Warning: I can no longer ban or restrict members in {group}. The link is kept; give me the ban right again to restore it."
+staff_notice_health_ok: "{group} is healthy again: I have the rights I need."
 staff_unlink_not_linked: "This group is not linked to a Staff Group."
 staff_unlink_refuse_not_owner: "Only the creator of this group and of its Staff Group can unlink it. Nothing was changed."
 staff_unlink_refuse_not_group_owner: "Not unlinked: you are not the creator of {group}. Only the creator of both groups can unlink them."
@@ -1486,11 +1458,11 @@ staff_unlink_check_failed_group: "Not unlinked: I could not verify who created {
 staff_panel_unlink_button: "Unlink {group}"
 staff_unlink_confirm_prompt: "Are you sure you want to unlink {group}? Staff commands will no longer reach it."
 staff_cb_denied: "This button does not belong to this chat."
-staff_panel_row_status: "Bot is admin: {bot} | Can restrict members: {restrict} | Owner matches: {owner}"
+staff_panel_row_status: "I am admin: {bot} | Can restrict members: {restrict} | Owner matches: {owner}"
 staff_panel_row_lockdown: "🔒 In lockdown since {since}"
-staff_panel_reason_bot_missing: "Problem: the bot is not in this group."
-staff_panel_reason_bot_not_admin: "Problem: the bot is not an admin in this group."
-staff_panel_reason_bot_cannot_restrict: "Problem: the bot cannot restrict members in this group."
+staff_panel_reason_bot_missing: "Problem: I am not in this group."
+staff_panel_reason_bot_not_admin: "Problem: I am not an admin in this group."
+staff_panel_reason_bot_cannot_restrict: "Problem: I cannot restrict members in this group."
 staff_panel_reason_owner_unknown: "Problem: I could not check who owns this group right now."
 staff_panel_legend: "✅ yes | ❌ no | ❔ could not be checked"
 staff_panel_updated: "Updated {time} UTC"
@@ -1554,8 +1526,8 @@ staff_act_skip_staff_group: "this is the Staff Group"
 staff_act_fail_owner_unknown: "could not verify the group owner"
 staff_act_fail_lookup: "could not check members"
 staff_act_fail_telegram: "Telegram error: {error}"
-staff_act_fail_bot_not_admin: "bot is not an admin"
-staff_act_fail_bot_no_rights: "bot lacks ban rights"
+staff_act_fail_bot_not_admin: "I am not an admin there"
+staff_act_fail_bot_no_rights: "I lack the ban right there"
 staff_act_fail_group_not_found: "group not found"
 staff_act_fail_rate_limited: "rate limited, gave up after retries"
 staff_act_fail_internal: "internal error"
@@ -1714,7 +1686,7 @@ lockdown_auto_flood_on: "Flood: on. I lock this group when {threshold} messages 
 lockdown_auto_flood_off: "Flood: off. Its threshold is {threshold} messages within 30 seconds."
 lockdown_auto_ai_on: "AI spam: on. I lock this group when {threshold} messages from at least 3 accounts are judged spam within 120 seconds."
 lockdown_auto_ai_off: "AI spam: off. Its threshold is {threshold} spam verdicts within 120 seconds."
-lockdown_auto_ai_unavailable: "AI checks are not set up on this bot, so the AI spam trigger cannot fire."
+lockdown_auto_ai_unavailable: "AI checks are not set up for me, so the AI spam trigger cannot fire."
 lockdown_auto_hint: "Admins and approved users never count. Change a trigger with <code>/autolockdown joins N|on|off</code>, <code>/autolockdown flood N|on|off</code> or <code>/autolockdown ai N|on|off</code>; a number sets the threshold and turns the trigger on."
 lockdown_auto_saved: "✅ Saved."
 lockdown_auto_usage: "Usage: <code>/autolockdown</code> shows the triggers; <code>/autolockdown joins N|on|off</code>, <code>/autolockdown flood N|on|off</code> or <code>/autolockdown ai N|on|off</code> changes one."
@@ -1773,7 +1745,7 @@ settings_btn_trigger_joins: "Join surge: {state}"
 settings_btn_unlink: "➖ Unlink Staff Group"
 settings_btn_yes: "✅ Yes"
 settings_captcha_action: "If not solved: <b>{action}</b>"
-settings_captcha_fallback_note: "Turnstile is not available on this bot, so new members get the math captcha instead."
+settings_captcha_fallback_note: "Turnstile is not available to me, so new members get the math captcha instead."
 settings_captcha_mode: "Mode: <b>{mode}</b> ({desc})"
 settings_captcha_status: "Captcha: {state}"
 settings_card_expired: "This confirmation expired. Nothing changed. Ask again."
@@ -2095,7 +2067,7 @@ settings_mreq_here_basic: "This is a basic group, and rules are checked only in 
 settings_mreq_here_nolink: "{rule}: I found no linked channel for this group, so nobody is checked."
 settings_mreq_here_notadmin: "{rule}: I am not an administrator of the linked channel, so nobody is checked."
 settings_mreq_here_unknown: "{rule}: I could not check this right now. Try again in a moment."
-settings_mreq_here_ai: "{rule}: AI checks are not set up on this bot, so nobody is checked."
+settings_mreq_here_ai: "{rule}: AI checks are not set up for me, so nobody is checked."
 settings_page_del: "Deletion"
 settings_state_del_on: "{n} on"
 settings_del_intro: "I can delete service notices, some of my own messages and messages from members. Tap a section to set it."
@@ -2188,7 +2160,7 @@ settings_btn_sw_reports: "Reports: {state}"
 settings_btn_sw_aispam: "AI spam filter: {state}"
 settings_btn_sw_approve: "Auto-approve joins: {state}"
 settings_sw_ai_off: "The AI spam filter is <b>off</b> in this chat."
-settings_sw_ai_unavailable: "The AI spam filter is not available on this bot, so it can only be switched off."
+settings_sw_ai_unavailable: "The AI spam filter is not available to me, so it can only be switched off."
 settings_lang_current: "Group language: <b>{lang}</b>"
 settings_lang_hint: "I answer in this group in the language you pick. Your own language is set with /lang in a private chat with me."
 settings_log_status: "Log channel: <b>{state}</b>"
