@@ -5,22 +5,22 @@ description: Complete guide to Users module commands and features
 
 # 📦 Users Commands
 
-Resident registry. An automatic background tracker of users and chats. This module has no commands: it quietly records every message sender and every chat the bot is active in.
+Resident registry. I keep an automatic record of users and chats. There are no commands here: I quietly note every message sender and every chat I am active in.
 ### What It Tracks:
 - User IDs, usernames and display names of every message sender.
-- Chat IDs and names of every group the bot is in.
+- Chat IDs and names of every group I am in.
 - Channel IDs, names and usernames of linked channels.
 ### Rate Limiting:
 - User updates are limited to one per UserUpdateInterval.
 - Chat updates are limited to one per ChatUpdateInterval.
-Other modules, such as /info, depend on the data this module collects.
+Other modules, such as /info, depend on the data collected here.
 
 **Background Tracker:**
-The Users module is a passive background module with no user-facing commands. It runs quietly on every message the bot processes, tracking every message sender and every chat the bot is active in.
+The Users module is a passive background module with no user-facing commands. I run it quietly on every message I process, tracking every message sender and every chat I am active in.
 
 **What It Tracks:**
 - User IDs, usernames and display names of every message sender
-- Chat IDs and names of every group the bot is in
+- Chat IDs and names of every group I am in
 - Channel IDs, names and usernames of linked channels
 
 **Rate Limiting:**

@@ -5,15 +5,15 @@ description: Complete guide to Federations module commands and features
 
 # 🛡️ Federations Commands
 
-Federations share a ban list across the groups you own. One removal, every facility.
+Federations share one ban list across the groups you own. One ban, every facility.
 
-### Owner (PM):
+### Owner (in private):
 - `/newfed <name>`: Create a federation (one per user).
 - `/renamefed <name>`: Rename your federation.
 - `/delfed`: Delete your federation (confirm).
 - `/fedpromote /feddemote`: Manage fed admins.
 - `/fedreason on/off`: Require a reason for fbans.
-- `/fednotif on/off`: PM the owner on fbans.
+- `/fednotif on/off`: Tell the owner about fbans in private.
 - `/subfed /unsubfed /fedsubs`: Subscribe to another fed (max 5).
 - `/fbanlist [csv|json|minicsv]`: Export fbans.
 - `/importfbans`: Import from a replied CSV/JSON file.
@@ -56,7 +56,7 @@ This module can be accessed using the following aliases:
 | `/feddemote` | Manage fed admins. | ❌ |
 | `/feddemoteme` | No description available | ❌ |
 | `/fedinfo` | No description available | ✅ |
-| `/fednotif` | PM the owner on fbans. | ❌ |
+| `/fednotif` | Tell the owner about fbans in private. | ❌ |
 | `/fedpromote` | Manage fed admins. | ❌ |
 | `/fedreason` | Require a reason for fbans. | ❌ |
 | `/fedstat` | Check a user's fban. | ✅ |
