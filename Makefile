@@ -1,4 +1,4 @@
-.PHONY: run tidy vendor build bump-version lint test test-postgres-integrity check-translations check-duplicates psql-migrate psql-status psql-reset generate-docs check-docs inventory docs-dev validate-db backup-db
+.PHONY: run tidy vendor build bump-version lint test test-rest test-shard test-shard-check coverage-merge test-postgres-integrity check-translations check-duplicates psql-migrate psql-status psql-reset generate-docs check-docs inventory docs-dev validate-db backup-db
 
 GO_CMD = go
 GORELEASER_CMD = goreleaser
@@ -31,10 +31,42 @@ lint:
 	@which $(GOLANGCI_LINT_CMD) > /dev/null || (echo "golangci-lint not found, install it from https://golangci-lint.run/usage/install/" && exit 1)
 	$(GOLANGCI_LINT_CMD) run
 
+# The flags every full or sharded test run shares (race, coverage over all of fuku, no cache).
+TEST_FLAGS = -tags testtools -json -race -coverpkg=$$(go list ./fuku/... | paste -sd, -) -count=1 -timeout 40m
+# The package CI splits into shards (most of the suite's time), and how many.
+SHARDED_PKG = ./fuku/modules
+SHARDS ?= 4
+
 test: SHELL := /bin/bash
 test: .SHELLFLAGS := -o pipefail -c
 test:
-	$(GO_CMD) test -tags testtools -json -race -coverprofile=coverage.out -coverpkg=$$(go list ./fuku/... | paste -sd, -) -count=1 -timeout 40m ./... | $(GO_CMD) run ./scripts/check_test_results
+	$(GO_CMD) test $(TEST_FLAGS) -coverprofile=coverage.out ./... | $(GO_CMD) run ./scripts/check_test_results
+
+# CI runs `make test` as test-rest plus test-shard SHARD=1..$(SHARDS) in parallel jobs, then
+# coverage-merge. Together they run exactly the tests `make test` runs.
+test-rest: SHELL := /bin/bash
+test-rest: .SHELLFLAGS := -o pipefail -c
+test-rest:
+	$(GO_CMD) test $(TEST_FLAGS) -coverprofile=coverage-rest.out $$(go list ./... | grep -vx "$$(go list $(SHARDED_PKG))") | $(GO_CMD) run ./scripts/check_test_results
+
+test-shard: SHELL := /bin/bash
+test-shard: .SHELLFLAGS := -o pipefail -c
+test-shard:
+	@if [ -z "$(SHARD)" ]; then echo "SHARD is required, e.g. make test-shard SHARD=1"; exit 1; fi
+	$(GO_CMD) test $(TEST_FLAGS) -coverprofile=coverage-shard-$(SHARD).out -run "$$(scripts/test_shard.sh $(SHARDED_PKG) $(SHARD) $(SHARDS))" $(SHARDED_PKG) | $(GO_CMD) run ./scripts/check_test_results
+
+# Fails when the shard script's test list differs from what `go test -list` reports, so a test
+# the script cannot see is never left out of every shard.
+test-shard-check: SHELL := /bin/bash
+test-shard-check: .SHELLFLAGS := -o pipefail -c
+test-shard-check:
+	diff <(scripts/test_shard.sh $(SHARDED_PKG) list) <($(GO_CMD) test -tags testtools -list '.*' $(SHARDED_PKG) | grep -E '^Test' | LC_ALL=C sort)
+
+# Joins coverage-rest.out and coverage-shard-*.out into coverage.out. `go tool cover` adds up the
+# counts of a block listed more than once, which `go test` already relies on for -coverpkg.
+coverage-merge:
+	@ls coverage-rest.out coverage-shard-*.out > /dev/null
+	{ echo "mode: atomic"; for f in coverage-rest.out coverage-shard-*.out; do tail -n +2 "$$f"; done; } > coverage.out
 
 test-postgres-integrity:
 	$(GO_CMD) test -tags testtools -v -race -p 1 -count=1 -timeout 10m \

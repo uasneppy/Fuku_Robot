@@ -241,12 +241,14 @@ jobs:
           path: /tmp/fuku_robot
           retention-days: 7
 
-  # Automated regression tests
-  test:
-    name: Test Suite
+  # Automated regression tests. `make test` runs as parallel jobs: test-rest runs every
+  # package but fuku/modules, test-shard runs fuku/modules in SHARDS slices, and test merges
+  # their coverage and applies the threshold. Together they run exactly what `make test` runs.
+  test-rest:
+    name: Tests (other packages)
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-    services:
+    timeout-minutes: 30
+    services: &test-services
       postgres:
         image: postgres:16
         env:
@@ -269,7 +271,7 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
-    env:
+    env: &test-env
       BOT_TOKEN: test-token
       OWNER_ID: "1"
       MESSAGE_DUMP: "1"
@@ -343,36 +345,99 @@ jobs:
         # Node's built-in runner, nothing to install. The glob form is required on Node 22.
         run: node --test scripts/captcha-page/*.test.mjs
 
-      - name: Run test suite
+      - name: Check that the shards cover every fuku/modules test
+        run: make test-shard-check
+
+      - name: Run tests of every package but fuku/modules
+        run: make test-rest
+
+      - name: Upload coverage part
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-part-rest
+          path: coverage-rest.out
+          retention-days: 1
+          if-no-files-found: error
+
+  test-shard:
+    name: Tests (fuku/modules ${{ matrix.shard }}/4)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # Keep in step with SHARDS in the Makefile (passed below).
+        shard: [1, 2, 3, 4]
+    services: *test-services
+    env: *test-env
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          cache: false
+
+      - name: Restore Go module and build cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-race-${{ runner.os }}-${{ hashFiles('go.sum') }}-${{ github.run_id }}
+          restore-keys: |
+            go-race-${{ runner.os }}-${{ hashFiles('go.sum') }}-
+            go-race-${{ runner.os }}-
+
+      - name: Run fuku/modules shard ${{ matrix.shard }} of 4
         run: |
-          # Run tests and capture timing (capture exit status to track duration even on failure)
           start_time=$(date +%s)
-          make test || test_exit=$?
-          end_time=$(date +%s)
-          duration=$((end_time - start_time))
+          make test-shard SHARD=${{ matrix.shard }} SHARDS=4 || test_exit=$?
+          duration=$(( $(date +%s) - start_time ))
+          echo "Shard ${{ matrix.shard }} duration: ${duration}s"
+          echo "**fuku/modules shard ${{ matrix.shard }}/4:** ${duration} seconds" >> $GITHUB_STEP_SUMMARY
+          exit ${test_exit:-0}
 
-          # Print duration to logs
-          echo "Test suite duration: ${duration}s"
+      - name: Upload coverage part
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-part-${{ matrix.shard }}
+          path: coverage-shard-${{ matrix.shard }}.out
+          retention-days: 1
+          if-no-files-found: error
 
-          # Add to job summary
-          echo "## 🧪 Test Suite Performance" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Total Duration:** ${duration} seconds" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [test-rest, test-shard]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
-          # Re-exit with test failure status if tests failed
-          if [ -n "${test_exit}" ]; then
-            exit ${test_exit}
-          fi
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          cache: true
+
+      - name: Download coverage parts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: coverage-part-*
+          merge-multiple: true
+
+      - name: Merge coverage
+        run: make coverage-merge
 
       - name: Check coverage threshold
-        if: success()
         run: |
-          if [ ! -f coverage.out ]; then
-            echo "ERROR: coverage.out not found"
-            exit 1
-          fi
-
           THRESHOLD=78
           COVERAGE=$(go tool cover -func=coverage.out | grep '^total:' | awk '{print $3}' | tr -d '%')
 
