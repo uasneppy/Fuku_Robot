@@ -5,7 +5,7 @@ admin_anon_admin_disabled: "AnonAdmin mode is currently <b>disabled</b> for %s.\
 admin_anon_admin_disabled_now: "AnonAdmin mode is now <b>disabled</b> for %s.\nFrom now on, I will not ask anonymous admins to verify their permissions."
 admin_anon_admin_enabled: "AnonAdmin mode is currently <b>enabled</b> for %s.\nAll anonymous admins can perform admin actions without restriction."
 admin_anon_admin_enabled_now: "AnonAdmin mode is now <b>enabled</b> for %s.\nFrom now on, I will ask anonymous admins to verify their permissions."
-admin_anon_admin_invalid_arg: "Invalid argument. I only accept <code>on</code>, <code>off</code>, <code>yes</code>, <code>no</code>"
+admin_anon_admin_invalid_arg: "Unrecognised input. I accept <code>on</code>, <code>off</code>, <code>yes</code> or <code>no</code> only."
 admin_demote_not_admin: "Request denied. This person is not an admin. There is nothing to demote."
 admin_demote_is_bot_itself: "Request denied. I do not process my own demotion. Nice try."
 admin_demote_is_owner: "Request denied. This person created the chat. I cannot demote them."
@@ -63,7 +63,7 @@ antiflood_flood_deleter_already_disabled: "Antiflood message deleting is already
 antiflood_flood_deleter_already_enabled: "Antiflood message deleting is already *enabled* in this chat. Messages that trigger antiflood will be deleted."
 antiflood_flood_deleter_disabled: "Antiflood message deleting off. Messages that trigger antiflood will be left alone."
 antiflood_flood_deleter_enabled: "Antiflood message deleting on. Messages that trigger antiflood will be deleted."
-antiflood_flood_deleter_invalid_option: "Unrecognised input. I accept: `yes`/`no`/`on`/`off`"
+antiflood_flood_deleter_invalid_option: "Unrecognised input. I accept `yes`/`no`/`on`/`off` only."
 antiflood_flood_disabled: "Flood control is off in this chat."
 antiflood_flood_show_settings: "Flood control is active in this chat after %d messages. Anyone sending more than that will be %s."
 antiflood_help_msg: "Someone joins, sends 100 messages and ruins the chat. With antiflood, that stops here.\n\nAntiflood acts on users who send more than x messages in a row. Actions: ban/kick/mute\n\n*Admin commands*:\n× /flood: Get the current antiflood settings.\n× /setflood `<number/off/no>`: Set the number of messages after which to act on a user. Set '0', 'off' or 'no' to disable.\n× /setfloodmode `<action type>`: Choose the action for a user who floods. Options: ban/kick/mute\n× /delflood `<yes/no/on/off>`: Whether the bot deletes the flood messages."
@@ -218,7 +218,7 @@ captcha_failed_send: "Malfunction: could not send a new captcha image."
 captcha_invalid_data: Invalid captcha data
 captcha_invalid_attempt: Invalid attempt ID
 captcha_invalid_user: Invalid user ID
-captcha_error_processing: Error processing answer
+captcha_error_processing: "Malfunction: could not process the answer."
 captcha_invalid_refresh: Invalid refresh data
 
 # Captcha max attempts
@@ -271,7 +271,7 @@ misc_translation_error: "Malfunction: the translation request failed."
 devs_specify_user: "Specify a user to get info on"
 
 # Common error messages used across modules
-error_generic: "Malfunction. Try again later."
+error_generic: "Malfunction. Try again."
 common_anonymous_user_error: "This command cannot be used on an anonymous user."
 common_anonymous_ban_error: "This command cannot be used on an anonymous user. Anonymous users can only be banned or unbanned."
 common_cannot_identify_user: "Cannot identify the user. Channels cannot use this command."
@@ -413,7 +413,7 @@ pins_cleanlinked_current_disabled: Linked channel post deletion is currently <b>
 pins_no_pinned_message: "Nothing is pinned in this chat. The notice board is empty."
 pins_here_is_pinned: <a href='%s'>Here</a> is the pinned message.
 pins_pinned_message_button: Pinned Message
-pins_input_not_recognized: "Unrecognised input. I accept: yes/no/on/off"
+pins_input_not_recognized: "Unrecognised input. I accept yes/no/on/off only."
 
 # Purges module strings
 purges_cannot_delete_old: "Messages over two days old cannot be deleted. Choose a more recent message."
@@ -462,7 +462,7 @@ disabling_delete_current_disabled: "Disabled command deleting is *disabled*: dis
 disabling_enabled_successfully: "Re-enabled in this chat:%s"
 disabling_unknown_reenable: "Unknown command to re-enable:\n-%s\nSee /disableable."
 disabling_no_command_reenable: "You have not specified a command to disable."
-disabling_invalid_option: "Unrecognised input. I accept: `yes`/`no`/`on`/`off`"
+disabling_invalid_option: "Unrecognised input. I accept `on`/`yes` or `off`/`no` only."
 
 # Misc module strings
 misc_reply_to_someone: Reply to someone.
@@ -604,7 +604,7 @@ captcha_math_time_remaining: "👋 Welcome, %s.\n\nSolve the problem in the imag
 
 # Notes module strings
 notes_save_success: "Note <b>%s</b> filed.\nGet it with <code>#%s</code> or <code>/get %s</code>."
-notes_save_failed: "Malfunction: could not save the note. Try again later."
+notes_save_failed: "Malfunction: could not save the note. Try again."
 notes_keyword_required: "Give me a keyword to reply to."
 notes_name_invalid: "Note name rejected. It must be one word of at most 100 characters and must not start with #."
 notes_overwrite_confirm: "Note already exists.\nOverwrite it?"
@@ -613,7 +613,7 @@ notes_not_exists: "Note does not exist."
 notes_removed_success: "Note <b>%s</b> removed from the files."
 notes_private_enabled: "Private notes on.\nUsers now get notes as a private message."
 notes_private_disabled: "Private notes off.\nAll notes are now sent to the group chat."
-notes_private_invalid_option: "Unrecognised input. I accept one of <on/off/yes/no>"
+notes_private_invalid_option: "Unrecognised input. I accept <on/off/yes/no> only."
 notes_private_status_on: "Private notes are currently on."
 notes_private_status_off: "Private notes are currently off."
 notes_none_in_chat: "The filing cabinet is empty. No notes in this chat."
@@ -750,10 +750,10 @@ captcha_invalid_action_error: "invalid failure action: must be 'kick', 'ban', or
 captcha_attempts_range_error: "max attempts must be between 1 and 10"
 captcha_status_usage: "Use <code>/captcha on</code> or <code>/captcha off</code> to change status."
 captcha_not_for_you: "This captcha is not for you."
-captcha_expired_or_not_found: "Captcha expired or not found"
+captcha_expired_or_not_found: "Captcha expired or not found."
 captcha_attempt_not_valid: "This captcha attempt is no longer valid."
 captcha_refresh_limit_reached: "Refresh limit reached for this captcha."
-captcha_internal_update_error: "Internal error updating captcha."
+captcha_internal_update_error: "Malfunction while updating captcha. Try again."
 captcha_internal_error: "Malfunction while updating captcha settings. Try again."
 
 # Greetings additional strings
@@ -886,7 +886,7 @@ reports_button_ban: "⛔️ Ban"
 reports_button_delete: "❎ Delete Message"
 reports_button_resolved: "✔️ Mark Resolved"
 reports_blocked_users_header: "Users blocked from using report commands:"
-reports_invalid_input: "Unrecognised input. I accept: <code><yes/on/no/off> or <block/unblock/showblocklist></code>"
+reports_invalid_input: "Unrecognised input. I accept <code>yes/on/no/off</code> or <code>block/unblock/showblocklist</code> only."
 reports_preference_enabled_private: "Your preference is on. You will be notified whenever someone reports something in groups where you are an admin."
 reports_preference_disabled_private: "You have not enabled reports. You will not be notified."
 reports_status_enabled_group: "Reports are enabled in this chat.\nUsers can use the /report command, or mention @admin, to tag all admins."
@@ -926,7 +926,7 @@ message_type_video_note: "video note"
 message_type_unknown: "unknown"
 
 # Connections module strings
-connections_invalid_option: "Unrecognised input. I accept one of <yes/on/no/off>"
+connections_invalid_option: "Unrecognised input. I accept 'on/yes' or 'off/no' only."
 connections_button_connect: "Connect to chat"
 
 # Bot updates module strings
@@ -972,7 +972,7 @@ aispam_enabled_success: "✅ The AI spam filter is now <b>on</b>. Messages the m
 aispam_disabled_success: "❌ The AI spam filter is now <b>off</b>."
 aispam_no_key: "❌ I cannot turn the AI spam filter on: the bot operator has not configured an API key. Nothing has changed."
 aispam_globally_disabled: "❌ I cannot turn the AI spam filter on: the bot operator has switched it off globally. Nothing has changed."
-aispam_invalid_option: "Unrecognised input. I accept: <code>on</code>/<code>off</code>/<code>yes</code>/<code>no</code>"
+aispam_invalid_option: "Unrecognised input. I accept <code>on</code>/<code>off</code>/<code>yes</code>/<code>no</code> only."
 aispam_breaker_notice: "⚠️ AI spam checks are paused in this chat for a few minutes after repeated failures from the AI provider. They resume on their own, and the filter stays on."
 
 # Admin module extended documentation
@@ -1166,17 +1166,17 @@ misc_translate_parse_error: "Malfunction: could not read the translation respons
 blacklists_set_bl_action_update_failed: "Malfunction: could not update the blacklist action. Try again."
 filters_overwrite_token_failed: "Malfunction: could not create the overwrite confirmation. Try again."
 notes_overwrite_token_failed: "Malfunction: could not create the overwrite confirmation. Try again."
-common_settings_save_failed: "Malfunction: could not save the settings. Try again later."
+common_settings_save_failed: "Malfunction: could not save the settings. Try again."
 devs_chatlist_error: "Malfunction: could not generate the chat list. Try again."
 
 # Reactions module strings
 reactions_help_msg: "<b>🎭 Auto-Reactions</b>\n\nAutomatic reactions to chosen keywords. Morale is a facility resource too.\n\nSet up emoji reactions that trigger when users send specific words.\n\n<b>Admin Commands:</b>\n• /addreaction <keyword> <emoji> - Add an auto-reaction\n• /removereaction <keyword> - Remove a reaction\n• /reactions - List configured reactions\n• /resetreactions - Clear all reactions\n\n<b>Example:</b>\n• /addreaction hello 👋 - The bot reacts with 👋 when someone says \"hello\"\n"
 
-reactions_add_usage: "Usage: /addreaction <keyword> <emoji>"
+reactions_add_usage: "Usage: /addreaction &lt;keyword&gt; &lt;emoji&gt;"
 reactions_invalid_emoji: "Give me a valid emoji."
 reactions_add_error: "Malfunction: could not save the reaction. Try again."
 reactions_add_success: "Reaction filed: <code>{keyword}</code> -> {emoji}"
-reactions_remove_usage: "Usage: /removereaction <keyword>"
+reactions_remove_usage: "Usage: /removereaction &lt;keyword&gt;"
 reactions_not_found: "No reactions are configured for this chat."
 reactions_keyword_not_found: "No reaction found for keyword: <code>{keyword}</code>"
 reactions_remove_error: "Malfunction: could not remove the reaction. Try again."
@@ -1195,7 +1195,7 @@ backup_export_success: "<b>✅ Export complete.</b>\n\n<b>Chat:</b> %s\n<b>Modul
 backup_export_success_text: "✅ Modules exported: {modules}. Download the backup file above."
 backup_export_rate_limited: "⏳ Wait <b>{time}</b> before exporting again."
 backup_export_no_modules: "❌ No exportable modules found for this chat."
-backup_export_failed: "❌ Malfunction: could not export settings. Try again later."
+backup_export_failed: "❌ Malfunction: could not export settings. Try again."
 
 backup_import_success: "<b>✅ Import complete.</b>\n\n<b>Modules imported:</b> %d\n\n<b>Modules:</b>\n%s\n"
 
@@ -1294,7 +1294,7 @@ feds_join_failed: "Malfunction: could not join that federation."
 feds_joined: "This chat joined federation <b>{name}</b> (<code>{id}</code>)."
 feds_not_in_fed: "This chat is not in a federation."
 feds_left: "This chat left its federation."
-feds_invalid_toggle: "Use on or off."
+feds_invalid_toggle: "Unrecognised input. I accept on or off only."
 feds_quiet_on: "Quiet federation on. Passive fbans will not be announced here."
 feds_quiet_off: "Quiet federation off. Passive fbans will be announced."
 feds_info: "<b>{name}</b>\nID: <code>{id}</code>\nOwner: <code>{owner}</code>\nChats: {chats}\nBans: {bans}\nAdmins: {admins}\nSubscriptions: {subs}\nRequire reason: {reason}\nNotify owner: {notify}"
@@ -1357,7 +1357,7 @@ logs_categories: "Categories: settings, admin, user, automated, reports, other."
 logs_enabled: "Logging enabled for: {cats}"
 logs_disabled: "Logging disabled for: {cats}"
 logs_unknown_category: "Unknown category. See /logcategories."
-logs_usage: "Usage: /log <category> or /nolog <category>"
+logs_usage: "Usage: /log &lt;category&gt; or /nolog &lt;category&gt;"
 logs_group_only: "This command works only in groups."
 bans_banme_is_admin: "Request denied. Admins cannot ban themselves. Resign first."
 bans_banme_ok: "Request granted. You are banned."
@@ -1377,11 +1377,11 @@ misc_stickerid_result: "Sticker file ID: <code>{id}</code>"
 misc_zombies_scanning: "Scanning the facility for deleted accounts…"
 misc_zombies_none: "No deleted accounts found among known residents."
 misc_zombies_cleaned: "Deleted accounts removed: {count}."
-misc_github_usage: "Usage: /github <user> or /github <user/repo>"
+misc_github_usage: "Usage: /github &lt;user&gt; or /github &lt;user/repo&gt;"
 misc_github_not_found: "No GitHub user or repository found by that name."
-misc_wiki_usage: "Usage: /wiki <search>"
+misc_wiki_usage: "Usage: /wiki &lt;search&gt;"
 misc_wiki_not_found: "No Wikipedia result for that."
-misc_ud_usage: "Usage: /ud <term>"
+misc_ud_usage: "Usage: /ud &lt;term&gt;"
 misc_ud_not_found: "No Urban Dictionary result for that."
 misc_runs: ["Leaves the facility. Briefly.", "Request denied.", "This unit is on a tempe break.", "Catch me if you can. You cannot. I fly."]
 chat_status_bot_change_info_error: "I cannot change group info here. Make sure I am an admin and can change group info."
