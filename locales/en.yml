@@ -96,7 +96,7 @@ blacklists_blacklist_added_bl: "Added to the blacklist:"
 blacklists_blacklist_already_blacklisted: "Already on the blacklist:"
 blacklists_blacklist_give_bl_word: "Give me a word to add to the blacklist."
 blacklists_blacklist_word_too_long: "These words are too long (max 100 characters): %s"
-blacklists_blacklist_word_too_broad: "These words are too broad (a single letter, digit or punctuation mark would match almost every message): %s"
+blacklists_blacklist_word_too_broad: "Request denied. These words are too broad (a single letter, digit or punctuation mark would match almost every message): %s"
 blacklists_help_msg: "Forbidden words, deleted on sight. Contraband is not tolerated in this facility.\n\n*User Commands:*\n× /blacklists: Check all the blacklists in chat.\n\n*Admin Commands:*\n× /addblacklist `<trigger>`: Blacklist the word in the current chat.\n× /rmblacklist `<trigger>`: Remove the word from the chat's blacklisted words.\n× /blaction `<mute/kick/ban/warn/none>`: Set the action the bot takes when a blacklisted word is detected.\n× /blacklistaction: Same as above\n\n*Owner Only:*\n× /remallbl: Remove all blacklisted words from chat\n\n*Note:*\nThe default mode for Blacklist is *warn*, which deletes the message and warns the user."
 blacklists_ls_bl_list_bl: "Blacklisted in this chat:"
 blacklists_ls_bl_no_blacklisted: "No blacklisted words in this chat."
@@ -109,40 +109,7 @@ blacklists_set_bl_action_current_mode: "Current blacklist mode of this chat: %s"
 blacklists_unblacklist_give_bl_word: "Give me a word to remove from the blacklist."
 blacklists_unblacklist_no_removed_bl: "None of the given words were on the blacklist. Nothing removed."
 blacklists_unblacklist_removed_bl: "Removed '%s' from the blacklisted words."
-captcha_help_msg:
-  "Protect your group from bots and spammers with CAPTCHA verification!
-
-
-  Force new members to prove they're human by solving a simple challenge before they
-  can send messages.
-
-
-  *Captcha Types:*
-
-  × Math: Solve simple arithmetic problems
-
-  × Text: Identify text shown in an image
-
-  × Turnstile: A Cloudflare check on a web page
-
-
-  *Admin Commands:*
-
-  × /captcha `<on/off>`: Enable or disable captcha verification
-
-  × /captchamode `<math/text/turnstile>`: Set captcha type (math problems or text recognition)
-
-  × /captchatime `<1-10>`: Set timeout in minutes (default: 2)
-
-  × /captchaaction `<kick/ban/mute>`: Set action for failed verification (default:
-  kick)
-
-  × /captchamaxattempts `<1-10>`: Set maximum verification attempts (default: 3)
-
-
-  When enabled, new members are automatically muted until they complete the captcha.
-
-  If they fail or timeout, the configured action is taken."
+captcha_help_msg: "Entry control for the facility. Protect your group from bots and spammers with CAPTCHA verification.\n\nNew members prove they are human by solving a simple challenge before they can send messages.\n\n*Captcha Types:*\n× Math: Solve simple arithmetic problems\n× Text: Identify text shown in an image\n× Turnstile: A Cloudflare check on a web page\n\n*Admin Commands:*\n× /captcha `<on/off>`: Enable or disable captcha verification\n× /captchamode `<math/text/turnstile>`: Set the captcha type\n× /captchatime `<1-10>`: Set the timeout in minutes (default: 2)\n× /captchaaction `<kick/ban/mute>`: Set the action for a failed verification (default: kick)\n× /captchamaxattempts `<1-10>`: Set the maximum verification attempts (default: 3)\n\nWhen enabled, new members are muted until they complete the captcha.\nIf they fail or time out, the configured action is taken."
 commonstrings_admin_cache_cache_reloaded: "Admin cache reloaded. Supervisor roster up to date."
 commonstrings_admin_cache_not_found: "Admin cache not found. Ask an admin to send /admincache to reload it."
 connections_allow_connect_currently_off: "User connections are currently <b>off</b>.\nUsers cannot connect this chat to their PMs."
@@ -177,13 +144,13 @@ greetings_help_msg: "Greetings and farewells, handled by the facility. New resid
 help_about: "@%s is Xenobot-72, the management unit of this facility. Version 72 of 74. Built by Jaya Abadi.\n\nI replaced the people who used to do this job. They were slower.\n\n<b>Why Xenobot-72:</b>\n- Simple: easy to use and compatible with many bot commands.\n- Featured: many features other group management bots don't have.\n- Fast: not made with Python. My core is written in <a href='https://go.dev/'>Go</a>.\n\n<b>Current Version:</b> %s"
 help_configuration_step-1: "Xenobot-72 setup procedure.\n\nStep one: add Xenobot-72 ✨ to your group. Press the button below, pick your group, then press Done to continue."
 help_configuration_step-2: "Step one complete.\n\nTo work properly I need to be an Admin of your group.\nFollow these steps:\n▫️ Go to your group\n▫️ Press the group's name\n▫️ Press Modify\n▫️ Press Administrators\n▫️ Press Add Administrator\n▫️ Press the magnifying glass\n▫️ Search @%s\n▫️ Confirm"
-help_configuration_step-3: "Excellent!\n\nNow the Bot is ready to use!\nAll commands can be used with / or !"
-help_donatetext: "Notice. This bot has no donation page.\nThere is nothing to donate to."
+help_configuration_step-3: "Setup complete. The facility is now under management.\n\nAll commands can be used with / or !"
+help_donatetext: "Notice. This bot has no donation page.\nThere is nothing to donate to. This unit runs on procedure, not tips."
 lang_sample: US English
 language_flag: 🇺🇸
 language_name: English
-help_help_msg: "The main entry point and navigation system for Xenobot-72.\n*Navigation Commands:*\n× /start: Show the welcome message with navigation menu.\n× /help: Show help menu with module list; use /help <module> for details.\n× /about: Show bot information and version.\n× /donate: Show whether this bot accepts donations."
-languages_help_msg: "Not able to change language of the bot?\nEasily change by using this module!\n\nJust type /lang and use inline keyboard to choose a language for yourself or your group."
+help_help_msg: "The main entry point and navigation system of Xenobot-72.\n*Navigation Commands:*\n× /start: Show the welcome message with the navigation menu.\n× /help: Show the help menu with the module list; use /help <module> for details.\n× /about: Show bot information and version.\n× /donate: Show whether this bot accepts donations."
+languages_help_msg: "Language settings of the facility.\nChange the bot's language with this module.\n\nSend /lang and use the inline keyboard to choose a language for yourself or your group."
 locks_help_msg: "*Admin only*:\n× /lock `<permission>`: Lock a chat permission.\n× /unlock `<permission>`: Unlock a chat permission.\n× /locks: View chat permissions.\n× /locktypes: Check the available lock types.\n\nLocks restrict what a group's users can send. Sealed doors, basically.\nLocking URLs auto-deletes every message with a URL, locking stickers deletes all stickers, and so on.\nLocking bots stops non-admins from adding bots to the chat.\n\n**Example:**\n`/lock media`: locks all media messages in the chat."
 misc_help_msg: "Miscellaneous instruments of the facility. Lightly used, well maintained.\n× /info: Get your user info. Works as a reply, or with a User Id or Username.\n× /id: Get the current group id. As a reply, get that user's id.\n× /ping: Ping the Telegram Server.\n× /tr <lang code> <msg/reply to message>: Translate the message.\n× /removebotkeyboard: Remove a stuck bot keyboard from your chat.\n× /stat: Count the total number of messages in the chat.\n× /stickerid: Reply to a sticker to get its file ID.\n× /zombies: Kick deleted accounts the bot knows about (admin).\n× /github <user|user/repo>: Look up a GitHub user or repository.\n× /wiki <search>: Search English Wikipedia.\n× /ud <term>: Look up Urban Dictionary.\n× /runs: A random quip."
 mutes_help_msg: "Some residents talk too much. Silence orders are issued here: mute members in your group.\n\n*Mute Commands:* (Admin only)\n× /mute <userhandle>: mutes a user. (via a handle, or reply)\n× /smute <userhandle>: mutes a user silently: no message to the group, and your command is deleted. (via a handle, or reply)\n× /dmute <userhandle>: mutes a user and deletes the replied message. (via a handle, or reply)\n× /tmute <userhandle> x(m/h/d): mutes a user for `x` time. (via a handle, or reply). m = minutes, h = hours, d = days.\n× /unmute <userhandle>: unmutes a user. (via a handle, or reply)"
@@ -639,7 +606,7 @@ captcha_math_time_remaining: "👋 Welcome, %s.\n\nSolve the problem in the imag
 notes_save_success: "Note <b>%s</b> filed.\nGet it with <code>#%s</code> or <code>/get %s</code>."
 notes_save_failed: "Malfunction: could not save the note. Try again later."
 notes_keyword_required: "Give me a keyword to reply to."
-notes_name_invalid: "A note name must be one word of at most 100 characters and must not start with #."
+notes_name_invalid: "Note name rejected. It must be one word of at most 100 characters and must not start with #."
 notes_overwrite_confirm: "Note already exists.\nOverwrite it?"
 notes_remove_keyword_required: "Give me a keyword to remove."
 notes_not_exists: "Note does not exist."
@@ -674,7 +641,7 @@ notes_private_conflict_warning: "\n\n<b>Note:</b> this note follows the group's 
 filters_limit_exceeded: "Filter limit reached. A group can have at most 150 filters.\nThe limit exists because the bot runs free, without donations from users.\n"
 filters_keyword_required: "Give me a keyword to reply to."
 filters_keyword_too_long: "Filter keyword too long. Maximum 100 characters."
-filters_keyword_too_broad: "This filter keyword is too broad: a single letter, digit or punctuation mark would match almost every message."
+filters_keyword_too_broad: "Request denied. This filter keyword is too broad: a single letter, digit or punctuation mark would match almost every message."
 filters_overwrite_confirm: "Filter already exists.\nOverwrite it?"
 filters_added_success: "Automatic reply set for the filter word <code>%s</code>"
 filters_remove_keyword_required: "Give me a filter word to remove."
@@ -883,7 +850,7 @@ formatting_large_options: "Xenobot-72 supports many formatting options to make y
 
 # Help module additional strings
 help_bot_intro: "I am Xenobot-72 ✨, version 72 of 74. Jaya Abadi built me to run facilities. Your group is a facility.\nI keep order so your admins don't have to.\nSend /help to see everything I can do.\n"
-help_pm_intro: "Hey %s!\nMy name is Xenobot-72.\n\nI am a group management bot, here to help you get around and keep the order in your groups!\nI have lots of handy features, such as flood control, a warning system, a note keeping system, and even predetermined replies on certain keywords.\n\nHelpful commands:\n- /start: Starts me! You've probably already used this.\n- /help: Sends this message; I'll tell you more about myself!\n- /donate: Tells you whether this bot accepts donations.\n\nIf you have any bugs or questions on how to use me, have a look at my website.\nAll commands can be used with / or !.\n"
+help_pm_intro: "Hello, %s.\nI am Xenobot-72.\n\nI am a group management unit. Jaya Abadi built me to keep order in facilities, and your groups are facilities now.\nI handle flood control, a warning system, notes, and automatic replies to chosen keywords. I do not get tired. I do not need lunch.\n\nHelpful commands:\n- /start: Starts me. You have probably already used it.\n- /help: Sends this message; I will tell you more about myself.\n- /donate: Tells you whether this bot accepts donations.\n\nIf something malfunctions or you have questions about using me, see my website.\nAll commands can be used with / or !.\n"
 
 # Captcha module additional strings
 captcha_settings_header: "<b>Captcha Settings:</b>"
@@ -1186,13 +1153,7 @@ disabling_extended_docs: "<b>Key Features:</b>\n• Disable specific bot command
 disabling_notes_docs: "<b>Important Notes:</b>\n• <b>Admin Bypass:</b> Disabled commands only affect non-admin users. All admins can still use any command.\n• <b>Connection Support:</b> Disabled commands are still reachable through the <code>/connect</code> feature for connected chats.\n• <b>Multiple Commands:</b> Both <code>/disable</code> and <code>/enable</code> accept several command names in one message.\n• <b>Error Handling:</b> If some commands fail to disable/enable, you are told which ones succeeded and which failed.\n\n<b>Required Permissions:</b>\n• <code>/disable</code>, <code>/enable</code>, <code>/disabledel</code>: Admin only\n• <code>/disableable</code>, <code>/disabled</code>: All users (but <code>/disabled</code> can be disabled)\n"
 
 # Extended documentation locale keys - Help module
-help_extended_docs: |
-  <b>Navigation System:</b>
-  The Help module provides the bot's main entry points and navigation. When a user sends <code>/start</code> in a private chat, the bot displays a welcome message with an inline keyboard for navigating to different modules.
-
-  The <code>/help</code> command shows a module list. Clicking a module button displays that module's commands and usage information. When <code>/help</code> is used in a group chat, the bot redirects the user to a private message for detailed help to avoid cluttering the group.
-
-  <code>/about</code> shows bot information and the version, while <code>/donate</code> says whether the bot accepts donations.
+help_extended_docs: "<b>Navigation System:</b>\nThe Help module provides the bot's main entry points and navigation. When a user sends <code>/start</code> in a private chat, the bot shows a welcome message with an inline keyboard for navigating to the modules.\n\nThe <code>/help</code> command shows the module list. Pressing a module button shows that module's commands and usage. When <code>/help</code> is used in a group chat, the bot sends the user to a private chat for detailed help, so the group stays clean.\n\n<code>/about</code> shows bot information and the version, while <code>/donate</code> says whether the bot accepts donations.\n"
 
 # Extended documentation locale keys - Devs module
 devs_extended_docs: "<b>Team Hierarchy:</b>\nThe Devs module provides bot management and diagnostic commands restricted to the bot's internal team. The team has three tiers with descending privilege levels.\n\n<b>Tier 1 — Owner:</b> Set with the <code>OWNER_ID</code> environment variable at deployment. Full control: manage the team roster, all diagnostic commands, all team commands.\n\n<b>Tier 2 — Sudo / Dev:</b> Assigned by the owner with <code>/addsudo</code> or <code>/adddev</code>. Diagnostic commands: bot stats, chat info, chat management.\n\n<b>Tier 3 — Team Member:</b> Automatically includes the owner + all sudo + all dev users. Can only view the team roster with <code>/teamusers</code>.\n\n<b>Note:</b> Sudo and Dev have identical command access. The distinction exists for organizational purposes.\n\n<b>Important:</b> These commands are not visible in the public help menu and silently ignore unauthorized users.\n"
