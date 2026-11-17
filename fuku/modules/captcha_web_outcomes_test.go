@@ -655,7 +655,7 @@ func TestCaptchaWebFailedActionNotAppliedIsNeutral(t *testing.T) {
 	token := env.join(member)
 	env.setSiteverify(captchaweb.SiteverifyAnswerForTest(http.StatusOK, `{"success":false,"error-codes":["invalid-input-response"]}`))
 	env.client.mu.Lock()
-	env.client.errors["banChatMember"] = errors.New("Bad Request: not enough rights to restrict")
+	env.client.errors["banChatMember"] = &gotgbot.TelegramError{Code: 400, Description: "Bad Request: not enough rights to restrict"}
 	env.client.mu.Unlock()
 
 	status, answer := env.verify(member, token)

@@ -1546,14 +1546,9 @@ func handleCaptchaTimeout(bot *gotgbot.Bot, chatID, userID int64, attemptID uint
 	}
 
 	if err := executeCaptchaFailureAction(bot, chatID, userID, action); err != nil {
-		log.Errorf("[Captcha] Failed to apply %s to user %d in chat %d: %v", action, userID, chatID, err)
-		if action == "kick" {
-			_, _ = bot.UnbanChatMember(chatID, userID, &gotgbot.UnbanChatMemberOpts{OnlyIfBanned: false})
+		if !settleFailedCaptchaAction(bot, chatID, userID, action, err) {
+			return true, false
 		}
-		if restoreErr := restoreCaptchaPermissions(bot, chatID, userID); restoreErr != nil {
-			log.Errorf("[Captcha] Failed to restore permissions after action failure: %v", restoreErr)
-		}
-		return true, false
 	}
 	if action != "mute" {
 		if err := captcha.DeleteMutedUser(userID, chatID); err != nil {
@@ -1608,6 +1603,60 @@ func buildCaptchaFailureMessage(tr *i18n.Translator, action string, userID int64
 	return fmt.Sprintf(template, formatting.MentionHtml(userID, userName))
 }
 
+// captchaFailureMuteSpan is how long the captcha's mute action lasts, and how long a member
+// whose failure action had an unknown outcome stays muted before the fallback unmute.
+const captchaFailureMuteSpan = 24 * time.Hour
+
+// errCaptchaMuteNotStored is a mute action that stopped before any Telegram call, because its
+// automatic unmute could not be stored: nothing was applied.
+var errCaptchaMuteNotStored = errors.New("store automatic unmute")
+
+// settleFailedCaptchaAction decides what a failure action Telegram answered with an error did,
+// from the member's live record (C2), and reports whether it took effect after all:
+//   - a kick or ban whose member is now left or kicked, and a mute whose member is restricted
+//     without the right to send, took effect (a mute gets its 24 hour unmute back);
+//   - a mute whose member is gone has nothing left to do;
+//   - with the member still there, a definite refusal (a Telegram 4xx other than 429, or a mute
+//     whose unmute could not be stored) releases and unmutes them (WR-07);
+//   - anything else (a 429, a 5xx, a timeout, an unreadable record) may have taken effect, so the
+//     member stays muted, the 24 hour fallback unmute is scheduled (the unmute worker reads the
+//     live member before it restricts) and one warning names the IDs.
+//
+// It never sends a member-removing unban: a failed kick is not retried blindly.
+func settleFailedCaptchaAction(bot *gotgbot.Bot, chatID, userID int64, action string, actionErr error) bool {
+	member, readErr := bot.GetChatMember(chatID, userID, nil)
+	if readErr == nil {
+		status := member.GetStatus()
+		removed := status == "left" || status == "kicked"
+		switch {
+		case action == "mute" && status == "restricted" && !member.MergeChatMember().CanSendMessages:
+			if err := captcha.CreateMutedUser(userID, chatID, time.Now().Add(captchaFailureMuteSpan)); err != nil {
+				log.Errorf("[Captcha] Failed to schedule the unmute of user %d in chat %d: %v", userID, chatID, err)
+			}
+			return true
+		case action != "mute" && removed:
+			return true
+		case removed:
+			if err := captcha.DeleteMutedUser(userID, chatID); err != nil {
+				log.Errorf("[Captcha] Failed to clear fallback unmute for user %d: %v", userID, err)
+			}
+			return false
+		case isTelegramClientError(actionErr) || errors.Is(actionErr, errCaptchaMuteNotStored):
+			log.Errorf("[Captcha] Failed to apply %s to user %d in chat %d: %v", action, userID, chatID, actionErr)
+			if restoreErr := restoreCaptchaPermissions(bot, chatID, userID); restoreErr != nil {
+				log.Errorf("[Captcha] Failed to restore permissions after action failure: %v", restoreErr)
+			}
+			return false
+		}
+	}
+	log.Warnf("[Captcha] The %s of user %d in chat %d has an unknown outcome; the member stays muted until the fallback unmute",
+		action, userID, chatID)
+	if err := captcha.CreateMutedUser(userID, chatID, time.Now().Add(captchaFailureMuteSpan)); err != nil {
+		log.Errorf("[Captcha] Failed to schedule the fallback unmute of user %d in chat %d: %v", userID, chatID, err)
+	}
+	return false
+}
+
 func executeCaptchaFailureAction(bot *gotgbot.Bot, chatID, userID int64, action string) error {
 	switch action {
 	case "kick":
@@ -1619,9 +1668,9 @@ func executeCaptchaFailureAction(bot *gotgbot.Bot, chatID, userID int64, action 
 			return fmt.Errorf("ban: %w", err)
 		}
 	case "mute":
-		unmuteAt := time.Now().Add(24 * time.Hour)
+		unmuteAt := time.Now().Add(captchaFailureMuteSpan)
 		if err := captcha.CreateMutedUser(userID, chatID, unmuteAt); err != nil {
-			return fmt.Errorf("store automatic unmute: %w", err)
+			return fmt.Errorf("%w: %w", errCaptchaMuteNotStored, err)
 		}
 		if _, muteErr := bot.RestrictChatMember(chatID, userID, MutedPermissions, nil); muteErr != nil {
 			return errors.Join(fmt.Errorf("mute: %w", muteErr), captcha.DeleteMutedUser(userID, chatID))

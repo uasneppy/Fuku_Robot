@@ -3108,10 +3108,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   Cloudflare call, and a bot without it, or an unknown answer, is a retry. A `Backend` method returns an error only when
   it changed nothing, which is what makes the re-arm after one safe. `Fail` and `Expire` return a
   `captchaweb.ActionResult`: `ActionLost` (someone else decided), `ActionApplied` or `ActionNotApplied` (this call won the
-  claim but the action did not take effect: Telegram refused the kick or ban, so the member was unmuted and is still in
-  the group). A not-applied outcome is answered with the neutral `invalid` and no action, never `failed` or `expired`
-  with a removal text, the replay marker stores the same `invalid`, and the handler logs `outcome=<result> applied=false`
-  at Warn and counts an error (WR-07).
+  claim but the action did not take effect). A failure action Telegram answered with an error is judged by
+  `settleFailedCaptchaAction` from one live `getChatMember` (C2): a kick or ban whose member is now left or kicked, and a
+  mute whose member is restricted without the right to send (its 24 hour unmute stored again), took effect after all
+  (`ActionApplied`, the notice is posted); with the member still there, a definite refusal (a Telegram 4xx other than
+  429, or a mute whose unmute could not be stored) releases and unmutes them; any other answer (a 429, a 5xx, a timeout)
+  or an unreadable record leaves the member muted, schedules the 24 hour fallback unmute in `captcha_muted_users` (the
+  unmute worker reads the live member before it restricts) and logs one Warn by IDs. A failed kick is never retried and
+  a failed ban is never followed by a member-removing unban. A not-applied outcome is answered with the neutral
+  `invalid` and no action, never `failed` or `expired` with a removal text, the replay marker stores the same `invalid`,
+  and the handler logs `outcome=<result> applied=false` at Warn and counts an error (WR-07).
   Exactly once on any replica: a pass, a failed solve and a timeout are decided only by the conditional delete of the
   attempt row (`CompleteCaptchaAttemptAtomic` or `ReleaseCaptchaAttemptAtomic`), never by a Redis flag, so a challenge
   issued on one replica passes on another and a timer, a cleanup tick and a check on three replicas cannot all act. A
