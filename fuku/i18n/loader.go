@@ -2,7 +2,7 @@ package i18n
 
 import (
 	"fmt"
-	"path/filepath"
+	"path"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -30,7 +30,7 @@ func (lm *LocaleManager) loadLocaleFiles() error {
 			continue
 		}
 
-		filePath := filepath.Join(lm.localePath, fileName)
+		filePath := path.Join(lm.localePath, fileName)
 		langCode := extractLangCode(fileName)
 
 		if err := lm.loadSingleLocaleFile(filePath, langCode); err != nil {
@@ -84,7 +84,7 @@ func parseYAML(content []byte) (map[string]any, error) {
 }
 
 func extractLangCode(fileName string) string {
-	langCode := strings.TrimSuffix(fileName, filepath.Ext(fileName))
+	langCode := strings.TrimSuffix(fileName, path.Ext(fileName))
 	langCode = strings.TrimSuffix(langCode, ".yml")
 	langCode = strings.TrimSuffix(langCode, ".yaml")
 	return langCode
@@ -268,6 +268,6 @@ func (t *Translator) lookupStringSlice(key string) []string {
 }
 
 func isYAMLFile(fileName string) bool {
-	ext := strings.ToLower(filepath.Ext(fileName))
+	ext := strings.ToLower(path.Ext(fileName))
 	return ext == ".yml" || ext == ".yaml"
 }

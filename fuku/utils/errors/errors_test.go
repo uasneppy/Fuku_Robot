@@ -178,3 +178,25 @@ func TestFilePathTruncation(t *testing.T) {
 		t.Fatalf("File %q has %d slashes, expected at most 1", we.File, slashCount)
 	}
 }
+
+// TestWrapfReportsCaller holds I6: Wrapf called Wrap, so runtime.Caller(1) inside Wrap named
+// Wrapf in errors.go and not the code that wrapped the error. Both must name their caller.
+func TestWrapfReportsCaller(t *testing.T) {
+	t.Parallel()
+
+	for name, err := range map[string]error{
+		"Wrap":  Wrap(stderrors.New("base"), "msg"),
+		"Wrapf": Wrapf(stderrors.New("base"), "msg %d", 1),
+	} {
+		var wrapped *WrappedError
+		if !stderrors.As(err, &wrapped) {
+			t.Fatalf("%s returned %T, want *WrappedError", name, err)
+		}
+		if !strings.HasSuffix(wrapped.File, "errors_test.go") {
+			t.Errorf("%s File = %q, want the caller's errors_test.go", name, wrapped.File)
+		}
+		if !strings.Contains(wrapped.Function, "TestWrapfReportsCaller") {
+			t.Errorf("%s Function = %q, want the calling test", name, wrapped.Function)
+		}
+	}
+}

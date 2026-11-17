@@ -462,50 +462,51 @@ func memberPinnedRecently(chatID, messageID int64, now time.Time) bool {
 	return known && now.Sub(at) <= memberPinnedTTL
 }
 
-// memberDeleteDropPinned drops one pending self-destruct row; it is a variable only so a test can
-// make it fail.
-var memberDeleteDropPinned = deletion.DropPendingMessage
+// memberDeleteDropPinned drops the pending rows of a pinned message, whatever their kind; it is a
+// variable only so a test can make it fail.
+var memberDeleteDropPinned = deletion.DropPendingMessageAnyKind
 
-// memberSelfDestructRuleStored reports whether the chat may have self-destruct rows: true when the
-// cached rules hold a member:selfdestruct entry, and also when they cannot be read, so an unreadable
-// rule keeps the old behaviour (attempt the drop, IN-03). A chat with no such entry has nothing to
-// drop and nothing buffered that the flush would not drop as off.
-func memberSelfDestructRuleStored(chatID int64) bool {
+// memberDeleteRuleStored reports whether the chat may have queued rows: true when the cached rules
+// hold any delete rule (a member rule or a bot rule), and also when they cannot be read, so an
+// unreadable rule keeps the old behaviour (attempt the drop, IN-03). A chat with no rule at all has
+// nothing queued and nothing buffered that the flush would not drop as off.
+func memberDeleteRuleStored(chatID int64) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), deletionRecordTimeout)
 	defer cancel()
 	rules, err := deletionRulesLookup(ctx, chatID)
 	if err != nil || rules == nil {
 		return true
 	}
-	_, present := rules.Delays[deletion.KindMemberSelfDestruct]
-	return present
+	return len(rules.Delays) > 0
 }
 
-// memberDeletePinned keeps a pinned message out of the self-destruct queue (D-11). It first
-// remembers the pin in process, so a flush that holds the message in its buffer, or is already
-// screening it, drops it instead of writing it (WR-03: this closes that window on this replica only;
-// a pin handled by another replica stays the accepted limit AR-5), and then drops the message's
-// pending row, retrying the database drop once because the pin event is never delivered again. Each
-// attempt runs on a fresh bounded context and a failure is logged by chat ID only; the only cost of
-// a drop that fails twice is that the pinned message is still deleted when its time comes. A chat
-// with no member:selfdestruct rule is skipped after one cached rules read, with no note and no
-// database call (IN-03): pins are rare, but the drop was a synchronous write in the dispatcher
-// goroutine for every chat, Staff Groups and chats that never used the rule included.
+// memberDeletePinned keeps a pinned message out of the deletion queue (D-11), whatever kind of rule
+// queued it: a member's self-destruct row as well as the row of a bot message (a welcome, the rules,
+// a punishment reply) an admin pinned (I2). It first remembers the pin in process, so a flush that
+// holds the message in its buffer, or is already screening it, drops it instead of writing it (WR-03:
+// this closes that window on this replica only; a pin handled by another replica stays the accepted
+// limit AR-5), and then drops the message's pending rows, retrying the database drop once because the
+// pin event is never delivered again. Each attempt runs on a fresh bounded context and a failure is
+// logged by chat ID only; the only cost of a drop that fails twice is that the pinned message is
+// still deleted when its time comes. A chat with no delete rule at all is skipped after one cached
+// rules read, with no note and no database call (IN-03): pins are rare, but the drop was a
+// synchronous write in the dispatcher goroutine for every chat, Staff Groups and chats that never
+// used a rule included.
 func memberDeletePinned(chatID, messageID int64) {
-	if !memberSelfDestructRuleStored(chatID) {
+	if !memberDeleteRuleStored(chatID) {
 		return
 	}
 	memberPinnedNote(chatID, messageID, deletionNow())
 	var err error
 	for range 2 {
 		ctx, cancel := context.WithTimeout(context.Background(), deletionRecordTimeout)
-		_, err = memberDeleteDropPinned(ctx, chatID, messageID, deletion.KindMemberSelfDestruct)
+		_, err = memberDeleteDropPinned(ctx, chatID, messageID)
 		cancel()
 		if err == nil {
 			return
 		}
 	}
-	log.Warnf("[MemberDeletion] a pinned message of chat %d could not be taken off the self-destruct queue: %s",
+	log.Warnf("[MemberDeletion] a pinned message of chat %d could not be taken off the deletion queue: %s",
 		chatID, memberReqErrText(err))
 }
 

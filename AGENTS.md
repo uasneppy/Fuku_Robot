@@ -131,7 +131,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   holds: all four of `CAPTCHA_WEB_BASE_URL`, `TELEGRAM_MINI_APP_SHORT_NAME`, `TURNSTILE_SITE_KEY` and
   `TURNSTILE_SECRET_KEY` (some but not all stops startup, and the secret is registered with `logredact`). `main` builds
   the page's string tables from `i18n.StringTable(captchaweb.PageLanguages, captchaweb.PageKeys)` (a missing or empty
-  key is fatal), installs the runtime with `modules.ConfigureCaptchaWeb` (`StartNotReady` true, `TrustedProxies` from
+  key in any of the languages, with no fallback to English, is fatal), installs the runtime with `modules.ConfigureCaptchaWeb` (`StartNotReady` true, `TrustedProxies` from
   `CAPTCHA_WEB_TRUSTED_PROXIES`, a bad entry stops startup) and mounts `modules.CaptchaWebRoutes()` (`/captcha`,
   `/captcha/verify`, `/captcha/health`) through `Server.Handle` before `Start`. The patterns carry no method on purpose: a
   Go 1.22 method pattern makes the mux answer a wrong method itself with a bare text 405 that has none of the headers
@@ -145,7 +145,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   own `Stop` runs first and a web pass's finish joins `StopCaptchaLifecycle`. The captcha routes share the port with
   `/metrics`, `/db_metrics`, `/health`, pprof and the webhook, so `modules.CaptchaWebStartupWarnings` makes `main` warn
   when `METRICS_AUTH_TOKEN` or `CAPTCHA_WEB_TRUSTED_PROXIES` is empty, and the owner's public proxy must forward only
-  `/captcha` and `/captcha/*` (D-31; the bot enforces no path allow-list).
+  `/captcha` and `/captcha/*` (D-31; the bot enforces no path allow-list). With `METRICS_AUTH_TOKEN` set, `/metrics`,
+  `/db_metrics` and `/debug/pprof/` all need it as a bearer token (`requireMetricsAuth`). `/health` asks Redis with `PING`
+  (it writes no key) and, with `DISABLE_CACHE=true`, is not unhealthy when there is no Redis.
 
 ## Handlers
 
@@ -1691,6 +1693,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   evicts it on this replica only; list freshness-critical keys in `skipLocal` (`fuku/db/cache/local.go`). Tests that
   write rows directly must call `cache.ResetLocalForTest()` or `DeleteCache` before reading through the cache.
 - Two packages are named `cache`; the loader and generation guards are in `fuku/db/cache`, not `fuku/utils/cache`.
+- Accepted limit (review item I9, owner decision): the generation guard is per process. A load on replica A that read
+  the database before replica B's write and `DeleteCache` can still `SET` the old value into Redis after B's `DEL`,
+  and every replica then serves it until the key's TTL ends or the next write drops it. A Redis-side generation with a
+  Lua compare-and-set was not added: the write goes through gocache's marshaler and store (a memory store in tests), so
+  it would bypass that layer, duplicate its encoding and add a round trip to every load and every delete. Keys whose
+  staleness matters are read fresh (`*Fresh`, never cached) or kept short; a new cached setting that must change at once
+  on every replica needs that too, not only `skipLocal`.
 - Operational Redis keys (`fuku:anonAdmin:*`, `fuku:staff:*`, `fuku:lockdown:*`, `fuku:raid:*`, `fuku:memberreq:*`, `fuku:fed:*`) sit outside the
   `fuku:cache:` prefix; `CLEAR_CACHE_ON_STARTUP` does not clear them. `fuku:antiraid:*` is retired: nothing reads or
   writes it, and `sweepRetiredAntiRaidKeys` removes what the old raid mode left, once per process at startup.
@@ -2363,7 +2372,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   with one fresh read per distinct chat (a Staff Group chat's entries are dropped, a failed read drops that chat's entries
   and is returned while other chats are written). `deletion.CountPending` is the exact count of a chat's queued rows of one
   kind bounded by a limit (`SELECT count(*) FROM (SELECT 1 ... LIMIT n)`, served by `uk_scheduled_deletions_message`) and
-  `deletion.DropPendingMessage` deletes the one pending row of a `(chat, message, kind)`; no migration was added for them.
+  `deletion.DropPendingMessage` deletes the one pending row of a `(chat, message, kind)` and
+  `deletion.DropPendingMessageAnyKind` every pending row of a `(chat, message)`, whatever its kind (the pin drop); no
+  migration was added for them.
   The queue is read and written only through fresh queries, so no `DeleteCache` applies, and it is
   never part of backup, export, import or reset. The worker (`deletion_worker.go`) claims at most 1000 due rows per cycle
   (`deletionBatch`) and screens the claimed member:selfdestruct rows against the chat's current rule, releases claims older than 2 minutes (`deletionStaleClaim`) without counting an attempt, ends a cycle
@@ -2430,6 +2441,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 ## Migrations
 
 - `migrations/*.sql` is the schema source of truth. Never edit an applied file; the SHA-256 checksum aborts startup.
+  Both appliers check every applied file's checksum on every run, also when nothing is pending, and warn about a
+  recorded version that has no file (it changes nothing).
 - Name new files with a timestamp greater than every existing one; order is plain filename sort.
 - Each file runs in one transaction: no top-level `BEGIN`/`COMMIT`/`ROLLBACK`, no `CREATE INDEX CONCURRENTLY`.
 - Change `fuku/db/migrations/runner.go` and `scripts/migrate_psql.sh` together; both appliers must agree.
@@ -3009,18 +3022,20 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   automatic forward), bots and the bot's own messages, Telegram service IDs, every service message (the service rules own
   them), a private chat, a Staff Group (`deletion.ScheduleBatch` refuses it and fails closed on a read error, DEL-07) and a
   member whose captcha is pending (group `-10` holds and ends that update). Pinned messages stay (D-11): a `pinned_message`
-  service message drops the pending row of the message it names (exactly its chat, message, kind and the pending state: an
-  acting row is left to the worker), and the bot's own `/pin` does the same through the hook in `pins.go` after its successful
+  service message drops every pending row of the message it names, whatever its kind (`deletion.DropPendingMessageAnyKind`:
+  exactly its chat, message and the pending state, so a member's self-destruct row and the row of a bot message an admin
+  pinned, a welcome, the rules or a punishment reply, both go; an acting row is left to the worker; I2), and the bot's own `/pin` does the same through the hook in `pins.go` after its successful
   `pinChatMessage`, because the pin service message the bot causes has a bot sender that a watcher without `SetAllowBot` never
   sees. `memberDeletePinned` first notes the pin in a small bounded in-process set (`memberPinnedNotes`: `memberPinnedTTL` 10 s,
   `memberPinnedMax` 4096, expired notes pruned on every write, the oldest evicted when full, on the replica that handled the
   pin) which the flush consults right before its write (`memberDeleteDropPinnedEntries`, counted in `memberDeletePinnedDropped`,
   correct and not a shed), so a message pinned while it sat in the buffer or in the flush's screening is dropped instead of
-  written; it then drops the pending row through the `memberDeleteDropPinned` seam, retried once on a fresh context because the
+  written; it then drops the pending rows through the `memberDeleteDropPinned` seam, retried once on a fresh context because the
   pin event is never delivered again (`TestMemberSelfDestructPinRace`). A pin in a chat whose cached rules hold no
-  `member:selfdestruct` entry (`memberSelfDestructRuleStored`, one cached read; an unreadable rule counts as stored, the old
-  behaviour) notes nothing and makes no database call, so a Staff Group or a chat that never used the rule pays no synchronous
-  write in group `-8` (`TestMemberDeletePinnedNeedsRule`); unpinning queues nothing, and `/permapin` pins a message the bot sent, which is never queued. Switching Self-destruct
+  delete rule at all (`memberDeleteRuleStored`, one cached read; any stored rule, a member or a bot kind, counts, and an
+  unreadable rule counts as stored, the old behaviour) notes nothing and makes no database call, so a Staff Group or a chat
+  that never used a rule pays no synchronous write in group `-8` (`TestMemberDeletePinnedNeedsRule`,
+  `TestMemberDeletePinnedAnyKind`); unpinning queues nothing, and `/permapin` pins a message the bot sent, which is never queued. Switching Self-destruct
   Off drops the chat's pending self-destruct rows in the same write (`RemoveRule`), and turning it on or changing the delay
   drops nothing: rows queued under the old delay keep their time (D-12). Accepted limits, stated and not tested as wanted
   behaviour: a pin that lands after the worker claimed its row still deletes it, and a pin handled by another replica while the
@@ -4176,7 +4191,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - A string filled with `i18n.TranslationParams` uses `{name}` placeholders equal to the param names. A `%s` or `%d`
   verb is filled only from the keys `0` to `9` or the fixed common names of `extractOrderedValues`, and prints raw
   for any other name (`modules`, `list`, `chat`, `time`, `types`, `attempts` did). `TestRawPlaceholderKeysRender`
-  (`fuku/i18n`) renders the backup and captcha keys that once printed raw verbs through the real locale files.
+  (`fuku/i18n`) renders the backup and captcha keys that once printed raw verbs through the real locale files. Both kinds
+  are filled in one pass over the raw template, the verbs counted on the template alone, so a value a user typed that
+  holds a verb or a `{name}` is printed as typed (`TestInterpolateParamsIgnoresVerbsInValues`).
 - The docs generator finds raw commands in the module source by the shim's call, `helpers.NewBotCommand("name", ...)`
   (`scripts/generate_docs/parsers.go`); a command registered another way is not listed, and the guard test rejects it.
 - The docs generator reads only `locales/en.yml`. Pages marked `<!-- MANUALLY MAINTAINED: do not regenerate -->` in
