@@ -507,6 +507,15 @@ func lockdownProcessLifts(ctx context.Context, b *gotgbot.Bot) bool {
 // lockdownProcessLift is one cycle of one lift.
 func lockdownProcessLift(ctx context.Context, b *gotgbot.Bot, ld models.ChatLockdown) bool {
 	progress := false
+	// A ban whose call failed without a refusal (a 5xx, a timeout) may have taken
+	// effect, so those rows are unbanned through the live check like any other ban
+	// before the rest of the pending rows are cancelled.
+	if routed, err := lockdown.RouteUncertainBans(ld.ID); err != nil {
+		log.Errorf("[Lockdown] uncertain bans of lockdown %d were not routed to the unban: %v", ld.ID, err)
+		return progress
+	} else if routed > 0 {
+		progress = true
+	}
 	if cancelled, err := lockdown.CancelPending(ld.ID); err != nil {
 		log.Errorf("[Lockdown] pending joiners of lockdown %d were not cancelled: %v", ld.ID, err)
 	} else if cancelled > 0 {
@@ -573,8 +582,16 @@ func lockdownUnbanOne(ctx context.Context, b *gotgbot.Bot, row models.LockdownJo
 	}
 
 	if !isLockdownBan(member, row.BanUntil) {
+		// A row the lift routed here because its ban answer failed, and whose member
+		// carries no ban at all, was never banned: it ends like a pending row the lift
+		// cancels, and is not counted as a ban left alone on purpose.
+		expired := lockdownBanExpired(member, row.BanUntil, time.Now())
+		if row.Detail == models.JoinerDetailLiftCheck && !expired && member.Status != gotgbot.ChatMemberStatusKicked {
+			moveLockdownJoiner(row.ID, models.JoinerStateUnbanning, models.JoinerStateCancelled, "", false)
+			return true
+		}
 		detail := ""
-		if lockdownBanExpired(member, row.BanUntil, time.Now()) {
+		if expired {
 			detail = models.JoinerDetailBanExpired
 		}
 		moveLockdownJoiner(row.ID, models.JoinerStateUnbanning, models.JoinerStateKept, detail, false)
@@ -607,7 +624,12 @@ func lockdownUnbanFailed(ctx context.Context, row models.LockdownJoiner, err err
 		moveLockdownJoiner(row.ID, models.JoinerStateUnbanning, models.JoinerStateUnbanFailed, telegramErrorDetail(err), true)
 		return true
 	}
-	moveLockdownJoiner(row.ID, models.JoinerStateUnbanning, models.JoinerStateBanned, telegramErrorDetail(err), true)
+	detail := telegramErrorDetail(err)
+	if row.Detail == models.JoinerDetailLiftCheck {
+		// The retry must still know the ban may never have landed.
+		detail = models.JoinerDetailLiftCheck
+	}
+	moveLockdownJoiner(row.ID, models.JoinerStateUnbanning, models.JoinerStateBanned, detail, true)
 	return false
 }
 

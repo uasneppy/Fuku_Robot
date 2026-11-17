@@ -3416,9 +3416,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - The lockdown lift runs in the same worker after `/unlockdown` restored the permissions. It unbans (`only_if_banned=true`)
   only a joiner whose live `getChatMember` shows kicked with that row's `ban_until` (`isLockdownBan`, 2 s tolerance); anyone
   else, a deliberate `/ban` or `/tban` included, is kept and never touched (a staff `/ban` or `/tban` over a lockdown's
-  ban replaces it with its own end date, so it falls here too; see the StaffActions bullet). Joiners still pending when
-  the lift starts are
-  cancelled and never banned. Rows are handled in the order they were recorded, and the tally is posted once, by the
+  ban replaces it with its own end date, so it falls here too; see the StaffActions bullet). A ban call that failed
+  without a refusal (a 5xx, a timeout) may still have taken effect, so before anything else the lift (inline in
+  `liftLockdownRow` before `FinishLift`, and in every worker cycle before `CancelPending`) moves every `ban_failed` row
+  and every pending row with an attempt counted (join requests excepted) to `banned` with detail
+  `models.JoinerDetailLiftCheck` and the attempts at zero (`lockdown.RouteUncertainBans`): the live check then unbans a
+  marker ban, keeps a ban of another date, and cancels the row when the member carries no ban at all, so a ban that
+  never landed is not counted as kept (`TestLockdownLiftChecksBansWhoseAnswerFailed`). The other joiners still pending
+  when the lift starts are cancelled and never banned. Rows are handled in the order they were recorded, and the tally is posted once, by the
   replica whose `FinishLift` conditional update won; a lockdown with nothing to report posts none.
 - A lockdown has no end date but its bans do: each joiner's ban lasts `lockdownBanSpan` (330 days) from the join, so a
   lockdown that outlasts that stops banning the raiders it removed (Telegram bans of 30 s to 366 days are the only

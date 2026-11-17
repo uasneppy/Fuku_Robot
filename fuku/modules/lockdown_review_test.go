@@ -7,7 +7,10 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/PaulSonOfLars/gotgbot/v2"
+
 	"github.com/uasneppy/fuku_robot/fuku/db/lockdown"
+	"github.com/uasneppy/fuku_robot/fuku/db/models"
 )
 
 // TestLockdownStartLiftedDuringLock covers a /unlockdown that restores and records the
@@ -50,5 +53,70 @@ func TestLockdownStartLiftedDuringLock(t *testing.T) {
 	}
 	if active, err := lockdown.GetActiveFresh(env.chat.Id); err != nil || active != nil {
 		t.Errorf("active lockdown = %v, %v, want none", active, err)
+	}
+}
+
+// TestLockdownLiftChecksBansWhoseAnswerFailed covers a ban call that answered a 5xx
+// but may have taken effect: the row is left pending with an attempt counted, or ends
+// ban_failed after three. The lift must still look at those joiners live and remove
+// a ban that carries the row's marker, and leave a joiner whose ban never landed
+// out of the tally.
+func TestLockdownLiftChecksBansWhoseAnswerFailed(t *testing.T) {
+	serverError := staffFakeError(500, "Internal Server Error")
+	cases := []struct {
+		name      string
+		failures  int
+		landed    bool
+		wantState string
+	}{
+		{"pending after one failed answer, ban in place", 1, true, models.JoinerStateUnbanned},
+		{"ban_failed after three failed answers, ban in place", 3, true, models.JoinerStateUnbanned},
+		{"ban_failed and the ban never landed", 3, false, models.JoinerStateCancelled},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			env := newLockdownEnv(t)
+			env.lockAsAdmin("raid")
+			raider := env.newJoiner("Raider")
+			env.join(raider, raider, "https://t.me/+abc")
+			for i := 0; i < tt.failures; i++ {
+				env.fake.script("banChatMember", env.chat.Id, serverError)
+				env.cycle()
+			}
+			row := env.joinerRow(raider.Id)
+			wantBefore := models.JoinerStatePending
+			if tt.failures >= lockdownMaxAttempts {
+				wantBefore = models.JoinerStateBanFailed
+			}
+			if row.State != wantBefore {
+				t.Fatalf("setup: joiner is %q, want %q", row.State, wantBefore)
+			}
+			if tt.landed {
+				// The ban took effect although its answer was lost.
+				env.fake.setMember(env.chat.Id, raider.Id, staffFakeMember{
+					Status:    gotgbot.ChatMemberStatusKicked,
+					UntilDate: row.BanUntil,
+				})
+			}
+
+			env.send(env.admin, "/unlockdown")
+			env.cycle()
+
+			if got := env.joinerRow(raider.Id); got.State != tt.wantState {
+				t.Errorf("joiner state after the lift = %q, want %q", got.State, tt.wantState)
+			}
+			unbans := env.unbansOf(raider.Id)
+			if tt.landed && len(unbans) != 1 {
+				t.Errorf("unbanChatMember calls = %d, want 1: the lockdown's ban must be lifted", len(unbans))
+			}
+			if !tt.landed && len(unbans) != 0 {
+				t.Errorf("unbanChatMember calls = %d, want 0: there was no ban to lift", len(unbans))
+			}
+			if !tt.landed {
+				if got := env.messagesWith(staffMarker("lockdown_lift_tally_kept")); got != 0 {
+					t.Errorf("tally messages with a kept line = %d, want 0", got)
+				}
+			}
+		})
 	}
 }

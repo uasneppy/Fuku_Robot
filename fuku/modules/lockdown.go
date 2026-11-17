@@ -612,6 +612,14 @@ func liftLockdownRow(ctx context.Context, b *gotgbot.Bot, row *models.ChatLockdo
 		return lockdownLiftResult{Outcome: lockdownLiftLost, ManualChange: manualChange}
 	}
 	res := lockdownLiftResult{Outcome: lockdownLiftDone, ManualChange: manualChange}
+	// A ban whose answer was a failure may have landed, so it goes to the worker's
+	// live-checked unban instead of letting FinishLift pass it by. A failed write
+	// leaves the lift unfinished; the worker routes them on its next cycle.
+	if _, routeErr := lockdown.RouteUncertainBans(row.ID); routeErr != nil {
+		log.Errorf("[Lockdown] uncertain bans of lockdown %d were not routed to the unban: %v", row.ID, routeErr)
+		wakeLockdownWorker()
+		return res
+	}
 	res.Finished, err = lockdown.FinishLift(row.ID)
 	if err != nil {
 		log.Errorf("[Lockdown] lockdown %d lift was not finished: %v", row.ID, err)
