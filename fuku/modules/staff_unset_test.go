@@ -260,6 +260,41 @@ func TestUnsetStaffCancelKeepsEverything(t *testing.T) {
 	}
 }
 
+// TestUnsetStaffCancelNeedsOwner: Cancel takes the same live creator check as
+// Confirm, so a bystander cannot dismiss the creator's prompt (S8).
+func TestUnsetStaffCancelNeedsOwner(t *testing.T) {
+	t.Run("not the creator", func(t *testing.T) {
+		f := newUnsetFixture(t, "Alpha")
+		f.press(t, gotgbot.User{Id: 5152, FirstName: "Intruder"}, staffActUnsetCancel)
+
+		answers := f.answers()
+		if len(answers) != 1 || !strings.Contains(fmt.Sprint(answers[0].Params["text"]), staffMarker("staff_cb_owner_only")) {
+			t.Fatalf("answers = %v, want one staff_cb_owner_only alert", answers)
+		}
+		if alert, _ := answers[0].Params["show_alert"].(bool); !alert {
+			t.Fatalf("answer params = %v, want show_alert true", answers[0].Params)
+		}
+		if got := f.editTexts(); len(got) != 0 {
+			t.Fatalf("a bystander's Cancel edited the prompt: %q", got)
+		}
+	})
+	t.Run("owner unknown", func(t *testing.T) {
+		f := newUnsetFixture(t, "Alpha")
+		f.client.setFailure("getChatAdministrators", f.staffID, &gotgbot.TelegramError{
+			Method: "getChatAdministrators", Code: 429, Description: "Too Many Requests: retry after 5",
+		})
+		f.press(t, gotgbot.User{Id: f.ownerID, FirstName: "Owner"}, staffActUnsetCancel)
+
+		answers := f.answers()
+		if len(answers) != 1 || !strings.Contains(fmt.Sprint(answers[0].Params["text"]), staffMarker("staff_check_failed")) {
+			t.Fatalf("answers = %v, want one staff_check_failed", answers)
+		}
+		if got := f.editTexts(); len(got) != 0 {
+			t.Fatalf("an unverifiable Cancel edited the prompt: %q", got)
+		}
+	})
+}
+
 func TestUnsetStaffUnknownActionExpires(t *testing.T) {
 	f := newUnsetFixture(t, "Alpha")
 	owner := gotgbot.User{Id: f.ownerID, FirstName: "Owner"}

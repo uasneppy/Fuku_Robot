@@ -25,6 +25,10 @@ type staffPriorState struct {
 	// Until is the end of the ban or restriction as a Unix time; 0 is permanent.
 	Until int64
 	Perms *gotgbot.ChatPermissions
+	// LockdownBanEnded is true when the recorded ban was a lockdown's own ban (its end
+	// date is a joiner's ban_until) and that lockdown is no longer active. It is not
+	// stored: an undo reads it fresh before deciding (S6).
+	LockdownBanEnded bool
 }
 
 // staffPriorFromMember captures the state a live getChatMember answer reports.

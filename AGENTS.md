@@ -3245,10 +3245,17 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   never summary_chat_id or `staff_action_groups.group_chat_id`, and `summary_msg_id` is only valid together with
   `summary_chat_id`. It re-keys the forward blocklist too (`staff_forward_blocks.staff_chat_id` and
   `staff_forward_block_settings.staff_chat_id`, in the same transaction) and drops the `staff_forward_block` key of the
-  old and the new ID after the commit.
+  old and the new ID after the commit. It also drops the cached link (`staff_link_of:<group>`) of every group linked to
+  the re-keyed Staff Group, because that row names the Staff Group's chat ID (`TestRekeyChatInvalidatesLinkedGroups`).
 - Staff links: authority reads use uncached `staff.*Fresh` plus live `chat_status.CheckOwner`; only `OwnerMismatch`
   removes a link (errors are unknown); each automatic removal or health change is one conditional statement, and only
-  the caller with RowsAffected == 1 posts the Staff Group notice. Unsetting a Staff Group (`DeleteStaffGroupWithLinks`)
+  the caller with RowsAffected == 1 posts the Staff Group notice. In a staff fan-out (an action or an undo) the
+  owner pass collects those notices (`staffOwnerPass.notices`, a `staffNoticeBatch`) and the run posts them after its
+  workers through `staffPaced`: one combined notice per Staff Group whose owner changed and one per group whose owner
+  changed, under `staffNoticeFlushTimeout` (10 s, one second once the run was cancelled by a shutdown)
+  (`TestStaffActionOwnerChangeOneNotice`). Both buttons of the `/unsetstaff` prompt, Confirm and
+  Cancel, need the live creator of the Staff Group (`staffUnsetPresserIsOwner`; anyone else gets the owner-only alert and
+  the prompt stays). Unsetting a Staff Group (`DeleteStaffGroupWithLinks`)
   deletes the Staff Group row, its links and its forward blocklist (sources and action) in one transaction; unlinking one
   group deletes no list, because the list belongs to the Staff Group and the link gate stops it acting in that group.
 - The `/staff` panel marks a linked group whose lockdown is confirmed with one `staff_panel_row_lockdown` line (the
@@ -3711,8 +3718,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `fwdWatchClient` to take the bot's delete right away).
 - StaffActions (staff `/ban` across linked groups): per-group authority is only the live `getChatMember(group, issuer)`
   answer, creator or administrator with `can_restrict_members`, never the cached admin predicates. The link owner is
-  rechecked through `recheckLink`. No write ever targets the Staff Group and nothing is posted into a linked group's own
-  chat. Each group where an action was applied gets one post in its log channel under the admin category
+  rechecked through `recheckLink`, which also reads the group's link fresh once both owners match and answers
+  `staffRecheckGone` when the row is gone or is another row (an unlink, or a link made again); the fan-out reads that
+  as "no longer linked" (`staffReasonSkipNoLongerLinked`), while a removal for an owner change stays "link removed".
+  Right before each write, of an action and of an undo alike, the link is read fresh once more
+  (`staffLinkStillCurrent`, seam `staffLinkCurrentLookup`) and must still be the same link row of the same Staff Group,
+  else the group gets no write and reads "no longer linked" (a failed read fails the group) (`TestRecheckLinkGoneRow`,
+  `TestStaffActionSkipsUnlinkedGroup`, `TestStaffUndoSkipsUnlinkedGroup`). No write ever targets the Staff Group and
+  nothing is posted into a linked group's own chat. Each group where an action was applied gets one post in its log channel under the admin category
   (`staff_log.go`), sent through `staffPaced` after the group's result is set, naming the issuer and target and saying
   "via Staff Group" but never the Staff Group's title or ID. A failed post never changes that result. Undos are
   logged the same way, as `#STAFF_UNDO` through the shared `sendStaffLogPost`: one post per group where the undo
@@ -3726,11 +3739,26 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   member-removing unban (`only_if_banned=false`) is only `/kick` on a current member, and every `/unban` sends
   `only_if_banned=true`. A kicked target skips mute, kick and unmute as "not in group". The decision lives in
   `decideStaffAction` alone; `executeStaffCall` switches only on its verdict. Keep new actions inside that table.
+  Because a mute and a kick replace the target's status, `executeStaffCall` reads the target live once more inside
+  their paced unit, right before the write (so a retry after a 429 wait reads again), and decides again with
+  `decideStaffAction` (`staffRedecide`): when the fresh verdict is no longer that call (the target was banned or left
+  meanwhile) nothing is sent and the group gets the fresh verdict's reason (`staffStateChangedError`,
+  `TestStaffActionRereadsBeforeWrite`).
   Its one exception to "a ban never shortens a ban" is a lockdown's own ban: for a staff ban (`/ban`, `/tban`) on a
   kicked target with an end date, `runStaffActionInGroup` asks `staffLockdownBanLookup` (`lockdown.HasJoinerBanFresh`
   on the live `until_date`) and sets `staffTargetState.LockdownBan`, and `decideStaffBan` then sends the ban even when
   it ends sooner, so the staff ban gets its own end date and the lockdown's lift keeps it (D-05). A failed lookup
-  fails that group as an internal error with no write. Undo decisions live in `decideStaffUndo` alone, beside `decideStaffAction`, and `executeStaffUndoCall` switches only
+  fails that group as an internal error with no write. The undo of such a ban, or of a staff `/unban` that lifted a
+  lockdown's ban, asks `staffEndedLockdownBanLookup` (`lockdown.HasEndedJoinerBanFresh`: a joiner row matches the
+  recorded end date and none of them is of an active lockdown) and sets `staffPriorState.LockdownBanEnded`: the lockdown
+  is over, so the marker ban is never put back (no lift would ever end it); the ban undo unbans with
+  `only_if_banned=true` instead and the unban undo is skipped as ended. While the lockdown is still active the marker
+  ban is put back for its lift to end (`TestStaffUndoLiftedLockdownBan`); a failed read fails the group. A staff mute never shortens a restriction either: a member
+  restricted (not muted) until a later date than the mute's, or for good while the mute is timed, is skipped "already
+  restricted for longer" (`staffReasonSkipRestrictedLonger`), because `restrictChatMember` would replace that
+  restriction (`TestStaffActionMuteNeverShortensRestriction`). Accepted limit (owner decision S3-ban): a timed staff ban
+  (`/tban`, `/ban <duration>`) on a member restricted until later than the ban's end, or for good, is still sent, so
+  when the ban ends the member comes back without that restriction. Undo decisions live in `decideStaffUndo` alone, beside `decideStaffAction`, and `executeStaffUndoCall` switches only
   on its verdict. Its one exception to the never-lift rule, a restrict or ban sent to a kicked or left target, is
   allowed only when the live state equals what the staff action left behind. An undo touches only groups where the
   action was applied, rechecks each one live for the presser (creator, or administrator with `can_restrict_members`,
@@ -3778,8 +3806,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `until_date` less than 30 s away as permanent, so right before every ban or restrict write, inside the paced closure
   of `executeStaffCall` (so a retry after a 429 wait is checked again), an end date under `staffUntilMinLead` (35 s)
   away or past is not sent (`staffUntilTooClose`, `errStaffTimeRanOut`): that group fails with `fail_time_ran_out`
-  (`staff_act_fail_time_ran_out`) and nobody is restricted for good. The one `until_date` for every group is unchanged,
-  and the undo path has no such guard.
+  (`staff_act_fail_time_ran_out`) and nobody is restricted for good. The one `until_date` for every group is unchanged.
+  The undo path has the same guard: a re-ban goes through `executeStaffCall`, and a restore of a recorded restriction
+  checks `staffUntilTooClose` inside its own paced unit in `executeStaffUndoCall` (`TestStaffUndoRestoreTimeRanOut`);
+  `decideStaffUndo` already skips an end date within `staffUndoMinRemaining` (120 s), so the guard only catches a
+  pacer wait or 429 retry that ran it down.
 - Greeting media types (Phase 12): `db.ANIMATION` (9) is a GIF saved by `/setwelcome`, `/setgoodbye` or the message
   editor's media part, stored with the animation's file ID and sent with `sendAnimation`. Only the greeting extraction
   returns it: `extractGreetingMedia` (animation first, then `extractMediaFromReply`) sits behind `ExtractWelcome` and
