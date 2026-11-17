@@ -195,7 +195,12 @@ func applyWarn(ctx context.Context, b *gotgbot.Bot, chat *gotgbot.Chat, userID i
 	mu := warnPunishLock(chat.Id, userID)
 	mu.Lock()
 	defer mu.Unlock()
-	settings := warns.GetWarnSettingContext(ctx, chat.Id)
+	// A settings read that fails stores no warn and punishes nobody (fail closed): the
+	// caller answers common_settings_save_failed.
+	settings, err := warns.GetWarnSettingErrContext(ctx, chat.Id)
+	if err != nil {
+		return res, err
+	}
 	numWarns, reasons, err := warns.WarnUser(userID, chat.Id, reason)
 	if err != nil {
 		return res, err
