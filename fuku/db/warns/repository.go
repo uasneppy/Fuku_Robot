@@ -17,10 +17,6 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
 )
 
-func checkWarnSettings(chatID int64) (*models.WarnSettings, error) {
-	return checkWarnSettingsContext(context.Background(), chatID)
-}
-
 // checkWarnSettingsContext reads the chat's warn settings and creates the default row for a
 // chat the bot knows. A read or write that fails is returned, never replaced by the defaults,
 // so the cache loader stores nothing for it and a caller that punishes can fail closed.

@@ -500,6 +500,9 @@ func importModuleData(tx *gorm.DB, chatID int64, module string, data interface{}
 	if err := ensureBackupChat(tx, chatID); err != nil {
 		return nil, err
 	}
+	if keys, ok, err := importListModule(tx, chatID, module, data, preserveLegacyOmissions, report); ok {
+		return keys, err
+	}
 	switch module {
 	case BackupModuleAdmin:
 		return importAdmin(tx, chatID, data)
@@ -509,22 +512,16 @@ func importModuleData(tx *gorm.DB, chatID int64, module string, data interface{}
 		return importAntiraid(tx, chatID, data)
 	case BackupModuleApprovals:
 		return importApprovals(tx, chatID, data)
-	case BackupModuleBlacklists:
-		return importBlacklists(tx, chatID, data, report)
 	case BackupModuleCaptcha:
 		return importCaptcha(tx, chatID, data)
 	case BackupModuleConnections:
 		return importConnections(tx, chatID, data)
 	case BackupModuleDisabling:
 		return importDisabling(tx, chatID, data)
-	case BackupModuleFilters:
-		return importFilters(tx, chatID, data, report)
 	case BackupModuleGreetings:
 		return importGreetings(tx, chatID, data)
 	case BackupModuleLocks:
 		return importLocks(tx, chatID, data)
-	case BackupModuleNotes:
-		return importNotes(tx, chatID, data, preserveLegacyOmissions, report)
 	case BackupModulePins:
 		return importPins(tx, chatID, data)
 	case BackupModuleReactions:
@@ -533,15 +530,31 @@ func importModuleData(tx *gorm.DB, chatID int64, module string, data interface{}
 		return importReports(tx, chatID, data)
 	case BackupModuleRules:
 		return importRules(tx, chatID, data)
-	case BackupModuleWarns:
-		return importWarns(tx, chatID, data, preserveLegacyOmissions)
 	case BackupModuleFederations:
 		return importFederations(tx, chatID, data)
-	case BackupModuleLogChannels:
-		return importLogChannels(tx, chatID, data, report)
 	default:
 		return nil, fmt.Errorf("unknown module: %s", module)
 	}
+}
+
+// importListModule imports the modules whose import takes the report or the legacy flag
+// (the list modules, warns and the log channel). ok is false for every other module.
+func importListModule(tx *gorm.DB, chatID int64, module string, data interface{}, preserveLegacyOmissions bool, report *ImportReport) (keys []string, ok bool, err error) {
+	switch module {
+	case BackupModuleBlacklists:
+		keys, err = importBlacklists(tx, chatID, data, report)
+	case BackupModuleFilters:
+		keys, err = importFilters(tx, chatID, data, report)
+	case BackupModuleNotes:
+		keys, err = importNotes(tx, chatID, data, preserveLegacyOmissions, report)
+	case BackupModuleWarns:
+		keys, err = importWarns(tx, chatID, data, preserveLegacyOmissions)
+	case BackupModuleLogChannels:
+		keys, err = importLogChannels(tx, chatID, data, report)
+	default:
+		return nil, false, nil
+	}
+	return keys, true, err
 }
 
 func importAdmin(tx *gorm.DB, chatID int64, payload interface{}) ([]string, error) {

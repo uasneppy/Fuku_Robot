@@ -25,7 +25,9 @@ func TestSetRulesByReply(t *testing.T) {
 		chat := gotgbot.Chat{Id: uniqueModuleChatID(), Type: "supergroup", Title: "Rules Chat", IsForum: topic}
 		editCleanup(t, chat.Id)
 		if existing != "" {
-			rules.SetChatRules(chat.Id, existing)
+			if err := rules.SetChatRules(chat.Id, existing); err != nil {
+				t.Fatalf("SetChatRules: %v", err)
+			}
 		}
 		ctx := newModuleMessageContext(bot, chat, admin, text)
 		ctx.EffectiveMessage.ReplyToMessage = reply
