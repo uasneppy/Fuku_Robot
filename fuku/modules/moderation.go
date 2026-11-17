@@ -338,6 +338,67 @@ func refuseReplyMismatch(c *moderationCtx) error {
 	return errReplyTargetMismatch
 }
 
+// liveTargetState is what a target's live member record says before a button
+// kicks, mutes or unmutes them.
+type liveTargetState int
+
+const (
+	// liveTargetInChat: a member, an administrator, the creator, or a restricted
+	// member who is still a member.
+	liveTargetInChat liveTargetState = iota
+	// liveTargetGone: kicked, left, or a restricted non-member.
+	liveTargetGone
+	// liveTargetUnknown: the record could not be read.
+	liveTargetUnknown
+)
+
+// memberRecordInChat reports whether a live member record shows someone still in
+// the chat. Kicked and left are not, and neither is a restricted non-member.
+func memberRecordInChat(member gotgbot.ChatMember) bool {
+	if member == nil {
+		return false
+	}
+	merged := member.MergeChatMember()
+	switch merged.Status {
+	case "member", "administrator", "creator":
+		return true
+	case "restricted":
+		return merged.IsMember
+	default:
+		return false
+	}
+}
+
+// readLiveTarget reads the target's live member record. A member-removing
+// unbanChatMember on a kicked user lifts the ban and a restrictChatMember
+// replaces it, so the Kick, Mute and Unmute buttons and /zombies act only on
+// someone this answers liveTargetInChat for.
+func readLiveTarget(b *gotgbot.Bot, chatID, userID int64) liveTargetState {
+	member, err := b.GetChatMember(chatID, userID, nil)
+	if err != nil {
+		log.Warnf("[Moderation] live member read of user %d in chat %d failed: %v", userID, chatID, err)
+		return liveTargetUnknown
+	}
+	if memberRecordInChat(member) {
+		return liveTargetInChat
+	}
+	return liveTargetGone
+}
+
+// answerLiveTargetRefusal answers a button press whose target is not in the
+// chat (common_user_not_in_chat) or could not be checked
+// (common_member_check_failed); nothing was changed.
+func answerLiveTargetRefusal(b *gotgbot.Bot, query *gotgbot.CallbackQuery, tr *i18n.Translator, state liveTargetState) {
+	key := "common_user_not_in_chat"
+	if state == liveTargetUnknown {
+		key = "common_member_check_failed"
+	}
+	text, _ := tr.GetString(key)
+	if _, err := query.Answer(b, &gotgbot.AnswerCallbackQueryOpts{Text: text, ShowAlert: true}); err != nil {
+		log.Error(err)
+	}
+}
+
 // replyValidationError sends a validation failure reply, logging send errors.
 func replyValidationError(c *moderationCtx, text string) error {
 	_, err := c.Msg.Reply(c.Bot, text, formatting.Shtml())

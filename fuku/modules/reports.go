@@ -572,6 +572,13 @@ func (moduleStruct) markResolvedButtonHandler(b *gotgbot.Bot, ctx *ext.Context) 
 		}
 	}
 
+	if action == "kick" {
+		if state := readLiveTarget(b, chat.Id, userId); state != liveTargetInChat {
+			answerLiveTargetRefusal(b, query, tr, state)
+			return ext.EndGroups
+		}
+	}
+
 	switch action {
 	case "kick":
 		replyQuery, _ = tr.GetString("reports_success_kick")

@@ -617,6 +617,13 @@ func (moduleStruct) restrictButtonHandler(b *gotgbot.Bot, ctx *ext.Context) erro
 		return ext.EndGroups
 	}
 
+	if action == "kick" || action == "mute" {
+		if state := readLiveTarget(b, chat.Id, userId); state != liveTargetInChat {
+			answerLiveTargetRefusal(b, query, tr, state)
+			return ext.EndGroups
+		}
+	}
+
 	var helpText string
 
 	actionUser, err := b.GetChat(userId, nil)
@@ -823,6 +830,10 @@ func (moduleStruct) unrestrictButtonHandler(b *gotgbot.Bot, ctx *ext.Context) er
 
 	switch action {
 	case "unmute":
+		if state := readLiveTarget(b, chat.Id, userId); state != liveTargetInChat {
+			answerLiveTargetRefusal(b, query, tr, state)
+			return ext.EndGroups
+		}
 
 		c, err := b.GetChat(chat.Id, nil)
 		if err != nil {

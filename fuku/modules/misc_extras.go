@@ -91,6 +91,10 @@ func (moduleStruct) zombies(b *gotgbot.Bot, ctx *ext.Context) error {
 		chat_status.NewPermissionResponder(b).Respond(ctx, "chat_status_user_admin_cmd_error", "chat_status_user_admin_button_error", chat_status.WithReplyFallback())
 		return ext.EndGroups
 	}
+	if !chat_status.CanUserRestrict(b, ctx, chat, from.Id) {
+		chat_status.NewPermissionResponder(b).Respond(ctx, "chat_status_restrict_cmd_error", "chat_status_restrict_button_error")
+		return ext.EndGroups
+	}
 	if !chat_status.CanBotRestrict(b, ctx, nil) {
 		chat_status.NewPermissionResponder(b).Respond(ctx, "chat_status_bot_restrict_group_error", "chat_status_bot_restrict_error")
 		return ext.EndGroups
@@ -105,6 +109,10 @@ func (moduleStruct) zombies(b *gotgbot.Bot, ctx *ext.Context) error {
 		}
 		member, err := b.GetChatMember(chat.Id, userID, nil)
 		if err != nil || member == nil {
+			continue
+		}
+		// A member-removing unban lifts a ban, so only an account still in the chat is kicked.
+		if !memberRecordInChat(member) {
 			continue
 		}
 		merged := member.MergeChatMember()
