@@ -207,7 +207,7 @@ func TestNoteIDDeepLinkHandler(t *testing.T) {
 	member := gotgbot.User{Id: 42, FirstName: "Member"}
 	private := gotgbot.Chat{Id: member.Id, Type: "private", FirstName: "Member"}
 
-	run := func(t *testing.T, arg string) (*moduleBotClient, error, string) {
+	run := func(t *testing.T, arg string) (*moduleBotClient, string, error) {
 		t.Helper()
 		client := newModuleBotClient()
 		client.responses["getChat"] = []byte(fmt.Sprintf(`{"id":%d,"type":"supergroup","title":"Notes Chat"}`, chatID))
@@ -220,7 +220,7 @@ func TestNoteIDDeepLinkHandler(t *testing.T) {
 		} else {
 			t.Fatalf("%s: sendMessage calls = %d, want one reply", arg, len(calls))
 		}
-		return client, err, text
+		return client, text, err
 	}
 	trText := func(t *testing.T, key string) string {
 		t.Helper()
@@ -230,21 +230,21 @@ func TestNoteIDDeepLinkHandler(t *testing.T) {
 	}
 
 	t.Run("sends the note", func(t *testing.T) {
-		_, err, text := run(t, fmt.Sprintf("noteid_%d_%d", chatID, public.ID))
+		_, text, err := run(t, fmt.Sprintf("noteid_%d_%d", chatID, public.ID))
 		if err != ext.EndGroups || !strings.Contains(text, "Visible note body") {
 			t.Fatalf("got %v %q, want the note", err, text)
 		}
 	})
 
 	t.Run("another chat's row is not found", func(t *testing.T) {
-		_, err, text := run(t, fmt.Sprintf("noteid_%d_%d", chatID, foreign.ID))
+		_, text, err := run(t, fmt.Sprintf("noteid_%d_%d", chatID, foreign.ID))
 		if err != ext.EndGroups || text != trText(t, "helpers_note_not_exist") {
 			t.Fatalf("got %v %q, want the note-does-not-exist reply", err, text)
 		}
 	})
 
 	t.Run("admin only", func(t *testing.T) {
-		_, err, text := run(t, fmt.Sprintf("noteid_%d_%d", chatID, adminOnly.ID))
+		_, text, err := run(t, fmt.Sprintf("noteid_%d_%d", chatID, adminOnly.ID))
 		if err != ext.ContinueGroups || text != trText(t, "helpers_note_admin_only") {
 			t.Fatalf("got %v %q, want the admin-only refusal", err, text)
 		}
@@ -263,7 +263,7 @@ func TestNoteIDDeepLinkHandler(t *testing.T) {
 			fmt.Sprintf("noteid_x_%d", public.ID),
 			fmt.Sprintf("noteid_%d_%d", -chatID, public.ID),
 		} {
-			client, err, text := run(t, arg)
+			client, text, err := run(t, arg)
 			if err != ext.EndGroups || text != trText(t, "helpers_invalid_deep_link") {
 				t.Errorf("%s: got %v %q, want the invalid-link reply", arg, err, text)
 			}
@@ -274,7 +274,7 @@ func TestNoteIDDeepLinkHandler(t *testing.T) {
 	})
 
 	t.Run("old note_ payload", func(t *testing.T) {
-		_, err, text := run(t, fmt.Sprintf("note_%d_правила", chatID))
+		_, text, err := run(t, fmt.Sprintf("note_%d_правила", chatID))
 		if err != ext.EndGroups || !strings.Contains(text, "Visible note body") {
 			t.Fatalf("got %v %q, want the note", err, text)
 		}
