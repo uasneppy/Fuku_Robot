@@ -3678,6 +3678,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   member-removing unban (`only_if_banned=false`) is only `/kick` on a current member, and every `/unban` sends
   `only_if_banned=true`. A kicked target skips mute, kick and unmute as "not in group". The decision lives in
   `decideStaffAction` alone; `executeStaffCall` switches only on its verdict. Keep new actions inside that table.
+  Because a mute and a kick replace the target's status, `executeStaffCall` reads the target live once more inside
+  their paced unit, right before the write (so a retry after a 429 wait reads again), and decides again with
+  `decideStaffAction` (`staffRedecide`): when the fresh verdict is no longer that call (the target was banned or left
+  meanwhile) nothing is sent and the group gets the fresh verdict's reason (`staffStateChangedError`,
+  `TestStaffActionRereadsBeforeWrite`).
   Its one exception to "a ban never shortens a ban" is a lockdown's own ban: for a staff ban (`/ban`, `/tban`) on a
   kicked target with an end date, `runStaffActionInGroup` asks `staffLockdownBanLookup` (`lockdown.HasJoinerBanFresh`
   on the live `until_date`) and sets `staffTargetState.LockdownBan`, and `decideStaffBan` then sends the ban even when

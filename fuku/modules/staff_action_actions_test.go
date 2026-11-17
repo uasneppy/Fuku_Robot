@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
+
+	"github.com/uasneppy/fuku_robot/fuku/db/staff"
 )
 
 // runStaffCommand has the issuer send a staff command in the Staff Group, confirm
@@ -309,6 +311,40 @@ func TestStaffActionMuteNeverShortensRestriction(t *testing.T) {
 	}
 	wantSkippedLine(t, summary, "Group A", "staff_act_skip_restricted_longer")
 	wantSkippedLine(t, summary, "Group B", "staff_act_skip_restricted_longer")
+}
+
+// TestStaffActionRereadsBeforeWrite: a target banned between the read the verdict was
+// made on and the write is not muted or kicked, because both calls would lift the ban
+// (S1). The ban lands right after the prior state is stored, the last step before the
+// write.
+func TestStaffActionRereadsBeforeWrite(t *testing.T) {
+	for _, command := range []string{"/mute 4242", "/kick 4242"} {
+		t.Run(command, func(t *testing.T) {
+			env := newStaffActionEnv(t, 1)
+			g1 := env.groups[0]
+			env.fake.setMember(g1, staffTestTarget, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+			banUntil := time.Now().Add(72 * time.Hour).Unix()
+			previous := staffSavePrior
+			staffSavePrior = func(actionID uint, groupChatID int64, prior staff.ActionPrior) error {
+				err := previous(actionID, groupChatID, prior)
+				env.fake.setMember(groupChatID, staffTestTarget, staffFakeMember{
+					Status: gotgbot.ChatMemberStatusKicked, UntilDate: banUntil,
+				})
+				return err
+			}
+			t.Cleanup(func() { staffSavePrior = previous })
+
+			summary, _ := env.runStaffCommand(command)
+
+			if writes := env.writes(g1); len(writes) != 0 {
+				t.Fatalf("write calls = %+v, want none for a target banned before the write", writes)
+			}
+			if m := wantMember(t, env.fake, g1, staffTestTarget, gotgbot.ChatMemberStatusKicked); m.UntilDate != banUntil {
+				t.Fatalf("ban end = %d, want the ban left at %d", m.UntilDate, banUntil)
+			}
+			wantSkippedLine(t, summary, "Group A", "staff_act_skip_not_in_group")
+		})
+	}
 }
 
 func TestStaffActionKickClearsMute(t *testing.T) {
