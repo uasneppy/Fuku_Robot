@@ -375,9 +375,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   unconfigured stored value counts as Off there, or every message of every member would start a job for ever) the same
   round also reads `fuku:memberreq:nv:<verdict key hash>`, `fuku:memberreq:nm:<user>` and `fuku:memberreq:nu:<chat>:<user>`
   (`memberReqAIWatchQueue`: the canonical names and the verdict key come from pure Go, with `config.AppConfig.AnthropicModel`),
-  and the AI part is satisfied when the verdict parses and is below the bar, or when the marker is absent and the baseline
-  equals the current names hash (`memberReqAIWatchSatisfied`, pure: a miss, an unparsable value, NaN, an infinity and any
-  Redis error are not satisfied); names that are not judgeable are satisfied with no key read, and everything else is one job
+  and the AI part is satisfied only when the marker is absent and either the verdict parses and is below the bar or the
+  baseline equals the current names hash (`memberReqAIWatchSatisfied`, pure: a miss, an unparsable value, NaN, an infinity
+  and any Redis error are not satisfied; a marker holder is never satisfied, so a joiner whose names have a cached pass gets
+  one job that records the baseline and deletes the marker from the cache with no provider call, Q3); names that are not judgeable are satisfied with no key read, and everything else is one job
   after `memberReqMissExempt`. `memberReqLookupCached` takes the names for this and its complexity is held at 18 or less by
   keeping the AI part in those two small functions. The watcher writes no verdict, baseline or marker and calls nobody.
   While the AI breaker is paused for the chat (`memberReqAIPaused`: in memory and pure, the provider-wide pause or the group's
