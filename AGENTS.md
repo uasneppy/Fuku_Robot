@@ -3597,6 +3597,15 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   fall back to the channels table and live `getChat`. A reply is never a target (a bare reply gets a hint; a reply plus
   an explicit target uses the explicit one). `/sban`, `/dban`, `/skick`, `/dkick`, `/smute` and `/dmute` are
   intercepted in a Staff Group only to be refused with a hint (`staffCommandSpec.Refused`), after the anonymous check.
+- Per-group targets and delete ranges are never read from the raw `reply_to_message`, only through
+  `extraction.ReplyTarget`: in a forum supergroup Telegram sets `reply_to_message` to the topic's `forum_topic_created`
+  service message on every topic message that is not an explicit reply, so `ReplyTarget` answers nil for that message
+  and for a topic message's own thread root (`IsTopicMessage` with `MessageThreadId` equal to the reply's ID; outside a
+  forum replying to a thread's root is a real reply). `ExtractUserAndText`, `IdFromReply`, `extractFromReply`, `/dkick`,
+  `/dban`, `/dmute`, `/purge`, `/del`, `/purgefrom`, `/purgeto` and `/id` use it. In `ExtractUserAndText` an explicit
+  target (a `text_mention` at the argument, an `@username` or a numeric ID) always beats the reply: the reply is the
+  fallback only when the first argument named nobody, and `/id` shows a reply's details only when the resolved user is
+  the reply's sender.
 - A staff action card has one writer once its run starts: the run's coordinator goroutine, which edits at most every
   2.5 s (`staffActionEditEvery`), only when a result changed, and never before a progress edit's 429 `retry_after` has
   passed. The summary never drops a group: over 3800 UTF-16 units (counted on the escaped HTML) only done lines

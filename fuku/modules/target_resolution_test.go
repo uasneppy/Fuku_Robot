@@ -91,3 +91,108 @@ func TestGetIdExplicitTargetBeatsReply(t *testing.T) {
 		t.Fatalf("bare /id as a reply = %q, want the reply details", bare)
 	}
 }
+
+// forumTopicContext is a command sent inside a forum topic. With explicit false the
+// message is not a reply, so Telegram sets reply_to_message to the topic's creation
+// message; with explicit true it replies to a member's message in the topic.
+func forumTopicContext(bot *gotgbot.Bot, chat gotgbot.Chat, from gotgbot.User, text string, explicit bool) *ext.Context {
+	const threadID = 70
+	ctx := newModuleMessageContext(bot, chat, from, text)
+	ctx.EffectiveMessage.MessageId = 400
+	ctx.EffectiveMessage.IsTopicMessage = true
+	ctx.EffectiveMessage.MessageThreadId = threadID
+	if explicit {
+		ctx.EffectiveMessage.ReplyToMessage = &gotgbot.Message{
+			MessageId:       390,
+			Date:            1,
+			Chat:            chat,
+			From:            &gotgbot.User{Id: 42, FirstName: "Member"},
+			Text:            "spam",
+			IsTopicMessage:  true,
+			MessageThreadId: threadID,
+		}
+		return ctx
+	}
+	ctx.EffectiveMessage.ReplyToMessage = &gotgbot.Message{
+		MessageId:         threadID,
+		Date:              1,
+		Chat:              chat,
+		From:              &gotgbot.User{Id: 5151, FirstName: "Topic Creator"},
+		ForumTopicCreated: &gotgbot.ForumTopicCreated{Name: "topic"},
+	}
+	return ctx
+}
+
+func TestForumTopicImplicitReplyIsNoTarget(t *testing.T) {
+	withRealLocales(t)
+	admin := gotgbot.User{Id: 777000, FirstName: "Telegram"}
+	destructive := []string{"banChatMember", "restrictChatMember", "unbanChatMember", "deleteMessage"}
+
+	type handler func(*gotgbot.Bot, *ext.Context) error
+	cases := []struct {
+		name string
+		text string
+		run  handler
+		// acts is the method a real reply inside the topic must reach.
+		acts string
+	}{
+		{name: "ban", text: "/ban", run: bansModule.ban, acts: "banChatMember"},
+		{name: "mute", text: "/mute", run: mutesModule.mute, acts: "restrictChatMember"},
+		{name: "dkick", text: "/dkick", run: bansModule.dkick, acts: "unbanChatMember"},
+		{name: "purge", text: "/purge", run: purgesModule.purge, acts: "deleteMessage"},
+		{name: "del", text: "/del", run: purgesModule.delCmd, acts: "deleteMessage"},
+		{name: "purgefrom", text: "/purgefrom", run: purgesModule.purgeFrom},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			chat := gotgbot.Chat{Id: uniqueModuleChatID(), Type: "supergroup", Title: "Forum", IsForum: true}
+			t.Cleanup(func() { delMsgs.Delete(chat.Id) })
+
+			client := newModuleBotClient()
+			bot := newModuleTestBot(client)
+			if err := tc.run(bot, forumTopicContext(bot, chat, admin, tc.text, false)); err != ext.EndGroups {
+				t.Fatalf("%s implicit error = %v, want EndGroups", tc.text, err)
+			}
+			for _, method := range destructive {
+				if calls := client.callsFor(method); len(calls) != 0 {
+					t.Fatalf("%s on the topic's creation message made %d %s calls, want none", tc.text, len(calls), method)
+				}
+			}
+			if calls := client.callsFor("sendMessage"); len(calls) != 1 {
+				t.Fatalf("%s implicit sendMessage calls = %d, want one refusal", tc.text, len(calls))
+			}
+			if _, marked := delMsgs.Load(chat.Id); marked {
+				t.Fatalf("%s marked the topic's creation message for a purge", tc.text)
+			}
+			if tc.acts == "" {
+				return
+			}
+
+			client = newModuleBotClient()
+			bot = newModuleTestBot(client)
+			if err := tc.run(bot, forumTopicContext(bot, chat, admin, tc.text, true)); err != ext.EndGroups {
+				t.Fatalf("%s explicit error = %v, want EndGroups", tc.text, err)
+			}
+			if calls := client.callsFor(tc.acts); len(calls) == 0 {
+				t.Fatalf("%s as a real reply in the topic made no %s call", tc.text, tc.acts)
+			}
+		})
+	}
+
+	t.Run("id", func(t *testing.T) {
+		chat := gotgbot.Chat{Id: uniqueModuleChatID(), Type: "supergroup", Title: "Forum", IsForum: true}
+		client := newModuleBotClient()
+		bot := newModuleTestBot(client)
+		if err := miscModule.getId(bot, forumTopicContext(bot, chat, admin, "/id", false)); err != ext.EndGroups {
+			t.Fatalf("/id implicit error = %v, want EndGroups", err)
+		}
+		calls := client.callsFor("sendMessage")
+		if len(calls) != 1 {
+			t.Fatalf("/id sendMessage calls = %d, want 1", len(calls))
+		}
+		text := fmt.Sprint(calls[0].Params["text"])
+		if !strings.Contains(text, "777000") || strings.Contains(text, "5151") {
+			t.Fatalf("/id in a topic = %q, want the sender's own ID and not the topic creator's", text)
+		}
+	})
+}

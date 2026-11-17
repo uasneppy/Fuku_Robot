@@ -128,7 +128,7 @@ func (moduleStruct) getId(b *gotgbot.Bot, ctx *ext.Context) error {
 	if userId != 0 {
 		// The reply's details are shown only when the resolved user is the reply's
 		// sender: an explicit target (/id @name as a reply) beats the reply.
-		reply := msg.ReplyToMessage
+		reply := extraction.ReplyTarget(msg)
 		if reply != nil && reply.GetSender() != nil && reply.GetSender().Id() == userId {
 			tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 			temp, _ := tr.GetString("misc_chat_id")
@@ -141,8 +141,8 @@ func (moduleStruct) getId(b *gotgbot.Bot, ctx *ext.Context) error {
 				builder.WriteString(text)
 				builder.WriteString("\n")
 			}
-			if msg.ReplyToMessage.From != nil {
-				originalId := msg.ReplyToMessage.From.Id
+			if reply.From != nil {
+				originalId := reply.From.Id
 				_, user1Name, _ := extraction.GetUserInfo(originalId)
 				temp3, _ := tr.GetString("misc_user_id")
 				text = fmt.Sprintf(temp3, user1Name, originalId)
@@ -150,7 +150,7 @@ func (moduleStruct) getId(b *gotgbot.Bot, ctx *ext.Context) error {
 				builder.WriteString("\n")
 			}
 
-			if rpm := msg.ReplyToMessage; rpm != nil {
+			if rpm := reply; rpm != nil {
 				if frpm := rpm.ForwardOrigin; frpm != nil {
 					if frpm.GetDate() != 0 {
 						fwdd := frpm.MergeMessageOrigin()
@@ -173,15 +173,15 @@ func (moduleStruct) getId(b *gotgbot.Bot, ctx *ext.Context) error {
 					}
 				}
 			}
-			if msg.ReplyToMessage.Animation != nil {
+			if reply.Animation != nil {
 				temp6, _ := tr.GetString("misc_gif_id")
-				text = fmt.Sprintf(temp6, msg.ReplyToMessage.Animation.FileId)
+				text = fmt.Sprintf(temp6, reply.Animation.FileId)
 				builder.WriteString(text)
 				builder.WriteString("\n")
 			}
-			if msg.ReplyToMessage.Sticker != nil {
+			if reply.Sticker != nil {
 				temp7, _ := tr.GetString("misc_sticker_id")
-				text = fmt.Sprintf(temp7, msg.ReplyToMessage.Sticker.FileId)
+				text = fmt.Sprintf(temp7, reply.Sticker.FileId)
 				builder.WriteString(text)
 				builder.WriteString("\n")
 			}

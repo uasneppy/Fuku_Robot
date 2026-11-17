@@ -141,7 +141,8 @@ func extractFromArgs(c *moderationCtx) (target, error) {
 
 // extractFromReply resolves the target from the replied-to message.
 func extractFromReply(c *moderationCtx) (target, error) {
-	if c.Msg.ReplyToMessage == nil {
+	reply := extraction.ReplyTarget(c.Msg)
+	if reply == nil {
 		text, _ := c.Tr.GetString("bans_dkick_no_reply")
 		if text == "" {
 			text, _ = c.Tr.GetString("common_no_reply_to_message")
@@ -153,7 +154,7 @@ func extractFromReply(c *moderationCtx) (target, error) {
 		}
 		return target{}, fmt.Errorf("no reply")
 	}
-	if c.Msg.ReplyToMessage.From == nil {
+	if reply.From == nil {
 		text, _ := c.Tr.GetString("bans_cannot_identify_user")
 		_, err := c.Msg.Reply(c.Bot, text, formatting.Shtml())
 		if err != nil {
@@ -162,7 +163,7 @@ func extractFromReply(c *moderationCtx) (target, error) {
 		}
 		return target{}, fmt.Errorf("nil from")
 	}
-	uid := c.Msg.ReplyToMessage.From.Id
+	uid := reply.From.Id
 	if chat_status.IsChannelId(uid) {
 		anonKey := "bans_anonymous_ban_only_error"
 		text, _ := c.Tr.GetString(anonKey)

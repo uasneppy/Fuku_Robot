@@ -162,7 +162,7 @@ func moderationDmute(m *moduleStruct) *moderationCommand {
 		gates:   []gateFn{deleteModGates},
 		extract: extractFromArgs,
 		validate: func(c *moderationCtx, t *target) error {
-			if c.Msg.ReplyToMessage == nil {
+			if extraction.ReplyTarget(c.Msg) == nil {
 				text, _ := c.Tr.GetString("mute_reply_to_dmute")
 				if text == "" {
 					text, _ = c.Tr.GetString("common_no_reply_to_message")
@@ -177,7 +177,7 @@ func moderationDmute(m *moduleStruct) *moderationCommand {
 			return muteTargetValidation(c, t)
 		},
 		execute: func(c *moderationCtx, t *target) error {
-			_, err := c.Msg.ReplyToMessage.Delete(c.Bot, nil)
+			_, err := extraction.ReplyTarget(c.Msg).Delete(c.Bot, nil)
 			if err != nil {
 				log.Error(err)
 				return err

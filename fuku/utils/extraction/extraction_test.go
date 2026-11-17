@@ -1090,3 +1090,78 @@ func TestExtractUserAndTextExplicitTargetBeatsReply(t *testing.T) {
 		}
 	})
 }
+
+func TestReplyTarget(t *testing.T) {
+	plain := &gotgbot.Message{MessageId: 50, From: &gotgbot.User{Id: 1234}}
+	topicRoot := &gotgbot.Message{MessageId: 70, From: &gotgbot.User{Id: 5}, ForumTopicCreated: &gotgbot.ForumTopicCreated{Name: "t"}}
+	threadRoot := &gotgbot.Message{MessageId: 80, From: &gotgbot.User{Id: 6}}
+
+	tests := []struct {
+		name string
+		msg  *gotgbot.Message
+		want *gotgbot.Message
+	}{
+		{name: "nil message", msg: nil, want: nil},
+		{name: "no reply", msg: &gotgbot.Message{MessageId: 1}, want: nil},
+		{name: "plain reply", msg: &gotgbot.Message{MessageId: 1, ReplyToMessage: plain}, want: plain},
+		{name: "topic creation message", msg: &gotgbot.Message{MessageId: 1, ReplyToMessage: topicRoot}, want: nil},
+		{
+			name: "topic message implicitly replying to its thread root",
+			msg:  &gotgbot.Message{MessageId: 1, IsTopicMessage: true, MessageThreadId: 80, ReplyToMessage: threadRoot},
+			want: nil,
+		},
+		{
+			name: "reply to a reply thread root outside a forum",
+			msg:  &gotgbot.Message{MessageId: 1, MessageThreadId: 80, ReplyToMessage: threadRoot},
+			want: threadRoot,
+		},
+		{
+			name: "topic message replying to another message",
+			msg:  &gotgbot.Message{MessageId: 1, IsTopicMessage: true, MessageThreadId: 80, ReplyToMessage: plain},
+			want: plain,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := ReplyTarget(tc.msg); got != tc.want {
+				t.Fatalf("ReplyTarget() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestExtractUserAndTextForumImplicitReply(t *testing.T) {
+	client := &extractionBotClient{}
+	bot := newExtractionBot(client)
+	if err := db.DB.Create(&db.User{UserId: 777125, UserName: "forumextract", Name: "Forum"}).Error; err != nil {
+		t.Fatalf("Create forum user failed: %v", err)
+	}
+
+	inTopic := func(text string) *ext.Context {
+		ctx := newExtractionContext(bot, text)
+		ctx.EffectiveMessage.IsTopicMessage = true
+		ctx.EffectiveMessage.MessageThreadId = 70
+		ctx.EffectiveMessage.ReplyToMessage = &gotgbot.Message{
+			MessageId:         70,
+			From:              &gotgbot.User{Id: 5555, FirstName: "Topic Creator"},
+			ForumTopicCreated: &gotgbot.ForumTopicCreated{Name: "topic"},
+		}
+		return ctx
+	}
+
+	if gotID, gotText := ExtractUserAndText(bot, inTopic("/ban")); gotID != 0 || gotText != "" {
+		t.Fatalf("ExtractUserAndText(/ban in topic) = (%d, %q), want (0, \"\")", gotID, gotText)
+	}
+	if gotID, _ := ExtractUserAndText(bot, inTopic("/ban spam words")); gotID != 0 {
+		t.Fatalf("ExtractUserAndText(/ban spam words in topic) = %d, want 0", gotID)
+	}
+	if gotID, gotText := ExtractUserAndText(bot, inTopic("/ban @forumextract reason")); gotID != 777125 || gotText != "reason" {
+		t.Fatalf("ExtractUserAndText(/ban @name in topic) = (%d, %q), want (777125, reason)", gotID, gotText)
+	}
+	if gotID, gotText := ExtractUserAndText(bot, inTopic("/ban 555123 reason")); gotID != 555123 || gotText != "reason" {
+		t.Fatalf("ExtractUserAndText(/ban id in topic) = (%d, %q), want (555123, reason)", gotID, gotText)
+	}
+	if gotID, _ := IdFromReply(inTopic("/ban").EffectiveMessage); gotID != 0 {
+		t.Fatalf("IdFromReply(topic creation message) = %d, want 0", gotID)
+	}
+}

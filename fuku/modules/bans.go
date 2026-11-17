@@ -84,7 +84,7 @@ func moderationDkick(m *moduleStruct) *moderationCommand {
 		extract:  extractFromReply,
 		validate: kickTargetValidation,
 		execute: func(c *moderationCtx, t *target) error {
-			_, err := c.Msg.ReplyToMessage.Delete(c.Bot, nil)
+			_, err := extraction.ReplyTarget(c.Msg).Delete(c.Bot, nil)
 			if err != nil {
 				log.Error(err)
 				return err
@@ -324,7 +324,7 @@ func moderationDban(m *moduleStruct) *moderationCommand {
 		gates:   []gateFn{deleteModGates},
 		extract: extractFromArgs,
 		validate: func(c *moderationCtx, t *target) error {
-			if c.Msg.ReplyToMessage == nil {
+			if extraction.ReplyTarget(c.Msg) == nil {
 				text, _ := c.Tr.GetString(strings.ToLower(c.Module.moduleName) + "_ban_dban_no_reply")
 				if text == "" {
 					text, _ = c.Tr.GetString("common_no_reply_to_message")
@@ -339,7 +339,7 @@ func moderationDban(m *moduleStruct) *moderationCommand {
 			return banTargetValidation(c, t)
 		},
 		execute: func(c *moderationCtx, t *target) error {
-			_, err := c.Msg.ReplyToMessage.Delete(c.Bot, nil)
+			_, err := extraction.ReplyTarget(c.Msg).Delete(c.Bot, nil)
 			if err != nil {
 				log.Error(err)
 				return err
