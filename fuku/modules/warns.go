@@ -349,8 +349,9 @@ func (moduleStruct) warnThisUser(b *gotgbot.Bot, ctx *ext.Context, userId int64,
 		}
 		reply += sb.String()
 	} else {
-		rules := rules.GetChatRulesInfo(chat.Id)
-		if len(rules.Rules) >= 1 {
+		// The Rules button shows whenever the rules are set (a text, a media or buttons),
+		// the same test /rules and a welcome's {rules} button use.
+		if rules.GetChatRulesInfo(chat.Id).HasContent() {
 			keyboard = gotgbot.InlineKeyboardMarkup{
 				InlineKeyboard: [][]gotgbot.InlineKeyboardButton{
 					{
