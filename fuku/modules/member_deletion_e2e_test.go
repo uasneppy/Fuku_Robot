@@ -878,7 +878,7 @@ func TestMemberDeletionLogsCarryIDsOnly(t *testing.T) {
 		"(count unreadable)",
 		"(write failed)",
 		"could not read the rules of chat",
-		"could not be taken off the self-destruct queue",
+		"could not be taken off the deletion queue",
 	} {
 		found := false
 		for _, entry := range entries {
