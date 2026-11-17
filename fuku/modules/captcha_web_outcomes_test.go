@@ -152,6 +152,15 @@ func outcomeRace(t *testing.T, env *captchaWebEnv, timer, checker *outcomeReplic
 		}
 	}
 
+	// The fake does not track a member's status. A member the timeout decided was kicked, and a
+	// check that finds the attempt decided reads the live record (C5), so every client answers
+	// the racer as left; the passed branch never reads it.
+	for _, c := range clients {
+		c.mu.Lock()
+		c.responses["getChatMember"] = json.RawMessage(`{"status":"left","user":{"id":6000,"is_bot":false,"first_name":"Racer"}}`)
+		c.mu.Unlock()
+	}
+
 	var passed, expired int
 	for i := 0; i < iterations; i++ {
 		member := gotgbot.User{Id: int64(6000 + i), FirstName: "Racer"}

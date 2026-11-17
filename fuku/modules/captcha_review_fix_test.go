@@ -5,6 +5,7 @@ package modules
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"testing"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/db"
 	dbcache "github.com/uasneppy/fuku_robot/fuku/db/cache"
 	"github.com/uasneppy/fuku_robot/fuku/db/captcha"
+	"github.com/uasneppy/fuku_robot/fuku/utils/captchaweb"
 )
 
 // waitCaptchaAttemptGone waits up to limit for the attempt row to be deleted and reports
@@ -197,6 +199,51 @@ func TestRunOrphanedCaptchaRecoverySparesYoungUnsentAttempt(t *testing.T) {
 	}
 	if got := len(callsForUser(client, "restrictChatMember", young)); got != 0 {
 		t.Fatalf("restrictChatMember calls for the young attempt = %d, want none", got)
+	}
+}
+
+// TestCaptchaWebDecidedAttemptAnswersLiveMember pins C5: a verify that finds its attempt
+// already decided by someone else answers expired with the action only when the live member
+// shows that action; a member still in the group (released, say) gets the neutral invalid.
+func TestCaptchaWebDecidedAttemptAnswersLiveMember(t *testing.T) {
+	cases := []struct {
+		name       string
+		live       string
+		wantResult captchaweb.Result
+		wantAction string
+	}{
+		{name: "released and still in the group", wantResult: captchaweb.ResultInvalid},
+		{name: "kicked by the timer", live: "left", wantResult: captchaweb.ResultExpired, wantAction: "kick"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newCaptchaWebEnv(t)
+			member := gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: "Member"}
+			memberReqCleanup(t, nil, []int64{member.Id})
+			token := env.join(member)
+			attempt := env.attempt(member.Id)
+			// Someone else decided the attempt: its row is gone.
+			if err := db.DB.Where("id = ?", attempt.ID).Delete(&db.CaptchaAttempts{}).Error; err != nil {
+				t.Fatalf("delete the attempt: %v", err)
+			}
+			dbcache.DeleteCache(dbcache.CacheKey("captcha_pending", env.chat.Id))
+			if tc.live != "" {
+				env.client.mu.Lock()
+				env.client.responses["getChatMember"] = json.RawMessage(fmt.Sprintf(
+					`{"status":%q,"user":{"id":%d,"is_bot":false,"first_name":"Member"}}`, tc.live, member.Id))
+				env.client.mu.Unlock()
+			}
+
+			for i := 0; i < 2; i++ {
+				status, answer := env.verify(member, token)
+				if status != http.StatusOK || answer.Result != tc.wantResult || answer.Action != tc.wantAction {
+					t.Fatalf("verify %d = %d %+v, want 200 %s %q", i+1, status, answer, tc.wantResult, tc.wantAction)
+				}
+			}
+			if got := kicksOf(env.client, member.Id); got != 0 {
+				t.Fatalf("kicks = %d, want none from the late check", got)
+			}
+		})
 	}
 }
 

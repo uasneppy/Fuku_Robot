@@ -3089,8 +3089,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   math captcha with no extra message (D-09, `captchaWebAvailable`); `cache.IsRedisAvailable` is not used for this,
   because it only says a client object exists. An issue or send failure rolls the attempt back and unmutes (the existing
   `rollbackCaptchaAttempt`), with no fallback to math from inside a failed join. A re-join replaces the attempt, so the
-  old token answers `expired` and never touches the new attempt: the backend matches the challenge record's attempt ID,
-  never the member's current attempt.
+  old token never touches the new attempt: the backend matches the challenge record's attempt ID, never the member's
+  current attempt, and the old token is answered from the live member like any decided attempt (the neutral `invalid`
+  while they are still in the group).
   Outcomes (D-28): only `invalid-input-response` and `timeout-or-duplicate` as the only error codes, and a confirmed token
   whose `cdata` belongs to another challenge, are a failed solve (`captchaweb.OutcomeFailed`); it runs
   `settleCaptchaAttempt` once through `captchaWebBackend.Fail`, the decision the timer, the cleanup tick and the late check
@@ -3127,7 +3128,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   gone, because the pass claim also matches the message ID and refresh count read a moment before and `SendCaptcha`
   stores the message ID after its send: `challengeRun.lostClaim` reads the attempt again, and a still live attempt gives
   the challenge back and answers `retry`, an unreadable one is a `retry` too, and only a row confirmed gone or expired
-  answers `expired`. For the same reason `captchaWebBackend.Fail` reads the row again after an unclaimed
+  answers `expired`. When the row is gone, or another caller won the expiry claim, someone else decided the attempt and
+  `captchaWebBackend.decidedElsewhere` reads the member live (3 s): `expired` with the action only while the record shows
+  that action (left or kicked for a kick or ban, restricted without the right to send for a mute); a member still in the
+  group gets `captchaweb.ActionSpared`, the neutral `invalid` with no action and no error counted, and the replay marker
+  stores the same; an unreadable record or setting keeps `expired` with the action (C5). For the same reason `captchaWebBackend.Fail` reads the row again after an unclaimed
   `settleCaptchaAttempt` (the timeout path reports a database error as "not claimed") and returns an error when the
   attempt is still pending, so a blip re-arms the challenge instead of burning it (WR-01). A claim whose unmute failed answers `retry`,
   not `passed` (the member is not unmuted yet): the claim already wrote the `captcha_muted_users` row due now, the
