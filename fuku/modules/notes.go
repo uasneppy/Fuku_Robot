@@ -58,14 +58,17 @@ type noteWriteSeams struct {
 	// RemoveByID deletes one row by ID only when it belongs to the chat and returns its name.
 	RemoveByID func(ctx context.Context, chatID, id int64) (name string, removed bool, err error)
 	Exists     func(ctx context.Context, chatID int64, noteName string) (bool, error)
+	// PrivateNotes turns the chat's private notes switch (/privnote) on or off.
+	PrivateNotes func(chatID int64, on bool) error
 }
 
 // noteWrites is the one place the note commands reach the repository through.
 var noteWrites = noteWriteSeams{
-	Add:        notes.AddNoteContext,
-	Remove:     notes.RemoveNoteContext,
-	RemoveByID: notes.RemoveNoteByID,
-	Exists:     notes.NoteExistsContext,
+	Add:          notes.AddNoteContext,
+	Remove:       notes.RemoveNoteContext,
+	RemoveByID:   notes.RemoveNoteByID,
+	Exists:       notes.NoteExistsContext,
+	PrivateNotes: notes.TooglePrivateNote,
 }
 
 // noteAddOutcome is what applyNoteAdd did; its zero value is a stored note.
@@ -484,14 +487,16 @@ func (moduleStruct) privNote(b *gotgbot.Bot, ctx *ext.Context) error {
 		case "on", "yes", "true":
 			tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 			txt, _ = tr.GetString("notes_private_enabled")
-			if err := notes.TooglePrivateNote(chat.Id, true); err != nil {
+			if err := noteWrites.PrivateNotes(chat.Id, true); err != nil {
 				log.Errorf("[Notes] Failed to enable private notes for chat %d: %v", chat.Id, err)
+				txt, _ = tr.GetString("common_settings_save_failed")
 			}
 		case "off", "no", "false":
 			tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 			txt, _ = tr.GetString("notes_private_disabled")
-			if err := notes.TooglePrivateNote(chat.Id, false); err != nil {
+			if err := noteWrites.PrivateNotes(chat.Id, false); err != nil {
 				log.Errorf("[Notes] Failed to disable private notes for chat %d: %v", chat.Id, err)
+				txt, _ = tr.GetString("common_settings_save_failed")
 			}
 		default:
 			tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
