@@ -264,12 +264,10 @@ func TestReportsSettingsPrivateAndValidationBranches(t *testing.T) {
 	bot := newModuleTestBot(client)
 	admin := gotgbot.User{Id: 777000, FirstName: "Telegram"}
 	privateChat := gotgbot.Chat{Id: admin.Id, Type: "private", FirstName: "Telegram"}
-	connectedChat := gotgbot.Chat{Id: uniqueModuleChatID(), Type: "supergroup", Title: "Connected Report Chat"}
-	client.responses["getChat"] = []byte(`{"id":-100777,"type":"supergroup","title":"Connected Report Chat"}`)
-	connections.ConnectId(admin.Id, connectedChat.Id)
-	t.Cleanup(func() {
-		connections.DisconnectId(admin.Id)
-	})
+	// With no stored connection a private /reports is the user's own preference (quick task 261116-wh2).
+	if err := connections.DisconnectId(admin.Id); err != nil {
+		t.Fatalf("clear the user's connection: %v", err)
+	}
 
 	privateOnCtx := newModuleMessageContext(bot, privateChat, admin, "/reports on")
 	if err := reportsModule.reports(bot, privateOnCtx); err != ext.EndGroups {

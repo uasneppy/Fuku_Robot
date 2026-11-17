@@ -14,6 +14,7 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers/filters/callbackquery"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/uasneppy/fuku_robot/fuku/db/connections"
 	"github.com/uasneppy/fuku_robot/fuku/db/lang"
 	"github.com/uasneppy/fuku_robot/fuku/db/reports"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
@@ -311,13 +312,30 @@ func (moduleStruct) report(b *gotgbot.Bot, ctx *ext.Context) error {
 	return ext.EndGroups
 }
 
+// reportsPersonalMode reports whether /reports speaks about the sender's own preference: a private
+// chat with no stored connection. A personal preference grants no authority over any group, so it
+// needs no connection and no admin check; a private chat with a connection speaks about the
+// connected group.
+func reportsPersonalMode(ctx *ext.Context) bool {
+	msg := ctx.EffectiveMessage
+	user := ctx.EffectiveUser
+	if msg == nil || user == nil || msg.Chat.Type != "private" {
+		return false
+	}
+	conn := connections.Connection(user.Id)
+	return !conn.Connected || conn.ChatId == 0
+}
+
 //nolint:dupl // reports has symmetric block/unblock logic
 func (moduleStruct) reports(b *gotgbot.Bot, ctx *ext.Context) error {
-	connectedChat := chat_status.IsUserConnected(b, ctx, true, true)
-	if connectedChat == nil {
-		return ext.EndGroups
+	personal := reportsPersonalMode(ctx)
+	if !personal {
+		connectedChat := chat_status.IsUserConnected(b, ctx, true, true)
+		if connectedChat == nil {
+			return ext.EndGroups
+		}
+		ctx.EffectiveChat = connectedChat
 	}
-	ctx.EffectiveChat = connectedChat
 	chat := ctx.EffectiveChat
 	sender := ctx.EffectiveSender
 	if sender == nil || sender.User == nil {
@@ -332,13 +350,17 @@ func (moduleStruct) reports(b *gotgbot.Bot, ctx *ext.Context) error {
 		replyText string
 	)
 
-	if !chat_status.RequireUserAdmin(b, ctx, nil, user.Id) {
-		chat_status.NewPermissionResponder(b).Respond(ctx, "chat_status_user_admin_cmd_error", "chat_status_user_admin_button_error", chat_status.WithReplyFallback())
-		return ext.EndGroups
-	}
-	if !chat_status.RequireBotAdmin(b, ctx, nil) {
-		chat_status.NewPermissionResponder(b).Respond(ctx, "chat_status_bot_not_admin", "", chat_status.WithReply())
-		return ext.EndGroups
+	if !personal {
+		// The connected chat is passed explicitly: with a nil chat the predicates judge the chat the
+		// message came from, which for a connected private chat is the private chat itself.
+		if !chat_status.RequireUserAdmin(b, ctx, chat, user.Id) {
+			chat_status.NewPermissionResponder(b).Respond(ctx, "chat_status_user_admin_cmd_error", "chat_status_user_admin_button_error", chat_status.WithReplyFallback())
+			return ext.EndGroups
+		}
+		if !chat_status.RequireBotAdmin(b, ctx, chat) {
+			chat_status.NewPermissionResponder(b).Respond(ctx, "chat_status_bot_not_admin", "", chat_status.WithReply())
+			return ext.EndGroups
+		}
 	}
 
 	if len(args) >= 1 {
@@ -346,7 +368,7 @@ func (moduleStruct) reports(b *gotgbot.Bot, ctx *ext.Context) error {
 		switch action {
 		case "on", "yes", "true":
 			tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-			if msg.Chat.Type == "private" {
+			if personal {
 				err := reports.SetUserReportSettings(user.Id, true)
 				if err != nil {
 					replyText, _ = tr.GetString("common_settings_save_failed")
@@ -358,7 +380,7 @@ func (moduleStruct) reports(b *gotgbot.Bot, ctx *ext.Context) error {
 			}
 		case "off", "no", "false":
 			tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-			if msg.Chat.Type == "private" {
+			if personal {
 				err := reports.SetUserReportSettings(user.Id, false)
 				if err != nil {
 					replyText, _ = tr.GetString("common_settings_save_failed")
@@ -445,7 +467,7 @@ func (moduleStruct) reports(b *gotgbot.Bot, ctx *ext.Context) error {
 		}
 	} else {
 		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-		if msg.Chat.Type == "private" {
+		if personal {
 			rStatus := reports.GetUserReportSettings(user.Id).Status
 			if rStatus {
 				replyText, _ = tr.GetString("reports_preference_enabled_private")

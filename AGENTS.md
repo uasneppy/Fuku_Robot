@@ -3719,8 +3719,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   The reports switch (Phase 18) is `applyReportsEnabled` in `reports.go`: it wraps only the group branch of `/reports on|off`
   (`reportsWrites.ChatStatus`, default `reports.SetChatReportStatus`, which writes `enabled` and `status` together; the
   `/report` path reads `status`) and returns a `reportsApplyResult` (outcome, the command's reply key, the status read
-  back, the error). The private-chat branch writes the user's own preference through `reports.SetUserReportSettings` and
-  stays in the command. `report_chat_settings` has no cache, so there is no key to drop and nothing is skewed across
+  back, the error). In a private chat with no stored connection (`reportsPersonalMode`) `/reports on|off` and the bare
+  status write and show the user's own preference through `reports.SetUserReportSettings`, need no connection and run no
+  admin check (a personal preference grants nothing over any group); that branch stays in the command. In a private
+  chat with a connection the same words set and show the connected group's switch through `applyReportsEnabled`, after
+  `IsUserConnected(true, true)` and the admin and bot-admin checks on the connected chat (passed explicitly: with a nil
+  chat they would judge the private chat), so a connected non-admin changes nothing (`TestReportsPrivateConnection`,
+  quick task 261116-wh2). `block`, `unblock` and `showblocklist` still answer the group-only text in any private chat.
+  `report_chat_settings` has no cache, so there is no key to drop and nothing is skewed across
   replicas. The page reads through `reports.LoadChatStatusContext`, one plain `SELECT` that creates no `chats` or report
   row, returns its error and reads a chat with no row as on (the model default); the command's own status text still
   reads `GetChatReportSettings`, which creates the row as before (`TestLegacyReportsRequests` and
