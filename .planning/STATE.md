@@ -360,6 +360,17 @@ None yet.
 | 261116-wh0 | Fix target resolution and moderation safety: unban, explicit targets, forum replies, usernames, escaping, staff durations, federations | 2026-11-17 | 5cd047a | [261116-wh0-fix-target-resolution-and-moderation-saf](./quick/261116-wh0-fix-target-resolution-and-moderation-saf/) |
 | 261116-wh1 | Fix anonymous admin proof and re-entry, lock exemptions and commands through a PM connection | 2026-11-17 | 5fab71f | [261116-wh1-fix-anonymous-admin-proof-and-re-entry-l](./quick/261116-wh1-fix-anonymous-admin-proof-and-re-entry-l/) |
 | 261116-wh2 | Fix raw placeholder strings, note deep links, wiki, reports in PM and disable no-ops | 2026-11-17 | 95d8ff4 | [261116-wh2-fix-raw-placeholder-strings-note-deep-li](./quick/261116-wh2-fix-raw-placeholder-strings-note-deep-li/) |
+| 261117-rv0 | Record the code review fix plan of 2026-11-17 (and the CI items I11, I12) | 2026-11-17 | 71a2071 | [261117-rv0-code-review-fix-plan](./quick/261117-rv0-code-review-fix-plan/) |
+| 261117-w1a | Review wave 1: command authority (automatic forwards, /setlog marker) | 2026-11-17 | 3620154 | [261117-w1a-command-authority](./quick/261117-w1a-command-authority/) |
+| 261117-w2c | Review wave 2: captcha timer precision, failed actions, web answers | 2026-11-17 | 1d389a1 | [261117-w2c-captcha](./quick/261117-w2c-captcha/) |
+| 261117-w3m | Review wave 3: moderation commands, reply targets, federation pacing | 2026-11-17 | afc0cab | [261117-w3m-moderation](./quick/261117-w3m-moderation/) |
+| 261117-w4n | Review wave 4: notes, filters, greetings, rules, backup | 2026-11-17 | e5eab37 | [261117-w4n-notes-backup](./quick/261117-w4n-notes-backup/) |
+| 261117-w5l | Review wave 5: lockdown | 2026-11-17 | 6f02bbe | [261117-w5l-lockdown](./quick/261117-w5l-lockdown/) |
+| 261117-w6r | Review wave 6: raid and AI | 2026-11-17 | 4258d5c | [261117-w6r-raid-ai](./quick/261117-w6r-raid-ai/) |
+| 261117-w7q | Review wave 7: member requirements | 2026-11-17 | 01cb02e | [261117-w7q-memberreq](./quick/261117-w7q-memberreq/) |
+| 261117-w8s | Review wave 8: Staff Group | 2026-11-17 | d586acd | [261117-w8s-staff](./quick/261117-w8s-staff/) |
+| 261117-w9i | Review wave 9: deletion and infrastructure | 2026-11-17 | cef33c2 | [261117-w9i-infra](./quick/261117-w9i-infra/) |
+| 261117-w10t | Review wave 10: settings menu | 2026-11-17 | a9c457d | [261117-w10t-settings](./quick/261117-w10t-settings/) |
 
 ## Deferred Items
 
