@@ -3209,7 +3209,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   the re-keyed Staff Group, because that row names the Staff Group's chat ID (`TestRekeyChatInvalidatesLinkedGroups`).
 - Staff links: authority reads use uncached `staff.*Fresh` plus live `chat_status.CheckOwner`; only `OwnerMismatch`
   removes a link (errors are unknown); each automatic removal or health change is one conditional statement, and only
-  the caller with RowsAffected == 1 posts the Staff Group notice. Unsetting a Staff Group (`DeleteStaffGroupWithLinks`)
+  the caller with RowsAffected == 1 posts the Staff Group notice. Both buttons of the `/unsetstaff` prompt, Confirm and
+  Cancel, need the live creator of the Staff Group (`staffUnsetPresserIsOwner`; anyone else gets the owner-only alert and
+  the prompt stays). Unsetting a Staff Group (`DeleteStaffGroupWithLinks`)
   deletes the Staff Group row, its links and its forward blocklist (sources and action) in one transaction; unlinking one
   group deletes no list, because the list belongs to the Staff Group and the link gate stops it acting in that group.
 - The `/staff` panel marks a linked group whose lockdown is confirmed with one `staff_panel_row_lockdown` line (the

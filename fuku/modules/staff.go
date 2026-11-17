@@ -332,16 +332,7 @@ func (moduleStruct) staffUnsetConfirm(b *gotgbot.Bot, query *gotgbot.CallbackQue
 		return ext.EndGroups
 	}
 
-	result, _, ownerErr := chat_status.CheckOwner(b, chatID, query.From.Id)
-	switch result {
-	case chat_status.OwnerUnknown:
-		log.Warnf("[Staff] unset confirm: owner check for chat %d failed: %v", chatID, ownerErr)
-		text, _ := tr.GetString("staff_check_failed")
-		answerStaffCallback(b, query, text, true)
-		return ext.EndGroups
-	case chat_status.OwnerMismatch:
-		text, _ := tr.GetString("staff_cb_owner_only")
-		answerStaffCallback(b, query, text, true)
+	if !staffUnsetPresserIsOwner(b, query, tr, chatID) {
 		return ext.EndGroups
 	}
 
@@ -367,8 +358,32 @@ func (moduleStruct) staffUnsetConfirm(b *gotgbot.Bot, query *gotgbot.CallbackQue
 	return ext.EndGroups
 }
 
-// staffUnsetCancel leaves Staff status untouched and closes the prompt.
+// staffUnsetPresserIsOwner is the live creator check both /unsetstaff buttons make
+// on the person who pressed them. It answers the press itself, with an alert, and
+// returns false when the presser is not the creator or that cannot be checked.
+func staffUnsetPresserIsOwner(b *gotgbot.Bot, query *gotgbot.CallbackQuery, tr *i18n.Translator, chatID int64) bool {
+	result, _, ownerErr := chat_status.CheckOwner(b, chatID, query.From.Id)
+	switch result {
+	case chat_status.OwnerUnknown:
+		log.Warnf("[Staff] unset: owner check for chat %d failed: %v", chatID, ownerErr)
+		text, _ := tr.GetString("staff_check_failed")
+		answerStaffCallback(b, query, text, true)
+		return false
+	case chat_status.OwnerMismatch:
+		text, _ := tr.GetString("staff_cb_owner_only")
+		answerStaffCallback(b, query, text, true)
+		return false
+	}
+	return true
+}
+
+// staffUnsetCancel leaves Staff status untouched and closes the prompt. It needs
+// the same live creator check as Confirm, so a bystander cannot dismiss the
+// creator's prompt.
 func (moduleStruct) staffUnsetCancel(b *gotgbot.Bot, query *gotgbot.CallbackQuery, tr *i18n.Translator) error {
+	if !staffUnsetPresserIsOwner(b, query, tr, query.Message.GetChat().Id) {
+		return ext.EndGroups
+	}
 	text, _ := tr.GetString("staff_unset_cancelled")
 	editStaffCallbackMessage(b, query, text)
 	answerStaffCallback(b, query, "", false)
