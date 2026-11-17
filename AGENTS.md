@@ -3477,7 +3477,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`lockdownPlanReminders`, right before the poster in `runLockdownCycle`) plans one reminder copy per alert destination:
   kind `reminder`, `seq = floor((now - alert_started_at) / lockdownReminderEvery)`, inserted by
   `lockdown.PlanReminderSlots` with `ON CONFLICT DO NOTHING` on the slot key, so exactly one row exists per reminder and
-  destination whichever replica plans it. Only the current seq is ever planned (no backlog after downtime, and an
+  destination whichever replica plans it. A cycle reads `lockdownReminderBatch` (50) remindable lockdowns after the
+  in-memory cursor `lockdownReminderCursor` (`lockdown.ListRemindableFresh(afterID, limit)`) and a short batch starts
+  over from the lowest ID, so more due lockdowns than one batch are all reached within a few cycles
+  (`TestLockdownRemindersReachEveryLockdown`). Only the current seq is ever planned (no backlog after downtime, and an
   alert older than this feature does not fire a burst), and a pending reminder behind the current seq is marked failed
   with detail `superseded` instead of posted. The destinations are the alert's destination kinds
   (`lockdown.AlertDestKinds`) resolved again by `lockdownAlertDestinations`, so a Staff Group unlinked since, a kind the

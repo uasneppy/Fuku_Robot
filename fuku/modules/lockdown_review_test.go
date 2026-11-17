@@ -12,6 +12,7 @@ import (
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
+	"github.com/uasneppy/fuku_robot/fuku/db"
 	"github.com/uasneppy/fuku_robot/fuku/db/lockdown"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 )
@@ -183,6 +184,52 @@ func TestLockdownGuardBansWhenABotAdminAddsSomeone(t *testing.T) {
 	env.serviceJoin(helper, nil, byMessage)
 	if row := env.joinerRow(byMessage.Id); row.State != models.JoinerStatePending {
 		t.Errorf("service join: state = %q, want pending: a bot administrator does not exempt", row.State)
+	}
+}
+
+// TestLockdownRemindersReachEveryLockdown covers more due lockdowns than one batch of
+// the reminder planner: every one of them must get its reminder within a few cycles,
+// not only the lowest IDs over and over.
+func TestLockdownRemindersReachEveryLockdown(t *testing.T) {
+	env := newLockdownEnv(t)
+	previous := lockdownReminderBatch
+	lockdownReminderBatch = 1
+	lockdownReminderCursor.Store(0)
+	t.Cleanup(func() {
+		lockdownReminderBatch = previous
+		lockdownReminderCursor.Store(0)
+	})
+
+	second := env.addChat()
+	for _, chatID := range []int64{env.chat.Id, second.Id} {
+		setStaffLogChannel(t, chatID, uniqueModuleChatID())
+		chatID := chatID
+		t.Cleanup(func() { db.DB.Where("chat_id = ?", chatID).Delete(&models.ChatLockdownAlert{}) })
+	}
+	first := env.lockAsAdmin("raid")
+	if res := env.startRow(second); res.Outcome != lockdownStartStarted {
+		t.Fatalf("second lockdown outcome = %d, want started", res.Outcome)
+	}
+	env.cycle()
+	ids := []uint{first.ID}
+	if row, err := lockdown.GetActiveFresh(second.Id); err != nil || row == nil {
+		t.Fatalf("second lockdown = %v, %v", row, err)
+	} else {
+		ids = append(ids, row.ID)
+	}
+	for _, id := range ids {
+		ageAlert(t, id, 61*time.Minute)
+	}
+
+	for i := 0; i < 5; i++ {
+		lockdownPlanReminders(context.Background(), env.bot)
+	}
+
+	for _, id := range ids {
+		planned, err := lockdown.ReminderPlanned(id, 1)
+		if err != nil || !planned {
+			t.Errorf("reminder 1 of lockdown %d planned = %v, %v, want true", id, planned, err)
+		}
 	}
 }
 

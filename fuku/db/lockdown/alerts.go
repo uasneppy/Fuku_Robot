@@ -449,12 +449,14 @@ func ReleaseAlertClose(id uint, countAttempt bool) (bool, error) {
 }
 
 // ListRemindableFresh reads up to limit active lockdowns whose lock Telegram confirmed
-// and whose alert was decided, oldest ID first, straight from the database. They are the
-// lockdowns that may owe a reminder.
-func ListRemindableFresh(limit int) ([]models.ChatLockdown, error) {
+// and whose alert was decided, with an ID above afterID, oldest ID first, straight from
+// the database. They are the lockdowns that may owe a reminder; afterID is the cursor
+// that lets a caller page through all of them across calls.
+func ListRemindableFresh(afterID uint, limit int) ([]models.ChatLockdown, error) {
 	var rows []models.ChatLockdown
 	err := db.DB.
-		Where("state = ? AND locked_at IS NOT NULL AND alert_started_at IS NOT NULL", models.LockdownStateActive).
+		Where("state = ? AND locked_at IS NOT NULL AND alert_started_at IS NOT NULL AND id > ?",
+			models.LockdownStateActive, afterID).
 		Order("id").
 		Limit(limit).
 		Find(&rows).Error

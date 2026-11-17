@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -382,6 +383,19 @@ func lockdownReminderSeq(ld *models.ChatLockdown, now time.Time) int {
 	return int(elapsed / lockdownReminderEvery)
 }
 
+// lockdownReminderBatch is how many lockdowns one cycle of the reminder planner reads.
+// A variable so a test can make it small.
+var lockdownReminderBatch = lockdownWorkerBatch
+
+// lockdownReminderCursor is the highest lockdown ID the reminder planner read in its
+// last cycle on this replica. The next cycle reads the batch after it, and a batch
+// shorter than lockdownReminderBatch starts over from the lowest ID, so with more due
+// lockdowns than one batch every lockdown is reached within a few cycles instead of
+// the lowest IDs over and over. It is in memory only: a restart starts from the lowest
+// ID, and each replica keeps its own (planning is ON CONFLICT DO NOTHING, so two
+// replicas planning one lockdown create its reminder once).
+var lockdownReminderCursor atomic.Uint64
+
 // lockdownPlanReminders plans the reminder that is due for every confirmed active
 // lockdown whose alert was decided. The destinations are the alert's destination kinds,
 // each resolved again now (lockdownAlertDestinations): a Staff Group the group was
@@ -390,10 +404,17 @@ func lockdownReminderSeq(ld *models.ChatLockdown, now time.Time) int {
 // whichever replica plans first creates them and the others add nothing. It reports
 // whether any copy was planned here.
 func lockdownPlanReminders(ctx context.Context, _ *gotgbot.Bot) bool {
-	rows, err := lockdown.ListRemindableFresh(lockdownWorkerBatch)
+	after := uint(lockdownReminderCursor.Load())
+	rows, err := lockdown.ListRemindableFresh(after, lockdownReminderBatch)
 	if err != nil {
 		log.Errorf("[Lockdown] lockdowns that may need a reminder could not be listed: %v", err)
 		return false
+	}
+	if len(rows) < lockdownReminderBatch {
+		// The end of the list: the next cycle starts over from the lowest ID.
+		lockdownReminderCursor.Store(0)
+	} else {
+		lockdownReminderCursor.Store(uint64(rows[len(rows)-1].ID))
 	}
 	now := time.Now()
 	progress := false
