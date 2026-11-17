@@ -421,12 +421,15 @@ func actionResultOf(claimed, applied bool) captchaweb.ActionResult {
 // so whichever of the three arrives first decides and the others find the row gone. A row
 // that is gone, belongs to another member or chat, or is still live is left alone: the timer
 // owns a live row.
-func (b captchaWebBackend) Expire(_ context.Context, rec captchaweb.Record) (captchaweb.ActionResult, error) {
+func (b captchaWebBackend) Expire(ctx context.Context, rec captchaweb.Record) (captchaweb.ActionResult, error) {
 	attempt, err := pendingTurnstileAttempt(rec)
 	if err != nil {
 		return captchaweb.ActionLost, err
 	}
-	if attempt == nil || time.Now().Before(attempt.ExpiresAt) {
+	if attempt == nil {
+		return b.decidedElsewhere(ctx, rec), nil
+	}
+	if time.Now().Before(attempt.ExpiresAt) {
 		return captchaweb.ActionLost, nil
 	}
 	claimed, applied, err := expireCaptchaAttemptApplied(b.rt.bot, attempt)
@@ -436,5 +439,37 @@ func (b captchaWebBackend) Expire(_ context.Context, rec captchaweb.Record) (cap
 		log.Warnf("[Captcha][Web] Expire of attempt %d was claimed but a follow-up failed: %v", rec.AttemptID, err)
 		err = nil
 	}
+	if !claimed && err == nil {
+		return b.decidedElsewhere(ctx, rec), nil
+	}
 	return actionResultOf(claimed, applied), err
+}
+
+// captchaWebLiveReadTimeout bounds the live member read of decidedElsewhere.
+const captchaWebLiveReadTimeout = 3 * time.Second
+
+// decidedElsewhere answers an attempt someone else decided (the timer, the cleanup tick, a
+// pass, another replica, a release) from the member's live record, so the page never tells a
+// member who is still in the group that they were removed (C5): a kick or ban shows as left or
+// kicked, a mute as restricted without the right to send. That is ActionLost, answered with
+// the group's action; anything else is ActionSpared, the neutral answer. A record or setting
+// that cannot be read keeps the old answer (ActionLost).
+func (b captchaWebBackend) decidedElsewhere(ctx context.Context, rec captchaweb.Record) captchaweb.ActionResult {
+	settings, err := captcha.GetCaptchaSettings(rec.ChatID)
+	if err != nil {
+		return captchaweb.ActionLost
+	}
+	readCtx, cancel := context.WithTimeout(ctx, captchaWebLiveReadTimeout)
+	defer cancel()
+	member, err := b.rt.bot.GetChatMemberWithContext(readCtx, rec.ChatID, rec.UserID, nil)
+	if err != nil {
+		return captchaweb.ActionLost
+	}
+	status := member.GetStatus()
+	removed := status == "left" || status == "kicked"
+	muted := status == "restricted" && !member.MergeChatMember().CanSendMessages
+	if (settings.FailureAction == "mute" && muted) || (settings.FailureAction != "mute" && removed) {
+		return captchaweb.ActionLost
+	}
+	return captchaweb.ActionSpared
 }

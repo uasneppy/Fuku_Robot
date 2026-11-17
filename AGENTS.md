@@ -3066,7 +3066,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   shares `sendDeepLinkNote` (the admin-only check and the send) with the old `note_` handler, which stays for buttons
   already posted. An entry cached by an earlier build has no ID and falls back to the name form until `notes_list` is
   dropped. Note names in the two HTML lists are escaped.
-- Captcha allows one attempt per `(user, chat)`; group `-10` stores the pending user's messages for replay. Service messages
+- Captcha allows one attempt per `(user, chat)`; group `-10` records each content message of the pending user
+  (`stored_messages`), deletes it and ends the update. Nothing is replayed: a pass posts one summary of how many
+  messages of which types were removed (`captcha_stored_messages_summary`), a failure counts them in its notice, and the
+  rows go with the attempt. Service messages
   (join, leave, pin and the other deletion-table kinds, `memberContentMessage` false) are never held: group `-10` returns
   `ext.ContinueGroups` for them first, so the lockdown guard, fed-ban, the service deletion watcher and `cleanService` still
   see the joiner's own join message (`TestCaptchaPendingLetsJoinServiceMessageThrough`).
@@ -3094,8 +3097,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   math captcha with no extra message (D-09, `captchaWebAvailable`); `cache.IsRedisAvailable` is not used for this,
   because it only says a client object exists. An issue or send failure rolls the attempt back and unmutes (the existing
   `rollbackCaptchaAttempt`), with no fallback to math from inside a failed join. A re-join replaces the attempt, so the
-  old token answers `expired` and never touches the new attempt: the backend matches the challenge record's attempt ID,
-  never the member's current attempt.
+  old token never touches the new attempt: the backend matches the challenge record's attempt ID, never the member's
+  current attempt, and the old token is answered from the live member like any decided attempt (the neutral `invalid`
+  while they are still in the group).
   Outcomes (D-28): only `invalid-input-response` and `timeout-or-duplicate` as the only error codes, and a confirmed token
   whose `cdata` belongs to another challenge, are a failed solve (`captchaweb.OutcomeFailed`); it runs
   `settleCaptchaAttempt` once through `captchaWebBackend.Fail`, the decision the timer, the cleanup tick and the late check
@@ -3113,10 +3117,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   Cloudflare call, and a bot without it, or an unknown answer, is a retry. A `Backend` method returns an error only when
   it changed nothing, which is what makes the re-arm after one safe. `Fail` and `Expire` return a
   `captchaweb.ActionResult`: `ActionLost` (someone else decided), `ActionApplied` or `ActionNotApplied` (this call won the
-  claim but the action did not take effect: Telegram refused the kick or ban, so the member was unmuted and is still in
-  the group). A not-applied outcome is answered with the neutral `invalid` and no action, never `failed` or `expired`
-  with a removal text, the replay marker stores the same `invalid`, and the handler logs `outcome=<result> applied=false`
-  at Warn and counts an error (WR-07).
+  claim but the action did not take effect). A failure action Telegram answered with an error is judged by
+  `settleFailedCaptchaAction` from one live `getChatMember` (C2): a kick or ban whose member is now left or kicked, and a
+  mute whose member is restricted without the right to send (its 24 hour unmute stored again), took effect after all
+  (`ActionApplied`, the notice is posted); with the member still there, a definite refusal (a Telegram 4xx other than
+  429, or a mute whose unmute could not be stored) releases and unmutes them; any other answer (a 429, a 5xx, a timeout)
+  or an unreadable record leaves the member muted, schedules the 24 hour fallback unmute in `captcha_muted_users` (the
+  unmute worker reads the live member before it restricts) and logs one Warn by IDs. A failed kick is never retried and
+  a failed ban is never followed by a member-removing unban. A not-applied outcome is answered with the neutral
+  `invalid` and no action, never `failed` or `expired` with a removal text, the replay marker stores the same `invalid`,
+  and the handler logs `outcome=<result> applied=false` at Warn and counts an error (WR-07).
   Exactly once on any replica: a pass, a failed solve and a timeout are decided only by the conditional delete of the
   attempt row (`CompleteCaptchaAttemptAtomic` or `ReleaseCaptchaAttemptAtomic`), never by a Redis flag, so a challenge
   issued on one replica passes on another and a timer, a cleanup tick and a check on three replicas cannot all act. A
@@ -3126,7 +3136,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   gone, because the pass claim also matches the message ID and refresh count read a moment before and `SendCaptcha`
   stores the message ID after its send: `challengeRun.lostClaim` reads the attempt again, and a still live attempt gives
   the challenge back and answers `retry`, an unreadable one is a `retry` too, and only a row confirmed gone or expired
-  answers `expired`. For the same reason `captchaWebBackend.Fail` reads the row again after an unclaimed
+  answers `expired`. When the row is gone, or another caller won the expiry claim, someone else decided the attempt and
+  `captchaWebBackend.decidedElsewhere` reads the member live (3 s): `expired` with the action only while the record shows
+  that action (left or kicked for a kick or ban, restricted without the right to send for a mute); a member still in the
+  group gets `captchaweb.ActionSpared`, the neutral `invalid` with no action and no error counted, and the replay marker
+  stores the same; an unreadable record or setting keeps `expired` with the action (C5). For the same reason `captchaWebBackend.Fail` reads the row again after an unclaimed
   `settleCaptchaAttempt` (the timeout path reports a database error as "not claimed") and returns an error when the
   attempt is still pending, so a blip re-arms the challenge instead of burning it (WR-01). A claim whose unmute failed answers `retry`,
   not `passed` (the member is not unmuted yet): the claim already wrote the `captcha_muted_users` row due now, the

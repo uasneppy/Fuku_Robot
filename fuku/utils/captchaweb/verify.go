@@ -107,6 +107,11 @@ const (
 	// applied (Telegram refused it): the member was unmuted and is still in the group, so the
 	// answer must not say they were removed.
 	ActionNotApplied
+	// ActionSpared means this call changed nothing because someone else already decided the
+	// attempt, and the member's live record shows they were not removed (released, passed, or
+	// an action that did not take effect): the answer is the neutral invalid, and it is no
+	// fault (C5).
+	ActionSpared
 )
 
 // Backend is the bot side of the web captcha: the attempt row, the claim, the unmute and the
@@ -131,8 +136,10 @@ type Backend interface {
 	// Fail with the attempt still pending is an error, because nothing was decided.
 	Fail(ctx context.Context, rec Record) (ActionResult, error)
 	// Expire applies the group's failure action to an attempt whose time is up and that
-	// nobody has decided yet. It does nothing (ActionLost) when the row is gone or still live,
-	// because the timer owns a live row.
+	// nobody has decided yet. It does nothing (ActionLost) when the row is still live, because
+	// the timer owns a live row. When someone else already decided the attempt it changes
+	// nothing either and reports ActionSpared when the member's live record shows they were not
+	// removed, ActionLost otherwise.
 	Expire(ctx context.Context, rec Record) (ActionResult, error)
 }
 
@@ -577,6 +584,12 @@ func (c *challengeRun) answerAction(result Result, res ActionResult) {
 	if res == ActionNotApplied {
 		log.WithFields(c.fields).Warnf("[CaptchaWeb][Verify] outcome=%s applied=false", result)
 		countError()
+		c.decided(ResultInvalid, "")
+		writeAnswer(c.w, http.StatusOK, Answer{Result: ResultInvalid})
+		return
+	}
+	if res == ActionSpared {
+		log.WithFields(c.fields).Infof("[CaptchaWeb][Verify] outcome=%s decided_elsewhere spared=true", result)
 		c.decided(ResultInvalid, "")
 		writeAnswer(c.w, http.StatusOK, Answer{Result: ResultInvalid})
 		return

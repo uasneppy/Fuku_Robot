@@ -170,7 +170,9 @@ func createCaptchaAttemptPreMessage(userID, chatID int64, answer string, timeout
 		Attempts:     0,
 		MessageID:    0,
 		RefreshCount: 0,
-		ExpiresAt:    time.Now().Add(time.Duration(timeout) * time.Minute),
+		// PostgreSQL keeps timestamps to the microsecond. The in-memory attempt carries the same
+		// value the row will hold, so a timer comparing the two never reads a rounding as a change.
+		ExpiresAt: time.Now().UTC().Add(time.Duration(timeout) * time.Minute).Truncate(time.Microsecond),
 	}
 
 	err := db.DB.Transaction(func(tx *gorm.DB) error {

@@ -221,7 +221,8 @@ func TestRunOrphanedCaptchaRecoveryPersistsFailedUnmuteWithoutFailingStartup(t *
 		ChatID:    chatID,
 		Answer:    "0",
 		MessageID: 0,
-		CreatedAt: now.Add(-time.Minute),
+		// Older than captchaUnsentAttemptGrace: a younger unsent attempt is left to its sender.
+		CreatedAt: now.Add(-3 * time.Minute),
 		ExpiresAt: now.Add(time.Minute),
 	}
 	if err := db.DB.Create(&attempt).Error; err != nil {
@@ -1449,7 +1450,9 @@ func TestExpireCaptchaAttemptReleasesWhenCaptchaWasDisabled(t *testing.T) {
 
 func TestHandleCaptchaTimeoutRestoresPermissionsWhenActionFails(t *testing.T) {
 	client := newModuleBotClient()
-	client.errors["banChatMember"] = errors.New("telegram unavailable")
+	// A definite refusal with the member still there (C2: an unknown answer keeps them muted
+	// instead, TestCaptchaTimeoutFailedActionReadsLiveMember).
+	client.errors["banChatMember"] = &gotgbot.TelegramError{Code: 400, Description: "Bad Request: not enough rights to restrict/ban chat member"}
 	client.responses["getChat"] = []byte(`{
 		"id": -1001,
 		"type": "supergroup",

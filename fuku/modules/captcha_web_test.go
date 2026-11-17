@@ -437,7 +437,7 @@ func TestCaptchaWebTracerJoinVerifyUnmute(t *testing.T) {
 	t.Run("stale initData is invalid", func(t *testing.T) {
 		env := newCaptchaWebEnv(t)
 		token := env.join(member)
-		stale := captchaweb.InitDataForTest(env.bot.Token, member.Id, member.FirstName, "en", token, time.Now().Add(-6*time.Minute))
+		stale := captchaweb.InitDataForTest(env.bot.Token, member.Id, member.FirstName, "en", token, time.Now().Add(-captchaweb.InitDataMaxAge-time.Minute))
 
 		status, answer := env.verifyBody(env.verifyJSON(stale, captchaweb.TurnstileTokenForTest(token), token))
 		if status != http.StatusOK || answer.Result != captchaweb.ResultInvalid {
@@ -782,9 +782,11 @@ func TestCaptchaWebRejoinInvalidatesOldChallenge(t *testing.T) {
 		t.Fatal("the first challenge message was not deleted by the re-join")
 	}
 
+	// The member is still in the group on the new attempt, so the old token is answered with
+	// the neutral invalid, never a removal (C5).
 	status, answer := env.verify(member, tokenA)
-	if status != http.StatusOK || answer.Result != captchaweb.ResultExpired || answer.Action != "kick" {
-		t.Fatalf("verify(old token) = %d %+v, want 200 expired with action kick", status, answer)
+	if status != http.StatusOK || answer.Result != captchaweb.ResultInvalid || answer.Action != "" {
+		t.Fatalf("verify(old token) = %d %+v, want 200 invalid with no action", status, answer)
 	}
 	if got := env.cfRequests.Load(); got != 0 {
 		t.Fatalf("Cloudflare requests = %d, want none for an old token", got)
