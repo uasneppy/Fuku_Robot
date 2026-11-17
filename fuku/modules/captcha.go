@@ -1419,7 +1419,9 @@ func scheduleCaptchaTimeout(bot *gotgbot.Bot, attempt *db.CaptchaAttempts) {
 		case <-timer.C:
 			defer error_handling.RecoverFromPanic("captchaTimeout", "captcha")
 			if fresh, err := captcha.GetCaptchaAttemptByID(capturedID); err == nil && fresh != nil {
-				if fresh.RefreshCount != capturedRefreshCount || !fresh.ExpiresAt.Equal(capturedExpiresAt) {
+				// Compared to the microsecond, the precision PostgreSQL stores (C1).
+				if fresh.RefreshCount != capturedRefreshCount ||
+					!fresh.ExpiresAt.Truncate(time.Microsecond).Equal(capturedExpiresAt.Truncate(time.Microsecond)) {
 					log.Debugf("[Captcha] Stale timer for attempt %d ignored (refreshCount %d->%d, expires %v->%v)", capturedID, capturedRefreshCount, fresh.RefreshCount, capturedExpiresAt, fresh.ExpiresAt)
 					return
 				}
