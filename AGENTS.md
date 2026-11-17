@@ -3937,7 +3937,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   person's rights. `/anonadmin` (`anonAdmin`) keeps its own read through `admin.GetAdminSettings`, which creates the `admin`
   row even for a non-owner it then refuses (Pitfall 3: the row exists after a refused `/anonadmin on`), its live owner check
   and its replies, and maps its two write branches onto the function (`TestLegacyAnonAdminRequests` pins every request and
-  stored row, never to be re-recorded). The `admin` table is not cached, so no write drops a key and no replica can lag. The
+  stored row, never to be re-recorded; its seven on and off cases changed once on purpose when the `_enabled_now` and
+  `_disabled_now` texts, which described the mode backwards in all 8 languages, were corrected, owner decision T4 of the
+  2026-11-17 review: mode on lets anonymous admins act with no proof, mode off makes them press the button). The `admin` table is not cached, so no write drops a key and no replica can lag. The
   reader `admin.LoadAnonAdminContext` is one plain `SELECT`, returns its error, creates no row and reads a missing row as off.
   Locks (Phase 18) are written by `applyLock(ctx, chatID, kind, on)` in `locks.go`, through the `lockWrites` seam (default
   `locks.UpdateLock`, one upsert that drops `locks_map:<chat>`). It handles exactly one kind: a name outside `/locktypes`

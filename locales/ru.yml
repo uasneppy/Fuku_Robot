@@ -5,9 +5,9 @@ admin_adminlist: "Администраторы в <b>%s</b>:"
 admin_anon_admin_already_disabled: Режим AnonAdmin уже <b>отключён</b> для %s
 admin_anon_admin_already_enabled: Режим AnonAdmin уже <b>включён</b> для %s
 admin_anon_admin_disabled: "Режим AnonAdmin в данный момент <b>отключён</b> для %s.\n\n Это требует, чтобы анонимные администраторы нажимали кнопку для подтверждения своих прав."
-admin_anon_admin_disabled_now: "Режим AnonAdmin теперь <b>отключён</b> для %s.\n\n С этого момента я не буду запрашивать подтверждение прав от анонимных администраторов."
+admin_anon_admin_disabled_now: "Режим AnonAdmin теперь <b>отключён</b> для %s.\n\n С этого момента анонимным администраторам нужно нажать кнопку, чтобы подтвердить свои права."
 admin_anon_admin_enabled: "Режим AnonAdmin в данный момент <b>включён</b> для %s.\n\n Это позволяет всем анонимным администраторам выполнять админские действия без ограничений."
-admin_anon_admin_enabled_now: "Режим AnonAdmin теперь <b>включён</b> для %s.\n\n С этого момента я буду запрашивать подтверждение прав от анонимных администраторов."
+admin_anon_admin_enabled_now: "Режим AnonAdmin теперь <b>включён</b> для %s.\n\n С этого момента анонимные администраторы могут действовать без подтверждения прав."
 admin_anon_admin_invalid_arg: |
   Неверный аргумент, я понимаю только <code>on</code>,
   <code>off</code>, <code>yes</code>, <code>no</code>

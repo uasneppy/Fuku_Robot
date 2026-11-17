@@ -3,9 +3,9 @@ admin_adminlist: "<b>%s</b> के एडमिन:"
 admin_anon_admin_already_disabled: AnonAdmin मोड पहले से ही %s के लिए <b>अक्षम</b> है
 admin_anon_admin_already_enabled: AnonAdmin मोड पहले से ही %s के लिए <b>सक्षम</b> है
 admin_anon_admin_disabled: "AnonAdmin मोड वर्तमान में %s के लिए <b>अक्षम</b> है।\n\n  इसके लिए गुमनाम एडमिन को अपनी अनुमतियों की पुष्टि के लिए एक बटन दबाना होगा।"
-admin_anon_admin_disabled_now: "AnonAdmin मोड अब %s के लिए <b>अक्षम</b> है।\n\n  अब से, मैं गुमनाम एडमिन से अनुमतियों की पुष्टि नहीं मांगूंगा।"
+admin_anon_admin_disabled_now: "AnonAdmin मोड अब %s के लिए <b>अक्षम</b> है।\n\n  अब से, गुमनाम एडमिन को अपनी अनुमतियों की पुष्टि के लिए एक बटन दबाना होगा।"
 admin_anon_admin_enabled: "AnonAdmin मोड वर्तमान में %s के लिए <b>सक्षम</b> है।\n\n  यह सभी गुमनाम एडमिन को बिना किसी प्रतिबंध के एडमिन कार्य करने की अनुमति देता है।"
-admin_anon_admin_enabled_now: "AnonAdmin मोड अब %s के लिए <b>सक्षम</b> है।\n\n  अब से, मैं गुमनाम एडमिन से अनुमतियों की पुष्टि मांगूंगा।"
+admin_anon_admin_enabled_now: "AnonAdmin मोड अब %s के लिए <b>सक्षम</b> है।\n\n  अब से, गुमनाम एडमिन अनुमतियों की पुष्टि किए बिना कार्य कर सकते हैं।"
 admin_anon_admin_invalid_arg: "अमान्य तर्क, मैं केवल <code>on</code>, <code>off</code>, <code>yes</code>, <code>no</code> समझता हूँ"
 admin_demote_not_admin: "यह व्यक्ति एडमिन नहीं है, मैं उन्हें कैसे डिमोट करूं?"
 admin_demote_is_bot_itself: मैं खुद को डिमोट नहीं करूंगा।

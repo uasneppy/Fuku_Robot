@@ -9,9 +9,9 @@ admin_adminlist: "Administrateurs de <b>%s</b> :"
 admin_anon_admin_already_disabled: Le mode AnonAdmin est déjà <b>désactivé</b> pour %s
 admin_anon_admin_already_enabled: Le mode AnonAdmin est déjà <b>activé</b> pour %s
 admin_anon_admin_disabled: "Le mode AnonAdmin est actuellement <b>désactivé</b> pour %s.\n\nCela nécessite que les administrateurs anonymes appuient sur un bouton pour confirmer leurs permissions."
-admin_anon_admin_disabled_now: "Le mode AnonAdmin est maintenant <b>désactivé</b> pour %s.\n\nDésormais, je ne demanderai plus aux administrateurs anonymes de vérifier leurs permissions."
+admin_anon_admin_disabled_now: "Le mode AnonAdmin est maintenant <b>désactivé</b> pour %s.\n\nDésormais, les administrateurs anonymes doivent appuyer sur un bouton pour confirmer leurs permissions."
 admin_anon_admin_enabled: "Le mode AnonAdmin est actuellement <b>activé</b> pour %s.\n\nCela permet à tous les administrateurs anonymes d'effectuer des actions d'administration sans restriction."
-admin_anon_admin_enabled_now: "Le mode AnonAdmin est maintenant <b>activé</b> pour %s.\n\nDésormais, je demanderai aux administrateurs de vérifier les permissions des administrateurs anonymes."
+admin_anon_admin_enabled_now: "Le mode AnonAdmin est maintenant <b>activé</b> pour %s.\n\nDésormais, les administrateurs anonymes peuvent agir sans confirmer leurs permissions."
 admin_anon_admin_invalid_arg: "Argument invalide, je comprends uniquement <code>on</code>, <code>off</code>, <code>yes</code>, <code>no</code>"
 admin_demote_not_admin: "Cette personne n'est pas administrateur, comment suis-je censé la rétrograder ?"
 admin_demote_is_bot_itself: Je ne vais pas me rétrograder moi-même.

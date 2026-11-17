@@ -9,13 +9,13 @@ admin_anon_admin_disabled: "Mode AnonAdmin saat ini <b>dinonaktifkan</b> untuk %
   Ini memerlukan admin anonim untuk menekan tombol untuk mengonfirmasi izin mereka."
 admin_anon_admin_disabled_now: "Mode AnonAdmin sekarang <b>dinonaktifkan</b> untuk %s.
 
-  Mulai sekarang, saya tidak akan meminta admin untuk memverifikasi izin dari admin anonim lagi."
+  Mulai sekarang, admin anonim harus menekan tombol untuk mengonfirmasi izin mereka."
 admin_anon_admin_enabled: "Mode AnonAdmin saat ini <b>diaktifkan</b> untuk %s.
 
   Ini memungkinkan semua admin anonim untuk melakukan tindakan admin tanpa batasan."
 admin_anon_admin_enabled_now: "Mode AnonAdmin sekarang <b>diaktifkan</b> untuk %s.
 
-  Mulai sekarang, saya akan meminta admin untuk memverifikasi izin dari admin anonim."
+  Mulai sekarang, admin anonim dapat bertindak tanpa mengonfirmasi izin mereka."
 admin_anon_admin_invalid_arg: |
   Argumen tidak valid, saya hanya mengerti <code>on</code>,
   <code>off</code>, <code>yes</code>, <code>no</code>
