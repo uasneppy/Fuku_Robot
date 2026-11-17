@@ -685,9 +685,9 @@ captcha_error_processing: Ошибка обработки ответа
 captcha_invalid_refresh: Неверные данные обновления
 
 # Captcha max attempts
-captcha_max_attempts_current: "Текущее максимальное количество попыток: <b>%d</b>"
+captcha_max_attempts_current: "Текущее максимальное количество попыток: <b>{attempts}</b>"
 captcha_max_attempts_invalid: "Неверное значение. Пожалуйста, укажите число от 1 до 10."
-captcha_max_attempts_set: "Максимальное количество попыток установлено на <b>%d</b>"
+captcha_max_attempts_set: "Максимальное количество попыток установлено на <b>{attempts}</b>"
 
 # Captcha auto-unmute
 captcha_user_auto_unmute: "Пользователь %s будет автоматически размучен через 24 часа."
@@ -1058,7 +1058,7 @@ captcha_timeout_failure_kicked: "❌ %s не удалось пройти про�
 captcha_timeout_failure_banned: "❌ %s не удалось пройти проверку капчи и был забанен."
 captcha_timeout_failure_muted: "❌ %s не удалось пройти проверку капчи и был заглушен."
 captcha_timeout_with_messages: "❌ %s не удалось пройти проверку капчи и был %s.\n\n📝 %d сообщение(й) было предпринято, но удалено из-за незавершённой проверки."
-captcha_stored_messages_summary: "📝 %s попытался отправить %d сообщение(й) (%s) до проверки"
+captcha_stored_messages_summary: "📝 {user} попытался отправить {count} сообщение(й) ({types}) до проверки"
 captcha_pending_usage: "Использование: <code>/captchapending @user</code> или <code>/captchapending user_id</code>"
 captcha_no_pending_messages: "Нет ожидающих сообщений для этого пользователя."
 captcha_clear_usage: "Использование: <code>/captchaclear @user</code> или <code>/captchaclear user_id</code>"
@@ -1943,12 +1943,12 @@ backup_import_button: "📥 Импорт"
 backup_export_success: |
   <b>✅ Экспорт успешен!</b>
 
-  <b>Чат:</b> %s
-  <b>Экспортировано модулей:</b> %d
-  <b>Экспортировано в:</b> %s
+  <b>Чат:</b> {chat}
+  <b>Экспортировано модулей:</b> {modules}
+  <b>Экспортировано в:</b> {time}
 
   <b>Модули:</b>
-  %s
+  {list}
 
 backup_export_success_text: "✅ Успешно экспортировано {modules} модулей. Скачайте файл резервной копии выше."
 backup_export_rate_limited: "⏳ Пожалуйста, подождите <b>{time}</b> перед следующим экспортом."
@@ -1958,10 +1958,10 @@ backup_export_failed: "❌ Не удалось экспортировать на
 backup_import_success: |
   <b>✅ Импорт успешен!</b>
 
-  <b>Импортировано модулей:</b> %d
+  <b>Импортировано модулей:</b> {modules}
 
   <b>Модули:</b>
-  %s
+  {list}
 
 backup_import_rate_limited: "⏳ Пожалуйста, подождите <b>{time}</b> перед следующим импортом."
 backup_import_no_reply: "❌ Пожалуйста, ответьте на файл резервной копии командой <code>/import</code>."
@@ -1973,8 +1973,8 @@ backup_import_creator_only: "❌ Только создатель группы м
 backup_import_confirm: |
   <b>⚠️ Подтвердите импорт</b>
 
-  Вы собираетесь импортировать <b>%s модулей</b>:
-  %s
+  Вы собираетесь импортировать <b>{modules} модулей</b>:
+  {list}
 
   Это перезапишет существующие настройки. Вы уверены?
 
@@ -1985,18 +1985,18 @@ backup_import_failed: "❌ Импорт не удался: %s"
 backup_reset_success: |
   <b>✅ Сброс успешен!</b>
 
-  <b>Сброшено модулей:</b> %d
+  <b>Сброшено модулей:</b> {modules}
 
   <b>Модули:</b>
-  %s
+  {list}
 
 backup_reset_rate_limited: "⏳ Пожалуйста, подождите <b>{time}</b> перед следующим сбросом."
 backup_reset_creator_only: "❌ Только создатель группы может сбросить настройки."
 backup_reset_confirm: |
   <b>⚠️ Подтвердите сброс</b>
 
-  Вы собираетесь сбросить <b>%s модулей</b>:
-  %s
+  Вы собираетесь сбросить <b>{modules} модулей</b>:
+  {list}
 
   <b>Это действие нельзя отменить!</b> Вы уверены?
 

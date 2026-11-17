@@ -780,9 +780,9 @@ captcha_invalid_attempt: अमान्य प्रयास ID
 captcha_invalid_user: अमान्य उपयोगकर्ता ID
 captcha_error_processing: उत्तर प्रोसेस करने में त्रुटि
 captcha_invalid_refresh: अमान्य रिफ्रेश डेटा
-captcha_max_attempts_current: "वर्तमान अधिकतम सत्यापन प्रयास: <b>%d</b>"
+captcha_max_attempts_current: "वर्तमान अधिकतम सत्यापन प्रयास: <b>{attempts}</b>"
 captcha_max_attempts_invalid: "अमान्य मान। कृपया 1 और 10 के बीच एक संख्या निर्दिष्ट करें।"
-captcha_max_attempts_set: "अधिकतम सत्यापन प्रयास <b>%d</b> पर सेट किए गए"
+captcha_max_attempts_set: "अधिकतम सत्यापन प्रयास <b>{attempts}</b> पर सेट किए गए"
 captcha_user_auto_unmute: "उपयोगकर्ता %s 24 घंटे में स्वचालित रूप से अनम्यूट हो जाएगा।"
 captcha_enabled_success: "✅ कैप्चा सत्यापन <b>सक्षम</b> कर दिया गया है। नए सदस्यों को शामिल होने के लिए कैप्चा पूरा करना होगा।"
 captcha_disabled_success: "❌ कैप्चा सत्यापन <b>अक्षम</b> कर दिया गया है।"
@@ -801,7 +801,7 @@ captcha_timeout_failure_kicked: "❌ %s कैप्चा सत्यापन
 captcha_timeout_failure_banned: "❌ %s कैप्चा सत्यापन पूरा करने में विफल रहा और उसे बैन कर दिया गया।"
 captcha_timeout_failure_muted: "❌ %s कैप्चा सत्यापन पूरा करने में विफल रहा और उसे म्यूट कर दिया गया।"
 captcha_timeout_with_messages: "❌ %s कैप्चा सत्यापन पूरा करने में विफल रहा और उसे %s कर दिया गया।\n\n📝 अपूर्ण सत्यापन के कारण %d संदेश हटा दिए गए।"
-captcha_stored_messages_summary: "📝 %s ने सत्यापन से पहले %d संदेश (%s) भेजने का प्रयास किया"
+captcha_stored_messages_summary: "📝 {user} ने सत्यापन से पहले {count} संदेश ({types}) भेजने का प्रयास किया"
 captcha_pending_usage: "उपयोग: <code>/captchapending @user</code> या <code>/captchapending user_id</code>"
 captcha_no_pending_messages: "इस उपयोगकर्ता के लिए कोई लंबित संदेश नहीं मिले।"
 captcha_clear_usage: "उपयोग: <code>/captchaclear @user</code> या <code>/captchaclear user_id</code>"
@@ -1846,12 +1846,12 @@ backup_import_button: "📥 इम्पोर्ट"
 backup_export_success: |
   <b>✅ एक्सपोर्ट सफल!</b>
 
-  <b>चैट:</b> %s
-  <b>एक्सपोर्ट किए गए मॉड्यूल:</b> %d
-  <b>एक्सपोर्ट समय:</b> %s
+  <b>चैट:</b> {chat}
+  <b>एक्सपोर्ट किए गए मॉड्यूल:</b> {modules}
+  <b>एक्सपोर्ट समय:</b> {time}
 
   <b>मॉड्यूल:</b>
-  %s
+  {list}
 
 backup_export_success_text: "✅ सफलतापूर्वक {modules} मॉड्यूल एक्सपोर्ट किए गए। ऊपर दी गई बैकअप फाइल डाउनलोड करें।"
 backup_export_rate_limited: "⏳ फिर से एक्सपोर्ट करने से पहले <b>{time}</b> प्रतीक्षा करें।"
@@ -1861,10 +1861,10 @@ backup_export_failed: "❌ सेटिंग्स एक्सपोर्ट 
 backup_import_success: |
   <b>✅ इम्पोर्ट सफल!</b>
 
-  <b>इम्पोर्ट किए गए मॉड्यूल:</b> %d
+  <b>इम्पोर्ट किए गए मॉड्यूल:</b> {modules}
 
   <b>मॉड्यूल:</b>
-  %s
+  {list}
 
 backup_import_rate_limited: "⏳ फिर से इम्पोर्ट करने से पहले <b>{time}</b> प्रतीक्षा करें।"
 backup_import_no_reply: "❌ कृपया बैकअप फाइल का जवाब <code>/import</code> के साथ दें।"
@@ -1877,8 +1877,8 @@ backup_import_creator_only: "❌ केवल ग्रुप क्रिएट
 backup_import_confirm: |
   <b>⚠️ इम्पोर्ट की पुष्टि करें</b>
 
-  आप <b>%s मॉड्यूल</b> इम्पोर्ट करने वाले हैं:
-  %s
+  आप <b>{modules} मॉड्यूल</b> इम्पोर्ट करने वाले हैं:
+  {list}
 
   यह मौजूदा सेटिंग्स को ओवरराइट कर देगा। क्या आप सुनिश्चित हैं?
 
@@ -1889,10 +1889,10 @@ backup_import_failed: "❌ इम्पोर्ट विफल: %s"
 backup_reset_success: |
   <b>✅ रीसेट सफल!</b>
 
-  <b>रीसेट किए गए मॉड्यूल:</b> %d
+  <b>रीसेट किए गए मॉड्यूल:</b> {modules}
 
   <b>मॉड्यूल:</b>
-  %s
+  {list}
 
 backup_reset_rate_limited: "⏳ फिर से रीसेट करने से पहले <b>{time}</b> प्रतीक्षा करें।"
 backup_reset_creator_only: "❌ केवल ग्रुप क्रिएटर ही सेटिंग्स रीसेट कर सकते हैं।"
@@ -1900,8 +1900,8 @@ backup_reset_creator_only: "❌ केवल ग्रुप क्रिएट�
 backup_reset_confirm: |
   <b>⚠️ रीसेट की पुष्टि करें</b>
 
-  आप <b>%s मॉड्यूल</b> रीसेट करने वाले हैं:
-  %s
+  आप <b>{modules} मॉड्यूल</b> रीसेट करने वाले हैं:
+  {list}
 
   <b>यह कार्रवाई पूर्ववर्ती नहीं की जा सकती!</b> क्या आप सुनिश्चित हैं?
 

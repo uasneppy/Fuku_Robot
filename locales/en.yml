@@ -222,9 +222,9 @@ captcha_error_processing: "Malfunction: could not process the answer."
 captcha_invalid_refresh: Invalid refresh data
 
 # Captcha max attempts
-captcha_max_attempts_current: "Current maximum verification attempts: <b>%d</b>."
+captcha_max_attempts_current: "Current maximum verification attempts: <b>{attempts}</b>."
 captcha_max_attempts_invalid: "Invalid value. Specify a number between 1 and 10."
-captcha_max_attempts_set: "Maximum verification attempts set to <b>%d</b>."
+captcha_max_attempts_set: "Maximum verification attempts set to <b>{attempts}</b>."
 
 # Captcha auto-unmute
 captcha_user_auto_unmute: "User %s will be unmuted automatically in 24 hours."
@@ -593,7 +593,7 @@ captcha_timeout_failure_kicked: "❌ %s did not complete captcha verification an
 captcha_timeout_failure_banned: "❌ %s did not complete captcha verification and has been banned."
 captcha_timeout_failure_muted: "❌ %s did not complete captcha verification and has been muted."
 captcha_timeout_with_messages: "❌ %s did not complete captcha verification and has been %s.\n\n📝 %d message(s) were sent before verification and deleted."
-captcha_stored_messages_summary: "📝 %s tried to send %d message(s) (%s) before verification"
+captcha_stored_messages_summary: "📝 {user} tried to send {count} message(s) ({types}) before verification"
 captcha_pending_usage: "Usage: <code>/captchapending @user</code> or <code>/captchapending user_id</code>."
 captcha_no_pending_messages: "No held messages found for this user."
 captcha_clear_usage: "Usage: <code>/captchaclear @user</code> or <code>/captchaclear user_id</code>."
@@ -1138,14 +1138,14 @@ backup_help_msg: "<b>📦 Backup & Restore</b>\n\nBack up and restore your group
 
 backup_export_button: "📤 Export"
 backup_import_button: "📥 Import"
-backup_export_success: "<b>✅ Export complete.</b>\n\n<b>Chat:</b> %s\n<b>Modules exported:</b> %d\n<b>Exported at:</b> %s\n\n<b>Modules:</b>\n%s\n"
+backup_export_success: "<b>✅ Export complete.</b>\n\n<b>Chat:</b> {chat}\n<b>Modules exported:</b> {modules}\n<b>Exported at:</b> {time}\n\n<b>Modules:</b>\n{list}\n"
 
 backup_export_success_text: "✅ Modules exported: {modules}. Download the backup file above."
 backup_export_rate_limited: "⏳ Wait <b>{time}</b> before exporting again."
 backup_export_no_modules: "❌ No exportable modules found for this chat."
 backup_export_failed: "❌ Malfunction: could not export settings. Try again."
 
-backup_import_success: "<b>✅ Import complete.</b>\n\n<b>Modules imported:</b> %d\n\n<b>Modules:</b>\n%s\n"
+backup_import_success: "<b>✅ Import complete.</b>\n\n<b>Modules imported:</b> {modules}\n\n<b>Modules:</b>\n{list}\n"
 
 backup_import_rate_limited: "⏳ Wait <b>{time}</b> before importing again."
 backup_import_no_reply: "❌ Reply to a backup file with <code>/import</code>."
@@ -1154,17 +1154,17 @@ backup_import_file_too_large: "❌ Backup file too large. Maximum size is 10MB."
 backup_import_download_failed: "❌ Malfunction: could not download the backup file. Try again."
 backup_import_version_mismatch: "⚠️ This backup was made with a different version. Some settings may not import correctly."
 backup_import_creator_only: "❌ Access denied. Only the group owner can import settings."
-backup_import_confirm: "<b>⚠️ Confirm Import</b>\n\nYou are about to import <b>%s modules</b>:\n%s\n\nThis overwrites the existing settings. Proceed?\n"
+backup_import_confirm: "<b>⚠️ Confirm Import</b>\n\nYou are about to import <b>{modules} modules</b>:\n{list}\n\nThis overwrites the existing settings. Proceed?\n"
 
 backup_import_expired: "❌ Import request expired. Start again with <code>/import</code>."
 backup_import_cancelled: "❌ Import cancelled."
 backup_import_failed: "❌ Import failed: %s"
 
-backup_reset_success: "<b>✅ Reset complete.</b>\n\n<b>Modules reset:</b> %d\n\n<b>Modules:</b>\n%s\n"
+backup_reset_success: "<b>✅ Reset complete.</b>\n\n<b>Modules reset:</b> {modules}\n\n<b>Modules:</b>\n{list}\n"
 
 backup_reset_rate_limited: "⏳ Wait <b>{time}</b> before resetting again."
 backup_reset_creator_only: "❌ Access denied. Only the group owner can reset settings."
-backup_reset_confirm: "<b>⚠️ Confirm Reset</b>\n\nYou are about to reset <b>%s modules</b>:\n%s\n\n<b>This cannot be undone.</b> Proceed?\n"
+backup_reset_confirm: "<b>⚠️ Confirm Reset</b>\n\nYou are about to reset <b>{modules} modules</b>:\n{list}\n\n<b>This cannot be undone.</b> Proceed?\n"
 
 backup_reset_expired: "❌ Reset request expired. Start again with <code>/reset</code>."
 backup_reset_cancelled: "❌ Reset cancelled."

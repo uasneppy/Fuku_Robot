@@ -215,9 +215,9 @@ captcha_invalid_user: "Некоректний ID користувача"
 captcha_error_processing: "Збій: не вдалося обробити відповідь."
 captcha_invalid_refresh: "Некоректні дані оновлення"
 
-captcha_max_attempts_current: "Поточна максимальна кількість спроб перевірки: <b>%d</b>."
+captcha_max_attempts_current: "Поточна максимальна кількість спроб перевірки: <b>{attempts}</b>."
 captcha_max_attempts_invalid: "Некоректне значення. Вкажіть число від 1 до 10."
-captcha_max_attempts_set: "Максимальну кількість спроб перевірки встановлено: <b>%d</b>."
+captcha_max_attempts_set: "Максимальну кількість спроб перевірки встановлено: <b>{attempts}</b>."
 
 captcha_user_auto_unmute: "Мут із %s буде знято автоматично через 24 години."
 
@@ -554,7 +554,7 @@ captcha_timeout_failure_kicked: "❌ %s: перевірку капчею не п
 captcha_timeout_failure_banned: "❌ %s: перевірку капчею не пройдено. Користувача забанено."
 captcha_timeout_failure_muted: "❌ %s: перевірку капчею не пройдено. Користувач отримує мут."
 captcha_timeout_with_messages: "❌ %s: капчу не пройдено, результат — %s.\n\n📝 Повідомлень, надісланих до перевірки, видалено: %d."
-captcha_stored_messages_summary: "📝 %s: спроб надіслати повідомлення до перевірки — %d (%s)"
+captcha_stored_messages_summary: "📝 {user}: спроб надіслати повідомлення до перевірки — {count} ({types})"
 captcha_pending_usage: "Використання: <code>/captchapending @user</code> або <code>/captchapending user_id</code>."
 captcha_no_pending_messages: "Для цього користувача немає затриманих повідомлень."
 captcha_clear_usage: "Використання: <code>/captchaclear @user</code> або <code>/captchaclear user_id</code>."
@@ -1038,14 +1038,14 @@ backup_help_msg: "<b>📦 Резервні копії</b>\n\nЗберігайт�
 
 backup_export_button: "📤 Експорт"
 backup_import_button: "📥 Імпорт"
-backup_export_success: "<b>✅ Експорт завершено.</b>\n\n<b>Чат:</b> %s\n<b>Експортовано модулів:</b> %d\n<b>Час експорту:</b> %s\n\n<b>Модулі:</b>\n%s\n"
+backup_export_success: "<b>✅ Експорт завершено.</b>\n\n<b>Чат:</b> {chat}\n<b>Експортовано модулів:</b> {modules}\n<b>Час експорту:</b> {time}\n\n<b>Модулі:</b>\n{list}\n"
 
 backup_export_success_text: "✅ Експортовано модулів: {modules}. Завантажте файл копії вище."
 backup_export_rate_limited: "⏳ Зачекайте <b>{time}</b>, перш ніж експортувати знову."
 backup_export_no_modules: "❌ Для цього чату немає модулів для експорту."
 backup_export_failed: "❌ Збій: не вдалося експортувати налаштування. Спробуйте ще раз."
 
-backup_import_success: "<b>✅ Імпорт завершено.</b>\n\n<b>Імпортовано модулів:</b> %d\n\n<b>Модулі:</b>\n%s\n"
+backup_import_success: "<b>✅ Імпорт завершено.</b>\n\n<b>Імпортовано модулів:</b> {modules}\n\n<b>Модулі:</b>\n{list}\n"
 backup_import_rate_limited: "⏳ Зачекайте <b>{time}</b>, перш ніж імпортувати знову."
 backup_import_no_reply: "❌ Дайте відповідь на файл копії командою <code>/import</code>."
 backup_import_invalid_file: "❌ Некоректний формат файлу копії. Надішліть коректний JSON-файл."
@@ -1053,17 +1053,17 @@ backup_import_file_too_large: "❌ Файл копії завеликий. Ма�
 backup_import_download_failed: "❌ Збій: не вдалося завантажити файл копії. Спробуйте ще раз."
 backup_import_version_mismatch: "⚠️ Цю копію створено іншою версією. Деякі налаштування можуть імпортуватися некоректно."
 backup_import_creator_only: "❌ Доступ заборонено. Імпортувати налаштування може лише власник групи."
-backup_import_confirm: "<b>⚠️ Підтвердьте імпорт</b>\n\nБуде імпортовано модулі (<b>%s</b>):\n%s\n\nНаявні налаштування буде перезаписано. Продовжити?\n"
+backup_import_confirm: "<b>⚠️ Підтвердьте імпорт</b>\n\nБуде імпортовано модулі (<b>{modules}</b>):\n{list}\n\nНаявні налаштування буде перезаписано. Продовжити?\n"
 
 backup_import_expired: "❌ Запит на імпорт застарів. Почніть знову з <code>/import</code>."
 backup_import_cancelled: "❌ Імпорт скасовано."
 backup_import_failed: "❌ Імпорт не вдався: %s"
 
-backup_reset_success: "<b>✅ Скидання завершено.</b>\n\n<b>Скинуто модулів:</b> %d\n\n<b>Модулі:</b>\n%s\n"
+backup_reset_success: "<b>✅ Скидання завершено.</b>\n\n<b>Скинуто модулів:</b> {modules}\n\n<b>Модулі:</b>\n{list}\n"
 
 backup_reset_rate_limited: "⏳ Зачекайте <b>{time}</b>, перш ніж скидати знову."
 backup_reset_creator_only: "❌ Доступ заборонено. Скидати налаштування може лише власник групи."
-backup_reset_confirm: "<b>⚠️ Підтвердьте скидання</b>\n\nБуде скинуто модулі (<b>%s</b>):\n%s\n\n<b>Скасувати це не можна.</b> Продовжити?\n"
+backup_reset_confirm: "<b>⚠️ Підтвердьте скидання</b>\n\nБуде скинуто модулі (<b>{modules}</b>):\n{list}\n\n<b>Скасувати це не можна.</b> Продовжити?\n"
 
 backup_reset_expired: "❌ Запит на скидання застарів. Почніть знову з <code>/reset</code>."
 backup_reset_cancelled: "❌ Скидання скасовано."

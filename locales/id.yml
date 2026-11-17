@@ -848,9 +848,9 @@ captcha_error_processing: Kesalahan memproses jawaban
 captcha_invalid_refresh: Data refresh tidak valid
 
 # Captcha max attempts
-captcha_max_attempts_current: "Maksimum percobaan verifikasi saat ini: <b>%d</b>"
+captcha_max_attempts_current: "Maksimum percobaan verifikasi saat ini: <b>{attempts}</b>"
 captcha_max_attempts_invalid: "Nilai tidak valid. Silakan tentukan angka antara 1 dan 10."
-captcha_max_attempts_set: "Maksimum percobaan verifikasi diatur ke <b>%d</b>"
+captcha_max_attempts_set: "Maksimum percobaan verifikasi diatur ke <b>{attempts}</b>"
 
 # Captcha auto-unmute
 captcha_user_auto_unmute: "Pengguna %s akan dibuka bisunya secara otomatis dalam 24 jam."
@@ -1226,7 +1226,7 @@ captcha_timeout_failure_kicked: "❌ %s gagal menyelesaikan verifikasi captcha d
 captcha_timeout_failure_banned: "❌ %s gagal menyelesaikan verifikasi captcha dan telah diblokir."
 captcha_timeout_failure_muted: "❌ %s gagal menyelesaikan verifikasi captcha dan telah dibisukan."
 captcha_timeout_with_messages: "❌ %s gagal menyelesaikan verifikasi captcha dan telah %s.\n\n📝 %d pesan telah dicoba tetapi dihapus karena verifikasi tidak lengkap."
-captcha_stored_messages_summary: "📝 %s mencoba mengirim %d pesan (%s) sebelum verifikasi"
+captcha_stored_messages_summary: "📝 {user} mencoba mengirim {count} pesan ({types}) sebelum verifikasi"
 captcha_pending_usage: "Penggunaan: <code>/captchapending @user</code> atau <code>/captchapending user_id</code>"
 captcha_no_pending_messages: "Tidak ada pesan tertunda untuk pengguna ini."
 captcha_clear_usage: "Penggunaan: <code>/captchaclear @user</code> atau <code>/captchaclear user_id</code>"
@@ -2131,12 +2131,12 @@ backup_import_button: "📥 Impor"
 backup_export_success: |
   <b>✅ Ekspor Berhasil!</b>
 
-  <b>Obrolan:</b> %s
-  <b>Modul diekspor:</b> %d
-  <b>Diekspor pada:</b> %s
+  <b>Obrolan:</b> {chat}
+  <b>Modul diekspor:</b> {modules}
+  <b>Diekspor pada:</b> {time}
 
   <b>Modul:</b>
-  %s
+  {list}
 
 backup_export_success_text: "✅ Berhasil mengekspor {modules} modul. Unduh file cadangan di atas."
 backup_export_rate_limited: "⏳ Silakan tunggu <b>{time}</b> sebelum mengekspor lagi."
@@ -2146,10 +2146,10 @@ backup_export_failed: "❌ Gagal mengekspor pengaturan. Silakan coba lagi nanti.
 backup_import_success: |
   <b>✅ Impor Berhasil!</b>
 
-  <b>Modul diimpor:</b> %d
+  <b>Modul diimpor:</b> {modules}
 
   <b>Modul:</b>
-  %s
+  {list}
 
 backup_import_rate_limited: "⏳ Silakan tunggu <b>{time}</b> sebelum mengimpor lagi."
 backup_import_no_reply: "❌ Silakan balas ke file cadangan dengan <code>/import</code>."
@@ -2161,8 +2161,8 @@ backup_import_creator_only: "❌ Hanya pembuat grup yang dapat mengimpor pengatu
 backup_import_confirm: |
   <b>⚠️ Konfirmasi Impor</b>
 
-  Anda akan mengimpor <b>%s modul</b>:
-  %s
+  Anda akan mengimpor <b>{modules} modul</b>:
+  {list}
 
   Ini akan menimpa pengaturan yang ada. Apakah Anda yakin?
 
@@ -2173,18 +2173,18 @@ backup_import_failed: "❌ Impor gagal: %s"
 backup_reset_success: |
   <b>✅ Atur Ulang Berhasil!</b>
 
-  <b>Modul diatur ulang:</b> %d
+  <b>Modul diatur ulang:</b> {modules}
 
   <b>Modul:</b>
-  %s
+  {list}
 
 backup_reset_rate_limited: "⏳ Silakan tunggu <b>{time}</b> sebelum mengatur ulang lagi."
 backup_reset_creator_only: "❌ Hanya pembuat grup yang dapat mengatur ulang pengaturan."
 backup_reset_confirm: |
   <b>⚠️ Konfirmasi Atur Ulang</b>
 
-  Anda akan mengatur ulang <b>%s modul</b>:
-  %s
+  Anda akan mengatur ulang <b>{modules} modul</b>:
+  {list}
 
   <b>Tindakan ini tidak dapat dibatalkan!</b> Apakah Anda yakin?
 

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"html"
 	"net/http"
 	"strconv"
 	"strings"
@@ -688,7 +689,7 @@ func buildExportCaption(tr *i18n.Translator, backup *backup.BackupFormat) string
 	caption, _ := tr.GetString("backup_export_success", i18n.TranslationParams{
 		"modules": fmt.Sprintf("%d", len(backup.Data)),
 		"list":    modulesList,
-		"chat":    backup.ChatName,
+		"chat":    html.EscapeString(backup.ChatName),
 		"time":    backup.ExportedAt.Format("2006-01-02 15:04:05"),
 	})
 	return caption

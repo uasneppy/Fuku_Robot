@@ -534,9 +534,9 @@ captcha_invalid_attempt: ID de tentative invalide
 captcha_invalid_user: ID utilisateur invalide
 captcha_error_processing: Erreur lors du traitement de la réponse
 captcha_invalid_refresh: Données d'actualisation invalides
-captcha_max_attempts_current: "Nombre maximum de tentatives de vérification actuel : <b>%d</b>"
+captcha_max_attempts_current: "Nombre maximum de tentatives de vérification actuel : <b>{attempts}</b>"
 captcha_max_attempts_invalid: "Valeur invalide. Veuillez spécifier un nombre entre 1 et 10."
-captcha_max_attempts_set: "Nombre maximum de tentatives de vérification défini à <b>%d</b>"
+captcha_max_attempts_set: "Nombre maximum de tentatives de vérification défini à <b>{attempts}</b>"
 captcha_user_auto_unmute: "L'utilisateur %s sera automatiquement réactivé dans 24 heures."
 captcha_enabled_success: "✅ La vérification captcha a été <b>activée</b>. Les nouveaux membres devront compléter un captcha pour rejoindre."
 captcha_disabled_success: "❌ La vérification captcha a été <b>désactivée</b>."
@@ -555,7 +555,7 @@ captcha_timeout_failure_kicked: "❌ %s n'a pas complété la vérification capt
 captcha_timeout_failure_banned: "❌ %s n'a pas complété la vérification captcha et a été banni."
 captcha_timeout_failure_muted: "❌ %s n'a pas complété la vérification captcha et a été rendu muet."
 captcha_timeout_with_messages: "❌ %s n'a pas complété la vérification captcha et a été %s.\n\n📝 %d message(s) ont été tentés mais supprimés en raison de la vérification incomplète."
-captcha_stored_messages_summary: "📝 %s a essayé d'envoyer %d message(s) (%s) avant la vérification"
+captcha_stored_messages_summary: "📝 {user} a essayé d'envoyer {count} message(s) ({types}) avant la vérification"
 captcha_pending_usage: "Utilisation : <code>/captchapending @utilisateur</code> ou <code>/captchapending user_id</code>"
 captcha_no_pending_messages: "Aucun message en attente trouvé pour cet utilisateur."
 captcha_clear_usage: "Utilisation : <code>/captchaclear @utilisateur</code> ou <code>/captchaclear user_id</code>"
@@ -2077,12 +2077,12 @@ backup_import_button: "📥 Importer"
 backup_export_success: |
   <b>✅ Export Réussi !</b>
 
-  <b>Chat :</b> %s
-  <b>Modules exportés :</b> %d
-  <b>Exporté le :</b> %s
+  <b>Chat :</b> {chat}
+  <b>Modules exportés :</b> {modules}
+  <b>Exporté le :</b> {time}
 
   <b>Modules :</b>
-  %s
+  {list}
 
 backup_export_success_text: "✅ {modules} modules exportés avec succès. Téléchargez le fichier de sauvegarde ci-dessus."
 backup_export_rate_limited: "⏳ Veuillez attendre <b>{time}</b> avant d'exporter à nouveau."
@@ -2092,10 +2092,10 @@ backup_export_failed: "❌ Échec de l'export des paramètres. Veuillez réessay
 backup_import_success: |
   <b>✅ Import Réussi !</b>
 
-  <b>Modules importés :</b> %d
+  <b>Modules importés :</b> {modules}
 
   <b>Modules :</b>
-  %s
+  {list}
 
 backup_import_rate_limited: "⏳ Veuillez attendre <b>{time}</b> avant d'importer à nouveau."
 backup_import_no_reply: "❌ Veuillez répondre à un fichier de sauvegarde avec <code>/import</code>."
@@ -2107,8 +2107,8 @@ backup_import_creator_only: "❌ Seul le créateur du groupe peut importer des p
 backup_import_confirm: |
   <b>⚠️ Confirmer l'Import</b>
 
-  Vous êtes sur le point d'importer <b>%s modules</b> :
-  %s
+  Vous êtes sur le point d'importer <b>{modules} modules</b> :
+  {list}
 
   Cela écrasera les paramètres existants. Êtes-vous sûr ?
 
@@ -2119,18 +2119,18 @@ backup_import_failed: "❌ Échec de l'import : %s"
 backup_reset_success: |
   <b>✅ Réinitialisation Réussie !</b>
 
-  <b>Modules réinitialisés :</b> %d
+  <b>Modules réinitialisés :</b> {modules}
 
   <b>Modules :</b>
-  %s
+  {list}
 
 backup_reset_rate_limited: "⏳ Veuillez attendre <b>{time}</b> avant de réinitialiser à nouveau."
 backup_reset_creator_only: "❌ Seul le créateur du groupe peut réinitialiser les paramètres."
 backup_reset_confirm: |
   <b>⚠️ Confirmer la Réinitialisation</b>
 
-  Vous êtes sur le point de réinitialiser <b>%s modules</b> :
-  %s
+  Vous êtes sur le point de réinitialiser <b>{modules} modules</b> :
+  {list}
 
   <b>Cette action est irréversible !</b> Êtes-vous sûr ?
 

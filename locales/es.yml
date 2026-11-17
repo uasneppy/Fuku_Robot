@@ -854,9 +854,9 @@ captcha_error_processing: Error procesando respuesta
 captcha_invalid_refresh: Datos de actualización inválidos
 
 # Captcha max attempts
-captcha_max_attempts_current: "Intentos máximos de verificación actuales: <b>%d</b>"
+captcha_max_attempts_current: "Intentos máximos de verificación actuales: <b>{attempts}</b>"
 captcha_max_attempts_invalid: "Valor inválido. Especifica un número entre 1 y 10."
-captcha_max_attempts_set: "Intentos máximos de verificación establecidos en <b>%d</b>"
+captcha_max_attempts_set: "Intentos máximos de verificación establecidos en <b>{attempts}</b>"
 
 # Captcha auto-unmute
 captcha_user_auto_unmute: "El usuario %s será desmuteado automáticamente en 24 horas."
@@ -1234,7 +1234,7 @@ captcha_timeout_failure_kicked: "❌ %s no completó la verificación captcha y 
 captcha_timeout_failure_banned: "❌ %s no completó la verificación captcha y ha sido baneado."
 captcha_timeout_failure_muted: "❌ %s no completó la verificación captcha y ha sido silenciado."
 captcha_timeout_with_messages: "❌ %s no completó la verificación captcha y ha sido %s.\n\n📝 %d mensaje(s) fueron intentados pero eliminados debido a verificación incompleta."
-captcha_stored_messages_summary: "📝 %s intentó enviar %d mensaje(s) (%s) antes de la verificación"
+captcha_stored_messages_summary: "📝 {user} intentó enviar {count} mensaje(s) ({types}) antes de la verificación"
 captcha_pending_usage: "Uso: <code>/captchapending @usuario</code> o <code>/captchapending user_id</code>"
 captcha_no_pending_messages: "No se encontraron mensajes pendientes para este usuario."
 captcha_clear_usage: "Uso: <code>/captchaclear @usuario</code> o <code>/captchaclear user_id</code>"
@@ -2140,12 +2140,12 @@ backup_import_button: "📥 Importar"
 backup_export_success: |
   <b>✅ Exportación Exitosa!</b>
 
-  <b>Chat:</b> %s
-  <b>Módulos exportados:</b> %d
-  <b>Exportado el:</b> %s
+  <b>Chat:</b> {chat}
+  <b>Módulos exportados:</b> {modules}
+  <b>Exportado el:</b> {time}
 
   <b>Módulos:</b>
-  %s
+  {list}
 
 backup_export_success_text: "✅ Exportados exitosamente {modules} módulos. Descarga el archivo de copia de seguridad de arriba."
 backup_export_rate_limited: "⏳ Por favor espera <b>{time}</b> antes de exportar de nuevo."
@@ -2155,10 +2155,10 @@ backup_export_failed: "❌ Error al exportar la configuración. Por favor intén
 backup_import_success: |
   <b>✅ Importación Exitosa!</b>
 
-  <b>Módulos importados:</b> %d
+  <b>Módulos importados:</b> {modules}
 
   <b>Módulos:</b>
-  %s
+  {list}
 
 backup_import_rate_limited: "⏳ Por favor espera <b>{time}</b> antes de importar de nuevo."
 backup_import_no_reply: "❌ Por favor responde a un archivo de copia de seguridad con <code>/import</code>."
@@ -2170,8 +2170,8 @@ backup_import_creator_only: "❌ Solo el creador del grupo puede importar config
 backup_import_confirm: |
   <b>⚠️ Confirmar Importación</b>
 
-  Estás a punto de importar <b>%s módulos</b>:
-  %s
+  Estás a punto de importar <b>{modules} módulos</b>:
+  {list}
 
   Esto sobrescribirá la configuración existente. ¿Estás seguro?
 
@@ -2182,18 +2182,18 @@ backup_import_failed: "❌ Error al importar: %s"
 backup_reset_success: |
   <b>✅ Restablecimiento Exitoso!</b>
 
-  <b>Módulos restablecidos:</b> %d
+  <b>Módulos restablecidos:</b> {modules}
 
   <b>Módulos:</b>
-  %s
+  {list}
 
 backup_reset_rate_limited: "⏳ Por favor espera <b>{time}</b> antes de restablecer de nuevo."
 backup_reset_creator_only: "❌ Solo el creador del grupo puede restablecer la configuración."
 backup_reset_confirm: |
   <b>⚠️ Confirmar Restablecimiento</b>
 
-  Estás a punto de restablecer <b>%s módulos</b>:
-  %s
+  Estás a punto de restablecer <b>{modules} módulos</b>:
+  {list}
 
   <b>¡Esta acción no se puede deshacer!</b> ¿Estás seguro?
 
