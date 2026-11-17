@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: v1.1
 status: Awaiting next milestone
 stopped_at: Completed 19-12-PLAN.md
-last_updated: "2026-11-17T06:28:17.690Z"
+last_updated: "2026-11-17T06:59:09.171Z"
 last_activity: 2026-11-17
 last_activity_desc: Quick task 261113-tjj completed (Staff Group forward-source blocklist)
-state_head: 5fab71fb9134dcd128d5dbfa5a3489cb6a7fe5b9
+state_head: 95d8ff420583e92b3cdf470c0a45f75e23f8b924
 milestone_name: PM Settings Hub & Member Screening
 current_phase: 19
 current_phase_name: Blacklist, Filter and Note Pages
@@ -32,7 +32,7 @@ See: .planning/PROJECT.md (updated 2026-11-13)
 Phase: Milestone v1.1 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-11-17 - Completed quick task 261116-wh1: Fix anonymous admin proof and re-entry, lock exemptions and commands through a PM connection
+Last activity: 2026-11-17 - Completed quick task 261116-wh2: Fix raw placeholder strings, note deep links, wiki, reports in PM and disable no-ops
 
 ## Performance Metrics
 
@@ -359,6 +359,7 @@ None yet.
 | 261116-wgz | Fix the log channel flows: setlog, setfedlog and the dead log categories | 2026-11-17 | dfbf977 | [261116-wgz-fix-the-log-channel-flows-setlog-setfedl](./quick/261116-wgz-fix-the-log-channel-flows-setlog-setfedl/) |
 | 261116-wh0 | Fix target resolution and moderation safety: unban, explicit targets, forum replies, usernames, escaping, staff durations, federations | 2026-11-17 | 5cd047a | [261116-wh0-fix-target-resolution-and-moderation-saf](./quick/261116-wh0-fix-target-resolution-and-moderation-saf/) |
 | 261116-wh1 | Fix anonymous admin proof and re-entry, lock exemptions and commands through a PM connection | 2026-11-17 | 5fab71f | [261116-wh1-fix-anonymous-admin-proof-and-re-entry-l](./quick/261116-wh1-fix-anonymous-admin-proof-and-re-entry-l/) |
+| 261116-wh2 | Fix raw placeholder strings, note deep links, wiki, reports in PM and disable no-ops | 2026-11-17 | 95d8ff4 | [261116-wh2-fix-raw-placeholder-strings-note-deep-li](./quick/261116-wh2-fix-raw-placeholder-strings-note-deep-li/) |
 
 ## Deferred Items
 
