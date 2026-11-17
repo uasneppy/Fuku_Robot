@@ -3652,7 +3652,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   service message on every topic message that is not an explicit reply, so `ReplyTarget` answers nil for that message
   and for a topic message's own thread root (`IsTopicMessage` with `MessageThreadId` equal to the reply's ID; outside a
   forum replying to a thread's root is a real reply). `ExtractUserAndText`, `IdFromReply`, `extractFromReply`, `/dkick`,
-  `/dban`, `/dmute`, `/dwarn`, `/report`, the `@admin` watcher, `/reports block|unblock`, `/purge`, `/del`, `/purgefrom`, `/purgeto` and `/id` use it. In `ExtractUserAndText` an explicit
+  `/dban`, `/dmute`, `/dwarn`, `/report`, the `@admin` watcher, `/reports block|unblock`, `/pin`, `/unpin`, `/permapin`, `/pinned`, `/tr`, `/purge`, `/del`, `/purgefrom`, `/purgeto` and `/id` use it. In `ExtractUserAndText` an explicit
   target (a `text_mention` at the argument, an `@username` or a numeric ID) always beats the reply: the reply is the
   fallback only when the first argument named nobody, and `/id` shows a reply's details only when the resolved user is
   the reply's sender. `/dban`, `/dmute` and `/dwarn` delete the replied message, so an explicit target that did not send
