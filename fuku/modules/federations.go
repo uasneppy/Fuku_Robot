@@ -709,6 +709,7 @@ func (moduleStruct) applyFban(b *gotgbot.Bot, ctx *ext.Context, ban bool) error 
 			replyHTML(b, msg, text)
 			return ext.EndGroups
 		}
+		previous := federations.GetFedBanContext(tracing.UpdateContext(ctx), fed.FedID, targetID)
 		_, created, err := federations.Fban(fed.FedID, targetID, from.Id, reason)
 		if err != nil {
 			text, _ := tr.GetString("feds_fban_failed")
@@ -726,13 +727,17 @@ func (moduleStruct) applyFban(b *gotgbot.Bot, ctx *ext.Context, ban bool) error 
 			})
 			replyHTML(b, msg, text)
 		}
-		notifyFedAction(b, fed, from, fmt.Sprintf(
-			"FBAN <code>%d</code> by %s\nReason: %s",
-			targetID,
-			formatting.MentionHtml(from.Id, from.FirstName),
-			html.EscapeString(reason),
-		))
-		go applyActiveFban(b, fed.FedID, targetID)
+		// A repeated /fban with the same reason changes nothing: no second
+		// announcement and no second ban loop.
+		if fbanChanged(created, previous, reason) {
+			notifyFedAction(b, fed, from, fmt.Sprintf(
+				"FBAN <code>%d</code> by %s\nReason: %s",
+				targetID,
+				formatting.MentionHtml(from.Id, from.FirstName),
+				html.EscapeString(reason),
+			))
+			go applyActiveFban(b, fed.FedID, targetID)
+		}
 		return ext.EndGroups
 	}
 	if err := federations.Unfban(fed.FedID, targetID); err != nil {
@@ -750,7 +755,17 @@ func (moduleStruct) applyFban(b *gotgbot.Bot, ctx *ext.Context, ban bool) error 
 		targetID,
 		formatting.MentionHtml(from.Id, from.FirstName),
 	))
+	go applyActiveUnfban(b, fed.FedID, targetID)
 	return ext.EndGroups
+}
+
+// fbanChanged reports whether an /fban changed anything worth announcing: a new ban,
+// or a reason that differs from the stored one once both are trimmed.
+func fbanChanged(created bool, previous *models.FederationBan, reason string) bool {
+	if created || previous == nil {
+		return true
+	}
+	return strings.TrimSpace(previous.Reason) != strings.TrimSpace(reason)
 }
 
 func applyActiveFban(b *gotgbot.Bot, fedID string, userID int64) {
@@ -762,6 +777,28 @@ func applyActiveFban(b *gotgbot.Bot, fedID string, userID int64) {
 	for _, chatID := range federations.ChatsContainingUser(userID, chatIDs) {
 		if _, err := b.BanChatMember(chatID, userID, nil); err != nil {
 			log.Debugf("[Federations] active fban chat %d user %d: %v", chatID, userID, err)
+		}
+	}
+}
+
+// applyActiveUnfban mirrors applyActiveFban after an /unfban: it unbans the user, with
+// only_if_banned so a member is never removed, in every chat of the federation the bot
+// has seen them in. It does nothing while a federation this one subscribes to still
+// bans the user, because the passive check would ban them again at their next message.
+// Accepted: only_if_banned cannot tell a ban a chat admin placed separately apart, so
+// that one is lifted too.
+func applyActiveUnfban(b *gotgbot.Bot, fedID string, userID int64) {
+	defer error_handling.RecoverFromPanic("applyActiveUnfban", "Federations")
+	if ban, _ := federations.FindBanInFedTree(fedID, userID); ban != nil {
+		return
+	}
+	chatIDs, err := federations.ListFedChatIDs(fedID)
+	if err != nil {
+		return
+	}
+	for _, chatID := range federations.ChatsContainingUser(userID, chatIDs) {
+		if _, err := b.UnbanChatMember(chatID, userID, &gotgbot.UnbanChatMemberOpts{OnlyIfBanned: true}); err != nil {
+			log.Debugf("[Federations] active unfban chat %d user %d: %v", chatID, userID, err)
 		}
 	}
 }
