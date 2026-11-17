@@ -87,6 +87,11 @@ func TestStaffUndoDecisionTable(t *testing.T) {
 	priorKicked := func(until int64) staffPriorState {
 		return priorOf(gotgbot.ChatMemberStatusKicked, false, until, nil)
 	}
+	priorLockdownEnded := func(until int64) staffPriorState {
+		prior := priorKicked(until)
+		prior.LockdownBanEnded = true
+		return prior
+	}
 
 	t.Run("ban", func(t *testing.T) {
 		runUndoRows(t, []undoRow{
@@ -137,6 +142,11 @@ func TestStaffUndoDecisionTable(t *testing.T) {
 			{name: "prior shorter ban", kind: staffKindBan,
 				prior: priorKicked(undoNow + 7200), applied: noUntil, live: kicked,
 				wantCall: staffCallBan, wantWhy: staffReasonUndoneBanRestored, wantUntil: undoNow + 7200},
+			// A lockdown's own ban whose lockdown is no longer active is not put back: its
+			// lift will never come again, so the marker ban would stay for good (S6).
+			{name: "prior lockdown ban of a lifted lockdown", kind: staffKindBan,
+				prior: priorLockdownEnded(undoNow + 7200), applied: noUntil, live: kicked,
+				wantCall: staffCallUnban, wantWhy: staffReasonUndoneUnbanned},
 			{name: "prior shorter ban already about to end", kind: staffKindBan,
 				prior: priorKicked(undoNow + 60), applied: noUntil, live: kicked,
 				wantCall: staffCallUnban, wantWhy: staffReasonUndoneUnbanned},
@@ -218,6 +228,8 @@ func TestStaffUndoDecisionTable(t *testing.T) {
 		runUndoRows(t, []undoRow{
 			{name: "prior shorter ban", kind: staffKindUnban, prior: priorKicked(undoNow + 7200), applied: noUntil, live: left,
 				wantCall: staffCallBan, wantWhy: staffReasonUndoneBanRestored, wantUntil: undoNow + 7200},
+			{name: "prior lockdown ban of a lifted lockdown", kind: staffKindUnban, prior: priorLockdownEnded(undoNow + 7200), applied: noUntil, live: left,
+				wantCall: staffCallNone, wantWhy: staffReasonSkipRestrictionEnded},
 			{name: "prior permanent ban", kind: staffKindUnban, prior: priorKicked(0), applied: noUntil, live: left,
 				wantCall: staffCallBan, wantWhy: staffReasonUndoneBanRestored, wantUntil: 0},
 			{name: "prior ban about to end", kind: staffKindUnban, prior: priorKicked(undoNow + 60), applied: noUntil, live: left,

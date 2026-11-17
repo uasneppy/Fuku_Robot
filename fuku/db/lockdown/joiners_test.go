@@ -459,6 +459,45 @@ func TestHasJoinerBanFresh(t *testing.T) {
 	}
 }
 
+func TestHasEndedJoinerBanFresh(t *testing.T) {
+	activeChat := uniqueLockdownChatID(t)
+	liftedChat := uniqueLockdownChatID(t)
+	cleanupLockdowns(t, activeChat, liftedChat)
+	const until int64 = 1_900_000_000
+	for _, chat := range []int64{activeChat, liftedChat} {
+		ld := mustStart(t, chat)
+		rec := newJoinRecord(ld, 9700)
+		rec.State = models.JoinerStateBanned
+		rec.BanUntil = until
+		mustRecord(t, rec)
+		if chat == liftedChat {
+			if began, err := BeginLift(ld.ID, 1, "Lifter", false); err != nil || !began {
+				t.Fatalf("BeginLift = %v, %v", began, err)
+			}
+		}
+	}
+
+	tests := []struct {
+		name  string
+		chat  int64
+		until int64
+		want  bool
+	}{
+		{"a ban of an active lockdown", activeChat, until, false},
+		{"a ban of a lockdown being lifted", liftedChat, until + 2, true},
+		{"another end date", liftedChat, until + 3, false},
+		{"a permanent ban", liftedChat, 0, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := HasEndedJoinerBanFresh(tt.chat, 9700, tt.until)
+			if err != nil || got != tt.want {
+				t.Errorf("HasEndedJoinerBanFresh(%d, 9700, %d) = %v, %v, want %v, nil", tt.chat, tt.until, got, err, tt.want)
+			}
+		})
+	}
+}
+
 // seedClaimedJoiner records a joiner row and puts it straight into a claimed state
 // with the given attempts, claimed that long ago.
 func seedClaimedJoiner(t *testing.T, ld *models.ChatLockdown, userID int64, path, state string, attempts int, claimedAgo time.Duration) uint {

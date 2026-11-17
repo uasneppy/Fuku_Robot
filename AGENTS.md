@@ -3693,7 +3693,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   kicked target with an end date, `runStaffActionInGroup` asks `staffLockdownBanLookup` (`lockdown.HasJoinerBanFresh`
   on the live `until_date`) and sets `staffTargetState.LockdownBan`, and `decideStaffBan` then sends the ban even when
   it ends sooner, so the staff ban gets its own end date and the lockdown's lift keeps it (D-05). A failed lookup
-  fails that group as an internal error with no write. A staff mute never shortens a restriction either: a member
+  fails that group as an internal error with no write. The undo of such a ban, or of a staff `/unban` that lifted a
+  lockdown's ban, asks `staffEndedLockdownBanLookup` (`lockdown.HasEndedJoinerBanFresh`: a joiner row matches the
+  recorded end date and none of them is of an active lockdown) and sets `staffPriorState.LockdownBanEnded`: the lockdown
+  is over, so the marker ban is never put back (no lift would ever end it); the ban undo unbans with
+  `only_if_banned=true` instead and the unban undo is skipped as ended. While the lockdown is still active the marker
+  ban is put back for its lift to end (`TestStaffUndoLiftedLockdownBan`); a failed read fails the group. A staff mute never shortens a restriction either: a member
   restricted (not muted) until a later date than the mute's, or for good while the mute is timed, is skipped "already
   restricted for longer" (`staffReasonSkipRestrictedLonger`), because `restrictChatMember` would replace that
   restriction (`TestStaffActionMuteNeverShortensRestriction`). Accepted limit (owner decision S3-ban): a timed staff ban

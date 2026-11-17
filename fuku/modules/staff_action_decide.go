@@ -460,7 +460,9 @@ func decideStaffUndoUnban(prior staffPriorState, now int64) staffUndoVerdict {
 	if prior.Status != gotgbot.ChatMemberStatusKicked {
 		return staffUndoSkip(staffReasonSkipNoPriorState)
 	}
-	if staffUndoEnded(prior.Until, now) {
+	// The lifted ban was a lockdown's own ban and that lockdown is over: its lift would
+	// have ended the ban, and no lift will come to end it if it is put back (S6).
+	if prior.LockdownBanEnded || staffUndoEnded(prior.Until, now) {
 		return staffUndoSkip(staffReasonSkipRestrictionEnded)
 	}
 	return staffUndoDo(staffCallBan, staffReasonUndoneBanRestored, prior.Until)
@@ -497,7 +499,9 @@ func decideStaffUndoBan(prior staffPriorState, now int64) staffUndoVerdict {
 		}
 		return staffUndoRestore(prior)
 	case gotgbot.ChatMemberStatusKicked:
-		if staffUndoEnded(prior.Until, now) {
+		// A lockdown's own ban of a lockdown no longer active is not put back: no lift
+		// would ever end it, so the staff ban is only lifted (S6).
+		if prior.LockdownBanEnded || staffUndoEnded(prior.Until, now) {
 			return staffUndoDo(staffCallUnban, staffReasonUndoneUnbanned, 0)
 		}
 		return staffUndoDo(staffCallBan, staffReasonUndoneBanRestored, prior.Until)

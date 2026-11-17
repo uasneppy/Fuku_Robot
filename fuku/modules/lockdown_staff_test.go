@@ -196,3 +196,45 @@ func TestStaffBanLockdownLookupFails(t *testing.T) {
 	}
 	wantDoneLine(t, summary, "Group B")
 }
+
+// TestStaffUndoLiftedLockdownBan: a staff ban replaced a lockdown's own ban, the
+// lockdown was lifted, then the staff ban is undone. Putting the lockdown's marker ban
+// back would leave a ban no lift will ever remove, so the undo unbans instead (S6).
+// While the lockdown is still active the marker ban is put back, for its lift to end.
+func TestStaffUndoLiftedLockdownBan(t *testing.T) {
+	for _, lifted := range []bool{true, false} {
+		t.Run(map[bool]string{true: "lifted", false: "active"}[lifted], func(t *testing.T) {
+			env := newStaffActionEnv(t, 1)
+			group := env.groups[0]
+			presser := env.undoPresser("Bob")
+			banUntil := time.Now().Add(330 * 24 * time.Hour).Unix()
+			row := seedLockdownBannedTarget(t, env, group, banUntil)
+			msgID, action := env.ranStaffCommand("/ban 4242 raid")
+			if lifted {
+				if began, err := lockdown.BeginLift(row.ID, 9191, "Locker Name", false); err != nil || !began {
+					t.Fatalf("BeginLift = %v, %v, want true", began, err)
+				}
+			}
+
+			cardMsgID := env.runUndo(presser, msgID, action.ID)
+
+			bans := env.callsTo("banChatMember", group)
+			if lifted {
+				if len(bans) != 1 {
+					t.Fatalf("banChatMember calls = %+v, want only the staff ban: the marker ban must not come back", bans)
+				}
+				unbans := env.callsTo("unbanChatMember", group)
+				if len(unbans) != 1 || !staffParamBool(unbans[0].Params, "only_if_banned") {
+					t.Fatalf("unbanChatMember calls = %+v, want one with only_if_banned=true", unbans)
+				}
+				wantMember(t, env.fake, group, staffTestTarget, gotgbot.ChatMemberStatusLeft)
+			} else {
+				if len(bans) != 2 || staffParamInt(bans[1].Params, "until_date") != banUntil {
+					t.Fatalf("banChatMember calls = %+v, want the marker ban put back", bans)
+				}
+				wantMember(t, env.fake, group, staffTestTarget, gotgbot.ChatMemberStatusKicked)
+			}
+			wantDoneLine(t, env.lastEditText(env.staffChat, cardMsgID), "Group A")
+		})
+	}
+}

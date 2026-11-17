@@ -413,3 +413,37 @@ func HasJoinerBanFresh(chatID, userID, until int64) (bool, error) {
 	}
 	return count > 0, nil
 }
+
+// HasEndedJoinerBanFresh reports whether a ban of the user in the chat that ends at
+// until is a lockdown's own ban (as HasJoinerBanFresh matches it) of a lockdown that
+// is no longer active, read straight from the database: no joiner row of an active
+// lockdown matches, and one of an earlier lockdown does. Such a ban is never lifted by
+// a lockdown any more, which is why a staff undo does not put it back. An until of 0
+// never matches and costs no query.
+func HasEndedJoinerBanFresh(chatID, userID, until int64) (bool, error) {
+	if until == 0 {
+		return false, nil
+	}
+	var rows []struct {
+		State string
+	}
+	err := db.DB.Model(&models.LockdownJoiner{}).
+		Select("chat_lockdowns.state AS state").
+		Joins("JOIN chat_lockdowns ON chat_lockdowns.id = chat_lockdown_joiners.lockdown_id").
+		Where("chat_lockdown_joiners.chat_id = ? AND chat_lockdown_joiners.user_id = ? AND chat_lockdown_joiners.ban_until BETWEEN ? AND ?",
+			chatID, userID, until-joinerBanTolerance, until+joinerBanTolerance).
+		Scan(&rows).Error
+	if err != nil {
+		log.Errorf("[Lockdown] HasEndedJoinerBanFresh: %v", err)
+		return false, fukuerrors.Wrapf(err, "look up an ended lockdown ban of user %d in chat %d", userID, chatID)
+	}
+	if len(rows) == 0 {
+		return false, nil
+	}
+	for _, row := range rows {
+		if row.State == models.LockdownStateActive {
+			return false, nil
+		}
+	}
+	return true, nil
+}

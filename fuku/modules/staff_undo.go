@@ -14,6 +14,7 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/uasneppy/fuku_robot/fuku/db/lockdown"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/db/staff"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
@@ -716,6 +717,11 @@ func startStaffUndoRun(
 	})
 }
 
+// staffEndedLockdownBanLookup reports whether a recorded ban that ended at until was a
+// lockdown's own ban of a lockdown no longer active. It is a test seam over
+// lockdown.HasEndedJoinerBanFresh.
+var staffEndedLockdownBanLookup = lockdown.HasEndedJoinerBanFresh
+
 // runStaffUndoInGroup is the per-group chain of an undo, with the member who pressed
 // Undo (card.Issuer) as the actor. A group no longer linked is skipped with no
 // Telegram call. Otherwise the shared prechecks run for the presser: link owner,
@@ -748,6 +754,17 @@ func runStaffUndoInGroup(
 	if err != nil {
 		log.Warnf("[StaffActions] undo of action %d: %v", a.ID, err)
 		return result(staffReasonSkipNoPriorState, "")
+	}
+	// Only a ban or an unban that replaced or lifted a dated ban can meet a lockdown's
+	// own ban, so no other undo pays the query. A failed read fails the group closed.
+	if (card.UndoKind == staffKindBan || card.UndoKind == staffKindUnban) &&
+		prior.Status == gotgbot.ChatMemberStatusKicked && prior.Until != 0 {
+		ended, err := staffEndedLockdownBanLookup(link.GroupChatID, card.Target, prior.Until)
+		if err != nil {
+			log.Errorf("[StaffActions] ended lockdown ban lookup in group %d: %v", link.GroupChatID, err)
+			return result(staffReasonFailInternal, "")
+		}
+		prior.LockdownBanEnded = ended
 	}
 	var appliedAt int64
 	if t.Row.AppliedAt != nil {
