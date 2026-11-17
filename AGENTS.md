@@ -3061,7 +3061,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   shares `sendDeepLinkNote` (the admin-only check and the send) with the old `note_` handler, which stays for buttons
   already posted. An entry cached by an earlier build has no ID and falls back to the name form until `notes_list` is
   dropped. Note names in the two HTML lists are escaped.
-- Captcha allows one attempt per `(user, chat)`; group `-10` stores the pending user's messages for replay. Service messages
+- Captcha allows one attempt per `(user, chat)`; group `-10` records each content message of the pending user
+  (`stored_messages`), deletes it and ends the update. Nothing is replayed: a pass posts one summary of how many
+  messages of which types were removed (`captcha_stored_messages_summary`), a failure counts them in its notice, and the
+  rows go with the attempt. Service messages
   (join, leave, pin and the other deletion-table kinds, `memberContentMessage` false) are never held: group `-10` returns
   `ext.ContinueGroups` for them first, so the lockdown guard, fed-ban, the service deletion watcher and `cleanService` still
   see the joiner's own join message (`TestCaptchaPendingLetsJoinServiceMessageThrough`).
