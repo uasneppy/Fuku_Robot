@@ -4018,8 +4018,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   to a group by a live administrator of the group binds the channel as the group's log channel (`bindSetLogForward`: group
   or supergroup, not an automatic forward (`helpers.IsAutomaticForward`: a linked channel's own post binds nothing), a
   channel origin with a message ID, the sender, `chat_status.RequireUserAdmin` of that group, and only then
-  the single-use consume, `consumePendingMarker`, GETDEL with Redis, so a member's forward never burns the marker, then
-  `logchannels.Set`, `logs_set_ok` and the `#SETTINGS` audit post). `setlog` is a documented raw `helpers.NewBotCommand`
+  the single-use consume, `consumePendingMarker`, GETDEL with Redis and a get then delete under one process-wide mutex
+  without it, so a member's forward never burns the marker, then `logchannels.Set`, `logs_set_ok` and the `#SETTINGS`
+  audit post; a failed save puts the marker back with `storePendingMarker` and answers `common_settings_save_failed`,
+  so the next forward can still bind, `TestSetLogMarkerSurvivesFailedSave`, `TestConsumePendingMarkerOnce`). `setlog` is a documented raw `helpers.NewBotCommand`
   with `SetAllowChannel(true)` (like the other log channel commands it is not wrapped), because a channel post has no
   sender and `WrapCommand` would reply to it. The forward still
   carries the command text and entity, so the group-0 command binds it itself; the group-11 watcher

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -66,12 +67,19 @@ func peekPendingMarker(key string) ([]byte, bool) {
 	return marker, true
 }
 
+// pendingMarkerConsumeMu serialises consumePendingMarker's get and delete when there is no Redis,
+// so the fallback store takes a marker once on this process too.
+var pendingMarkerConsumeMu sync.Mutex
+
 // consumePendingMarker takes a marker once. With Redis it is one GETDEL, so concurrent forwards of
-// the same channel post bind once; without Redis it is the marshaler's get then delete.
+// the same channel post bind once; without Redis it is the marshaler's get then delete under
+// pendingMarkerConsumeMu.
 func consumePendingMarker(key string) bool {
 	if rdb := cache.GetRedisClient(); rdb != nil {
 		return rdb.GetDel(cache.Context, key).Err() == nil
 	}
+	pendingMarkerConsumeMu.Lock()
+	defer pendingMarkerConsumeMu.Unlock()
 	m := cache.GetMarshal()
 	if m == nil {
 		return false
@@ -328,7 +336,9 @@ func (moduleStruct) setLogCategories(b *gotgbot.Bot, ctx *ext.Context, enable bo
 // forward, in a group, of a channel post that carries a live /setlog marker, by a live
 // administrator of that group, binds the channel as the group's log channel. The admin check runs
 // before the marker is consumed, so a member's forward never burns it. It replies logs_set_ok and
-// posts the #SETTINGS audit entry only when the channel was stored, returns true then, and replies
+// posts the #SETTINGS audit entry only when the channel was stored, and returns true then. When the
+// save fails after the marker was consumed it puts the marker back, replies
+// common_settings_save_failed and returns true, so a later forward can still bind. It replies
 // nothing on every other path.
 func bindSetLogForward(b *gotgbot.Bot, ctx *ext.Context) bool {
 	msg := ctx.EffectiveMessage
@@ -352,14 +362,21 @@ func bindSetLogForward(b *gotgbot.Bot, ctx *ext.Context) bool {
 	if !chat_status.RequireUserAdmin(b, ctx, chat, from.Id) {
 		return false
 	}
-	if !consumePendingMarker(setlogPendingKey(channelID, messageID)) {
-		return false
-	}
-	if err := logchannels.Set(chat.Id, chat.Title, channelID); err != nil {
-		log.Errorf("[LogChannels] Set for chat %d: %v", chat.Id, err)
+	key := setlogPendingKey(channelID, messageID)
+	if !consumePendingMarker(key) {
 		return false
 	}
 	tr := ctxTr(ctx)
+	if err := logchannels.Set(chat.Id, chat.Title, channelID); err != nil {
+		// The marker was consumed: give it back so the next forward can still bind.
+		log.Errorf("[LogChannels] Set for chat %d: %v", chat.Id, err)
+		if err := storePendingMarker(key, []byte("1")); err != nil {
+			log.Errorf("[LogChannels] could not give back the setlog marker of channel %d: %v", channelID, err)
+		}
+		text, _ := tr.GetString("common_settings_save_failed")
+		replyHTML(b, msg, text)
+		return true
+	}
 	text, _ := tr.GetString("logs_set_ok")
 	replyHTML(b, msg, text)
 	actionlog.Settings(b, chat, from, "set log channel")
