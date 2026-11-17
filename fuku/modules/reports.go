@@ -2,6 +2,7 @@ package modules
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"slices"
@@ -21,6 +22,7 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/utils/actionlog"
 	"github.com/uasneppy/fuku_robot/fuku/utils/cache"
 	"github.com/uasneppy/fuku_robot/fuku/utils/chat_status"
+	"github.com/uasneppy/fuku_robot/fuku/utils/extraction"
 	"github.com/uasneppy/fuku_robot/fuku/utils/formatting"
 	"github.com/uasneppy/fuku_robot/fuku/utils/helpers"
 )
@@ -103,14 +105,17 @@ func (moduleStruct) report(b *gotgbot.Bot, ctx *ext.Context) error {
 		return ext.EndGroups
 	}
 
-	if msg.ReplyToMessage == nil {
+	// The reported message is the explicit reply only (extraction.ReplyTarget): in a
+	// forum topic reply_to_message is the topic's root on every message.
+	reply := extraction.ReplyTarget(msg)
+	if reply == nil {
 		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 		text, _ := tr.GetString("reports_reply_to_report")
 		_, _ = msg.Reply(b, text, nil)
 		return ext.EndGroups
 	}
 
-	if msg.ReplyToMessage.From == nil {
+	if reply.From == nil {
 		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 		text, _ := tr.GetString("reports_cannot_report_channel")
 		_, _ = msg.Reply(b, text, nil)
@@ -123,18 +128,14 @@ func (moduleStruct) report(b *gotgbot.Bot, ctx *ext.Context) error {
 		err        error
 	)
 
-	if msg.ReplyToMessage.From.Id == user.Id {
+	if reply.From.Id == user.Id {
 		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 		text, _ := tr.GetString("reports_cannot_report_self")
 		_, _ = msg.Reply(b, text, nil)
 		return ext.EndGroups
 	}
 
-	if replyMsg := msg.ReplyToMessage; replyMsg != nil {
-		replyMsgId = replyMsg.MessageId
-	} else {
-		replyMsgId = msg.MessageId
-	}
+	replyMsgId = reply.MessageId
 	reportprefs := reports.GetChatReportSettings(chat.Id)
 
 	if slices.Contains(reportprefs.BlockedList, user.Id) {
@@ -154,7 +155,7 @@ func (moduleStruct) report(b *gotgbot.Bot, ctx *ext.Context) error {
 		_, _ = msg.Reply(b, text, nil)
 		return ext.EndGroups
 	}
-	if msg.ReplyToMessage.From.Id == 1087968824 || msg.ReplyToMessage.From.Id == 777000 || msg.ReplyToMessage.From.Id == 136817688 {
+	if reply.From.Id == 1087968824 || reply.From.Id == 777000 || reply.From.Id == 136817688 {
 		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 		text, _ := tr.GetString("reports_special_account")
 		_, _ = msg.Reply(b, text, nil)
@@ -186,8 +187,8 @@ func (moduleStruct) report(b *gotgbot.Bot, ctx *ext.Context) error {
 		adminArray = append(adminArray, admin.User.Id)
 	}
 
-	reportedUser := msg.ReplyToMessage.From
-	reportedMsgId := msg.ReplyToMessage.MessageId
+	reportedUser := reply.From
+	reportedMsgId := reply.MessageId
 
 	if reportedUser.Id == b.Id {
 		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
@@ -312,6 +313,17 @@ func (moduleStruct) report(b *gotgbot.Bot, ctx *ext.Context) error {
 	return ext.EndGroups
 }
 
+// reportWatch is the group-8 @admin watcher: it reports like /report and then
+// returns nil, which leaves group 8 so groups 9 to 12 (filters, pins, the log
+// channel, the late raid flood counter) still see the message. Ending the update
+// is for commands.
+func (m moduleStruct) reportWatch(b *gotgbot.Bot, ctx *ext.Context) error {
+	if err := m.report(b, ctx); err != nil && !errors.Is(err, ext.EndGroups) {
+		return err
+	}
+	return nil
+}
+
 // reportsPersonalMode reports whether /reports speaks about the sender's own preference: a private
 // chat with no stored connection. A personal preference grants no authority over any group, so it
 // needs no connection and no admin check; a private chat with a connection speaks about the
@@ -395,7 +407,7 @@ func (moduleStruct) reports(b *gotgbot.Bot, ctx *ext.Context) error {
 			if msg.Chat.Type == "private" {
 				replyText, _ = tr.GetString("reports_group_only")
 			} else {
-				if reply := msg.ReplyToMessage; reply != nil {
+				if reply := extraction.ReplyTarget(msg); reply != nil {
 					if reply.From == nil {
 						replyText, _ = tr.GetString("reports_cannot_report_channel")
 					} else {
@@ -418,7 +430,7 @@ func (moduleStruct) reports(b *gotgbot.Bot, ctx *ext.Context) error {
 			if msg.Chat.Type == "private" {
 				replyText, _ = tr.GetString("reports_group_only")
 			} else {
-				if reply := msg.ReplyToMessage; reply != nil {
+				if reply := extraction.ReplyTarget(msg); reply != nil {
 					if reply.From == nil {
 						replyText, _ = tr.GetString("reports_cannot_report_channel")
 					} else {
@@ -572,6 +584,13 @@ func (moduleStruct) markResolvedButtonHandler(b *gotgbot.Bot, ctx *ext.Context) 
 		}
 	}
 
+	if action == "kick" {
+		if state := readLiveTarget(b, chat.Id, userId); state != liveTargetInChat {
+			answerLiveTargetRefusal(b, query, tr, state)
+			return ext.EndGroups
+		}
+	}
+
 	switch action {
 	case "kick":
 		replyQuery, _ = tr.GetString("reports_success_kick")
@@ -634,7 +653,7 @@ func LoadReports(dispatcher *ext.Dispatcher) {
 			func(msg *gotgbot.Message) bool {
 				return adminMentionRegex.MatchString(msg.Text)
 			},
-			reportsModule.report,
+			reportsModule.reportWatch,
 		),
 		reportsModule.handlerGroup,
 	)

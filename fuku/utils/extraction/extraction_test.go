@@ -823,25 +823,24 @@ func TestIdFromReply_TextSplitVariations(t *testing.T) {
 			wantText:   "reason",
 		},
 		{
-			// strings.SplitN splits on the literal " " character; tabs are not treated as delimiters.
-			// The string contains a space between "reason" and "here", so it splits there.
+			// Any run of Unicode white space ends the command; the reason keeps its own.
 			name:       "text with tab character split",
 			text:       "/cmd\treason here",
 			wantUserId: 42,
-			wantText:   "here",
+			wantText:   "reason here",
 		},
 		{
 			name:       "text with multiple consecutive spaces",
 			text:       "/cmd  reason  here",
 			wantUserId: 42,
-			wantText:   " reason  here",
+			wantText:   "reason  here",
 		},
 		{
-			// strings.SplitN(" cmd reason", " ", 2) => ["", "cmd reason"]; len(res) >= 2 so res[1] == "cmd reason".
+			// Leading white space is skipped, so the first field is the command.
 			name:       "text starting with space no command prefix",
 			text:       " cmd reason",
 			wantUserId: 42,
-			wantText:   "cmd reason",
+			wantText:   "reason",
 		},
 	}
 

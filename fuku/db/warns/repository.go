@@ -17,18 +17,21 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
 )
 
-func checkWarnSettings(chatID int64) (warnrc *models.WarnSettings) {
+func checkWarnSettings(chatID int64) (*models.WarnSettings, error) {
 	return checkWarnSettingsContext(context.Background(), chatID)
 }
 
-func checkWarnSettingsContext(ctx context.Context, chatID int64) (warnrc *models.WarnSettings) {
+// checkWarnSettingsContext reads the chat's warn settings and creates the default row for a
+// chat the bot knows. A read or write that fails is returned, never replaced by the defaults,
+// so the cache loader stores nothing for it and a caller that punishes can fail closed.
+func checkWarnSettingsContext(ctx context.Context, chatID int64) (warnrc *models.WarnSettings, err error) {
 	defaultWarnSettings := &models.WarnSettings{ChatId: chatID, WarnLimit: 3, WarnMode: "mute"}
 	warnrc = &models.WarnSettings{}
-	err := db.DB.WithContext(ctx).Where("chat_id = ?", chatID).First(warnrc).Error
+	err = db.DB.WithContext(ctx).Where("chat_id = ?", chatID).First(warnrc).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		if !db.ChatExistsContext(ctx, chatID) {
 			log.Debugf("[Database][checkWarnSettings]: Chat %d doesn't exist, returning default settings", chatID)
-			return defaultWarnSettings
+			return defaultWarnSettings, nil
 		}
 
 		warnrc = defaultWarnSettings
@@ -38,17 +41,18 @@ func checkWarnSettingsContext(ctx context.Context, chatID int64) (warnrc *models
 		}).Create(warnrc)
 		if result.Error != nil {
 			log.Errorf("[Database] checkWarnSettings: %v", result.Error)
+			return nil, result.Error
 		} else if result.RowsAffected == 0 {
 			if err := db.DB.WithContext(ctx).Where("chat_id = ?", chatID).First(warnrc).Error; err != nil {
 				log.Errorf("[Database] checkWarnSettings reload: %v", err)
-				warnrc = defaultWarnSettings
+				return nil, err
 			}
 		}
 	} else if err != nil {
 		log.Errorf("[Database][checkWarnSettings]: %d - %v", chatID, err)
-		warnrc = defaultWarnSettings
+		return nil, err
 	}
-	return
+	return warnrc, nil
 }
 
 func checkWarns(userId, chatId int64) (warnrc *models.Warns) {
@@ -293,19 +297,35 @@ func GetWarnSetting(chatId int64) *models.WarnSettings {
 	return GetWarnSettingContext(context.Background(), chatId)
 }
 
+// GetWarnSettingContext is GetWarnSettingErrContext for display paths: a read that fails
+// answers the defaults (limit 3, mode mute), which are not cached.
 func GetWarnSettingContext(ctx context.Context, chatId int64) *models.WarnSettings {
+	settings, err := GetWarnSettingErrContext(ctx, chatId)
+	if err != nil {
+		return &models.WarnSettings{ChatId: chatId, WarnLimit: 3, WarnMode: "mute"}
+	}
+	return settings
+}
+
+// GetWarnSettingErrContext reads the chat's warn settings through the warn_settings cache key
+// and returns a failed read as an error: nothing is cached for it, so the next read asks the
+// database again. A chat with no row gets the default row created, as before.
+func GetWarnSettingErrContext(ctx context.Context, chatId int64) (*models.WarnSettings, error) {
 	cached, err := cache.GetFromCacheOrLoad(ctx,
 		cache.CacheKey("warn_settings", chatId),
 		cache.CacheTTLWarnSettings,
 		func(ctx context.Context) (models.WarnSettings, error) {
-			w := checkWarnSettingsContext(ctx, chatId)
+			w, err := checkWarnSettingsContext(ctx, chatId)
+			if err != nil {
+				return models.WarnSettings{}, err
+			}
 			return *w, nil
 		},
 	)
 	if err != nil {
-		return &models.WarnSettings{ChatId: chatId, WarnLimit: 3, WarnMode: "mute"}
+		return nil, err
 	}
-	return &cached
+	return &cached, nil
 }
 
 // LoadWarnSettingsContext reads the chat's warn settings through the same cache key and TTL

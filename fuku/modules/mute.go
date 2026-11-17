@@ -169,6 +169,9 @@ func moderationDmute(m *moduleStruct) *moderationCommand {
 				}
 				return fmt.Errorf("no reply")
 			}
+			if replyTargetMismatch(c.Msg, t.userID) {
+				return refuseReplyMismatch(c)
+			}
 			return muteTargetValidation(c, t)
 		},
 		execute: func(c *moderationCtx, t *target) error {

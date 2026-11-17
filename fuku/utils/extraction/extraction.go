@@ -170,13 +170,14 @@ func ExtractUserAndText(b *gotgbot.Bot, ctx *ext.Context) (int64, string) {
 	args := ctx.Args()
 	prevMessage := ReplyTarget(msg)
 
-	splitText := strings.SplitN(msg.Text, " ", 2)
-
-	if len(splitText) < 2 {
+	// The text or, for a media message, the caption: the same text gotgbot's
+	// matcher and ctx.Args read.
+	fullText := msg.GetText()
+	_, textToParse := splitFirstField(fullText)
+	if textToParse == "" {
 		return IdFromReply(msg)
 	}
 
-	textToParse := splitText[1]
 	hasArgs := len(args) >= 2
 
 	trimTextNewline := func(str string) string {
@@ -190,6 +191,9 @@ func ExtractUserAndText(b *gotgbot.Bot, ctx *ext.Context) (int64, string) {
 	accepted["text_mention"] = struct{}{}
 
 	entities := msg.ParseEntityTypes(accepted)
+	if msg.Text == "" {
+		entities = msg.ParseCaptionEntityTypes(accepted)
+	}
 
 	var ent *gotgbot.ParsedMessageEntity
 	isId := false
@@ -199,10 +203,10 @@ func ExtractUserAndText(b *gotgbot.Bot, ctx *ext.Context) (int64, string) {
 		ent = nil
 	}
 
-	if entities != nil && ent != nil && int(ent.Offset) == (len(msg.Text)-len(textToParse)) {
+	if entities != nil && ent != nil && int(ent.Offset) == (len(fullText)-len(textToParse)) {
 		ent = &entities[0]
 		userId = ent.User.Id
-		text = msg.Text[ent.Offset+ent.Length:]
+		text = fullText[ent.Offset+ent.Length:]
 	} else if hasArgs && args[1][0] == '@' {
 		user := args[1]
 		userId = GetUserId(b, user)
@@ -215,10 +219,7 @@ func ExtractUserAndText(b *gotgbot.Bot, ctx *ext.Context) (int64, string) {
 			}
 			return -1, ""
 		}
-		res := strings.SplitN(msg.Text, " ", 3)
-		if len(res) >= 3 {
-			text = res[2]
-		}
+		_, text = splitFirstField(textToParse)
 	} else if hasArgs {
 		isId = true
 		if chatId, err := strconv.ParseInt(args[1], 10, 64); err != nil || !chat_status.IsChannelId(chatId) {
@@ -232,10 +233,7 @@ func ExtractUserAndText(b *gotgbot.Bot, ctx *ext.Context) (int64, string) {
 		}
 		if isId {
 			userId, _ = strconv.ParseInt(args[1], 10, 64)
-			res := strings.SplitN(msg.Text, " ", 3)
-			if len(res) >= 3 {
-				text = res[2]
-			}
+			_, text = splitFirstField(textToParse)
 		}
 	}
 	// An explicit target (a text_mention at the argument, an @username or a
@@ -342,11 +340,20 @@ func IdFromReply(m *gotgbot.Message) (int64, string) {
 	}
 	userId = replySender.Id()
 
-	res := strings.SplitN(m.Text, " ", 2)
-	if len(res) < 2 {
-		return userId, ""
+	_, rest := splitFirstField(m.GetText())
+	return userId, rest
+}
+
+// splitFirstField splits s at its first run of Unicode white space after the
+// first field: first is that field, rest is everything after the run, with its
+// own inner white space intact. Leading white space of s is skipped.
+func splitFirstField(s string) (first, rest string) {
+	s = strings.TrimLeftFunc(s, unicode.IsSpace)
+	end := strings.IndexFunc(s, unicode.IsSpace)
+	if end < 0 {
+		return s, ""
 	}
-	return userId, res[1]
+	return s[:end], strings.TrimLeftFunc(s[end:], unicode.IsSpace)
 }
 
 func ExtractQuotes(sentence string, matchQuotes, matchWord bool) (inQuotes, afterWord string) {

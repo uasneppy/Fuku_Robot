@@ -189,8 +189,7 @@ func moderationBan(m *moduleStruct) *moderationCommand {
 		},
 		execute: func(c *moderationCtx, t *target) error {
 			if t.isChannel {
-				if c.Msg.ReplyToMessage != nil {
-					t.userID = c.Msg.ReplyToMessage.GetSender().Id()
+				if extraction.ReplyTarget(c.Msg) != nil {
 					_, err := c.Bot.BanChatSenderChat(c.Chat.Id, t.userID, nil)
 					return err
 				}
@@ -204,9 +203,9 @@ func moderationBan(m *moduleStruct) *moderationCommand {
 			var sendMsgOptns *gotgbot.SendMessageOpts
 
 			if t.isChannel {
-				if c.Msg.ReplyToMessage != nil {
+				if extraction.ReplyTarget(c.Msg) != nil {
 					temp, _ := c.Tr.GetString("bans_anonymous_ban_user")
-					text = fmt.Sprintf(temp, formatting.MentionHtml(t.userID, c.Msg.ReplyToMessage.GetSender().Name()))
+					text = fmt.Sprintf(temp, formatting.MentionHtml(t.userID, channelTargetName(c.Msg, t.userID)))
 				} else {
 					text, _ = c.Tr.GetString("bans_anonymous_ban_reply_only")
 					return logReplyError(c.replyHint(text, formatting.Shtml()))
@@ -224,6 +223,22 @@ func moderationBan(m *moduleStruct) *moderationCommand {
 		},
 		logAction: "ban",
 	}
+}
+
+// channelTargetName is the display name of the channel /ban or /unban acts on:
+// the replied post's sender chat when it is that channel, else the stored channel
+// name, else the ID. The command always acts on the channel it extracted, never on
+// the reply's sender.
+func channelTargetName(msg *gotgbot.Message, channelID int64) string {
+	if reply := extraction.ReplyTarget(msg); reply != nil {
+		if sender := reply.GetSender(); sender != nil && sender.Id() == channelID {
+			return sender.Name()
+		}
+	}
+	if _, name, found := extraction.GetUserInfo(channelID); found && name != "" {
+		return name
+	}
+	return strconv.FormatInt(channelID, 10)
 }
 
 func moderationKick(m *moduleStruct) *moderationCommand {
@@ -322,6 +337,9 @@ func moderationDban(m *moduleStruct) *moderationCommand {
 				}
 				return fmt.Errorf("no reply")
 			}
+			if replyTargetMismatch(c.Msg, t.userID) {
+				return refuseReplyMismatch(c)
+			}
 			return banTargetValidation(c, t)
 		},
 		execute: func(c *moderationCtx, t *target) error {
@@ -376,8 +394,7 @@ func moderationUnban(m *moduleStruct) *moderationCommand {
 		},
 		execute: func(c *moderationCtx, t *target) error {
 			if t.isChannel {
-				if c.Msg.ReplyToMessage != nil {
-					t.userID = c.Msg.ReplyToMessage.GetSender().Id()
+				if extraction.ReplyTarget(c.Msg) != nil {
 					_, err := c.Bot.UnbanChatSenderChat(c.Chat.Id, t.userID, nil)
 					return err
 				}
@@ -391,9 +408,9 @@ func moderationUnban(m *moduleStruct) *moderationCommand {
 		reply: func(c *moderationCtx, t *target) error {
 			var text string
 			if t.isChannel {
-				if c.Msg.ReplyToMessage != nil {
+				if extraction.ReplyTarget(c.Msg) != nil {
 					temp, _ := c.Tr.GetString("bans_anonymous_unban_user")
-					text = fmt.Sprintf(temp, formatting.MentionHtml(t.userID, c.Msg.ReplyToMessage.GetSender().Name()))
+					text = fmt.Sprintf(temp, formatting.MentionHtml(t.userID, channelTargetName(c.Msg, t.userID)))
 				} else {
 					text, _ = c.Tr.GetString("bans_anonymous_unban_reply_only")
 					return logReplyError(c.replyHint(text, formatting.Shtml()))
@@ -598,6 +615,13 @@ func (moduleStruct) restrictButtonHandler(b *gotgbot.Bot, ctx *ext.Context) erro
 			ShowAlert: true,
 		})
 		return ext.EndGroups
+	}
+
+	if action == "kick" || action == "mute" {
+		if state := readLiveTarget(b, chat.Id, userId); state != liveTargetInChat {
+			answerLiveTargetRefusal(b, query, tr, state)
+			return ext.EndGroups
+		}
 	}
 
 	var helpText string
@@ -806,6 +830,10 @@ func (moduleStruct) unrestrictButtonHandler(b *gotgbot.Bot, ctx *ext.Context) er
 
 	switch action {
 	case "unmute":
+		if state := readLiveTarget(b, chat.Id, userId); state != liveTargetInChat {
+			answerLiveTargetRefusal(b, query, tr, state)
+			return ext.EndGroups
+		}
 
 		c, err := b.GetChat(chat.Id, nil)
 		if err != nil {
@@ -856,24 +884,29 @@ func (moduleStruct) unrestrictButtonHandler(b *gotgbot.Bot, ctx *ext.Context) er
 		helpText = fmt.Sprintf(temp, formatting.MentionHtml(user.Id, user.FirstName))
 	}
 
+	// The card's own text goes back in as HTML, so it is rebuilt from its entities
+	// (OriginalHTML escapes the text and keeps the mentions), never inserted raw.
 	updatedText := ""
 	if ctx.EffectiveMessage != nil {
-		updatedText = ctx.EffectiveMessage.Text
+		updatedText = ctx.EffectiveMessage.OriginalHTML()
 	}
 	if updatedText != "" {
 		updatedText = "<s>" + updatedText + "</s>\n\n"
 	}
 
-	_, _, err = msg.EditText(b, &gotgbot.EditMessageTextOpts{Text: updatedText + helpText, ParseMode: formatting.HTML})
-	if err != nil {
-		log.Error(err)
-		return err
+	_, _, editErr := msg.EditText(b, &gotgbot.EditMessageTextOpts{Text: updatedText + helpText, ParseMode: formatting.HTML})
+	if editErr != nil {
+		log.Error(editErr)
 	}
 
+	// The press is answered whether or not the edit landed: the action already took effect.
 	_, err = query.Answer(b, nil)
 	if err != nil {
 		log.Error(err)
 		return err
+	}
+	if editErr != nil {
+		return editErr
 	}
 
 	return ext.EndGroups

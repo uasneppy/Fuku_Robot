@@ -143,10 +143,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Group numbers are execution order: `-10` captcha sweeper · `-9` forward blocklist watcher (the only handler of the group, never ends an update; see the `StaffForwardBlock` bullet) · `-8` member deletion (two handlers: the edit handler and the self-destruct watcher, a `handlers.NewMessage(message.All, ...)` with no setter; neither ends an update, see the `MemberDeletion` bullet) · `-7` lockdown join guard (it also counts the join surge
   before it reads the lockdown) · `-6` fed-ban · `-5` service message deletion watcher (the only handler of the group, never ends an update, `SetAllowBot`; a deletable service type is deleted now or queued by the group's stored rule) · `-4` raid flood counter (counts everything but slash-prefixed texts, never ends an update; there is no
   antiraid handler any more) · `-3` staff watchers (chat-migration re-key; later ownership and bot health) · `-2` admin-cache (`my_chat_member` only) and the member requirements watcher (supergroup messages only, the only message handler of the group, `ext.ContinueGroups` on every path; never add another message handler to group -2) ·
-  `-1` users tracker · `0` commands/help/greetings · `1` settings typed-reply door (private messages only;
+  `-1` users tracker (records real users only: no `sender_chat`, no non-positive ID, no Telegram service account, `trackableUser`) · `0` commands/help/greetings · `1` settings typed-reply door (private messages only;
   `ext.ContinueGroups` for anyone with no wait and no marker, consumes and ends the update otherwise) · `2` raid AI candidate watcher (hands a new member's suspicious
   item to the raid AI pool, never ends an update) · `3` aispam · `4` antiflood · `5`/`6` locks · `7` blacklists ·
-  `8` reports+reactions · `9` filters · `10` pins · `11` log-channel · `12` late raid flood counter (slash-prefixed texts only; keep it
+  `8` reports+reactions (the `@admin` watcher, `reportWatch`, returns `nil` after reporting so groups 9 to 12 still run) · `9` filters · `10` pins · `11` log-channel · `12` late raid flood counter (slash-prefixed texts only; keep it
   after every other group).
 - gotgbot stops a group at the first matching handler. Watchers return `ext.ContinueGroups`; commands return
   `ext.EndGroups`. A group-0 watcher returning `nil` silently kills every later group-0 handler.
@@ -1681,7 +1681,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   evicts it on this replica only; list freshness-critical keys in `skipLocal` (`fuku/db/cache/local.go`). Tests that
   write rows directly must call `cache.ResetLocalForTest()` or `DeleteCache` before reading through the cache.
 - Two packages are named `cache`; the loader and generation guards are in `fuku/db/cache`, not `fuku/utils/cache`.
-- Operational Redis keys (`fuku:anonAdmin:*`, `fuku:staff:*`, `fuku:lockdown:*`, `fuku:raid:*`, `fuku:memberreq:*`) sit outside the
+- Operational Redis keys (`fuku:anonAdmin:*`, `fuku:staff:*`, `fuku:lockdown:*`, `fuku:raid:*`, `fuku:memberreq:*`, `fuku:fed:*`) sit outside the
   `fuku:cache:` prefix; `CLEAR_CACHE_ON_STARTUP` does not clear them. `fuku:antiraid:*` is retired: nothing reads or
   writes it, and `sweepRetiredAntiRaidKeys` removes what the old raid mode left, once per process at startup.
 - `fuku:settings:sweep:lock` (new family `fuku:settings:*`, also outside the `fuku:cache:` prefix, so
@@ -2362,6 +2362,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - `fuku:delete:pace:next` and `fuku:delete:pace:block` are the fleet-wide Telegram pacing of the deletion code
   (`deletionPaced`, `deletionPacer`: 100 ms, 3 retries, 60 s): the staff pacer's slot-plus-block design with its own keys, so
   deletions, member requirements, lockdown and staff fan-outs each keep their own budget (`TestDeletionPacerIsIndependent`).
+- `fuku:fed:pace:next` and `fuku:fed:pace:block` are the fleet-wide Telegram pacing of the federation fan-out
+  (`fedPaced`, `fedPacer`: 100 ms, 3 retries, 60 s, each call bounded by `fedCallTimeout`, 10 s): every ban of
+  `applyActiveFban` and every unban of `applyActiveUnfban` goes through it, with its own keys so an `/fban` across many
+  groups spends no other budget. A failed group is logged at Warn by chat and user ID, and `runFedFanout` follows the
+  federation notice (owner and log chat, as `notifyFedAction` sends it) with `<FBAN|UNFBAN> <id>: N of M groups failed`
+  whenever any group failed. A database error removing an fban answers `common_settings_save_failed`, and only a missing
+  ban answers `feds_unfban_not_banned`. The fan-out is a recover-protected goroutine with no shutdown drain (a restart cuts
+  it off, accepted). They sit outside the `fuku:cache:` prefix, so `CLEAR_CACHE_ON_STARTUP` keeps them.
 - `fuku:delete:norights:<chat>` is the 10 minute negative latch of a chat the bot cannot act in (`deletionLatchKey`,
   `deletionLatched`, `deletionSetLatch`, `deletionLatchTTL`), outside the `fuku:cache:` prefix so `CLEAR_CACHE_ON_STARTUP`
   keeps it. Its value is the scope: `gone` (the bot is not in the chat, was kicked, or the chat is gone or was upgraded: stops
@@ -3689,10 +3697,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   service message on every topic message that is not an explicit reply, so `ReplyTarget` answers nil for that message
   and for a topic message's own thread root (`IsTopicMessage` with `MessageThreadId` equal to the reply's ID; outside a
   forum replying to a thread's root is a real reply). `ExtractUserAndText`, `IdFromReply`, `extractFromReply`, `/dkick`,
-  `/dban`, `/dmute`, `/purge`, `/del`, `/purgefrom`, `/purgeto` and `/id` use it. In `ExtractUserAndText` an explicit
+  `/dban`, `/dmute`, `/dwarn`, `/report`, the `@admin` watcher, `/reports block|unblock`, `/pin`, `/unpin`, `/permapin`, `/pinned`, `/tr`, `/purge`, `/del`, `/purgefrom`, `/purgeto` and `/id` use it. In `ExtractUserAndText` an explicit
   target (a `text_mention` at the argument, an `@username` or a numeric ID) always beats the reply: the reply is the
   fallback only when the first argument named nobody, and `/id` shows a reply's details only when the resolved user is
-  the reply's sender.
+  the reply's sender. `/dban`, `/dmute` and `/dwarn` delete the replied message, so an explicit target that did not send
+  it is refused with `common_reply_target_mismatch` (`replyTargetMismatch`) and nothing is deleted or punished.
 - A staff action card has one writer once its run starts: the run's coordinator goroutine, which edits at most every
   2.5 s (`staffActionEditEvery`), only when a result changed, and never before a progress edit's 429 `retry_after` has
   passed. The summary never drops a group: over 3800 UTF-16 units (counted on the escaped HTML) only done lines

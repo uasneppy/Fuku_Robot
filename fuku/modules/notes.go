@@ -592,7 +592,7 @@ func (moduleStruct) notesList(b *gotgbot.Bot, ctx *ext.Context) error {
 		info = currentNotesText
 		var sb strings.Builder
 		for _, note := range noteKeys {
-			fmt.Fprintf(&sb, " - <code>#%s</code>\n", note)
+			fmt.Fprintf(&sb, " - <code>#%s</code>\n", html.EscapeString(note))
 		}
 		info += sb.String()
 		instructionText, _ := tr.GetString("notes_get_instruction")

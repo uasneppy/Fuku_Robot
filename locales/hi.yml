@@ -76,9 +76,11 @@ common_anonymous_ban_error: इस कमांड का उपयोग गु
 common_cannot_identify_user: उपयोगकर्ता की पहचान नहीं हो सकी। इस कमांड का उपयोग चैनलों द्वारा नहीं किया जा सकता।
 common_no_user_specified: मुझे नहीं पता आप किसके बारे में बात कर रहे हैं, आपको एक उपयोगकर्ता निर्दिष्ट करना होगा...!
 common_user_not_in_chat: यह उपयोगकर्ता इस चैट में नहीं है, मैं उन्हें कैसे प्रतिबंधित करूं?
+common_member_check_failed: "इस उपयोगकर्ता की स्थिति जाँची नहीं जा सकी। कुछ नहीं बदला गया। फिर से प्रयास करें।"
 common_cannot_target_admin: "मैं ग्रुप एडमिनिस्ट्रेटर्स पर यह कार्रवाई नहीं कर सकता।"
 common_cannot_target_self: "मैं खुद पर यह कार्रवाई नहीं कर सकता।"
 common_no_reply_to_message: "इस कार्रवाई को करने के लिए आपको किसी उपयोगकर्ता के संदेश का जवाब देना होगा।"
+common_reply_target_mismatch: "आपने जिस उपयोगकर्ता का नाम दिया, उसने वह संदेश नहीं लिखा जिसका आपने जवाब दिया। उनके संदेश का जवाब दें, या नाम न लिखें।"
 
 # Common action verbs (for dynamic error messages)
 common_action_ban: "बैन"
