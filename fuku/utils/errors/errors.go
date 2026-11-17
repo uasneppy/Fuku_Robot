@@ -22,12 +22,27 @@ func (e *WrappedError) Unwrap() error {
 	return e.Err
 }
 
+// Wrap wraps err with message and the location of its caller.
 func Wrap(err error, message string) error {
+	return wrapAt(err, message, 2)
+}
+
+// Wrapf is Wrap with a formatted message. It reports its own caller, not Wrap (I6).
+func Wrapf(err error, format string, args ...any) error {
+	if err == nil {
+		return nil
+	}
+	return wrapAt(err, fmt.Sprintf(format, args...), 2)
+}
+
+// wrapAt builds the wrapped error; skip counts the frames above it to the caller to report, as
+// runtime.Caller counts them (2 is the caller of the exported function that called wrapAt).
+func wrapAt(err error, message string, skip int) error {
 	if err == nil {
 		return nil
 	}
 
-	pc, file, line, ok := runtime.Caller(1)
+	pc, file, line, ok := runtime.Caller(skip)
 	if !ok {
 		return fmt.Errorf("%s: %w", message, err)
 	}
@@ -54,8 +69,4 @@ func Wrap(err error, message string) error {
 		Line:     line,
 		Function: funcName,
 	}
-}
-
-func Wrapf(err error, format string, args ...any) error {
-	return Wrap(err, fmt.Sprintf(format, args...))
 }
