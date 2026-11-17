@@ -3205,7 +3205,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   never summary_chat_id or `staff_action_groups.group_chat_id`, and `summary_msg_id` is only valid together with
   `summary_chat_id`. It re-keys the forward blocklist too (`staff_forward_blocks.staff_chat_id` and
   `staff_forward_block_settings.staff_chat_id`, in the same transaction) and drops the `staff_forward_block` key of the
-  old and the new ID after the commit.
+  old and the new ID after the commit. It also drops the cached link (`staff_link_of:<group>`) of every group linked to
+  the re-keyed Staff Group, because that row names the Staff Group's chat ID (`TestRekeyChatInvalidatesLinkedGroups`).
 - Staff links: authority reads use uncached `staff.*Fresh` plus live `chat_status.CheckOwner`; only `OwnerMismatch`
   removes a link (errors are unknown); each automatic removal or health change is one conditional statement, and only
   the caller with RowsAffected == 1 posts the Staff Group notice. Unsetting a Staff Group (`DeleteStaffGroupWithLinks`)

@@ -262,3 +262,29 @@ func TestRekeyChatMovesStaffActions(t *testing.T) {
 		t.Fatalf("group rows = %+v, %v, want the one row still on group %d", rows, err, groupID)
 	}
 }
+
+// A re-key of a Staff Group changes staff_chat_id on every link, so the cached
+// link of each linked group must go too, or the forward blocklist watcher and the
+// staff fan-out would keep reading the old Staff Group ID.
+func TestRekeyChatInvalidatesLinkedGroups(t *testing.T) {
+	utilsCache.SetupTestMemoryMarshaler(t)
+	cache.ResetLocalForTest()
+	oldID, newID := uniqueStaffChatID(), uniqueStaffChatID()
+	groupA, groupB := uniqueStaffChatID(), uniqueStaffChatID()
+	rekeySeed(t, oldID, groupA, groupB)
+	cleanupStaffRows(t, newID)
+
+	for _, group := range []int64{groupA, groupB} {
+		if link := GetLinkOfGroup(group); link == nil || link.StaffChatID != oldID {
+			t.Fatalf("GetLinkOfGroup(%d) = %+v before the re-key, want the old Staff Group", group, link)
+		}
+	}
+	if changed, err := RekeyChat(oldID, newID); err != nil || !changed {
+		t.Fatalf("RekeyChat = (%v, %v), want (true, nil)", changed, err)
+	}
+	for _, group := range []int64{groupA, groupB} {
+		if link := GetLinkOfGroup(group); link == nil || link.StaffChatID != newID {
+			t.Fatalf("GetLinkOfGroup(%d) = %+v after the re-key, want staff chat %d (stale cache)", group, link, newID)
+		}
+	}
+}
