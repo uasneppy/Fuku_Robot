@@ -175,6 +175,8 @@ func raidOutcomeLatch(outcome lockdownStartOutcome) (name string, latch time.Dur
 		return "already active", 0
 	case lockdownStartLockUnknown:
 		return "lock unknown", 0
+	case lockdownStartLiftedMeanwhile:
+		return "lifted during the lock", 0
 	case lockdownStartBotCheckFailed:
 		return "bot check failed", raidRetryLatch
 	case lockdownStartPermissionsUnreadable:

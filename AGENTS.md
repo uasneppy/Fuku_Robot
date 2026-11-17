@@ -3247,7 +3247,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   trigger's lockdown is exactly a `/lockdown`: the live bot-rights check, the raw permissions snapshot, the insert behind
   `uk_chat_lockdowns_active`, the lock call, the confirmation and the worker wake. Of two simultaneous callers for one
   chat exactly one gets `lockdownStartStarted` and the other `lockdownStartAlreadyActive` with the running row. It judges
-  no person's authority (the caller has) and `/lockdown` maps each outcome to the reply it always sent.
+  no person's authority (the caller has) and `/lockdown` maps each outcome to the reply it always sent. When the
+  confirmation matches no row because an `/unlockdown` of the unconfirmed row lifted it while the lock call was on its
+  way, the row is read again and, lifting or lifted, the stored permissions are put back once more and the outcome is
+  `lockdownStartLiftedMeanwhile` (`/lockdown` answers `lockdown_already_lifted`, a trigger posts nothing), so a lock that
+  landed after the lift's restore never leaves the group locked with no lockdown (`TestLockdownStartLiftedDuringLock`).
 - The join surge trigger is counted by both group `-7` join guards, `lockdownOnJoinMember` through
   `raidCountMemberJoin` and `lockdownOnJoinMessage` (the `new_chat_members` service message) through
   `raidCountMessageJoins`, right after the lockdown join tracker write and before the lockdown is read, so the join

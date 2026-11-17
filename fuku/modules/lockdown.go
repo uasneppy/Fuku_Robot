@@ -379,6 +379,8 @@ func (m moduleStruct) lockdown(b *gotgbot.Bot, ctx *ext.Context) error {
 		return refuse("lockdown_lock_unknown")
 	case lockdownStartLockFailed:
 		return refuse("lockdown_lock_failed")
+	case lockdownStartLiftedMeanwhile:
+		return refuse("lockdown_already_lifted")
 	}
 	row, botMember := res.Row, res.BotMember
 

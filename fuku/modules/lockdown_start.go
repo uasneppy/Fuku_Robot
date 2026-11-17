@@ -43,6 +43,11 @@ const (
 	// unconfirmed row is kept, because it holds the only copy of the permissions to
 	// restore, and the worker settles it later.
 	lockdownStartLockUnknown
+	// lockdownStartLiftedMeanwhile means the lock took effect but the row was lifted
+	// (an /unlockdown of the unconfirmed row) before the lock was confirmed. The
+	// stored permissions were put back, so the group is not left locked with no
+	// active lockdown. Row is the lifted row.
+	lockdownStartLiftedMeanwhile
 )
 
 // lockdownStartParams is what starts a lockdown: the chat, what started it (a trigger
@@ -160,9 +165,18 @@ func startLockdownRow(ctx context.Context, b *gotgbot.Bot, p lockdownStartParams
 		res.Outcome = lockdownStartLockFailed
 		return res
 	}
-	if _, err := lockdown.ConfirmLocked(row.ID); err != nil {
-		if _, retryErr := lockdown.ConfirmLocked(row.ID); retryErr != nil {
-			log.Errorf("[Lockdown] lockdown %d of chat %d is locked but not confirmed: %v", row.ID, chat.Id, retryErr)
+	confirmed, err := lockdown.ConfirmLocked(row.ID)
+	if err != nil {
+		confirmed, err = lockdown.ConfirmLocked(row.ID)
+		if err != nil {
+			log.Errorf("[Lockdown] lockdown %d of chat %d is locked but not confirmed: %v", row.ID, chat.Id, err)
+		}
+	}
+	if err == nil && !confirmed {
+		if lifted, ok := lockdownLiftedDuringLock(ctx, b, row); ok {
+			res.Outcome = lockdownStartLiftedMeanwhile
+			res.Row = lifted
+			return res
 		}
 	}
 	// The alert is decided and posted by the worker, so a lock confirmed here, one
@@ -172,4 +186,30 @@ func startLockdownRow(ctx context.Context, b *gotgbot.Bot, p lockdownStartParams
 	res.Outcome = lockdownStartStarted
 	res.Row = row
 	return res
+}
+
+// lockdownLiftedDuringLock handles a lock whose confirmation matched no row. An
+// /unlockdown of the unconfirmed row may have restored the stored permissions and
+// recorded its lift while the lock call was still on its way, so the lock can have
+// landed after the restore and left the group locked with no active lockdown. When the
+// row is now lifting or lifted, the stored permissions are put back once more (the
+// same set the lift restores, so a second restore is harmless) and true is returned
+// with the row. Any other state (confirmed by the settle step, or gone) is left as
+// before and reports false.
+func lockdownLiftedDuringLock(ctx context.Context, b *gotgbot.Bot, row *models.ChatLockdown) (*models.ChatLockdown, bool) {
+	current, err := lockdown.GetFresh(row.ID)
+	if err != nil || current == nil {
+		if err != nil {
+			log.Warnf("[Lockdown] lockdown %d of chat %d could not be read after a lost confirmation: %v", row.ID, row.ChatID, err)
+		}
+		return nil, false
+	}
+	if current.State != models.LockdownStateLifting && current.State != models.LockdownStateLifted {
+		return nil, false
+	}
+	if err := setLockdownPermissions(ctx, b, current.ChatID, current.PrePermissions); err != nil {
+		log.Errorf("[Lockdown] lockdown %d of chat %d was lifted during its lock and the stored permissions could not be put back: %v",
+			current.ID, current.ChatID, err)
+	}
+	return current, true
 }
