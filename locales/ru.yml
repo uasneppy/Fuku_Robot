@@ -1956,6 +1956,7 @@ backup_export_success: |
 backup_export_success_text: "✅ Успешно экспортировано {modules} модулей. Скачайте файл резервной копии выше."
 backup_export_rate_limited: "⏳ Пожалуйста, подождите <b>{time}</b> перед следующим экспортом."
 backup_export_no_modules: "❌ Для этого чата не найдено модулей для экспорта."
+backup_export_start_bot: "📬 Резервная копия отправляется вам в личные сообщения. Сначала начните со мной личный чат, затем снова отправьте /export."
 backup_export_failed: "❌ Не удалось экспортировать настройки. Пожалуйста, попробуйте позже."
 
 backup_import_success: |

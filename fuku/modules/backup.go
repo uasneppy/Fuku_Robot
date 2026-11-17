@@ -259,15 +259,22 @@ func (m moduleStruct) exportHandler(b *gotgbot.Bot, ctx *ext.Context) error {
 	fileName := fmt.Sprintf("xenobot72_backup_%d_%s.json", chat.Id, time.Now().Format("20060102_150405"))
 	caption := buildExportCaption(tr, bkp)
 
+	// The backup holds every note, filter and setting of the group, so it goes to the admin's private chat
+	// and never into the group.
 	_, err = b.SendDocument(
-		chat.Id,
+		user.Id,
 		gotgbot.InputFileByReader(fileName, bytes.NewReader(jsonData)),
 		&gotgbot.SendDocumentOpts{
-			Caption:         caption,
-			ParseMode:       "HTML",
-			ReplyParameters: &gotgbot.ReplyParameters{MessageId: msg.MessageId},
+			Caption:   caption,
+			ParseMode: "HTML",
 		},
 	)
+	if settingsEditIsForbidden(err) {
+		limiter.ReleaseExport(chat.Id)
+		text, _ := tr.GetString("backup_export_start_bot")
+		_, _ = msg.Reply(b, text, formatting.Shtml())
+		return ext.EndGroups
+	}
 	if err != nil {
 		log.Errorf("[Backup] Failed to send document: %v", err)
 		text, _ := tr.GetString("backup_export_success_text", i18n.TranslationParams{

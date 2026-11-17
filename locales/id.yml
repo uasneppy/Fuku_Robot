@@ -2144,6 +2144,7 @@ backup_export_success: |
 backup_export_success_text: "✅ Berhasil mengekspor {modules} modul. Unduh file cadangan di atas."
 backup_export_rate_limited: "⏳ Silakan tunggu <b>{time}</b> sebelum mengekspor lagi."
 backup_export_no_modules: "❌ Tidak ada modul yang dapat diekspor untuk obrolan ini."
+backup_export_start_bot: "📬 Cadangan dikirim kepada Anda lewat obrolan pribadi. Mulai obrolan pribadi dengan saya dulu, lalu kirim /export lagi."
 backup_export_failed: "❌ Gagal mengekspor pengaturan. Silakan coba lagi nanti."
 
 backup_import_success: |

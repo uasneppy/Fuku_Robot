@@ -1046,6 +1046,7 @@ backup_export_success: "<b>✅ Експорт завершено.</b>\n\n<b>Ча
 backup_export_success_text: "✅ Експортовано модулів: {modules}. Завантажте файл копії вище."
 backup_export_rate_limited: "⏳ Зачекайте <b>{time}</b>, перш ніж експортувати знову."
 backup_export_no_modules: "❌ Для цього чату немає модулів для експорту."
+backup_export_start_bot: "📬 Резервна копія надсилається вам в особисті повідомлення. Спершу почніть зі мною особистий чат, а потім знову надішліть /export."
 backup_export_failed: "❌ Збій: не вдалося експортувати налаштування. Спробуйте ще раз."
 
 backup_import_success: "<b>✅ Імпорт завершено.</b>\n\n<b>Імпортовано модулів:</b> {modules}\n\n<b>Модулі:</b>\n{list}\n"

@@ -2135,6 +2135,7 @@ backup_export_success: |
 backup_export_success_text: "✅ Exportados com sucesso {modules} módulos. Baixe o arquivo de backup acima."
 backup_export_rate_limited: "⏳ Por favor aguarde <b>{time}</b> antes de exportar novamente."
 backup_export_no_modules: "❌ Nenhum módulo exportável encontrado para este chat."
+backup_export_start_bot: "📬 O backup é enviado para você no chat privado. Primeiro inicie um chat privado comigo e depois envie /export de novo."
 backup_export_failed: "❌ Falha ao exportar configurações. Por favor tente novamente mais tarde."
 
 backup_import_success: |
