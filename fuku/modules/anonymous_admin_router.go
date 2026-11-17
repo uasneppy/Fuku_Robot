@@ -17,6 +17,13 @@ func RegisterAnonymousAdminHandler(command string, handler AnonymousAdminHandler
 	anonAdminRegistry[command] = handler
 }
 
+// hasAnonymousAdminHandler reports whether command (lower case, no slash) has a registered re-entry
+// handler, so the proof tap can refuse a command that would never run.
+func hasAnonymousAdminHandler(command string) bool {
+	_, ok := anonAdminRegistry[command]
+	return ok
+}
+
 // HandleAnonymousAdmin routes an anonymous admin command to the appropriate handler.
 func HandleAnonymousAdmin(b *gotgbot.Bot, ctx *ext.Context, command string) error {
 	if handler, ok := anonAdminRegistry[command]; ok {

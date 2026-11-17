@@ -1506,6 +1506,7 @@ bot_updates_need_supergroup: "Maaf, tetapi untuk menggunakan semua fitur saya, A
 bot_updates_thanks_for_adding: "Terima kasih telah menambahkan saya di grup Anda!"
 bot_updates_make_me_admin: "Jadikan saya admin agar semua fitur saya bisa digunakan!"
 bot_updates_button_expired: "Tombol ini telah kedaluwarsa, Silakan gunakan perintah lagi."
+bot_updates_anon_unsupported_command: "Perintah ini tidak dapat digunakan secara anonim. Kirim sebagai diri sendiri, lalu kirim ulang."
 
 # Formatting module additional strings
 formatting_press_button: "Tekan tombol di bawah untuk mendapatkan Bantuan Markdown!"

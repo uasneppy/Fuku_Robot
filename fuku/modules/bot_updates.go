@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strconv"
-	"strings"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
@@ -138,10 +137,32 @@ func verifyAnonymousAdmin(b *gotgbot.Bot, ctx *ext.Context) error {
 	if !ok {
 		return ext.EndGroups
 	}
-	qmsg := query.Message
 	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
+	// Every path answers the tap exactly once: answer is the only way this handler answers, and
+	// the deferred call gives a path with no text of its own (an expired button, a failed delete)
+	// its empty answer. The query is captured here because the update is replaced below.
+	answered := false
+	answer := func(opts *gotgbot.AnswerCallbackQueryOpts) error {
+		if answered {
+			return nil
+		}
+		answered = true
+		_, err := query.Answer(b, opts)
+		return err
+	}
+	defer func() {
+		if err := answer(nil); err != nil {
+			log.Debugf("[BotUpdates] anon_admin empty answer failed: %v", err)
+		}
+	}()
+	invalid := func() error {
+		text, _ := tr.GetString("common_callback_invalid_request")
+		_ = answer(&gotgbot.AnswerCallbackQueryOpts{Text: text})
+		return ext.EndGroups
+	}
+	qmsg := query.Message
 	if qmsg == nil {
-		return answerInvalidCallback(b, ctx, query)
+		return invalid()
 	}
 
 	chatIDRaw := ""
@@ -152,28 +173,24 @@ func verifyAnonymousAdmin(b *gotgbot.Bot, ctx *ext.Context) error {
 	}
 	if chatIDRaw == "" || msgIDRaw == "" {
 		log.Warnf("[BotUpdates] Invalid callback data format: %s", query.Data)
-		return answerInvalidCallback(b, ctx, query)
+		return invalid()
 	}
 	chatId, err := strconv.ParseInt(chatIDRaw, 10, 64)
 	if err != nil {
 		log.Warnf("[BotUpdates] Invalid callback chat ID: %s (%s)", query.Data, chatIDRaw)
-		return answerInvalidCallback(b, ctx, query)
+		return invalid()
 	}
 	msgId, err := strconv.ParseInt(msgIDRaw, 10, 64)
 	if err != nil {
 		log.Warnf("[BotUpdates] Invalid callback message ID: %s (%s)", query.Data, msgIDRaw)
-		return answerInvalidCallback(b, ctx, query)
+		return invalid()
 	}
 
 	// if non-admins try to press it
 	// using this func because it's the only one that can be called by taking chatId from callback query
 	if !chat_status.IsUserAdmin(b, chatId, query.From.Id) {
 		text, _ := tr.GetString("bot_updates_need_admin")
-		_, err := query.Answer(b,
-			&gotgbot.AnswerCallbackQueryOpts{
-				Text: text,
-			},
-		)
+		err := answer(&gotgbot.AnswerCallbackQueryOpts{Text: text})
 		if err != nil {
 			log.Error(err)
 			return err
@@ -212,7 +229,7 @@ func verifyAnonymousAdmin(b *gotgbot.Bot, ctx *ext.Context) error {
 			"cachedChatId": msg.Chat.Id,
 			"buttonChatId": qmsg.GetChat().Id,
 		}).Warn("[BotUpdates] anon_admin proof tap names different chats")
-		return answerInvalidCallback(b, ctx, query)
+		return invalid()
 	}
 
 	_, err = qmsg.Delete(b, nil)
@@ -236,17 +253,24 @@ func verifyAnonymousAdmin(b *gotgbot.Bot, ctx *ext.Context) error {
 	fromCopy := query.From
 	ctx.EffectiveUser = &fromCopy
 	ctx.EffectiveSender = &gotgbot.Sender{User: &fromCopy, ChatId: chatId}
-	// Extract the command from Text or Caption (caption commands would panic on empty Text)
-	text := msg.Text
-	if text == "" {
-		text = msg.Caption
+	// The name is read as gotgbot's matcher reads it (first field up to any whitespace, lower
+	// case, this bot's @suffix, text or caption), so /Ban and "/ban\nreason" find the registry.
+	command, ok := botCommandName(b, msg)
+	if !ok {
+		return invalid()
 	}
-	if len(text) == 0 || text[0] != '/' {
+	if !hasAnonymousAdminHandler(command) {
+		// The command prompted for the proof but has no re-entry: say so once and run nothing.
+		text, _ := tr.GetString("bot_updates_anon_unsupported_command")
+		if err := answer(&gotgbot.AnswerCallbackQueryOpts{Text: text, ShowAlert: true}); err != nil {
+			log.Error(err)
+		}
 		return ext.EndGroups
 	}
-	parts := strings.SplitN(text, " ", 2)
-	command := strings.SplitN(parts[0][1:], "@", 2)[0]
-
+	// The spinner stops before the command runs.
+	if err := answer(nil); err != nil {
+		log.Debugf("[BotUpdates] anon_admin answer failed: %v", err)
+	}
 	if err := HandleAnonymousAdmin(b, ctx, command); err != nil {
 		return ext.EndGroups
 	}

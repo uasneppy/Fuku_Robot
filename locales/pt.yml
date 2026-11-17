@@ -1474,6 +1474,7 @@ bot_updates_need_supergroup: "Desculpe, mas para usar todas minhas funcionalidad
 bot_updates_thanks_for_adding: "Obrigado por me adicionar em seu grupo!"
 bot_updates_make_me_admin: "Torne-me administrador para usar todos os meus recursos!"
 bot_updates_button_expired: "Este botão expirou, Por favor use o comando novamente."
+bot_updates_anon_unsupported_command: "Este comando não pode ser usado anonimamente. Publique-o como você mesmo e envie-o novamente."
 
 # Formatting module additional strings
 formatting_press_button: "Pressione o botão abaixo para obter Ajuda Markdown!"

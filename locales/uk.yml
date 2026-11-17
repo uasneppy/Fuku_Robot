@@ -804,6 +804,7 @@ bot_updates_need_supergroup: "Об'єкт замалий. Щоб користу�
 bot_updates_thanks_for_adding: "Xenobot-72 на зв'язку. Дякую, що додали мене до групи. Відтепер цей об'єкт під керуванням."
 bot_updates_make_me_admin: "Надайте мені права адміна. Без них я не зможу керувати об'єктом на повну потужність."
 bot_updates_button_expired: "Термін дії кнопки минув. Надішліть команду ще раз."
+bot_updates_anon_unsupported_command: "Цю команду не можна використати анонімно. Надішліть її від свого імені ще раз."
 
 # Formatting module additional strings
 formatting_press_button: "Натисніть кнопку нижче, щоб отримати довідку з Markdown."

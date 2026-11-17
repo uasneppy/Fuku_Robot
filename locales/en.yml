@@ -843,6 +843,7 @@ bot_updates_need_supergroup: "Facility too small. To use all my features, conver
 bot_updates_thanks_for_adding: "Xenobot-72 is online. Thank you for adding me to your group. This facility is now under management."
 bot_updates_make_me_admin: "Grant me admin rights. Without them I cannot run this facility at full capacity."
 bot_updates_button_expired: "This button has expired. Send the command again."
+bot_updates_anon_unsupported_command: "This command cannot be used anonymously. Post it as yourself and send it again."
 
 # Formatting module additional strings
 formatting_press_button: "Press the button below for Markdown help."

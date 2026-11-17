@@ -1300,6 +1300,7 @@ bot_updates_need_supergroup: "Извините, но чтобы использо
 bot_updates_thanks_for_adding: "Спасибо, что добавили меня в вашу группу!"
 bot_updates_make_me_admin: "Сделайте меня администратором, чтобы использовать все мои возможности!"
 bot_updates_button_expired: "Эта кнопка истекла, пожалуйста, используйте команду снова."
+bot_updates_anon_unsupported_command: "Эту команду нельзя использовать анонимно. Отправьте её от своего имени ещё раз."
 
 # Formatting module additional strings
 formatting_press_button: "Нажмите кнопку ниже, чтобы получить справку по Markdown!"

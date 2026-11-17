@@ -169,7 +169,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   bytes, written by `chat_status.StoreAnonAdminCommand` and read by `chat_status.LoadAnonAdminCommand` (gotgbot's own
   unmarshalers, so a reply to a forwarded or pin service message survives; msgpack of the struct could not decode its
   interface fields). A value that does not decode, the old msgpack format included, and a decoder panic read as an
-  expired button. Rolling deploy: a replica on older code reads the new value as expired too (a 20 s window).
+  expired button. Rolling deploy: a replica on older code reads the new value as expired too (a 20 s window). The tap
+  answers the callback query exactly once on every path (`answer` in `verifyAnonymousAdmin`, with a deferred empty
+  answer for the expired, failed-delete and other text-less paths, and an empty answer before a command runs). The
+  command name is read as gotgbot's matcher reads it (`botCommandName`: first field up to any whitespace, lower case,
+  this bot's `@suffix`), so `/Ban` and `/ban` followed by a newline find the registry. A name with no registered
+  re-entry (`hasAnonymousAdminHandler` false, e.g. `/filter`) is answered with the alert
+  `bot_updates_anon_unsupported_command`, the prompt stays deleted and nothing runs. `kick`, `dkick`, `purgefrom` and
+  `purgeto` are registered for re-entry like their siblings.
 - The `StaffActions` module (priority 65) registers raw interceptors, built through `helpers.NewBotCommand`, at group 0 ahead of Bans (70)
   and Mutes (80), looping over a table so the docs generator skips them. Outside a Staff Group they return
   `ext.ContinueGroups` with no reply, write or Telegram call. They are a documented exception to the `WrapCommand`

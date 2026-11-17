@@ -1339,6 +1339,7 @@ bot_updates_need_supergroup: "Désolé, mais pour utiliser toutes mes fonctionna
 bot_updates_thanks_for_adding: "Merci de m'avoir ajouté à votre groupe !"
 bot_updates_make_me_admin: "Nommez-moi administrateur pour utiliser toutes mes fonctionnalités !"
 bot_updates_button_expired: "Ce bouton a expiré. Veuillez utiliser la commande à nouveau."
+bot_updates_anon_unsupported_command: "Cette commande ne peut pas être utilisée anonymement. Publiez-la en votre nom et renvoyez-la."
 bot_updates_convert_instruction: "Après avoir converti ce groupe en supergroupe, vous pouvez m'ajouter à nouveau pour m'utiliser.\n"
 bot_updates_convert_howto: "Pour convertir ce groupe en supergroupe, veuillez suivre les instructions ici :\n"
 
