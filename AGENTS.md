@@ -558,8 +558,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   Telegram service identity (`staffServiceUserIDs`) is answered "post as yourself" (`lockdown_alert_post_as_yourself`)
   before any read; `r` must parse (`lockdownParseCopyID`, 1 up to the largest 63-bit value) and name an existing copy,
   else "no longer valid"; the copy row is honoured only on the chat it was posted in (`dest_chat_id` equals the pressed
-  message's chat), else "no longer valid" with no lockdown read and no presser lookup; the lockdown must exist; a
-  lockdown that is not active makes the press stale (below); only then does the action run. Every path answers the
+  message's chat), else "no longer valid" with no lockdown read and no presser lookup; a card's Confirm (`lc`, `bc`,
+  `rc`) or Cancel (`x`) is honoured only on a card of that copy (`lockdownIsCardOf`: a message that replies to the copy's
+  message and is not the copy itself), else "no longer valid" with no lockdown read, no presser lookup and no edit, so
+  forged card data sent on the alert copy or another message edits nothing (`TestLockdownAlertForgedCardPress`); the
+  lockdown must exist; a lockdown that is not active makes the press stale (below); only then does the action run. Every path answers the
   callback query exactly once.
 - Actions: Lift is `a=lk&r=..` (first row of the alert), Ban recent joiners is `a=bn&r=..` (second row; the label
   carries N, or a generic label when N is 0 or unreadable) and Revoke link is `a=rk&r=..` (third row). Each ask posts a
@@ -579,7 +582,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`lockdownInviteAuthority`); the restrict right is not enough.
 - A press on a button of a lockdown that is not active (lifting or lifted) is judged before any action
   (`lockdownStalePress`): it answers "Already lifted by X at T", changes nothing, posts no card, and closes that copy at
-  once (`lockdownCloseSlotNow`, or edits a confirm card to the same text). The copy row names its own lockdown, so the
+  once (`lockdownCloseSlotNow`, or edits a confirm card of that copy to the same text; any other message is left as it
+  is). The copy row names its own lockdown, so the
   handler never looks at the chat's current lockdown and an old alert's button cannot reach a newer lockdown of the
   same group.
 - Revoke link is shown only while the copy's stored link is one the bot can revoke (`lockdownLinkRevocable`: a link in

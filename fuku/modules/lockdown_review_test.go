@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 
@@ -53,6 +54,44 @@ func TestLockdownStartLiftedDuringLock(t *testing.T) {
 	}
 	if active, err := lockdown.GetActiveFresh(env.chat.Id); err != nil || active != nil {
 		t.Errorf("active lockdown = %v, %v, want none", active, err)
+	}
+}
+
+// TestLockdownAlertForgedCardPress covers callback data of a confirm card (Confirm or
+// Cancel, with the presser's own ID as the asker) sent on a message that is not a card
+// of the copy: the alert copy itself, or another message of the Staff Group that is no
+// reply to the copy. Callback data is not authenticated, so such a press must be
+// answered as no longer valid, edit nothing and lift nothing.
+func TestLockdownAlertForgedCardPress(t *testing.T) {
+	env := newLockdownEnv(t)
+	fix := postLockdownAlert(t, env)
+	copies := env.alertRows()
+	if len(copies) != 1 {
+		t.Fatalf("alert copies = %d, want 1", len(copies))
+	}
+	copyID := fmt.Sprint(copies[0].ID)
+	asker := fmt.Sprint(env.admin.Id)
+	expiry := fmt.Sprint(time.Now().Unix()/60 + 5)
+	forged := map[string]string{
+		"cancel":       encodeCallbackData(lockdownCallbackNamespace, map[string]string{"a": lockdownActCancel, "r": copyID, "u": asker}),
+		"lift confirm": encodeCallbackData(lockdownCallbackNamespace, map[string]string{"a": lockdownActLiftConfirm, "r": copyID, "u": asker, "e": expiry}),
+	}
+	targets := map[string]int64{
+		"on the alert copy":            fix.alert.MessageID,
+		"on a message that is no card": fix.alert.MessageID + 1000,
+	}
+	for dataName, data := range forged {
+		for targetName, msgID := range targets {
+			edits := len(env.staffCalls("editMessageText", fix.staffChat.Id))
+			before := env.snapshotAlert(fix)
+
+			pressLockdownButton(env, env.admin, fix.staffChat, msgID, data)
+
+			if got := len(env.staffCalls("editMessageText", fix.staffChat.Id)); got != edits {
+				t.Errorf("%s %s: editMessageText calls = %d, were %d: a forged card press edits nothing", dataName, targetName, got, edits)
+			}
+			env.wantRefused(fix, before, staffMarker("lockdown_alert_expired"))
+		}
 	}
 }
 
