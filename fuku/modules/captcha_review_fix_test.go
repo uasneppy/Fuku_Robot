@@ -4,12 +4,14 @@ package modules
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"testing"
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
+	"gorm.io/gorm"
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
 	dbcache "github.com/uasneppy/fuku_robot/fuku/db/cache"
@@ -244,6 +246,34 @@ func TestCaptchaWebDecidedAttemptAnswersLiveMember(t *testing.T) {
 				t.Fatalf("kicks = %d, want none from the late check", got)
 			}
 		})
+	}
+}
+
+// TestRestoreCaptchaPermissionsIgnoresScheduleDeleteError pins C6: once the unmute succeeded,
+// a failure to delete the fallback schedule is logged, not reported as a failed unmute (the
+// worker reads the live member and drops a stale schedule).
+func TestRestoreCaptchaPermissionsIgnoresScheduleDeleteError(t *testing.T) {
+	env := newCaptchaReviewTimeoutEnv(t)
+	name := "test:fail_muted_delete_" + t.Name()
+	err := db.DB.Callback().Delete().Before("gorm:delete").Register(name, func(tx *gorm.DB) {
+		if tx.Statement.Table == "captcha_muted_users" {
+			_ = tx.AddError(errors.New("database is down"))
+		}
+	})
+	if err != nil {
+		t.Fatalf("register callback: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := db.DB.Callback().Delete().Remove(name); err != nil {
+			t.Errorf("remove callback: %v", err)
+		}
+	})
+
+	if err := restoreCaptchaPermissions(env.bot, env.chatID, env.userID); err != nil {
+		t.Fatalf("restoreCaptchaPermissions() error = %v, want nil after a successful unmute", err)
+	}
+	if got := unmutesOf(t, env.client, env.userID); got != 1 {
+		t.Fatalf("unmutes = %d, want 1", got)
 	}
 }
 

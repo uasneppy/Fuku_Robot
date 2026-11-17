@@ -1711,7 +1711,12 @@ func restoreCaptchaPermissions(bot *gotgbot.Bot, chatID, userID int64) error {
 		scheduleErr := captcha.CreateMutedUser(userID, chatID, time.Now())
 		return errors.Join(err, scheduleErr)
 	}
-	return captcha.DeleteMutedUser(userID, chatID)
+	// The member is unmuted. A schedule that could not be deleted is not a failed unmute (C6):
+	// it is logged, and the worker finds the member already unmuted when it runs.
+	if err := captcha.DeleteMutedUser(userID, chatID); err != nil {
+		log.Errorf("[Captcha] Unmuted user %d in chat %d but could not clear the fallback unmute: %v", userID, chatID, err)
+	}
+	return nil
 }
 
 // captchaPassInput is everything a captcha pass needs and nothing about how it was
