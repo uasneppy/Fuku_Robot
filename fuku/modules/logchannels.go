@@ -336,6 +336,11 @@ func bindSetLogForward(b *gotgbot.Bot, ctx *ext.Context) bool {
 	if msg == nil || chat == nil || (chat.Type != "group" && chat.Type != "supergroup") {
 		return false
 	}
+	// A linked channel's automatic forward is nobody's forward: its from is the Telegram
+	// service account, which the admin check would count as an administrator.
+	if helpers.IsAutomaticForward(msg) {
+		return false
+	}
 	channelID, messageID, ok := channelForwardOrigin(msg)
 	if !ok || messageID == 0 {
 		return false

@@ -231,6 +231,9 @@ func TestStaffActionAnonymous(t *testing.T) {
 		cases := []struct {
 			name  string
 			build func(env *staffActionEnv) *gotgbot.Update
+			// silent: an automatic forward never runs a command (helpers.NewBotCommand passes
+			// it on), so it gets no reply at all rather than "post as yourself".
+			silent bool
 		}{
 			{
 				name: "anonymous admin",
@@ -251,6 +254,7 @@ func TestStaffActionAnonymous(t *testing.T) {
 					update.Message.IsAutomaticForward = true
 					return update
 				},
+				silent: true,
 			},
 			{
 				name: "channel identity",
@@ -266,6 +270,10 @@ func TestStaffActionAnonymous(t *testing.T) {
 			t.Run(command+" "+tc.name, func(t *testing.T) {
 				env := newStaffActionEnv(t, 1)
 				env.process(tc.build(env))
+				if tc.silent {
+					env.wantNothing()
+					return
+				}
 				env.wantPostAsYourself()
 			})
 		}
@@ -286,6 +294,19 @@ func TestStaffActionAnonymous(t *testing.T) {
 			env.wantPostAsYourself()
 		}
 	})
+}
+
+// wantNothing expects no message to the Staff Group and no lookup or write.
+func (e *staffActionEnv) wantNothing() {
+	e.t.Helper()
+	if texts := textsToChat(e.fake.staffBotClient, e.staffChat); len(texts) != 0 {
+		e.t.Fatalf("messages to the Staff Group = %q, want none", texts)
+	}
+	for _, method := range []string{"getChatMember", "getChatAdministrators", "banChatMember", "restrictChatMember", "unbanChatMember"} {
+		if calls := e.fake.callsFor(method); len(calls) != 0 {
+			e.t.Fatalf("%s calls = %d, want 0 for an automatic forward", method, len(calls))
+		}
+	}
 }
 
 // wantPostAsYourself expects one keyboard-less refusal and no lookup or write.

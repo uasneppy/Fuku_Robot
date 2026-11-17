@@ -34,6 +34,10 @@ const (
 )
 
 var (
+	// tgAdminList are IDs IsUserAdmin counts as an administrator of every chat. 777000 is
+	// also the from of a linked channel's automatic forward, so such a message must never
+	// reach an admin check: helpers.NewBotCommand passes it on before any command runs
+	// (helpers.IsAutomaticForward), and a watcher that judges a sender checks it itself.
 	tgAdminList           = []int64{groupAnonymousBot, tgUserId}
 	anonChatMapExpiration = 20 * time.Second
 )
