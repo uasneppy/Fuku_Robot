@@ -59,7 +59,9 @@ func TestStringTable(t *testing.T) {
 		}
 	})
 
-	t.Run("English fallback", func(t *testing.T) {
+	// I10: a key a language lacks, or holds empty, is an error naming that language and key,
+	// never a silent English value on a page that claims to be in that language.
+	t.Run("missing in another language", func(t *testing.T) {
 		keys := []string{"captcha_web_a", "captcha_web_b"}
 		lm := newTableTestManager(map[string]map[string]any{
 			"en": {"captcha_web_a": "Alpha", "captcha_web_b": "Beta"},
@@ -67,14 +69,23 @@ func TestStringTable(t *testing.T) {
 		})
 
 		table, err := lm.StringTable([]string{"en", "es"}, keys)
-		if err != nil {
-			t.Fatalf("StringTable: %v", err)
+		if err == nil || table != nil {
+			t.Fatalf("StringTable = %v, %v; want an error and no table for a key es lacks", table, err)
 		}
-		if got := table["es"]["captcha_web_a"]; got != "Alfa" {
-			t.Errorf("es a = %q, want Alfa", got)
+		if !strings.Contains(err.Error(), `"es"`) || !strings.Contains(err.Error(), "captcha_web_b") {
+			t.Errorf("error %q does not name the language and the key", err)
 		}
-		if got := table["es"]["captcha_web_b"]; got != "Beta" {
-			t.Errorf("es b = %q, want the English Beta", got)
+	})
+
+	t.Run("empty in another language", func(t *testing.T) {
+		lm := newTableTestManager(map[string]map[string]any{
+			"en": {"captcha_web_a": "Alpha"},
+			"es": {"captcha_web_a": " "},
+		})
+
+		table, err := lm.StringTable([]string{"en", "es"}, []string{"captcha_web_a"})
+		if err == nil || table != nil {
+			t.Fatalf("StringTable = %v, %v; want an error and no table for a blank es value", table, err)
 		}
 	})
 
@@ -113,11 +124,8 @@ func TestStringTable(t *testing.T) {
 		})
 
 		table, err := lm.StringTable([]string{"de"}, []string{"captcha_web_a"})
-		if err != nil {
-			t.Fatalf("StringTable: %v", err)
-		}
-		if got := table["de"]["captcha_web_a"]; got != "Alpha" {
-			t.Errorf("de a = %q, want the English Alpha", got)
+		if err == nil || table != nil {
+			t.Fatalf("StringTable = %v, %v; want an error and no table for a language with no locale", table, err)
 		}
 	})
 }

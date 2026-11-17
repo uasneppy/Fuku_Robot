@@ -12,10 +12,11 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/utils/formatting"
 )
 
-// trS returns the translation for key, discarding the lookup error (which only
-// signals a missing key; GetString already falls back to English). It replaces
-// the repeated `func() string { t, _ := tr.GetString(key); return t }()` inline
-// closures used to set single button labels.
+// trS returns the translation for key and discards the error: GetString falls back to
+// English for a key the language lacks, and returns "" when English lacks it too (or the
+// translator has no manager), so a typo'd key gives an empty label, not an error. It
+// replaces the repeated `func() string { t, _ := tr.GetString(key); return t }()` inline
+// closures used to set single button labels; use it only for keys that exist in en.yml.
 func trS(tr *i18n.Translator, key string) string {
 	s, _ := tr.GetString(key)
 	return s
