@@ -255,6 +255,23 @@ func applyLockList(chatID int64, kinds []string, on bool) []string {
 	return failed
 }
 
+// lockCommandAuthorized is the admin decision of /lock and /unlock, made in chat, the connected
+// chat (the group itself in a group, the connected group in the bot's private chat). An anonymous
+// admin is an admin when the chat's AnonAdmin mode is on, and otherwise gets the proof prompt, whose
+// tap re-enters the command as the tapper; every other sender is judged by their own ID. A refusal
+// is answered here (the responder is silent when the proof prompt was the reply).
+func lockCommandAuthorized(b *gotgbot.Bot, ctx *ext.Context, chat *gotgbot.Chat, sender *gotgbot.Sender) bool {
+	if sender.IsAnonymousAdmin() {
+		if isAdmin, handled := chat_status.CheckAnonymousAdmin(b, ctx, chat); handled && isAdmin {
+			return true
+		}
+	} else if chat_status.RequireUserAdmin(b, ctx, chat, sender.Id()) {
+		return true
+	}
+	chat_status.NewPermissionResponder(b).Respond(ctx, "chat_status_user_admin_cmd_error", "chat_status_user_admin_button_error", chat_status.WithReplyFallback())
+	return false
+}
+
 //nolint:dupl // lockPerm has symmetric logic with unlockPerm
 func (m moduleStruct) lockPerm(b *gotgbot.Bot, ctx *ext.Context) error {
 	msg := ctx.EffectiveMessage
@@ -275,8 +292,7 @@ func (m moduleStruct) lockPerm(b *gotgbot.Bot, ctx *ext.Context) error {
 		chat_status.NewPermissionResponder(b).Respond(ctx, "chat_status_bot_not_admin", "", chat_status.WithReply())
 		return ext.EndGroups
 	}
-	if !chat_status.RequireUserAdmin(b, ctx, nil, sender.Id()) {
-		chat_status.NewPermissionResponder(b).Respond(ctx, "chat_status_user_admin_cmd_error", "chat_status_user_admin_button_error", chat_status.WithReplyFallback())
+	if !lockCommandAuthorized(b, ctx, chat, sender) {
 		return ext.EndGroups
 	}
 
@@ -350,8 +366,7 @@ func (m moduleStruct) unlockPerm(b *gotgbot.Bot, ctx *ext.Context) error {
 		chat_status.NewPermissionResponder(b).Respond(ctx, "chat_status_bot_not_admin", "", chat_status.WithReply())
 		return ext.EndGroups
 	}
-	if !chat_status.RequireUserAdmin(b, ctx, nil, sender.Id()) {
-		chat_status.NewPermissionResponder(b).Respond(ctx, "chat_status_user_admin_cmd_error", "chat_status_user_admin_button_error", chat_status.WithReplyFallback())
+	if !lockCommandAuthorized(b, ctx, chat, sender) {
 		return ext.EndGroups
 	}
 
@@ -602,4 +617,8 @@ func LoadLocks(dispatcher *ext.Dispatcher) {
 
 func init() {
 	RegisterLegacyModule("Locks", 130, LoadLocks)
+	// Raw handlers that make every check themselves: after the proof tap they re-enter with the
+	// tapper as the sender, who is checked live like anyone else.
+	RegisterAnonymousAdminHandler("lock", locksModule.lockPerm)
+	RegisterAnonymousAdminHandler("unlock", locksModule.unlockPerm)
 }

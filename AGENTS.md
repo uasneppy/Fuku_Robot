@@ -2395,6 +2395,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 ## Subsystem traps
 
 - Approved users skip antiflood, locks, blacklists, and captcha.
+- `/lock` and `/unlock` (raw handlers, `lockCommandAuthorized`) decide authority in the connected chat (the group, or the
+  connected group in the bot's private chat): an anonymous admin is an admin while the chat's AnonAdmin mode is on and
+  otherwise gets the proof prompt (`chat_status.CheckAnonymousAdmin`), whose tap re-enters the command through the
+  registry (`RegisterAnonymousAdminHandler("lock"/"unlock", ...)`, no `anonPipelineHandler`) with the tapper checked live;
+  every other sender is judged by their own ID, never the group's.
 - Antiflood first write (D-27): on a chat with no `antiflood_settings` row, the first `/setfloodmode` (pinned for ban) or
   `/delflood` stores `flood_limit` 5, the model's `default:5`, because the repository's `FirstOrCreate` insert leaves
   the limit at its Go zero value; an admin who only picks an action or turns message deleting on therefore also turns
