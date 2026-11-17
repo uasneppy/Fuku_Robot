@@ -2787,7 +2787,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   every captcha unmute (the pass, `restoreCaptchaPermissions`, restart recovery and the `captcha_muted_users` retry
   worker). While `memberReqLive()` is false it reads nothing and changes no captcha unmute: no hold read, no Telegram call,
   no error (`TestMemberReqCaptchaGuardOffUntilLive`, with a counting always-failing `memberReqHoldRead`). The switch is
-  true in production, so the guard reads a hold on every captcha unmute. Once the switch is on it reads the member's hold, and a punished requirement mute makes it re-apply `MutedPermissions` with `until_date`
+  true in production, so the guard reads a hold on every captcha unmute. Once the switch is on it reads the member's hold, and a punished requirement mute, or a pending one whose marker the
+  member's live record still carries (`memberReqPendingMuteLive`, one paced `getChatMember`, only for a pending mute hold; a
+  read that fails fails closed like an unreadable hold, Q5), makes it re-apply `MutedPermissions` with `until_date`
   the hold's own marker through `memberReqPaced` instead of unmuting, so a captcha pass never frees a held member and the
   marker stays valid for "I fixed it" (D-08). A hold-read error fails closed: the guard returns an error wrapped with the
   chat and user IDs only (`errMemberReqHoldUnreadable`, none of the database's text), `isPermanentUnmuteError` answers
