@@ -891,6 +891,7 @@ mute_reply_to_dmute: ¡Necesitas responder a un mensaje para eliminarlo y silenc
 bot_updates_need_admin: ¡Necesitas ser administrador para hacer esto!
 
 # Rules module strings
+rules_reply_needs_text: "Ese mensaje no tiene texto ni pie de foto para usar como reglas. Responde a un mensaje con texto o escribe las reglas después del comando."
 rules_need_text: "¡Necesitas darme reglas para establecer!\nYa sea respondiendo a un mensaje para proporcionarlas con el comando."
 
 # Notes module strings

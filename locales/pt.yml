@@ -875,6 +875,7 @@ mute_reply_to_dmute: Você precisa responder a uma mensagem para deletá-la e si
 bot_updates_need_admin: Você precisa ser admin para fazer isso!
 
 # Rules module strings
+rules_reply_needs_text: "Essa mensagem não tem texto nem legenda para usar como regras. Responda a uma mensagem com texto ou escreva as regras depois do comando."
 rules_need_text: "Você precisa me dar regras para definir!\nOu responda a uma mensagem para fornecê-las com o comando."
 
 # Notes module strings

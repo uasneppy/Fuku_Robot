@@ -259,6 +259,7 @@ mute_reply_to_dmute: "Reply to a message to delete it and mute the user."
 bot_updates_need_admin: "Access denied. You need to be an admin to do this."
 
 # Rules module strings
+rules_reply_needs_text: "That message has no text or caption to use as the rules. Reply to a message with text, or put the rules after the command."
 rules_need_text: "Give me the regulations to file.\nReply to a message, or put them after the command."
 
 # Notes module strings

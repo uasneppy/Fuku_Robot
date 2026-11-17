@@ -885,6 +885,7 @@ mute_reply_to_dmute: Anda perlu membalas pesan untuk menghapusnya dan membisukan
 bot_updates_need_admin: Anda perlu menjadi admin untuk melakukan ini!
 
 # Rules module strings
+rules_reply_needs_text: "Pesan itu tidak punya teks atau keterangan untuk dijadikan aturan. Balas pesan yang berisi teks, atau tulis aturannya setelah perintah."
 rules_need_text: "Anda perlu memberikan aturan untuk diatur!\nBalas ke pesan untuk memberikannya dengan perintah."
 
 # Notes module strings
