@@ -82,7 +82,7 @@ func ExtractNoteAndFilter(msg *gotgbot.Message, isFilter bool, language string) 
 
 	var (
 		rawText string
-		args    = strings.Fields(msg.Text)[1:]
+		args    = commandArgs(msg)
 	)
 	replyMsg := msg.ReplyToMessage
 
@@ -196,7 +196,7 @@ func ExtractWelcome(msg *gotgbot.Message, greetingType string, language string) 
 	result.ErrorMsg = fmt.Sprintf(template, greetingType)
 	var (
 		rawText string
-		args    = strings.Fields(msg.Text)[1:]
+		args    = commandArgs(msg)
 	)
 	_buttons := make([]tgmd2html.ButtonV2, 0)
 	replyMsg := msg.ReplyToMessage
