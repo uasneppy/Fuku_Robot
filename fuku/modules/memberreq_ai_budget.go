@@ -68,8 +68,8 @@ const (
 	// memberReqAICappedFleet means the fleet's allowance is used up: the caller's unknown is sticky
 	// and the group is latched until the end of the UTC hour (SEC-02).
 	memberReqAICappedFleet
-	// memberReqAIBudgetFault means a counter could not be read. It is a fault of the moment: the
-	// caller's unknown is plain, and the call is never made without a unit.
+	// memberReqAIBudgetFault means a counter could not be read. It is a state of the system, not a fault of one answer (WR-03): the caller's unknown is sticky, the
+	// chat is latched briefly, and the call is never made without a unit.
 	memberReqAIBudgetFault
 )
 

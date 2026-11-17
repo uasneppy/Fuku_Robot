@@ -48,7 +48,9 @@ type memberReqLookupMode struct {
 	Fresh bool
 	// Classify lets the channel rule read a member lookup that could not be answered as
 	// inert when the bot is shown to be no administrator of the channel (the held release
-	// and "I fixed it" set it; the punishing path never does, so it makes no extra call).
+	// and "I fixed it" set it). The punishing path never sets it: it still asks the bot's
+	// standing for such a lookup (once per channel per flight, leaving the cna fact behind,
+	// WR-01), but its own answer stays unknown for that call.
 	Classify bool
 	// Names are the member's three profile names as the live record shows them, for the rule that
 	// judges names (the AI rule; the photo and channel rules ignore them). A nil value means the
