@@ -347,6 +347,39 @@ func TestStaffActionRereadsBeforeWrite(t *testing.T) {
 	}
 }
 
+// TestStaffActionSkipsUnlinkedGroup: a group unlinked while the fan-out runs gets no
+// write. The link is read fresh right before the write and must still be the same
+// link of the same Staff Group (S2). The unlink lands after the prior state is
+// stored, the last step before the write; the other group is acted on.
+func TestStaffActionSkipsUnlinkedGroup(t *testing.T) {
+	env := newStaffActionEnv(t, 2)
+	g1, g2 := env.groups[0], env.groups[1]
+	env.fake.setMember(g1, staffTestTarget, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+	env.fake.setMember(g2, staffTestTarget, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+	previous := staffSavePrior
+	staffSavePrior = func(actionID uint, groupChatID int64, prior staff.ActionPrior) error {
+		err := previous(actionID, groupChatID, prior)
+		if groupChatID == g1 {
+			link, lookupErr := staff.GetLinkOfGroupFresh(g1)
+			if lookupErr != nil || link == nil {
+				t.Errorf("link of group A = %v, %v", link, lookupErr)
+			} else if deleted, delErr := staff.DeleteLink(link.ID); delErr != nil || !deleted {
+				t.Errorf("DeleteLink = %v, %v", deleted, delErr)
+			}
+		}
+		return err
+	}
+	t.Cleanup(func() { staffSavePrior = previous })
+
+	summary, _ := env.runStaffCommand("/ban 4242")
+
+	if writes := env.writes(g1); len(writes) != 0 {
+		t.Fatalf("write calls in the unlinked group = %+v, want none", writes)
+	}
+	wantSkippedLine(t, summary, "Group A", "staff_act_skip_no_longer_linked")
+	wantDoneLine(t, summary, "Group B")
+}
+
 func TestStaffActionKickClearsMute(t *testing.T) {
 	env := newStaffActionEnv(t, 1)
 	g1 := env.groups[0]

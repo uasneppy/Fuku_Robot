@@ -167,6 +167,8 @@ func staffReasonText(tr *i18n.Translator, r staffReason, detail string) string {
 		text, _ = tr.GetString("staff_act_skip_restricted_longer")
 	case staffReasonSkipLinkRemoved:
 		text, _ = tr.GetString("staff_act_skip_link_removed")
+	case staffReasonSkipNoLongerLinked:
+		text, _ = tr.GetString("staff_act_skip_no_longer_linked")
 	case staffReasonSkipStaffGroup:
 		text, _ = tr.GetString("staff_act_skip_staff_group")
 	case staffReasonFailOwnerUnknown:

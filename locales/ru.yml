@@ -2429,6 +2429,7 @@ staff_act_skip_restricted_longer: "уже ограничен на более д�
 staff_act_skip_not_banned: "не забанен"
 staff_act_skip_not_muted: "не в муте"
 staff_act_skip_link_removed: "привязка удалена, владелец сменился"
+staff_act_skip_no_longer_linked: "больше не связана"
 staff_act_skip_staff_group: "это штаб-группа"
 staff_act_fail_owner_unknown: "не удалось проверить владельца группы"
 staff_act_fail_lookup: "не удалось проверить участников"

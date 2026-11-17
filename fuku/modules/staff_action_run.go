@@ -537,8 +537,10 @@ func staffGroupPrechecks(
 	}
 
 	switch recheckLink(b, link, pass) {
-	case staffRecheckRemoved, staffRecheckGone:
+	case staffRecheckRemoved:
 		return early(staffReasonSkipLinkRemoved, "")
+	case staffRecheckGone:
+		return early(staffReasonSkipNoLongerLinked, "")
 	case staffRecheckUnknown:
 		if interrupted() {
 			return early(staffReasonFailInterrupted, "")
@@ -575,6 +577,27 @@ func staffGroupPrechecks(
 		return early(classifyStaffLookupFailure(ctx, b, link.GroupChatID, err))
 	}
 	return target, staffGroupResult{}, true
+}
+
+// staffLinkCurrentLookup reads a group's link fresh right before a staff write. It is
+// a test seam over staff.GetLinkOfGroupFresh.
+var staffLinkCurrentLookup = staff.GetLinkOfGroupFresh
+
+// staffLinkStillCurrent is the last check before a staff action's or an undo's write
+// in a group (S2): the group's link, read fresh, must still be the link the run was
+// started with, of the same Staff Group. A group unlinked, or linked again, since the
+// recheck gets no write and reads "no longer linked"; a failed read fails the group.
+// It returns the empty reason when the write may go ahead.
+func staffLinkStillCurrent(link models.StaffGroupLink) staffReason {
+	current, err := staffLinkCurrentLookup(link.GroupChatID)
+	if err != nil {
+		log.Errorf("[StaffActions] link of group %d could not be read before the write: %v", link.GroupChatID, err)
+		return staffReasonFailInternal
+	}
+	if !staffSameLink(current, link) {
+		return staffReasonSkipNoLongerLinked
+	}
+	return ""
 }
 
 // staffLockdownBanLookup reports whether a live ban of the user in the chat that ends
@@ -635,6 +658,9 @@ func runStaffActionInGroup(
 	}
 	if interrupted() {
 		return result(staffReasonFailInterrupted, "")
+	}
+	if reason := staffLinkStillCurrent(link); reason != "" {
+		return result(reason, "")
 	}
 	if err := executeStaffCall(ctx, b, link.GroupChatID, card.Target, verdict, newUntil); err != nil {
 		var changed *staffStateChangedError

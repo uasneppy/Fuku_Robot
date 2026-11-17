@@ -1366,6 +1366,7 @@ staff_act_skip_restricted_longer: "уже обмежений на довший �
 staff_act_skip_not_banned: "не в бані"
 staff_act_skip_not_muted: "не в муті"
 staff_act_skip_link_removed: "прив'язку прибрано, власник змінився"
+staff_act_skip_no_longer_linked: "більше не прив'язана"
 staff_act_skip_staff_group: "це Staff-група"
 staff_act_fail_owner_unknown: "не вдалося перевірити власника групи"
 staff_act_fail_lookup: "не вдалося перевірити учасників"

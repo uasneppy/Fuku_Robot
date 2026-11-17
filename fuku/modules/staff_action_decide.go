@@ -57,16 +57,19 @@ const (
 	// later date or for good, and a mute would replace that restriction with a shorter one.
 	staffReasonSkipRestrictedLonger staffReason = "skip_restricted_longer"
 	staffReasonSkipLinkRemoved      staffReason = "skip_link_removed"
-	staffReasonSkipStaffGroup       staffReason = "skip_staff_group"
-	staffReasonFailOwnerUnknown     staffReason = "fail_owner_unknown"
-	staffReasonFailLookup           staffReason = "fail_lookup"
-	staffReasonFailTelegram         staffReason = "fail_telegram"
-	staffReasonFailRateLimited      staffReason = "fail_rate_limited"
-	staffReasonFailBotNotAdmin      staffReason = "fail_bot_not_admin"
-	staffReasonFailBotNoRights      staffReason = "fail_bot_no_rights"
-	staffReasonFailGroupNotFound    staffReason = "fail_group_not_found"
-	staffReasonFailInternal         staffReason = "fail_internal"
-	staffReasonFailInterrupted      staffReason = "fail_interrupted"
+	// staffReasonSkipNoLongerLinked: the group was unlinked, or linked again under a
+	// new link, after the run started, so it got no write.
+	staffReasonSkipNoLongerLinked staffReason = "skip_no_longer_linked"
+	staffReasonSkipStaffGroup     staffReason = "skip_staff_group"
+	staffReasonFailOwnerUnknown   staffReason = "fail_owner_unknown"
+	staffReasonFailLookup         staffReason = "fail_lookup"
+	staffReasonFailTelegram       staffReason = "fail_telegram"
+	staffReasonFailRateLimited    staffReason = "fail_rate_limited"
+	staffReasonFailBotNotAdmin    staffReason = "fail_bot_not_admin"
+	staffReasonFailBotNoRights    staffReason = "fail_bot_no_rights"
+	staffReasonFailGroupNotFound  staffReason = "fail_group_not_found"
+	staffReasonFailInternal       staffReason = "fail_internal"
+	staffReasonFailInterrupted    staffReason = "fail_interrupted"
 	// staffReasonFailTimeRanOut: the fixed end date of a timed ban or mute was under
 	// staffUntilMinLead away when the write was due, so nothing was sent.
 	staffReasonFailTimeRanOut staffReason = "fail_time_ran_out"
@@ -95,7 +98,7 @@ func staffReasonOutcome(r staffReason) staffOutcome {
 		staffReasonSkipLinkRemoved, staffReasonSkipStaffGroup, staffReasonSkipNotInGroup,
 		staffReasonSkipAlreadyMuted, staffReasonSkipNotBanned, staffReasonSkipNotMuted,
 		staffReasonSkipNotApplied, staffReasonSkipChangedSince, staffReasonSkipRestrictionEnded,
-		staffReasonSkipNoPriorState, staffReasonSkipRestrictedLonger:
+		staffReasonSkipNoPriorState, staffReasonSkipRestrictedLonger, staffReasonSkipNoLongerLinked:
 		return staffOutcomeSkipped
 	case staffReasonFailOwnerUnknown, staffReasonFailLookup, staffReasonFailTelegram,
 		staffReasonFailRateLimited, staffReasonFailBotNotAdmin, staffReasonFailBotNoRights,

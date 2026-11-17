@@ -3663,8 +3663,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `fwdWatchClient` to take the bot's delete right away).
 - StaffActions (staff `/ban` across linked groups): per-group authority is only the live `getChatMember(group, issuer)`
   answer, creator or administrator with `can_restrict_members`, never the cached admin predicates. The link owner is
-  rechecked through `recheckLink`. No write ever targets the Staff Group and nothing is posted into a linked group's own
-  chat. Each group where an action was applied gets one post in its log channel under the admin category
+  rechecked through `recheckLink`, which also reads the group's link fresh once both owners match and answers
+  `staffRecheckGone` when the row is gone or is another row (an unlink, or a link made again); the fan-out reads that
+  as "no longer linked" (`staffReasonSkipNoLongerLinked`), while a removal for an owner change stays "link removed".
+  Right before each write, of an action and of an undo alike, the link is read fresh once more
+  (`staffLinkStillCurrent`, seam `staffLinkCurrentLookup`) and must still be the same link row of the same Staff Group,
+  else the group gets no write and reads "no longer linked" (a failed read fails the group) (`TestRecheckLinkGoneRow`,
+  `TestStaffActionSkipsUnlinkedGroup`, `TestStaffUndoSkipsUnlinkedGroup`). No write ever targets the Staff Group and
+  nothing is posted into a linked group's own chat. Each group where an action was applied gets one post in its log channel under the admin category
   (`staff_log.go`), sent through `staffPaced` after the group's result is set, naming the issuer and target and saying
   "via Staff Group" but never the Staff Group's title or ID. A failed post never changes that result. Undos are
   logged the same way, as `#STAFF_UNDO` through the shared `sendStaffLogPost`: one post per group where the undo

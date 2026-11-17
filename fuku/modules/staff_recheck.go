@@ -30,8 +30,9 @@ const (
 	staffRecheckRemoved
 	// staffRecheckUnknown means a Telegram answer was missing; nothing changed.
 	staffRecheckUnknown
-	// staffRecheckGone means the link was already removed, by another caller or
-	// because the maker no longer matches the stored row; nothing was posted.
+	// staffRecheckGone means the link was already removed, by another caller, an
+	// unlink or because the maker no longer matches the stored row, or the group's
+	// current link is another row; nothing was posted.
 	staffRecheckGone
 )
 
@@ -190,6 +191,16 @@ func recheckLink(b *gotgbot.Bot, link models.StaffGroupLink, pass *staffOwnerPas
 	}
 
 	if groupResult == chat_status.OwnerMatch && staffResult == chat_status.OwnerMatch {
+		// The owners still match, but the row may be gone (an unlink) or replaced by a
+		// new link: only the very row this link names is OK.
+		current, err := staff.GetLinkOfGroupFresh(link.GroupChatID)
+		if err != nil {
+			log.Warnf("[Staff] recheck: link of group %d could not be read: %v", link.GroupChatID, err)
+			return staffRecheckUnknown
+		}
+		if !staffSameLink(current, link) {
+			return staffRecheckGone
+		}
 		return staffRecheckOK
 	}
 	if groupErr != nil {
@@ -199,6 +210,12 @@ func recheckLink(b *gotgbot.Bot, link models.StaffGroupLink, pass *staffOwnerPas
 		log.Warnf("[Staff] recheck: owner check for Staff Group %d failed: %v", link.StaffChatID, staffErr)
 	}
 	return staffRecheckUnknown
+}
+
+// staffSameLink reports whether current, a fresh read of a group's link, is still the
+// link row want names, of the same Staff Group.
+func staffSameLink(current *models.StaffGroupLink, want models.StaffGroupLink) bool {
+	return current != nil && current.ID == want.ID && current.StaffChatID == want.StaffChatID
 }
 
 // staffHealthNoticeText returns the Staff Group heads-up for a link's new health,

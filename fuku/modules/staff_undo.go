@@ -762,6 +762,9 @@ func runStaffUndoInGroup(
 	if ctx.Err() != nil {
 		return result(staffReasonFailInterrupted, "")
 	}
+	if reason := staffLinkStillCurrent(link); reason != "" {
+		return result(reason, "")
+	}
 	// From here the write call has been made, whatever it returns: the group counts as
 	// reached, so the run keeps its undo claim (D-09).
 	reached := func(reason staffReason, detail string) staffGroupResult {

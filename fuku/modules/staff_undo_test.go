@@ -508,6 +508,36 @@ func TestStaffUndoAllSkipped(t *testing.T) {
 	wantUndoClaimGivenBack(t, msgID)
 }
 
+// TestStaffUndoSkipsUnlinkedGroup: an undo reads the group's link fresh right before
+// its write too, so a group unlinked after the undo's owner recheck gets no write
+// (S2).
+func TestStaffUndoSkipsUnlinkedGroup(t *testing.T) {
+	env := newStaffActionEnv(t, 2)
+	presser := env.undoPresser("Bob")
+	_, msgID := env.startRun("/ban 4242")
+	env.waitRuns()
+	action, _ := recordOfCard(t, msgID)
+	unlinked := env.groups[1]
+	previous := staffLinkCurrentLookup
+	staffLinkCurrentLookup = func(groupChatID int64) (*models.StaffGroupLink, error) {
+		if groupChatID == unlinked {
+			return nil, nil
+		}
+		return previous(groupChatID)
+	}
+	t.Cleanup(func() { staffLinkCurrentLookup = previous })
+
+	cardMsgID := env.runUndo(presser, msgID, action.ID)
+
+	summary := env.lastEditText(env.staffChat, cardMsgID)
+	wantDoneLine(t, summary, "Group A")
+	wantSkippedLine(t, summary, "Group B", "staff_act_skip_no_longer_linked")
+	if got := len(env.callsTo("unbanChatMember", unlinked)); got != 0 {
+		t.Fatalf("the unlinked group got %d unban calls, want none", got)
+	}
+	wantMember(t, env.fake, unlinked, staffTestTarget, gotgbot.ChatMemberStatusKicked)
+}
+
 func TestStaffUndoPresserNeedsTheRestrictRight(t *testing.T) {
 	env := newStaffActionEnv(t, 2)
 	presser := env.undoPresser("Bob")
