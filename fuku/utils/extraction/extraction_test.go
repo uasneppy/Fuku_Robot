@@ -1027,3 +1027,66 @@ func TestParseTemporaryDuration(t *testing.T) {
 		})
 	}
 }
+
+func TestExtractUserAndTextExplicitTargetBeatsReply(t *testing.T) {
+	client := &extractionBotClient{}
+	bot := newExtractionBot(client)
+
+	if err := db.DB.Create(&db.User{UserId: 777124, UserName: "explicitextract", Name: "Explicit"}).Error; err != nil {
+		t.Fatalf("Create explicit user failed: %v", err)
+	}
+
+	withReply := func(text string) *ext.Context {
+		ctx := newExtractionContext(bot, text)
+		ctx.EffectiveMessage.ReplyToMessage = &gotgbot.Message{
+			MessageId: 50,
+			From:      &gotgbot.User{Id: 1234, FirstName: "Reply Target"},
+		}
+		return ctx
+	}
+
+	t.Run("username beats the reply", func(t *testing.T) {
+		gotID, gotText := ExtractUserAndText(bot, withReply("/ban @explicitextract cached reason"))
+		if gotID != 777124 || gotText != "cached reason" {
+			t.Fatalf("ExtractUserAndText = (%d, %q), want (777124, cached reason)", gotID, gotText)
+		}
+	})
+
+	t.Run("text mention beats the reply", func(t *testing.T) {
+		ctx := withReply("/ban Alice entity reason")
+		ctx.EffectiveMessage.Entities = []gotgbot.MessageEntity{
+			{Type: "text_mention", Offset: 5, Length: 5, User: &gotgbot.User{Id: 888999, FirstName: "Alice"}},
+		}
+		gotID, gotText := ExtractUserAndText(bot, ctx)
+		if gotID != 888999 || gotText != " entity reason" {
+			t.Fatalf("ExtractUserAndText = (%d, %q), want (888999, \" entity reason\")", gotID, gotText)
+		}
+	})
+
+	t.Run("numeric id beats the reply", func(t *testing.T) {
+		gotID, gotText := ExtractUserAndText(bot, withReply("/ban 555123 repeated spam"))
+		if gotID != 555123 || gotText != "repeated spam" {
+			t.Fatalf("ExtractUserAndText = (%d, %q), want (555123, repeated spam)", gotID, gotText)
+		}
+	})
+
+	t.Run("plain words fall back to the reply", func(t *testing.T) {
+		gotID, gotText := ExtractUserAndText(bot, withReply("/ban spam words"))
+		if gotID != 1234 || gotText != "spam words" {
+			t.Fatalf("ExtractUserAndText = (%d, %q), want (1234, spam words)", gotID, gotText)
+		}
+	})
+
+	t.Run("unresolved username is refused", func(t *testing.T) {
+		before := len(client.callsFor("sendMessage"))
+		client.errors["getChat"] = errors.New("chat not found")
+		defer delete(client.errors, "getChat")
+		gotID, _ := ExtractUserAndText(bot, withReply("/ban @nobodyholdsthis reason"))
+		if gotID != -1 {
+			t.Fatalf("ExtractUserAndText(unknown) = %d, want -1", gotID)
+		}
+		if got := len(client.callsFor("sendMessage")) - before; got != 1 {
+			t.Fatalf("sendMessage calls = %d, want the not-found reply", got)
+		}
+	})
+}

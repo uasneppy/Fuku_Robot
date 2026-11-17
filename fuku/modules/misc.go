@@ -126,7 +126,10 @@ func (moduleStruct) getId(b *gotgbot.Bot, ctx *ext.Context) error {
 	}
 
 	if userId != 0 {
-		if msg.ReplyToMessage != nil {
+		// The reply's details are shown only when the resolved user is the reply's
+		// sender: an explicit target (/id @name as a reply) beats the reply.
+		reply := msg.ReplyToMessage
+		if reply != nil && reply.GetSender() != nil && reply.GetSender().Id() == userId {
 			tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 			temp, _ := tr.GetString("misc_chat_id")
 			text := fmt.Sprintf(temp, msg.Chat.Id)

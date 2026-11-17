@@ -238,7 +238,11 @@ func ExtractUserAndText(b *gotgbot.Bot, ctx *ext.Context) (int64, string) {
 			}
 		}
 	}
-	if !isId && prevMessage != nil && hasArgs {
+	// An explicit target (a text_mention at the argument, an @username or a
+	// numeric ID) always beats the reply: the reply is the fallback only when
+	// the first argument named nobody, and the whole argument is then the text.
+	explicitUser := userId != 0
+	if !isId && !explicitUser && prevMessage != nil && hasArgs {
 		_, parseErr := uuid.Parse(args[1])
 		userId, text = IdFromReply(msg)
 		if parseErr == nil {
