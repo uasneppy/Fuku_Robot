@@ -3431,7 +3431,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   marker ban, keeps a ban of another date, and cancels the row when the member carries no ban at all, so a ban that
   never landed is not counted as kept (`TestLockdownLiftChecksBansWhoseAnswerFailed`). The other joiners still pending
   when the lift starts are cancelled and never banned. Rows are handled in the order they were recorded, and the tally is posted once, by the
-  replica whose `FinishLift` conditional update won; a lockdown with nothing to report posts none.
+  replica whose `FinishLift` conditional update won; a lockdown with nothing to report posts none. When the lift itself
+  wins `FinishLift` (nothing was left for the worker, e.g. only kept bans), the caller (`/unlockdown`, the alert's Lift
+  Confirm, the settings menu's Lift Yes) posts that same tally after its own announcement through
+  `lockdownPostInlineTally` (`TestLockdownInlineLiftPostsTally`).
 - A lockdown has no end date but its bans do: each joiner's ban lasts `lockdownBanSpan` (330 days) from the join, so a
   lockdown that outlasts that stops banning the raiders it removed (Telegram bans of 30 s to 366 days are the only
   finite ones, and a longer one would be permanent and look like a deliberate ban). This is an accepted limit; the

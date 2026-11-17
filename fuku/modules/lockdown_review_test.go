@@ -233,6 +233,35 @@ func TestLockdownRemindersReachEveryLockdown(t *testing.T) {
 	}
 }
 
+// TestLockdownInlineLiftPostsTally covers a lift with nothing left for the worker
+// (here the only joiner's ban is a deliberate one, kept): /unlockdown itself wins
+// FinishLift, and the tally must still be posted, exactly once, as the worker posts it
+// when it finishes a lift.
+func TestLockdownInlineLiftPostsTally(t *testing.T) {
+	env := newLockdownEnv(t)
+	locked := env.lockAsAdmin("raid")
+	raider := env.newJoiner("Raider")
+	env.join(raider, raider, "https://t.me/+abc")
+	env.fake.setMember(env.chat.Id, raider.Id, staffFakeMember{
+		Status:    gotgbot.ChatMemberStatusKicked,
+		UntilDate: 0,
+	})
+	env.cycle()
+	if got := env.joinerRow(raider.Id); got.State != models.JoinerStateKept {
+		t.Fatalf("setup: joiner is %q, want kept", got.State)
+	}
+
+	env.send(env.admin, "/unlockdown")
+	if row, err := lockdown.GetFresh(locked.ID); err != nil || row == nil || row.State != models.LockdownStateLifted {
+		t.Fatalf("lockdown after /unlockdown = %+v, %v, want lifted at once", row, err)
+	}
+	env.cycle()
+
+	if got := env.messagesWith(staffMarker("lockdown_lift_tally_kept") + " 1"); got != 1 {
+		t.Errorf("tally messages naming the one kept ban = %d, want 1", got)
+	}
+}
+
 // TestLockdownLiftChecksBansWhoseAnswerFailed covers a ban call that answered a 5xx
 // but may have taken effect: the row is left pending with an attempt counted, or ends
 // ban_failed after three. The lift must still look at those joiners live and remove

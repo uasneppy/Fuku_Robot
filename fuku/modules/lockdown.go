@@ -428,7 +428,22 @@ func (m moduleStruct) unlockdown(b *gotgbot.Bot, ctx *ext.Context) error {
 	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 	res := applyLockdownLift(context.Background(), b, chat.Id, actor)
 	replyLockdown(b, msg, lockdownLiftApplyText(tr, res, actor.Id))
+	if res.Outcome == liftApplyDone {
+		lockdownPostInlineTally(b, res.Row, res.Lift)
+	}
 	return ext.EndGroups
+}
+
+// lockdownPostInlineTally posts the lift's tally when the caller's own liftLockdownRow
+// won FinishLift: the worker then has no lift left to finish, so it would post none.
+// Every lift caller calls it after its own announcement, so the tally follows the lifted
+// notice exactly as it does when the worker finishes a lift, and a lift with nothing to
+// report posts nothing (lockdownPostTally).
+func lockdownPostInlineTally(b *gotgbot.Bot, row *models.ChatLockdown, res lockdownLiftResult) {
+	if row == nil || res.Outcome != lockdownLiftDone || !res.Finished {
+		return
+	}
+	lockdownPostTally(context.Background(), b, *row)
 }
 
 // lockdownLiftApplyOutcome is how one applyLockdownLift call ended.

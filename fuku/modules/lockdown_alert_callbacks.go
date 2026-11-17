@@ -358,6 +358,7 @@ func (m moduleStruct) lockdownLiftConfirm(
 	editStaffCallbackMessage(b, query, lockdownGroupText(tr, "lockdown_alert_lift_done", ld,
 		lockdownNameToken, lockdownMention(query.From.Id, name)))
 	lockdownAnnounceLift(b, ld, query.From.Id, name, res)
+	lockdownPostInlineTally(b, ld, res)
 	return ext.EndGroups
 }
 
