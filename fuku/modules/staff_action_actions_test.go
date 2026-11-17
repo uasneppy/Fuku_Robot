@@ -285,6 +285,32 @@ func TestStaffActionMuteNeverShortens(t *testing.T) {
 	wantSkippedLine(t, summary, "Group B", "staff_act_skip_already_muted")
 }
 
+// TestStaffActionMuteNeverShortensRestriction: a member restricted (not muted) until
+// later than the staff mute, or for good, keeps that restriction. restrictChatMember
+// replaces it, so a timed mute would end it sooner (S3).
+func TestStaffActionMuteNeverShortensRestriction(t *testing.T) {
+	env := newStaffActionEnv(t, 2)
+	g1, g2 := env.groups[0], env.groups[1]
+	media := gotgbot.ChatPermissions{CanSendMessages: true}
+	env.fake.setMember(g1, staffTestTarget, staffFakeMember{
+		Status: gotgbot.ChatMemberStatusRestricted, IsMember: true, CanSendMessages: true,
+		UntilDate: time.Now().Add(48 * time.Hour).Unix(), Perms: &media,
+	})
+	env.fake.setMember(g2, staffTestTarget, staffFakeMember{
+		Status: gotgbot.ChatMemberStatusRestricted, IsMember: true, CanSendMessages: true, Perms: &media,
+	})
+
+	summary, _ := env.runStaffCommand("/mute 4242 1h")
+
+	for _, group := range []int64{g1, g2} {
+		if writes := env.writes(group); len(writes) != 0 {
+			t.Fatalf("write calls in group %d = %+v, want none over a longer restriction", group, writes)
+		}
+	}
+	wantSkippedLine(t, summary, "Group A", "staff_act_skip_restricted_longer")
+	wantSkippedLine(t, summary, "Group B", "staff_act_skip_restricted_longer")
+}
+
 func TestStaffActionKickClearsMute(t *testing.T) {
 	env := newStaffActionEnv(t, 1)
 	g1 := env.groups[0]

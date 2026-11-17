@@ -2330,6 +2330,7 @@ staff_act_skip_target_service: "यह टेलीग्राम का सर
 staff_act_skip_already_banned: "पहले से बैन है"
 staff_act_skip_not_in_group: "ग्रुप में नहीं है"
 staff_act_skip_already_muted: "पहले से म्यूट है"
+staff_act_skip_restricted_longer: "पहले से अधिक समय तक प्रतिबंधित है"
 staff_act_skip_not_banned: "बैन नहीं है"
 staff_act_skip_not_muted: "म्यूट नहीं है"
 staff_act_skip_link_removed: "लिंक हटा दिया गया, मालिक बदल गया"

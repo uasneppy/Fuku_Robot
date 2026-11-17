@@ -3682,7 +3682,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   kicked target with an end date, `runStaffActionInGroup` asks `staffLockdownBanLookup` (`lockdown.HasJoinerBanFresh`
   on the live `until_date`) and sets `staffTargetState.LockdownBan`, and `decideStaffBan` then sends the ban even when
   it ends sooner, so the staff ban gets its own end date and the lockdown's lift keeps it (D-05). A failed lookup
-  fails that group as an internal error with no write. Undo decisions live in `decideStaffUndo` alone, beside `decideStaffAction`, and `executeStaffUndoCall` switches only
+  fails that group as an internal error with no write. A staff mute never shortens a restriction either: a member
+  restricted (not muted) until a later date than the mute's, or for good while the mute is timed, is skipped "already
+  restricted for longer" (`staffReasonSkipRestrictedLonger`), because `restrictChatMember` would replace that
+  restriction (`TestStaffActionMuteNeverShortensRestriction`). Accepted limit (owner decision S3-ban): a timed staff ban
+  (`/tban`, `/ban <duration>`) on a member restricted until later than the ban's end, or for good, is still sent, so
+  when the ban ends the member comes back without that restriction. Undo decisions live in `decideStaffUndo` alone, beside `decideStaffAction`, and `executeStaffUndoCall` switches only
   on its verdict. Its one exception to the never-lift rule, a restrict or ban sent to a kicked or left target, is
   allowed only when the live state equals what the staff action left behind. An undo touches only groups where the
   action was applied, rechecks each one live for the presser (creator, or administrator with `can_restrict_members`,

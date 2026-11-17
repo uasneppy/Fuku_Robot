@@ -27,6 +27,7 @@ func TestStaffActionDecisionTable(t *testing.T) {
 		mutedIn  = staffState(gotgbot.ChatMemberStatusRestricted, true, true, 0)
 		mutedInT = staffState(gotgbot.ChatMemberStatusRestricted, true, true, until)
 		freeIn   = staffState(gotgbot.ChatMemberStatusRestricted, true, false, 0)
+		freeInT  = staffState(gotgbot.ChatMemberStatusRestricted, true, false, until)
 		mutedOut = staffState(gotgbot.ChatMemberStatusRestricted, false, true, 0)
 		freeOut  = staffState(gotgbot.ChatMemberStatusRestricted, false, false, 0)
 	)
@@ -67,6 +68,11 @@ func TestStaffActionDecisionTable(t *testing.T) {
 		{"mute muted until T with the same T", staffKindMute, mutedInT, until, staffVerdict{staffCallNone, staffReasonSkipAlreadyMuted}},
 		{"mute muted until T with a later end", staffKindMute, mutedInT, until + 1, staffVerdict{staffCallMute, staffReasonMuted}},
 		{"mute muted until T with an earlier end", staffKindMute, mutedInT, until - 1, staffVerdict{staffCallNone, staffReasonSkipAlreadyMuted}},
+		{"mute restricted for good with a timed mute", staffKindMute, freeIn, until, staffVerdict{staffCallNone, staffReasonSkipRestrictedLonger}},
+		{"mute restricted until T with an earlier end", staffKindMute, freeInT, until - 1, staffVerdict{staffCallNone, staffReasonSkipRestrictedLonger}},
+		{"mute restricted until T with the same T", staffKindMute, freeInT, until, staffVerdict{staffCallMute, staffReasonMuted}},
+		{"mute restricted until T with a later end", staffKindMute, freeInT, until + 1, staffVerdict{staffCallMute, staffReasonMuted}},
+		{"mute restricted until T with permanent", staffKindMute, freeInT, 0, staffVerdict{staffCallMute, staffReasonMuted}},
 		{"mute restricted non-member", staffKindMute, mutedOut, 0, staffVerdict{staffCallNone, staffReasonSkipNotInGroup}},
 		{"mute left", staffKindMute, left, 0, staffVerdict{staffCallNone, staffReasonSkipNotInGroup}},
 		{"mute kicked", staffKindMute, kicked, 0, staffVerdict{staffCallNone, staffReasonSkipNotInGroup}},
@@ -239,6 +245,11 @@ func TestStaffActionDecisionInvariants(t *testing.T) {
 				if kind == staffKindBan && st.Status == gotgbot.ChatMemberStatusKicked && st.LockdownBan &&
 					v.Call != staffCallBan {
 					t.Fatalf("a staff ban over a lockdown ban was not sent: %s", label)
+				}
+				// (5c) a mute never replaces a restriction that ends later (S3).
+				if v.Call == staffCallMute && st.Status == gotgbot.ChatMemberStatusRestricted &&
+					staffEndsLater(st.Until, newUntil) {
+					t.Fatalf("a mute replaced a restriction that ends later: %s", label)
 				}
 				// (6) a done reason stands exactly for a call that was made.
 				if done := staffReasonOutcome(v.Reason) == staffOutcomeDone; done != (v.Call != staffCallNone) {

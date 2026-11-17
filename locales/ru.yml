@@ -2425,6 +2425,7 @@ staff_act_skip_target_service: "это служебный аккаунт Telegra
 staff_act_skip_already_banned: "уже забанен"
 staff_act_skip_not_in_group: "нет в группе"
 staff_act_skip_already_muted: "уже в муте"
+staff_act_skip_restricted_longer: "уже ограничен на более долгий срок"
 staff_act_skip_not_banned: "не забанен"
 staff_act_skip_not_muted: "не в муте"
 staff_act_skip_link_removed: "привязка удалена, владелец сменился"

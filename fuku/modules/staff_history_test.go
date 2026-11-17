@@ -729,7 +729,7 @@ func TestStaffReasonText(t *testing.T) {
 		staffReasonSkipIssuerNotAdmin, staffReasonSkipIssuerNoRight, staffReasonSkipTargetAdmin,
 		staffReasonSkipTargetBot, staffReasonSkipTargetService, staffReasonSkipAlreadyBanned,
 		staffReasonSkipNotInGroup, staffReasonSkipAlreadyMuted, staffReasonSkipNotBanned,
-		staffReasonSkipNotMuted, staffReasonSkipLinkRemoved, staffReasonSkipStaffGroup,
+		staffReasonSkipNotMuted, staffReasonSkipRestrictedLonger, staffReasonSkipLinkRemoved, staffReasonSkipStaffGroup,
 		staffReasonFailOwnerUnknown, staffReasonFailLookup, staffReasonFailTelegram,
 		staffReasonFailRateLimited, staffReasonFailBotNotAdmin, staffReasonFailBotNoRights,
 		staffReasonFailGroupNotFound, staffReasonFailInternal, staffReasonFailInterrupted,
