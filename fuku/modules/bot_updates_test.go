@@ -343,7 +343,7 @@ func TestVerifyAnonymousAdminPropagatesEditAndDeleteErrors(t *testing.T) {
 			Text:      "/unknown",
 		}
 		key := fmt.Sprintf("fuku:anonAdmin:%d:%d", chat.Id, cached.MessageId)
-		if err := m.Set(cache.Context, key, cached); err != nil {
+		if err := chat_status.StoreAnonAdminCommand(chat.Id, cached); err != nil {
 			t.Fatalf("cache set: %v", err)
 		}
 		t.Cleanup(func() {
@@ -384,7 +384,7 @@ func TestVerifyAnonymousAdminRestoresCachedMessageAndDeletesButton(t *testing.T)
 		Text: "/unknown",
 	}
 	key := fmt.Sprintf("fuku:anonAdmin:%d:%d", chat.Id, cached.MessageId)
-	if err := m.Set(cache.Context, key, cached); err != nil {
+	if err := chat_status.StoreAnonAdminCommand(chat.Id, cached); err != nil {
 		t.Fatalf("cache set: %v", err)
 	}
 	t.Cleanup(func() {
@@ -457,7 +457,7 @@ func TestVerifyAnonymousAdminRefusesChatMismatch(t *testing.T) {
 			}
 			cached := &gotgbot.Message{MessageId: 505, Date: 1, Chat: cachedChat, Text: "/unknown"}
 			key := fmt.Sprintf("fuku:anonAdmin:%d:%d", chatA.Id, cached.MessageId)
-			if err := m.Set(cache.Context, key, cached); err != nil {
+			if err := chat_status.StoreAnonAdminCommand(chatA.Id, cached); err != nil {
 				t.Fatalf("cache set: %v", err)
 			}
 			t.Cleanup(func() { _ = m.Delete(cache.Context, key) })

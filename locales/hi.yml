@@ -575,11 +575,11 @@ aispam_help_msg: |
   अंग्रेज़ी में लिखे संदेश 80% भरोसे से और बाकी भाषाओं में लिखे संदेश 90% से कार्रवाई करते हैं, क्योंकि मॉडल मुख्य रूप से अंग्रेज़ी के लिए बना है।
 
 
-  *एडमिन कमांड:*
+  <b>एडमिन कमांड:</b>
 
   × /aispam: बताता है कि फ़िल्टर चालू है या नहीं, और मॉडल को ठीक-ठीक क्या भेजा जाता है।
 
-  × /aispam `<on/off>`: इस चैट के लिए फ़िल्टर चालू या बंद करता है।
+  × /aispam <code>&lt;on/off&gt;</code>: इस चैट के लिए फ़िल्टर चालू या बंद करता है।
 
 
   जब तक कोई एडमिन इसे चालू नहीं करता, फ़िल्टर हर चैट में बंद रहता है, और इसके लिए बॉट ऑपरेटर द्वारा API कुंजी सेट होना ज़रूरी है।
@@ -780,9 +780,9 @@ captcha_invalid_attempt: अमान्य प्रयास ID
 captcha_invalid_user: अमान्य उपयोगकर्ता ID
 captcha_error_processing: उत्तर प्रोसेस करने में त्रुटि
 captcha_invalid_refresh: अमान्य रिफ्रेश डेटा
-captcha_max_attempts_current: "वर्तमान अधिकतम सत्यापन प्रयास: <b>%d</b>"
+captcha_max_attempts_current: "वर्तमान अधिकतम सत्यापन प्रयास: <b>{attempts}</b>"
 captcha_max_attempts_invalid: "अमान्य मान। कृपया 1 और 10 के बीच एक संख्या निर्दिष्ट करें।"
-captcha_max_attempts_set: "अधिकतम सत्यापन प्रयास <b>%d</b> पर सेट किए गए"
+captcha_max_attempts_set: "अधिकतम सत्यापन प्रयास <b>{attempts}</b> पर सेट किए गए"
 captcha_user_auto_unmute: "उपयोगकर्ता %s 24 घंटे में स्वचालित रूप से अनम्यूट हो जाएगा।"
 captcha_enabled_success: "✅ कैप्चा सत्यापन <b>सक्षम</b> कर दिया गया है। नए सदस्यों को शामिल होने के लिए कैप्चा पूरा करना होगा।"
 captcha_disabled_success: "❌ कैप्चा सत्यापन <b>अक्षम</b> कर दिया गया है।"
@@ -795,13 +795,13 @@ captcha_wrong_answer_final: "❌ गलत उत्तर! आपको %s क�
 captcha_wrong_answer_remaining: "❌ गलत उत्तर! %d प्रयास शेष।"
 captcha_action_kicked: "किक"
 captcha_action_banned: "बैन"
-captcha_action_muted: "स्थायी रूप से म्यूट"
+captcha_action_muted: "24 घंटे के लिए म्यूट"
 captcha_refresh_success: "🔄 नया कैप्चा भेजा गया!"
 captcha_timeout_failure_kicked: "❌ %s कैप्चा सत्यापन पूरा करने में विफल रहा और उसे किक कर दिया गया।"
 captcha_timeout_failure_banned: "❌ %s कैप्चा सत्यापन पूरा करने में विफल रहा और उसे बैन कर दिया गया।"
 captcha_timeout_failure_muted: "❌ %s कैप्चा सत्यापन पूरा करने में विफल रहा और उसे म्यूट कर दिया गया।"
 captcha_timeout_with_messages: "❌ %s कैप्चा सत्यापन पूरा करने में विफल रहा और उसे %s कर दिया गया।\n\n📝 अपूर्ण सत्यापन के कारण %d संदेश हटा दिए गए।"
-captcha_stored_messages_summary: "📝 %s ने सत्यापन से पहले %d संदेश (%s) भेजने का प्रयास किया"
+captcha_stored_messages_summary: "📝 {user} ने सत्यापन से पहले {count} संदेश ({types}) भेजने का प्रयास किया"
 captcha_pending_usage: "उपयोग: <code>/captchapending @user</code> या <code>/captchapending user_id</code>"
 captcha_no_pending_messages: "इस उपयोगकर्ता के लिए कोई लंबित संदेश नहीं मिले।"
 captcha_clear_usage: "उपयोग: <code>/captchaclear @user</code> या <code>/captchaclear user_id</code>"
@@ -1114,6 +1114,7 @@ greetings_welcome_disabled: "मैं अब से उपयोगकर्त
 greetings_welcome_invalid_option: "मैं केवल 'on/yes' या 'off/no' समझता हूं!"
 greetings_welcome_set_success: "सफलतापूर्वक कस्टम स्वागत संदेश सेट किया गया!"
 greetings_welcome_reset_success: "कस्टम स्वागत संदेश सफलतापूर्वक डिफ़ॉल्ट पर रीसेट किया गया!"
+greetings_welcome_not_configured: "इस चैट के लिए अभी कोई स्वागत संदेश सहेजा नहीं गया है। /setwelcome से एक सेट करें।"
 greetings_goodbye_status: |
   मैं वर्तमान में उपयोगकर्ताओं को अलविदा कह रहा हूं: <code>%s</code>
   मैं वर्तमान में पुराने अलविदा हटा रहा हूं: <code>%s</code>
@@ -1124,6 +1125,7 @@ greetings_goodbye_disabled: "मैं अब से उपयोगकर्त
 greetings_goodbye_invalid_option: "मैं केवल 'on/yes' या 'off/no' समझता हूं!"
 greetings_goodbye_set_success: "सफलतापूर्वक कस्टम अलविदा संदेश सेट किया गया!"
 greetings_goodbye_reset_success: "कस्टम अलविदा संदेश सफलतापूर्वक डिफ़ॉल्ट पर रीसेट किया गया!"
+greetings_goodbye_not_configured: "इस चैट के लिए अभी कोई विदाई संदेश सहेजा नहीं गया है। /setgoodbye से एक सेट करें।"
 greetings_clean_welcome_status_should: "मुझे दो दिन पुराने स्वागत संदेश हटाने चाहिए।"
 greetings_clean_welcome_status_not: "मैं वर्तमान में पुराने स्वागत संदेश नहीं हटा रहा हूं!"
 greetings_clean_welcome_disabled: "मैं पुराने स्वागत संदेश नहीं हटाऊंगा!"
@@ -1648,6 +1650,7 @@ bot_updates_need_supergroup: "क्षमा करें, लेकिन म�
 bot_updates_thanks_for_adding: "मुझे अपने ग्रुप में जोड़ने के लिए धन्यवाद!"
 bot_updates_make_me_admin: "मेरी सभी सुविधाओं का उपयोग करने के लिए मुझे एडमिन बनाएँ!"
 bot_updates_button_expired: "यह बटन समाप्त हो गया है, कृपया कमांड फिर से उपयोग करें।"
+bot_updates_anon_unsupported_command: "यह कमांड गुमनाम रूप से इस्तेमाल नहीं की जा सकती। इसे अपने नाम से पोस्ट करें और फिर से भेजें।"
 bot_updates_convert_instruction: "इस ग्रुप को सुपरग्रुप में बदलने के बाद, आप मुझे फिर से जोड़ सकते हैं।\n"
 bot_updates_convert_howto: "इस ग्रुप को सुपरग्रुप में बदलने के लिए, कृपया यहां दिए गए निर्देशों का पालन करें:\n"
 
@@ -1824,7 +1827,7 @@ backup_help_msg: |
 
   अपने ग्रुप सेटिंग्स को JSON फाइलों का उपयोग करके बैकअप और रिस्टोर करें।
 
-  <b>उपयोगकर्ता कमांड:</b>
+  <b>एडमिन कमांड:</b>
   • /export - सभी ग्रुप सेटिंग्स को JSON फाइल में एक्सपोर्ट करें
   • /export notes filters rules - केवल विशिष्ट मॉड्यूल एक्सपोर्ट करें
 
@@ -1845,12 +1848,12 @@ backup_import_button: "📥 इम्पोर्ट"
 backup_export_success: |
   <b>✅ एक्सपोर्ट सफल!</b>
 
-  <b>चैट:</b> %s
-  <b>एक्सपोर्ट किए गए मॉड्यूल:</b> %d
-  <b>एक्सपोर्ट समय:</b> %s
+  <b>चैट:</b> {chat}
+  <b>एक्सपोर्ट किए गए मॉड्यूल:</b> {modules}
+  <b>एक्सपोर्ट समय:</b> {time}
 
   <b>मॉड्यूल:</b>
-  %s
+  {list}
 
 backup_export_success_text: "✅ सफलतापूर्वक {modules} मॉड्यूल एक्सपोर्ट किए गए। ऊपर दी गई बैकअप फाइल डाउनलोड करें।"
 backup_export_rate_limited: "⏳ फिर से एक्सपोर्ट करने से पहले <b>{time}</b> प्रतीक्षा करें।"
@@ -1860,10 +1863,10 @@ backup_export_failed: "❌ सेटिंग्स एक्सपोर्ट 
 backup_import_success: |
   <b>✅ इम्पोर्ट सफल!</b>
 
-  <b>इम्पोर्ट किए गए मॉड्यूल:</b> %d
+  <b>इम्पोर्ट किए गए मॉड्यूल:</b> {modules}
 
   <b>मॉड्यूल:</b>
-  %s
+  {list}
 
 backup_import_rate_limited: "⏳ फिर से इम्पोर्ट करने से पहले <b>{time}</b> प्रतीक्षा करें।"
 backup_import_no_reply: "❌ कृपया बैकअप फाइल का जवाब <code>/import</code> के साथ दें।"
@@ -1876,8 +1879,8 @@ backup_import_creator_only: "❌ केवल ग्रुप क्रिएट
 backup_import_confirm: |
   <b>⚠️ इम्पोर्ट की पुष्टि करें</b>
 
-  आप <b>%s मॉड्यूल</b> इम्पोर्ट करने वाले हैं:
-  %s
+  आप <b>{modules} मॉड्यूल</b> इम्पोर्ट करने वाले हैं:
+  {list}
 
   यह मौजूदा सेटिंग्स को ओवरराइट कर देगा। क्या आप सुनिश्चित हैं?
 
@@ -1888,10 +1891,10 @@ backup_import_failed: "❌ इम्पोर्ट विफल: %s"
 backup_reset_success: |
   <b>✅ रीसेट सफल!</b>
 
-  <b>रीसेट किए गए मॉड्यूल:</b> %d
+  <b>रीसेट किए गए मॉड्यूल:</b> {modules}
 
   <b>मॉड्यूल:</b>
-  %s
+  {list}
 
 backup_reset_rate_limited: "⏳ फिर से रीसेट करने से पहले <b>{time}</b> प्रतीक्षा करें।"
 backup_reset_creator_only: "❌ केवल ग्रुप क्रिएटर ही सेटिंग्स रीसेट कर सकते हैं।"
@@ -1899,8 +1902,8 @@ backup_reset_creator_only: "❌ केवल ग्रुप क्रिएट�
 backup_reset_confirm: |
   <b>⚠️ रीसेट की पुष्टि करें</b>
 
-  आप <b>%s मॉड्यूल</b> रीसेट करने वाले हैं:
-  %s
+  आप <b>{modules} मॉड्यूल</b> रीसेट करने वाले हैं:
+  {list}
 
   <b>यह कार्रवाई पूर्ववर्ती नहीं की जा सकती!</b> क्या आप सुनिश्चित हैं?
 
@@ -2008,7 +2011,11 @@ federations_help_msg: |
   × /subfed /unsubfed /fedsubs: Subscribe to another fed (max 5).
   × /fbanlist [csv|json|minicsv]: Export fbans.
   × /importfbans: Import from a replied CSV/JSON file.
-  × /setfedlog /unsetfedlog: Federation log chat.
+  × /unsetfedlog: Clear the federation log chat.
+
+  *Federation log chat (owner):*
+  × /setfedlog: In a group, make that group the federation log (you must be an admin there).
+  × For a channel: post /setfedlog <fed_id> in the channel (I must be an admin there), then forward that post to me in private or to a group, from the owner account, within 1 hour.
 
   *Group owner:*
   × /joinfed <fed_id>: Join this chat to a federation.
@@ -2035,7 +2042,7 @@ logchannels_help_msg: |
   × /log <category>: Enable a category.
   × /nolog <category>: Disable a category.
 
-  Categories: settings, admin, user, automated, reports, other.
+  Categories: settings, admin, user, reports.
 feds_pm_only: "This command can only be used in private chat with me."
 feds_group_only: "This command can only be used in groups."
 feds_need_name: "Give your federation a name."
@@ -2102,6 +2109,8 @@ feds_subs_header: "Subscriptions:"
 feds_setfedlog_need_id: "Give a federation ID, or use this in a group that is in your fed."
 feds_not_owner: "Only the federation owner can set the fed log."
 feds_setfedlog_ok: "Federation log chat set."
+feds_setfedlog_forward_to_owner: "अनुरोध दर्ज हो गया। अब इस पोस्ट को फ़ेडरेशन मालिक के खाते से 1 घंटे के भीतर मुझे निजी चैट में या किसी ऐसे ग्रुप में फ़ॉरवर्ड करें जिसमें मैं हूँ।"
+feds_setfedlog_no_pending: "यह फ़ॉरवर्ड किसी लंबित /setfedlog पोस्ट से मेल नहीं खाता, या उसकी समय-सीमा समाप्त हो गई। चैनल में फिर से /setfedlog &lt;fed_id&gt; पोस्ट करें और नई पोस्ट को 1 घंटे के भीतर फ़ॉरवर्ड करें।"
 feds_unsetfedlog_ok: "Federation log chat cleared."
 feds_export_wait: "Please wait before exporting again."
 feds_export_empty: "This federation has no bans to export."
@@ -2117,7 +2126,7 @@ logs_set_ok: "Log channel set. Admin actions from this chat will be sent there."
 logs_unset_ok: "Log channel removed."
 logs_not_set: "No log channel is set for this chat."
 logs_current: "Log channel: <code>{id}</code>"
-logs_categories: "Categories: settings, admin, user, automated, reports, other."
+logs_categories: "Categories: settings, admin, user, reports."
 logs_enabled: "Enabled logging for: {cats}"
 logs_disabled: "Disabled logging for: {cats}"
 logs_unknown_category: "Unknown category. See /logcategories."
@@ -2328,6 +2337,7 @@ staff_act_fail_group_not_found: "ग्रुप नहीं मिला"
 staff_act_fail_rate_limited: "रेट लिमिट के कारण कई प्रयासों के बाद छोड़ दिया"
 staff_act_fail_internal: "आंतरिक त्रुटि"
 staff_act_fail_interrupted: "पुनः आरंभ के कारण बाधित"
+staff_act_fail_time_ran_out: "यहाँ लागू करने से पहले प्रतिबंध की अवधि समाप्त हो चुकी थी"
 staff_act_summary_done_collapsed: "{count} समूह पूरे हुए"
 staff_act_summary_pending_collapsed: "{count} समूह प्रगति में"
 staff_act_summary_continued: "और समूह अगले संदेश में सूचीबद्ध हैं।"
@@ -2792,6 +2802,7 @@ settings_edit_refuse_button_url: "बटन {n} का लिंक मैं �
 settings_edit_refuse_buttons_limit: "बहुत ज़्यादा बटन हैं। एक संदेश में अधिकतम 100 बटन और एक पंक्ति में अधिकतम 8 हो सकते हैं।"
 settings_edit_refuse_text_buttons: "इस टेक्स्ट में बटन की लाइनें हैं। टेक्स्ट उनके बिना भेजें, और बटन अलग हिस्से के रूप में सेट करें।"
 settings_edit_refuse_access_lost: "मैं अब पुष्टि नहीं कर सकता कि आप इस ग्रुप की सेटिंग बदल सकते हैं, इसलिए मैंने इंतज़ार बंद कर दिया। कुछ नहीं बदला।"
+settings_edit_refuse_slash: "मैं स्लैश से शुरू होने वाला टेक्स्ट सेव नहीं कर सकता, क्योंकि वह कमांड जैसा दिखता है। पहला अक्षर बदलकर फिर से भेजें।"
 settings_edit_preview_header: "👁 प्रीव्यू, आपके नाम और ग्रुप के शीर्षक के साथ भरा हुआ।"
 settings_edit_preview_header_rules: "👁 नियम संदेश का प्रीव्यू।"
 settings_edit_preview_buttons_body: "👁 ये बटन हैं।"
@@ -2990,9 +3001,7 @@ settings_log_hint: "चैनल /setlog से जुड़ता है और
 settings_log_cat_settings: "सेटिंग्स"
 settings_log_cat_admin: "एडमिन कार्रवाई"
 settings_log_cat_user: "सदस्य कार्रवाई"
-settings_log_cat_automated: "स्वचालित"
 settings_log_cat_reports: "रिपोर्ट"
-settings_log_cat_other: "अन्य"
 settings_anon_hint: "इसे केवल ग्रुप का ओनर बदल सकता है, और मेरा ग्रुप में एडमिन होना ज़रूरी है।"
 settings_btn_anon_toggle: "AnonAdmin मोड: {state}"
 settings_locks_intro: "मैं लॉक किए गए प्रकार का संदेश उन सदस्यों से हटा देता हूँ जो एडमिन या स्वीकृत नहीं हैं। बॉट लॉक करने पर गैर-एडमिन बॉट नहीं जोड़ सकते।"

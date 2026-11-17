@@ -126,7 +126,10 @@ func (moduleStruct) getId(b *gotgbot.Bot, ctx *ext.Context) error {
 	}
 
 	if userId != 0 {
-		if msg.ReplyToMessage != nil {
+		// The reply's details are shown only when the resolved user is the reply's
+		// sender: an explicit target (/id @name as a reply) beats the reply.
+		reply := extraction.ReplyTarget(msg)
+		if reply != nil && reply.GetSender() != nil && reply.GetSender().Id() == userId {
 			tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 			temp, _ := tr.GetString("misc_chat_id")
 			text := fmt.Sprintf(temp, msg.Chat.Id)
@@ -138,16 +141,16 @@ func (moduleStruct) getId(b *gotgbot.Bot, ctx *ext.Context) error {
 				builder.WriteString(text)
 				builder.WriteString("\n")
 			}
-			if msg.ReplyToMessage.From != nil {
-				originalId := msg.ReplyToMessage.From.Id
+			if reply.From != nil {
+				originalId := reply.From.Id
 				_, user1Name, _ := extraction.GetUserInfo(originalId)
 				temp3, _ := tr.GetString("misc_user_id")
-				text = fmt.Sprintf(temp3, user1Name, originalId)
+				text = fmt.Sprintf(temp3, formatting.HtmlEscape(user1Name), originalId)
 				builder.WriteString(text)
 				builder.WriteString("\n")
 			}
 
-			if rpm := msg.ReplyToMessage; rpm != nil {
+			if rpm := reply; rpm != nil {
 				if frpm := rpm.ForwardOrigin; frpm != nil {
 					if frpm.GetDate() != 0 {
 						fwdd := frpm.MergeMessageOrigin()
@@ -156,29 +159,29 @@ func (moduleStruct) getId(b *gotgbot.Bot, ctx *ext.Context) error {
 							user1Id := fwdc.Id
 							_, user1Name, _ := extraction.GetUserInfo(user1Id)
 							temp4, _ := tr.GetString("misc_forwarded_from_user")
-							text = fmt.Sprintf(temp4, user1Name, user1Id)
+							text = fmt.Sprintf(temp4, formatting.HtmlEscape(user1Name), user1Id)
 							builder.WriteString(text)
 							builder.WriteString("\n")
 						}
 
 						if fwdc := fwdd.Chat; fwdc != nil {
 							temp5, _ := tr.GetString("misc_forwarded_from_chat")
-							text = fmt.Sprintf(temp5, fwdc.Title, fwdc.Id)
+							text = fmt.Sprintf(temp5, formatting.HtmlEscape(fwdc.Title), fwdc.Id)
 							builder.WriteString(text)
 							builder.WriteString("\n")
 						}
 					}
 				}
 			}
-			if msg.ReplyToMessage.Animation != nil {
+			if reply.Animation != nil {
 				temp6, _ := tr.GetString("misc_gif_id")
-				text = fmt.Sprintf(temp6, msg.ReplyToMessage.Animation.FileId)
+				text = fmt.Sprintf(temp6, reply.Animation.FileId)
 				builder.WriteString(text)
 				builder.WriteString("\n")
 			}
-			if msg.ReplyToMessage.Sticker != nil {
+			if reply.Sticker != nil {
 				temp7, _ := tr.GetString("misc_sticker_id")
-				text = fmt.Sprintf(temp7, msg.ReplyToMessage.Sticker.FileId)
+				text = fmt.Sprintf(temp7, reply.Sticker.FileId)
 				builder.WriteString(text)
 				builder.WriteString("\n")
 			}
@@ -186,7 +189,7 @@ func (moduleStruct) getId(b *gotgbot.Bot, ctx *ext.Context) error {
 			_, name, _ := extraction.GetUserInfo(userId)
 			tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 			temp, _ := tr.GetString("misc_user_id_is")
-			text := fmt.Sprintf(temp, name, userId)
+			text := fmt.Sprintf(temp, formatting.HtmlEscape(name), userId)
 			builder.WriteString(text)
 		}
 	} else {

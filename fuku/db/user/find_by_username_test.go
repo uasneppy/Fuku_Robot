@@ -153,12 +153,27 @@ func TestFindUsersByUsernameReturnsDatabaseError(t *testing.T) {
 	}
 }
 
-func TestGetUserIdByUserNameUnchanged(t *testing.T) {
+func TestGetUserIdByUserNameCaseInsensitive(t *testing.T) {
 	seedUsernameRows(t, models.User{UserId: 9141, UserName: "ExactCase", Name: "Exact", LastActivity: time.Now()})
 	if got := GetUserIdByUserName("ExactCase"); got != 9141 {
 		t.Fatalf("GetUserIdByUserName exact = %d, want 9141", got)
 	}
-	if got := GetUserIdByUserName("exactcase"); got != 0 {
-		t.Fatalf("GetUserIdByUserName wrong case = %d, want 0 (existing exact-case behaviour)", got)
+	if got := GetUserIdByUserName("exactcase"); got != 9141 {
+		t.Fatalf("GetUserIdByUserName other case = %d, want 9141", got)
+	}
+}
+
+func TestGetUserIdByUserNameRefusesAmbiguous(t *testing.T) {
+	seedUsernameRows(t,
+		models.User{UserId: 9151, UserName: "Shared", Name: "Old", LastActivity: time.Now().Add(-48 * time.Hour)},
+		models.User{UserId: 9152, UserName: "shared", Name: "New", LastActivity: time.Now()},
+	)
+	for _, name := range []string{"Shared", "shared", "SHARED"} {
+		if got := GetUserIdByUserName(name); got != 0 {
+			t.Fatalf("GetUserIdByUserName(%q) = %d, want 0 for a name two accounts hold", name, got)
+		}
+	}
+	if got := GetUserIdByUserName("nobody_holds_this"); got != 0 {
+		t.Fatalf("GetUserIdByUserName(unknown) = %d, want 0", got)
 	}
 }

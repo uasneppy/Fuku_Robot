@@ -45,7 +45,7 @@ Permission locks target specific types of content or actions. Use these for fine
 
 | Lock Type | Description |
 |-----------|-------------|
-| `anonchannel` | Blocks messages from anonymous channels and linked channel posts |
+| `anonchannel` | Blocks messages from anonymous channels |
 | `audio` | Blocks audio file messages |
 | `bots` | Prevents non-admins from adding bots to the group |
 | `contact` | Blocks contact card messages |
@@ -83,7 +83,7 @@ These locks control how content behaves:
 - **`url`**: Blocks messages containing URLs
 - **`previews`**: Blocks messages with URL previews
 - **`rtl`**: Blocks messages containing right-to-left (Arabic) text
-- **`anonchannel`**: Blocks messages from anonymous channels and linked channel posts
+- **`anonchannel`**: Blocks messages from anonymous channels
 - **`comments`**: Blocks messages from non-members (discussion comments)
 
 ## Special Locks

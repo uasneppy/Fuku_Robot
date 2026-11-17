@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"net/http"
 	"net/url"
 	"strings"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/uasneppy/fuku_robot/fuku/config"
 	"github.com/uasneppy/fuku_robot/fuku/db/chats"
 	"github.com/uasneppy/fuku_robot/fuku/db/lang"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
@@ -20,8 +22,22 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/utils/tracing"
 )
 
+// fetchUserAgent names the bot to the services it looks things up in. Wikimedia refuses a
+// request without a descriptive User-Agent with a 403.
+func fetchUserAgent() string {
+	if config.AppConfig == nil || config.AppConfig.BotVersion == "" {
+		return "Xenobot-72 (Telegram bot)"
+	}
+	return "Xenobot-72/" + config.AppConfig.BotVersion + " (Telegram bot)"
+}
+
 func fetchJSON(rawURL string, dest any) error {
-	resp, err := httpClient.Get(rawURL)
+	req, err := http.NewRequest(http.MethodGet, rawURL, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("User-Agent", fetchUserAgent())
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return err
 	}

@@ -5,10 +5,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/uasneppy/fuku_robot/fuku/db"
-	"github.com/uasneppy/fuku_robot/fuku/utils/cache"
+	"github.com/PaulSonOfLars/gotgbot/v2"
+	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 	"github.com/eko/gocache/lib/v4/store"
 	"github.com/vmihailenco/msgpack/v5"
+
+	"github.com/uasneppy/fuku_robot/fuku/db"
+	"github.com/uasneppy/fuku_robot/fuku/utils/cache"
+	"github.com/uasneppy/fuku_robot/fuku/utils/chat_status"
 )
 
 const overwriteCacheTTL = 5 * time.Minute
@@ -94,4 +98,51 @@ func deleteOverwriteCache(key string) {
 	if m := cache.GetMarshal(); m != nil {
 		_ = m.Delete(cache.Context, key)
 	}
+}
+
+// overwritePress is the outcome of the authority step of an overwrite card press.
+type overwritePress int
+
+const (
+	// overwritePressAllowed: the press may go on, acting on the target chat.
+	overwritePressAllowed overwritePress = iota
+	// overwritePressNotAdmin: the presser is not an administrator of the target chat; the caller
+	// answers through the PermissionResponder.
+	overwritePressNotAdmin
+	// overwritePressStale: a press in a private chat on a card that is missing, is not the
+	// presser's, or names no group; the caller answers with its expired or cancelled text.
+	overwritePressStale
+)
+
+// overwritePressTarget decides, before any token is consumed, which chat an overwrite card press
+// acts on and whether the presser may act there. In a group the target is the chat the card sits
+// in and the presser must be an administrator there (the caller keeps its own check that a card
+// naming a chat names this one). In a private chat (a card made through a PM connection) the target
+// is the card's own group, read without consuming the card: the presser must be the member who made
+// it (a non-zero UserID) and a live administrator of that group, and the card must name a group. The
+// target never comes from callback data. A refusal consumes nothing, so the holder can still press.
+func overwritePressTarget(
+	b *gotgbot.Bot,
+	ctx *ext.Context,
+	chat *gotgbot.Chat,
+	presser int64,
+	readCard func() (*overwriteBase, error),
+) (int64, overwritePress) {
+	if chat == nil {
+		return 0, overwritePressNotAdmin
+	}
+	if chat.Type != "private" {
+		if !chat_status.RequireUserAdmin(b, ctx, chat, presser) {
+			return 0, overwritePressNotAdmin
+		}
+		return chat.Id, overwritePressAllowed
+	}
+	card, err := readCard()
+	if err != nil || card == nil || card.UserID == 0 || card.UserID != presser || card.ChatID >= 0 {
+		return 0, overwritePressStale
+	}
+	if !chat_status.IsUserAdmin(b, card.ChatID, presser) {
+		return 0, overwritePressNotAdmin
+	}
+	return card.ChatID, overwritePressAllowed
 }

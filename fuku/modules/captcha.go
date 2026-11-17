@@ -2126,6 +2126,10 @@ func (moduleStruct) captchaRefreshCallback(bot *gotgbot.Bot, ctx *ext.Context) e
 		}
 	}
 
+	// The join's timer now sees a changed refresh count and exits as stale, so the refreshed
+	// attempt gets its own timer; its expiry is unchanged, so it fires when the attempt ends.
+	scheduleCaptchaTimeout(bot, updated)
+
 	if m := cache.GetMarshal(); m != nil {
 		if err := m.Set(cache.Context, cooldownKey, true, store.WithExpiration(time.Duration(captchaRefreshCooldownS)*time.Second)); err != nil {
 			log.Errorf("[CaptchaRefresh] Failed to set refresh cooldown for chat %d user %d: %v", chat.Id, targetUserID, err)
@@ -2141,6 +2145,12 @@ func (moduleStruct) captchaRefreshCallback(bot *gotgbot.Bot, ctx *ext.Context) e
 func (moduleStruct) handlePendingCaptchaMessage(bot *gotgbot.Bot, ctx *ext.Context) error {
 	msg := ctx.EffectiveMessage
 	chat := ctx.EffectiveChat
+	// A service message (the joiner's own join or leave message, a pin, a title change and the
+	// other deletion-table kinds) is never held: the lockdown guard, fed-ban, the service deletion
+	// watcher and cleanService must still see it.
+	if !memberContentMessage(msg) {
+		return ext.ContinueGroups
+	}
 	user := chat_status.RequireUser(bot, ctx)
 	if user == nil {
 		return ext.ContinueGroups

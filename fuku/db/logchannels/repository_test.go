@@ -32,6 +32,17 @@ func TestLogChannelSetCategoryAndUnset(t *testing.T) {
 	if !CategoryEnabled(got, CategoryAdmin) {
 		t.Fatal("admin category should default on")
 	}
+	if !got.CatAutomated || !got.CatOther {
+		t.Fatal("Set must still write the full row, the two unused columns included")
+	}
+	for _, dead := range []string{"automated", "other"} {
+		if err := SetCategory(chatID, dead, false); err == nil {
+			t.Fatalf("SetCategory(%s) was accepted", dead)
+		}
+	}
+	if got = Get(chatID); !got.CatAutomated || !got.CatOther {
+		t.Fatal("a refused SetCategory changed a stored column")
+	}
 	if err := SetCategory(chatID, CategoryAdmin, false); err != nil {
 		t.Fatalf("SetCategory: %v", err)
 	}
@@ -54,11 +65,19 @@ func TestLogChannelCategoryHelpers(t *testing.T) {
 	if categoryColumn("settings") != "cat_settings" ||
 		categoryColumn("admin") != "cat_admin" ||
 		categoryColumn("user") != "cat_user" ||
-		categoryColumn("automated") != "cat_automated" ||
 		categoryColumn("reports") != "cat_reports" ||
-		categoryColumn("other") != "cat_other" ||
 		categoryColumn("nope") != "" {
 		t.Fatal("categoryColumn mismatch")
+	}
+	// The two categories nothing ever posted to are not accepted names any more; their columns
+	// stay only for old rows and exports.
+	for _, dead := range []string{"automated", "other"} {
+		if IsValidCategory(dead) || categoryColumn(dead) != "" {
+			t.Fatalf("%s is still an accepted category", dead)
+		}
+	}
+	if len(AllCategories) != 4 {
+		t.Fatalf("AllCategories = %v, want four names", AllCategories)
 	}
 
 	settings := &models.LogChannel{

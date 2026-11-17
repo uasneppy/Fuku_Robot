@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html"
 	"slices"
 	"strconv"
 	"strings"
@@ -529,7 +530,7 @@ func (moduleStruct) notesList(b *gotgbot.Bot, ctx *ext.Context) error {
 		return ext.EndGroups
 	}
 
-	noteKeys := notes.GetNotesListContext(tracing.UpdateContext(ctx), chat.Id, chat_status.RequireUserAdmin(b, ctx, nil, user.Id))
+	noteKeys := notes.GetNotesListContext(tracing.UpdateContext(ctx), chat.Id, chat_status.RequireUserAdmin(b, ctx, chat, user.Id))
 	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 	info, _ := tr.GetString("notes_none_in_chat")
 
@@ -544,13 +545,13 @@ func (moduleStruct) notesList(b *gotgbot.Bot, ctx *ext.Context) error {
 
 	if ctx.Message.Chat.Type == "private" {
 		admin := chat_status.IsUserAdmin(b, chat.Id, user.Id)
-		noteKeys := notes.GetNotesListContext(tracing.UpdateContext(ctx), chat.Id, admin)
+		noteEntries := notes.GetNotesListEntriesContext(tracing.UpdateContext(ctx), chat.Id, admin)
 		listText, _ := tr.GetString("notes_list_for_chat")
-		info = fmt.Sprintf(listText, chat.Title)
+		info = fmt.Sprintf(listText, html.EscapeString(chat.Title))
 		var sb strings.Builder
-		for _, note := range noteKeys {
-			fmt.Fprintf(&sb, "\n - <a href='https://t.me/%s?start=note_%d_%s'>%s</a>",
-				b.Username, chat.Id, note, note)
+		for _, note := range noteEntries {
+			fmt.Fprintf(&sb, "\n - <a href='%s'>%s</a>",
+				html.EscapeString(noteDeepLinkURL(b.Username, chat.Id, note.ID, note.Name)), html.EscapeString(note.Name))
 		}
 		info += sb.String()
 		_, err := msg.Reply(b, info, formatting.Shtml())
@@ -685,11 +686,6 @@ func (m moduleStruct) noteOverWriteHandler(b *gotgbot.Bot, ctx *ext.Context) err
 	}
 	user := query.From
 
-	if !chat_status.RequireUserAdmin(b, ctx, nil, user.Id) {
-		chat_status.NewPermissionResponder(b).Respond(ctx, "chat_status_user_admin_cmd_error", "chat_status_user_admin_button_error", chat_status.WithReplyFallback())
-		return ext.EndGroups
-	}
-
 	var helpText string
 	action, token, ok := parseOverwriteCallbackData(query.Data, "notes.overwrite")
 	if !ok {
@@ -697,7 +693,34 @@ func (m moduleStruct) noteOverWriteHandler(b *gotgbot.Bot, ctx *ext.Context) err
 		return ext.EndGroups
 	}
 
+	var pressChat *gotgbot.Chat
+	if query.Message != nil {
+		qchat := query.Message.GetChat()
+		pressChat = &qchat
+	} else if ctx.EffectiveChat != nil {
+		pressChat = ctx.EffectiveChat
+	}
+	targetChatID, press := overwritePressTarget(b, ctx, pressChat, user.Id, func() (*overwriteBase, error) {
+		card, err := getOverwriteCache[overwriteNote](noteOverwriteCacheKey(token))
+		if err != nil {
+			return nil, err
+		}
+		return &card.overwriteBase, nil
+	})
 	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
+	switch press {
+	case overwritePressNotAdmin:
+		chat_status.NewPermissionResponder(b).Respond(ctx, "chat_status_user_admin_cmd_error", "chat_status_user_admin_button_error", chat_status.WithReplyFallback())
+		return ext.EndGroups
+	case overwritePressStale:
+		helpText, _ = tr.GetString("notes_overwrite_cancelled")
+		if _, err := query.Answer(b, &gotgbot.AnswerCallbackQueryOpts{Text: helpText}); err != nil {
+			log.Error(err)
+			return err
+		}
+		return ext.EndGroups
+	}
+
 	switch action {
 	case "no":
 		if token != "" {
@@ -723,20 +746,10 @@ func (m moduleStruct) noteOverWriteHandler(b *gotgbot.Bot, ctx *ext.Context) err
 		}
 		chatId = noteData.ChatID
 		if chatId == 0 {
-			if query.Message != nil {
-				chatId = query.Message.GetChat().Id
-			} else if ctx.EffectiveChat != nil {
-				chatId = ctx.EffectiveChat.Id
-			}
+			chatId = targetChatID
 		}
 
-		callbackChatID := int64(0)
-		if query.Message != nil {
-			callbackChatID = query.Message.GetChat().Id
-		} else if ctx.EffectiveChat != nil {
-			callbackChatID = ctx.EffectiveChat.Id
-		}
-		if noteData.ChatID != 0 && callbackChatID != 0 && noteData.ChatID != callbackChatID {
+		if noteData.ChatID != 0 && targetChatID != 0 && noteData.ChatID != targetChatID {
 			helpText, _ = tr.GetString("notes_overwrite_cancelled")
 			break
 		}
@@ -945,7 +958,7 @@ func (m moduleStruct) notesWatcher(b *gotgbot.Bot, ctx *ext.Context) error {
 								{
 									{
 										Text: trS(tr, "button_click_me"),
-										Url:  fmt.Sprintf("https://t.me/%s?start=note_%d_%s", b.Username, chat.Id, noteName),
+										Url:  noteDeepLinkURL(b.Username, chat.Id, noteData.ID, noteName),
 									},
 								},
 							},
@@ -1057,7 +1070,7 @@ func (m moduleStruct) getNotes(b *gotgbot.Bot, ctx *ext.Context) error {
 							{
 								{
 									Text: trS(tr, "button_click_me"),
-									Url:  fmt.Sprintf("https://t.me/%s?start=note_%d_%s", b.Username, chat.Id, noteName),
+									Url:  noteDeepLinkURL(b.Username, chat.Id, noteData.ID, noteName),
 								},
 							},
 						},
@@ -1091,7 +1104,7 @@ func (moduleStruct) sendNoFormatNote(b *gotgbot.Bot, ctx *ext.Context, replyMsgI
 		return ext.EndGroups
 	}
 
-	if !chat_status.RequireUserAdmin(b, ctx, nil, user.Id) {
+	if !chat_status.RequireUserAdmin(b, ctx, ctx.EffectiveChat, user.Id) {
 		chat_status.NewPermissionResponder(b).Respond(ctx, "chat_status_user_admin_cmd_error", "chat_status_user_admin_button_error", chat_status.WithReplyFallback())
 		return ext.EndGroups
 	}
@@ -1162,6 +1175,7 @@ func init() {
 	RegisterLegacyModule("Notes", 160, LoadNotes)
 	RegisterDeepLinkHandler("notes_", notesListDeepLinkHandler)
 	RegisterDeepLinkHandler("note_", noteDeepLinkHandler)
+	RegisterDeepLinkHandler("noteid_", noteIDDeepLinkHandler)
 	RegisterDeepLinkHandler("note", invalidNoteDeepLinkHandler)
 }
 
@@ -1211,14 +1225,15 @@ func notesListDeepLinkHandler(b *gotgbot.Bot, ctx *ext.Context, user *gotgbot.Us
 	}
 
 	admin := chat_status.IsUserAdmin(b, chatinfo.Id, user.Id)
-	noteKeys := notes.GetNotesListContext(tracing.UpdateContext(ctx), chatinfo.Id, admin)
+	noteEntries := notes.GetNotesListEntriesContext(tracing.UpdateContext(ctx), chatinfo.Id, admin)
 	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 	info, _ := tr.GetString("notes_none_in_chat")
-	if len(noteKeys) > 0 {
+	if len(noteEntries) > 0 {
 		info, _ = tr.GetString("helpers_notes_current_header")
 		var sb strings.Builder
-		for _, note := range noteKeys {
-			fmt.Fprintf(&sb, " - <a href='https://t.me/%s?start=note_%d_%s'>%s</a>\n", b.Username, chatinfo.Id, note, note)
+		for _, note := range noteEntries {
+			fmt.Fprintf(&sb, " - <a href='%s'>%s</a>\n",
+				html.EscapeString(noteDeepLinkURL(b.Username, chatinfo.Id, note.ID, note.Name)), html.EscapeString(note.Name))
 		}
 		info += sb.String()
 	}
@@ -1257,6 +1272,82 @@ func noteDeepLinkHandler(b *gotgbot.Bot, ctx *ext.Context, user *gotgbot.User, a
 
 	noteName := strings.ToLower(nArgs[2])
 	noteData := notes.GetNote(chatinfo.Id, noteName)
+	return sendDeepLinkNote(b, ctx, user, &_chat, noteData)
+}
+
+// noteDeepLinkURL is the link of a private note. Telegram accepts only 1 to 64 characters of
+// A-Z a-z 0-9 _ - as a start parameter, so the link names the note by its row ID; only an entry
+// cached by an earlier build, which has no ID, falls back to the old name form.
+func noteDeepLinkURL(botUsername string, chatID int64, noteID uint, noteName string) string {
+	if noteID > 0 {
+		return fmt.Sprintf("https://t.me/%s?start=noteid_%d_%d", botUsername, chatID, noteID)
+	}
+	return fmt.Sprintf("https://t.me/%s?start=note_%d_%s", botUsername, chatID, noteName)
+}
+
+// parseNoteIDDeepLink reads noteid_<chat id>_<row id> strictly: exactly three parts, a negative
+// chat ID and a positive row ID of at most 19 digits.
+func parseNoteIDDeepLink(arg string) (chatID, noteID int64, ok bool) {
+	parts := strings.Split(arg, "_")
+	if len(parts) != 3 || parts[0] != "noteid" {
+		return 0, 0, false
+	}
+	chatID, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil || chatID >= 0 {
+		return 0, 0, false
+	}
+	if len(parts[2]) == 0 || len(parts[2]) > 19 {
+		return 0, 0, false
+	}
+	for _, r := range parts[2] {
+		if r < '0' || r > '9' {
+			return 0, 0, false
+		}
+	}
+	noteID, err = strconv.ParseInt(parts[2], 10, 64)
+	if err != nil || noteID <= 0 {
+		return 0, 0, false
+	}
+	return chatID, noteID, true
+}
+
+// noteIDDeepLinkHandler opens /start noteid_<chat id>_<row id>. The payload is attacker-controlled,
+// so it is parsed before any Telegram call, the reader must be in the chat, and the note is read by
+// its row ID and the chat together, so an ID of another chat's note is not found.
+func noteIDDeepLinkHandler(b *gotgbot.Bot, ctx *ext.Context, user *gotgbot.User, arg string) error {
+	msg := ctx.EffectiveMessage
+	reply := func(key string) error {
+		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
+		text, _ := tr.GetString(key)
+		_, _ = msg.Reply(b, text, formatting.Shtml())
+		return ext.EndGroups
+	}
+
+	chatID, noteID, ok := parseNoteIDDeepLink(arg)
+	if !ok {
+		return reply("helpers_invalid_deep_link")
+	}
+	chatinfo, chatErr := b.GetChat(chatID, nil)
+	if chatErr != nil || chatinfo == nil {
+		return reply("helpers_chat_not_found")
+	}
+	_chat := chatinfo.ToChat()
+	if !chat_status.IsUserInChat(b, &_chat, user.Id) {
+		return reply("helpers_chat_not_found")
+	}
+
+	noteData, err := notes.GetNoteEntryFresh(tracing.UpdateContext(ctx), chatinfo.Id, noteID)
+	if err != nil {
+		log.Errorf("[Notes][noteIDDeepLinkHandler]: chat %d: %v", chatinfo.Id, err)
+		return reply("notes_parsing_error")
+	}
+	return sendDeepLinkNote(b, ctx, user, &_chat, noteData)
+}
+
+// sendDeepLinkNote is the part both note deep links share once the note was read: a missing note,
+// the admin-only check and the send.
+func sendDeepLinkNote(b *gotgbot.Bot, ctx *ext.Context, user *gotgbot.User, chat *gotgbot.Chat, noteData *models.Notes) error {
+	msg := ctx.EffectiveMessage
 	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 	if noteData == nil {
 		text, _ := tr.GetString("helpers_note_not_exist")
@@ -1268,7 +1359,7 @@ func noteDeepLinkHandler(b *gotgbot.Bot, ctx *ext.Context, user *gotgbot.User, a
 		return ext.EndGroups
 	}
 	if noteData.AdminOnly {
-		if !chat_status.IsUserAdmin(b, chatinfo.Id, user.Id) {
+		if !chat_status.IsUserAdmin(b, chat.Id, user.Id) {
 			text, _ := tr.GetString("helpers_note_admin_only")
 			_, err := msg.Reply(b, text, formatting.Shtml())
 			if err != nil {
@@ -1278,7 +1369,7 @@ func noteDeepLinkHandler(b *gotgbot.Bot, ctx *ext.Context, user *gotgbot.User, a
 			return ext.ContinueGroups
 		}
 	}
-	_, err = media.SendNote(b, ctx, &_chat, noteData, msg.MessageId, msg.MessageThreadId)
+	_, err := media.SendNote(b, ctx, chat, noteData, msg.MessageId, msg.MessageThreadId)
 	if err != nil {
 		log.Error(err)
 		return err

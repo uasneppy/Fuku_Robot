@@ -107,7 +107,7 @@ func TestApplyLogCategory(t *testing.T) {
 	t.Run("each category changes that flag only and drops the cache key", func(t *testing.T) {
 		chatID, _ := logApplyChat(t, true)
 		// A baseline with two categories already off, so a no-op press is told from a change.
-		for _, name := range []string{logchannels.CategoryUser, logchannels.CategoryOther} {
+		for _, name := range []string{logchannels.CategoryUser, logchannels.CategoryReports} {
 			if err := logchannels.SetCategory(chatID, name, false); err != nil {
 				t.Fatalf("seed %s off: %v", name, err)
 			}

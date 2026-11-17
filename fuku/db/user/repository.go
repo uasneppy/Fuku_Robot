@@ -116,17 +116,25 @@ func UpdateUser(userId int64, username, name string) error {
 	return nil
 }
 
+// GetUserIdByUserName returns the user ID of the one account holding username,
+// matched case-insensitively (newest activity first), or 0 when nobody holds it,
+// the read failed, or more than one account holds it: an ambiguous name is refused
+// rather than guessed, so a stale row of an old holder can never be acted on.
 func GetUserIdByUserName(username string) int64 {
-	var userId int64
-	err := db.DB.Model(&models.User{}).Select("user_id").Where("username = ?", username).Scan(&userId).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return 0
-	} else if err != nil {
-		log.Errorf("[Database] GetUserIdByUserName: %v - %s", err, username)
+	rows, err := FindUsersByUsername(username, 2)
+	if err != nil {
 		return 0
 	}
-	log.Debugf("[Database] GetUserIdByUserName: %d", userId)
-	return userId
+	switch len(rows) {
+	case 1:
+		log.Debugf("[Database] GetUserIdByUserName: %d", rows[0].UserId)
+		return rows[0].UserId
+	case 0:
+		return 0
+	default:
+		log.Debug("[Database] GetUserIdByUserName: the username is held by more than one account, refused as ambiguous")
+		return 0
+	}
 }
 
 // FindUsersByUsername is the Staff Group target resolver for an @username. It reads

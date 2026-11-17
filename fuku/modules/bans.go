@@ -53,18 +53,12 @@ func kickReply(c *moderationCtx, t *target) error {
 		return err
 	}
 
-	baseStr, _ := c.Tr.GetString(strings.ToLower(c.Module.moduleName) + "_kick_kicked_user")
-	if t.reason != "" {
-		temp, _ := c.Tr.GetString(strings.ToLower(c.Module.moduleName) + "_kick_kicked_reason")
-		if temp != "" {
-			baseStr += fmt.Sprintf(temp, t.reason)
-		}
-	}
+	prefix := strings.ToLower(c.Module.moduleName)
+	baseStr, _ := c.Tr.GetString(prefix + "_kick_kicked_user")
+	text := fmt.Sprintf(baseStr, formatting.MentionHtml(kickuser.Id, kickuser.FirstName)) +
+		moderationReasonSuffix(c, prefix+"_kick_kicked_reason", t.reason)
 
-	err = c.replySuccess(
-		fmt.Sprintf(baseStr, formatting.MentionHtml(kickuser.Id, kickuser.FirstName)),
-		formatting.Shtml(),
-	)
+	err = c.replySuccess(text, formatting.Shtml())
 	if err != nil {
 		log.Error(err)
 		return err
@@ -84,7 +78,7 @@ func moderationDkick(m *moduleStruct) *moderationCommand {
 		extract:  extractFromReply,
 		validate: kickTargetValidation,
 		execute: func(c *moderationCtx, t *target) error {
-			_, err := c.Msg.ReplyToMessage.Delete(c.Bot, nil)
+			_, err := extraction.ReplyTarget(c.Msg).Delete(c.Bot, nil)
 			if err != nil {
 				log.Error(err)
 				return err
@@ -118,13 +112,8 @@ func moderationTban(m *moduleStruct) *moderationCommand {
 			}
 
 			temp, _ := c.Tr.GetString(strings.ToLower(c.Module.moduleName) + "_ban_tban")
-			baseStr := fmt.Sprintf(temp, formatting.MentionHtml(banUser.Id, banUser.FirstName), t.timeVal)
-			if t.reason != "" {
-				temp, _ := c.Tr.GetString(strings.ToLower(c.Module.moduleName) + "_ban_ban_reason")
-				if temp != "" {
-					baseStr += fmt.Sprintf(temp, t.reason)
-				}
-			}
+			baseStr := fmt.Sprintf(temp, formatting.MentionHtml(banUser.Id, banUser.FirstName), t.timeVal) +
+				moderationReasonSuffix(c, strings.ToLower(c.Module.moduleName)+"_ban_ban_reason", t.reason)
 
 			err = c.replySuccess(baseStr, formatting.Shtml())
 			if err != nil {
@@ -144,13 +133,10 @@ func banReplyWithButton(c *moderationCtx, t *target) error {
 		return err
 	}
 
-	baseStr, _ := c.Tr.GetString(strings.ToLower(c.Module.moduleName) + "_ban_normal_ban")
-	if t.reason != "" {
-		temp, _ := c.Tr.GetString(strings.ToLower(c.Module.moduleName) + "_ban_ban_reason")
-		baseStr += fmt.Sprintf(temp, t.reason)
-	}
-
-	text := fmt.Sprintf(baseStr, formatting.MentionHtml(banUser.Id, banUser.FirstName))
+	prefix := strings.ToLower(c.Module.moduleName)
+	baseStr, _ := c.Tr.GetString(prefix + "_ban_normal_ban")
+	text := fmt.Sprintf(baseStr, formatting.MentionHtml(banUser.Id, banUser.FirstName)) +
+		moderationReasonSuffix(c, prefix+"_ban_ban_reason", t.reason)
 
 	err = c.replySuccess(text,
 		&gotgbot.SendMessageOpts{
@@ -324,7 +310,7 @@ func moderationDban(m *moduleStruct) *moderationCommand {
 		gates:   []gateFn{deleteModGates},
 		extract: extractFromArgs,
 		validate: func(c *moderationCtx, t *target) error {
-			if c.Msg.ReplyToMessage == nil {
+			if extraction.ReplyTarget(c.Msg) == nil {
 				text, _ := c.Tr.GetString(strings.ToLower(c.Module.moduleName) + "_ban_dban_no_reply")
 				if text == "" {
 					text, _ = c.Tr.GetString("common_no_reply_to_message")
@@ -339,7 +325,7 @@ func moderationDban(m *moduleStruct) *moderationCommand {
 			return banTargetValidation(c, t)
 		},
 		execute: func(c *moderationCtx, t *target) error {
-			_, err := c.Msg.ReplyToMessage.Delete(c.Bot, nil)
+			_, err := extraction.ReplyTarget(c.Msg).Delete(c.Bot, nil)
 			if err != nil {
 				log.Error(err)
 				return err
@@ -397,7 +383,9 @@ func moderationUnban(m *moduleStruct) *moderationCommand {
 				}
 				return nil
 			}
-			_, err := c.Chat.UnbanMember(c.Bot, t.userID, nil)
+			// only_if_banned: without it Telegram removes a current member, so /unban
+			// of a member who is not banned would kick them.
+			_, err := c.Chat.UnbanMember(c.Bot, t.userID, &gotgbot.UnbanChatMemberOpts{OnlyIfBanned: true})
 			return err
 		},
 		reply: func(c *moderationCtx, t *target) error {
@@ -1147,6 +1135,8 @@ func init() {
 	RegisterAnonymousAdminHandler("sban", anonPipelineHandler(sbanDesc, bansModule.sBan))
 	RegisterAnonymousAdminHandler("tban", anonPipelineHandler(tbanDesc, bansModule.tBan))
 	RegisterAnonymousAdminHandler("unban", anonPipelineHandler(unbanDesc, bansModule.unban))
+	RegisterAnonymousAdminHandler("kick", anonPipelineHandler(kickDesc, bansModule.kick))
+	RegisterAnonymousAdminHandler("dkick", anonPipelineHandler(dkickDesc, bansModule.dkick))
 	RegisterAnonymousAdminHandler("skick", anonPipelineHandler(skickDesc, bansModule.sKick))
 	RegisterAnonymousAdminHandler("restrict", anonPipelineHandler(restrictDesc, bansModule.restrict))
 	RegisterAnonymousAdminHandler("unrestrict", anonPipelineHandler(unrestrictDesc, bansModule.unrestrict))

@@ -17,23 +17,23 @@ import (
 
 const cachePrefix = "log_channel"
 
-// Categories are the Rose-compatible log channel category names.
+// Categories are the log channel category names /log, /nolog and the settings page accept.
+// Two more columns, cat_automated and cat_other (and their JSON keys), stay in the table and the
+// model only for old rows and backup exports: nothing ever posted to them, so nothing writes or
+// reads them any more and they are not accepted names.
 const (
-	CategorySettings  = "settings"
-	CategoryAdmin     = "admin"
-	CategoryUser      = "user"
-	CategoryAutomated = "automated"
-	CategoryReports   = "reports"
-	CategoryOther     = "other"
+	CategorySettings = "settings"
+	CategoryAdmin    = "admin"
+	CategoryUser     = "user"
+	CategoryReports  = "reports"
 )
 
+// AllCategories lists the accepted categories in the order the page and the help show them.
 var AllCategories = []string{
 	CategorySettings,
 	CategoryAdmin,
 	CategoryUser,
-	CategoryAutomated,
 	CategoryReports,
-	CategoryOther,
 }
 
 func invalidate(chatID int64) {
@@ -131,12 +131,10 @@ type categoryMeta struct {
 }
 
 var logCategories = map[string]categoryMeta{
-	CategorySettings:  {column: "cat_settings", get: func(s *models.LogChannel) bool { return s.CatSettings }},
-	CategoryAdmin:     {column: "cat_admin", get: func(s *models.LogChannel) bool { return s.CatAdmin }},
-	CategoryUser:      {column: "cat_user", get: func(s *models.LogChannel) bool { return s.CatUser }},
-	CategoryAutomated: {column: "cat_automated", get: func(s *models.LogChannel) bool { return s.CatAutomated }},
-	CategoryReports:   {column: "cat_reports", get: func(s *models.LogChannel) bool { return s.CatReports }},
-	CategoryOther:     {column: "cat_other", get: func(s *models.LogChannel) bool { return s.CatOther }},
+	CategorySettings: {column: "cat_settings", get: func(s *models.LogChannel) bool { return s.CatSettings }},
+	CategoryAdmin:    {column: "cat_admin", get: func(s *models.LogChannel) bool { return s.CatAdmin }},
+	CategoryUser:     {column: "cat_user", get: func(s *models.LogChannel) bool { return s.CatUser }},
+	CategoryReports:  {column: "cat_reports", get: func(s *models.LogChannel) bool { return s.CatReports }},
 }
 
 func categoryName(name string) string {

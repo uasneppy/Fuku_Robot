@@ -685,9 +685,9 @@ captcha_error_processing: Ошибка обработки ответа
 captcha_invalid_refresh: Неверные данные обновления
 
 # Captcha max attempts
-captcha_max_attempts_current: "Текущее максимальное количество попыток: <b>%d</b>"
+captcha_max_attempts_current: "Текущее максимальное количество попыток: <b>{attempts}</b>"
 captcha_max_attempts_invalid: "Неверное значение. Пожалуйста, укажите число от 1 до 10."
-captcha_max_attempts_set: "Максимальное количество попыток установлено на <b>%d</b>"
+captcha_max_attempts_set: "Максимальное количество попыток установлено на <b>{attempts}</b>"
 
 # Captcha auto-unmute
 captcha_user_auto_unmute: "Пользователь %s будет автоматически размучен через 24 часа."
@@ -999,6 +999,7 @@ greetings_welcome_disabled: "Я не буду приветствовать по�
 greetings_welcome_invalid_option: "Я понимаю только 'on/yes' или 'off/no'!"
 greetings_welcome_set_success: "Пользовательское приветственное сообщение успешно установлено!"
 greetings_welcome_reset_success: "Приветственное сообщение успешно сброшено на стандартное!"
+greetings_welcome_not_configured: "Для этого чата ещё не сохранено приветствие. Задайте его командой /setwelcome."
 greetings_goodbye_status: |
   Я в данный момент прощаюсь с пользователями: <code>%s</code>
   Я в данный момент удаляю старые прощания: <code>%s</code>
@@ -1009,6 +1010,7 @@ greetings_goodbye_disabled: "Я не буду прощаться с пользо
 greetings_goodbye_invalid_option: "Я понимаю только 'on/yes' или 'off/no'!"
 greetings_goodbye_set_success: "Пользовательское прощальное сообщение успешно установлено!"
 greetings_goodbye_reset_success: "Прощальное сообщение успешно сброшено на стандартное!"
+greetings_goodbye_not_configured: "Для этого чата ещё не сохранено прощание. Задайте его командой /setgoodbye."
 greetings_clean_welcome_status_should: "Я должен удалять приветственные сообщения до двух дней."
 greetings_clean_welcome_status_not: "Я в данный момент не удаляю старые приветственные сообщения!"
 greetings_clean_welcome_disabled: "Я не буду удалять старые приветственные сообщения!"
@@ -1052,13 +1054,13 @@ captcha_wrong_answer_final: "❌ Неверный ответ! Вы были %s."
 captcha_wrong_answer_remaining: "❌ Неверный ответ! Осталось %d попыток."
 captcha_action_kicked: "выгнаны"
 captcha_action_banned: "забанены"
-captcha_action_muted: "заглушены навсегда"
+captcha_action_muted: "заглушены на 24 часа"
 captcha_refresh_success: "🔄 Новая капча отправлена!"
 captcha_timeout_failure_kicked: "❌ %s не удалось пройти проверку капчи и был выгнан."
 captcha_timeout_failure_banned: "❌ %s не удалось пройти проверку капчи и был забанен."
 captcha_timeout_failure_muted: "❌ %s не удалось пройти проверку капчи и был заглушен."
 captcha_timeout_with_messages: "❌ %s не удалось пройти проверку капчи и был %s.\n\n📝 %d сообщение(й) было предпринято, но удалено из-за незавершённой проверки."
-captcha_stored_messages_summary: "📝 %s попытался отправить %d сообщение(й) (%s) до проверки"
+captcha_stored_messages_summary: "📝 {user} попытался отправить {count} сообщение(й) ({types}) до проверки"
 captcha_pending_usage: "Использование: <code>/captchapending @user</code> или <code>/captchapending user_id</code>"
 captcha_no_pending_messages: "Нет ожидающих сообщений для этого пользователя."
 captcha_clear_usage: "Использование: <code>/captchaclear @user</code> или <code>/captchaclear user_id</code>"
@@ -1300,6 +1302,7 @@ bot_updates_need_supergroup: "Извините, но чтобы использо
 bot_updates_thanks_for_adding: "Спасибо, что добавили меня в вашу группу!"
 bot_updates_make_me_admin: "Сделайте меня администратором, чтобы использовать все мои возможности!"
 bot_updates_button_expired: "Эта кнопка истекла, пожалуйста, используйте команду снова."
+bot_updates_anon_unsupported_command: "Эту команду нельзя использовать анонимно. Отправьте её от своего имени ещё раз."
 
 # Formatting module additional strings
 formatting_press_button: "Нажмите кнопку ниже, чтобы получить справку по Markdown!"
@@ -1416,11 +1419,11 @@ aispam_help_msg: |
   Сообщения на английском действуют с уверенности 80%, а сообщения на любом другом языке — с 90%, потому что модель оптимизирована под английский.
 
 
-  *Команды администратора:*
+  <b>Команды администратора:</b>
 
   × /aispam: Показывает, включён ли фильтр, и что именно отправляется модели.
 
-  × /aispam `<on/off>`: Включает или выключает фильтр в этом чате.
+  × /aispam <code>&lt;on/off&gt;</code>: Включает или выключает фильтр в этом чате.
 
 
   Фильтр выключен во всех чатах, пока администратор его не включит, и требует, чтобы оператор бота настроил ключ API.
@@ -1922,7 +1925,7 @@ backup_help_msg: |
 
   Создавайте резервные копии и восстанавливайте настройки вашей группы с помощью этих команд:
 
-  <b>Команды пользователя:</b>
+  <b>Команды администратора:</b>
   • /export - Экспортировать все настройки группы в JSON-файл
   • /export notes filters rules - Экспортировать только определённые модули
 
@@ -1942,12 +1945,12 @@ backup_import_button: "📥 Импорт"
 backup_export_success: |
   <b>✅ Экспорт успешен!</b>
 
-  <b>Чат:</b> %s
-  <b>Экспортировано модулей:</b> %d
-  <b>Экспортировано в:</b> %s
+  <b>Чат:</b> {chat}
+  <b>Экспортировано модулей:</b> {modules}
+  <b>Экспортировано в:</b> {time}
 
   <b>Модули:</b>
-  %s
+  {list}
 
 backup_export_success_text: "✅ Успешно экспортировано {modules} модулей. Скачайте файл резервной копии выше."
 backup_export_rate_limited: "⏳ Пожалуйста, подождите <b>{time}</b> перед следующим экспортом."
@@ -1957,10 +1960,10 @@ backup_export_failed: "❌ Не удалось экспортировать на
 backup_import_success: |
   <b>✅ Импорт успешен!</b>
 
-  <b>Импортировано модулей:</b> %d
+  <b>Импортировано модулей:</b> {modules}
 
   <b>Модули:</b>
-  %s
+  {list}
 
 backup_import_rate_limited: "⏳ Пожалуйста, подождите <b>{time}</b> перед следующим импортом."
 backup_import_no_reply: "❌ Пожалуйста, ответьте на файл резервной копии командой <code>/import</code>."
@@ -1972,8 +1975,8 @@ backup_import_creator_only: "❌ Только создатель группы м
 backup_import_confirm: |
   <b>⚠️ Подтвердите импорт</b>
 
-  Вы собираетесь импортировать <b>%s модулей</b>:
-  %s
+  Вы собираетесь импортировать <b>{modules} модулей</b>:
+  {list}
 
   Это перезапишет существующие настройки. Вы уверены?
 
@@ -1984,18 +1987,18 @@ backup_import_failed: "❌ Импорт не удался: %s"
 backup_reset_success: |
   <b>✅ Сброс успешен!</b>
 
-  <b>Сброшено модулей:</b> %d
+  <b>Сброшено модулей:</b> {modules}
 
   <b>Модули:</b>
-  %s
+  {list}
 
 backup_reset_rate_limited: "⏳ Пожалуйста, подождите <b>{time}</b> перед следующим сбросом."
 backup_reset_creator_only: "❌ Только создатель группы может сбросить настройки."
 backup_reset_confirm: |
   <b>⚠️ Подтвердите сброс</b>
 
-  Вы собираетесь сбросить <b>%s модулей</b>:
-  %s
+  Вы собираетесь сбросить <b>{modules} модулей</b>:
+  {list}
 
   <b>Это действие нельзя отменить!</b> Вы уверены?
 
@@ -2103,7 +2106,11 @@ federations_help_msg: |
   × /subfed /unsubfed /fedsubs: Subscribe to another fed (max 5).
   × /fbanlist [csv|json|minicsv]: Export fbans.
   × /importfbans: Import from a replied CSV/JSON file.
-  × /setfedlog /unsetfedlog: Federation log chat.
+  × /unsetfedlog: Clear the federation log chat.
+
+  *Federation log chat (owner):*
+  × /setfedlog: In a group, make that group the federation log (you must be an admin there).
+  × For a channel: post /setfedlog <fed_id> in the channel (I must be an admin there), then forward that post to me in private or to a group, from the owner account, within 1 hour.
 
   *Group owner:*
   × /joinfed <fed_id>: Join this chat to a federation.
@@ -2130,7 +2137,7 @@ logchannels_help_msg: |
   × /log <category>: Enable a category.
   × /nolog <category>: Disable a category.
 
-  Categories: settings, admin, user, automated, reports, other.
+  Categories: settings, admin, user, reports.
 feds_pm_only: "This command can only be used in private chat with me."
 feds_group_only: "This command can only be used in groups."
 feds_need_name: "Give your federation a name."
@@ -2197,6 +2204,8 @@ feds_subs_header: "Subscriptions:"
 feds_setfedlog_need_id: "Give a federation ID, or use this in a group that is in your fed."
 feds_not_owner: "Only the federation owner can set the fed log."
 feds_setfedlog_ok: "Federation log chat set."
+feds_setfedlog_forward_to_owner: "Запрос записан. Теперь перешлите этот пост с аккаунта владельца федерации мне в личный чат или в группу, где я есть, в течение 1 часа."
+feds_setfedlog_no_pending: "Этот пересланный пост не соответствует ни одному ожидающему запросу /setfedlog, или его срок истёк. Опубликуйте в канале /setfedlog &lt;fed_id&gt; ещё раз и перешлите новый пост в течение 1 часа."
 feds_unsetfedlog_ok: "Federation log chat cleared."
 feds_export_wait: "Please wait before exporting again."
 feds_export_empty: "This federation has no bans to export."
@@ -2212,7 +2221,7 @@ logs_set_ok: "Log channel set. Admin actions from this chat will be sent there."
 logs_unset_ok: "Log channel removed."
 logs_not_set: "No log channel is set for this chat."
 logs_current: "Log channel: <code>{id}</code>"
-logs_categories: "Categories: settings, admin, user, automated, reports, other."
+logs_categories: "Categories: settings, admin, user, reports."
 logs_enabled: "Enabled logging for: {cats}"
 logs_disabled: "Disabled logging for: {cats}"
 logs_unknown_category: "Unknown category. See /logcategories."
@@ -2423,6 +2432,7 @@ staff_act_fail_group_not_found: "группа не найдена"
 staff_act_fail_rate_limited: "превышен лимит запросов, попытки прекращены"
 staff_act_fail_internal: "внутренняя ошибка"
 staff_act_fail_interrupted: "прервано перезапуском"
+staff_act_fail_time_ran_out: "срок ограничения истёк до того, как его удалось применить здесь"
 staff_act_summary_done_collapsed: "{count} групп завершено"
 staff_act_summary_pending_collapsed: "{count} групп в процессе"
 staff_act_summary_continued: "Остальные группы указаны в следующем сообщении."
@@ -2887,6 +2897,7 @@ settings_edit_refuse_button_url: "У кнопки {n} ссылка, котору
 settings_edit_refuse_buttons_limit: "Слишком много кнопок. В сообщении может быть не больше 100 кнопок, и не больше 8 в одном ряду."
 settings_edit_refuse_text_buttons: "В этом тексте есть строки кнопок. Отправьте текст без них, а кнопки задайте отдельной частью."
 settings_edit_refuse_access_lost: "Я больше не могу подтвердить, что вы можете менять настройки этой группы, поэтому перестал ждать. Ничего не изменилось."
+settings_edit_refuse_slash: "Я не могу сохранить текст, который начинается с косой черты: он похож на команду. Замените первый символ и отправьте снова."
 settings_edit_preview_header: "👁 Предпросмотр с вашим именем и названием группы."
 settings_edit_preview_header_rules: "👁 Предпросмотр сообщения с правилами."
 settings_edit_preview_buttons_body: "👁 Вот кнопки."
@@ -3085,9 +3096,7 @@ settings_log_hint: "Канал привязывается командой /setl
 settings_log_cat_settings: "Настройки"
 settings_log_cat_admin: "Действия админов"
 settings_log_cat_user: "Действия юзеров"
-settings_log_cat_automated: "Автоматика"
 settings_log_cat_reports: "Жалобы"
-settings_log_cat_other: "Прочее"
 settings_anon_hint: "Изменить это может только владелец группы, и я должен быть админом в группе."
 settings_btn_anon_toggle: "Режим AnonAdmin: {state}"
 settings_locks_intro: "Я удаляю сообщения заблокированного типа от участников, которые не админы и не одобрены. Блокировка ботов не даёт не-админам добавлять ботов."

@@ -18,7 +18,7 @@ Send admin actions to a dedicated log channel. Every facility keeps records.
 - `/log <category>`: Enable a category.
 - `/nolog <category>`: Disable a category.
 
-Categories: settings, admin, user, automated, reports, other.
+Categories: settings, admin, user, reports.
 
 
 ## Available Commands

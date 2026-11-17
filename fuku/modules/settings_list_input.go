@@ -274,6 +274,9 @@ func (r *settingsInputReply) runList(def settingsListDef, part settingsListPart)
 	if !r.authorize(def.Right) {
 		return
 	}
+	if r.refuseSlash() {
+		return
+	}
 	switch {
 	case def.TwoStep != nil && part.Step == 1 && part.Next != "":
 		r.listStepOne(def, part)

@@ -168,7 +168,7 @@ func ExtractUser(b *gotgbot.Bot, ctx *ext.Context) int64 {
 func ExtractUserAndText(b *gotgbot.Bot, ctx *ext.Context) (int64, string) {
 	msg := ctx.EffectiveMessage
 	args := ctx.Args()
-	prevMessage := msg.ReplyToMessage
+	prevMessage := ReplyTarget(msg)
 
 	splitText := strings.SplitN(msg.Text, " ", 2)
 
@@ -238,7 +238,11 @@ func ExtractUserAndText(b *gotgbot.Bot, ctx *ext.Context) (int64, string) {
 			}
 		}
 	}
-	if !isId && prevMessage != nil && hasArgs {
+	// An explicit target (a text_mention at the argument, an @username or a
+	// numeric ID) always beats the reply: the reply is the fallback only when
+	// the first argument named nobody, and the whole argument is then the text.
+	explicitUser := userId != 0
+	if !isId && !explicitUser && prevMessage != nil && hasArgs {
 		_, parseErr := uuid.Parse(args[1])
 		userId, text = IdFromReply(msg)
 		if parseErr == nil {
@@ -302,8 +306,29 @@ func GetUserInfo(userId int64) (username, name string, found bool) {
 	return "", "", false
 }
 
+// ReplyTarget returns the message m explicitly replies to, or nil. In a forum
+// supergroup Telegram sets reply_to_message to the topic's forum_topic_created
+// service message on every topic message that is not an explicit reply, so that
+// message, and a topic message's own thread root, are never a reply: reading them
+// would act on the topic's creator or purge across topics. Outside a forum a reply
+// thread's ID equals its root's ID too, and replying to that root is a real reply,
+// which is why the thread comparison needs IsTopicMessage.
+func ReplyTarget(m *gotgbot.Message) *gotgbot.Message {
+	if m == nil || m.ReplyToMessage == nil {
+		return nil
+	}
+	reply := m.ReplyToMessage
+	if reply.ForumTopicCreated != nil {
+		return nil
+	}
+	if m.IsTopicMessage && m.MessageThreadId != 0 && m.MessageThreadId == reply.MessageId {
+		return nil
+	}
+	return reply
+}
+
 func IdFromReply(m *gotgbot.Message) (int64, string) {
-	prevMessage := m.ReplyToMessage
+	prevMessage := ReplyTarget(m)
 
 	var userId int64
 

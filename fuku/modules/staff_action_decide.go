@@ -64,6 +64,9 @@ const (
 	staffReasonFailGroupNotFound  staffReason = "fail_group_not_found"
 	staffReasonFailInternal       staffReason = "fail_internal"
 	staffReasonFailInterrupted    staffReason = "fail_interrupted"
+	// staffReasonFailTimeRanOut: the fixed end date of a timed ban or mute was under
+	// staffUntilMinLead away when the write was due, so nothing was sent.
+	staffReasonFailTimeRanOut staffReason = "fail_time_ran_out"
 
 	// Undo reasons (Phase 3). The undone_* reasons stand for a call that was made;
 	// the skip_* reasons leave the group alone.
@@ -93,7 +96,8 @@ func staffReasonOutcome(r staffReason) staffOutcome {
 		return staffOutcomeSkipped
 	case staffReasonFailOwnerUnknown, staffReasonFailLookup, staffReasonFailTelegram,
 		staffReasonFailRateLimited, staffReasonFailBotNotAdmin, staffReasonFailBotNoRights,
-		staffReasonFailGroupNotFound, staffReasonFailInternal, staffReasonFailInterrupted:
+		staffReasonFailGroupNotFound, staffReasonFailInternal, staffReasonFailInterrupted,
+		staffReasonFailTimeRanOut:
 		return staffOutcomeFailed
 	}
 	return staffOutcomeFailed

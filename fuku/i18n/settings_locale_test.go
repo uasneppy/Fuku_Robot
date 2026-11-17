@@ -214,6 +214,7 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_edit_refuse_buttons_limit":   {120, 168},
 	"settings_edit_refuse_text_buttons":    {150, 210},
 	"settings_edit_refuse_access_lost":     {140, 196},
+	"settings_edit_refuse_slash":           {130, 182},
 	"settings_edit_preview_header":         {90, 126},
 	"settings_edit_preview_header_rules":   {50, 70},
 	"settings_edit_preview_buttons_body":   {40, 56},
@@ -342,9 +343,7 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_log_cat_settings":   {18, 18},
 	"settings_log_cat_admin":      {18, 18},
 	"settings_log_cat_user":       {18, 18},
-	"settings_log_cat_automated":  {18, 18},
 	"settings_log_cat_reports":    {18, 18},
-	"settings_log_cat_other":      {18, 18},
 	"settings_anon_hint":          {90, 110},
 	"settings_btn_anon_toggle":    {30, 35},
 
@@ -849,7 +848,7 @@ func TestSettingsLabelLengths(t *testing.T) {
 	lockIcons := []string{"🔒", "🔓"}
 	logCategoryNames := []string{
 		"settings_log_cat_settings", "settings_log_cat_admin", "settings_log_cat_user",
-		"settings_log_cat_automated", "settings_log_cat_reports", "settings_log_cat_other",
+		"settings_log_cat_reports",
 	}
 	// The full-width toggles of the Switches and Anonymous admins pages (Phase 18): each is
 	// rendered with the check or cross icon and the language's longer On or Off word.

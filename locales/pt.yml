@@ -838,9 +838,9 @@ captcha_error_processing: Erro ao processar resposta
 captcha_invalid_refresh: Dados de atualização inválidos
 
 # Captcha max attempts
-captcha_max_attempts_current: "Máximo atual de tentativas de verificação: <b>%d</b>"
+captcha_max_attempts_current: "Máximo atual de tentativas de verificação: <b>{attempts}</b>"
 captcha_max_attempts_invalid: "Valor inválido. Por favor especifique um número entre 1 e 10."
-captcha_max_attempts_set: "Máximo de tentativas de verificação definido para <b>%d</b>"
+captcha_max_attempts_set: "Máximo de tentativas de verificação definido para <b>{attempts}</b>"
 
 # Captcha auto-unmute
 captcha_user_auto_unmute: "Usuário %s será automaticamente desmutado em 24 horas."
@@ -1157,6 +1157,7 @@ greetings_welcome_disabled: "Não vou dar boas-vindas aos usuários de agora em 
 greetings_welcome_invalid_option: "Eu entendo 'on/yes' ou 'off/no' apenas!"
 greetings_welcome_set_success: "Mensagem de boas-vindas personalizada definida com sucesso!"
 greetings_welcome_reset_success: "Mensagem de boas-vindas resetada para o padrão com sucesso!"
+greetings_welcome_not_configured: "Este chat ainda não tem uma mensagem de boas-vindas salva. Defina uma com /setwelcome."
 greetings_goodbye_status: |
   Estou dando adeus a usuários: <code>%s</code>
   Estou deletando adeus antigos: <code>%s</code>
@@ -1167,6 +1168,7 @@ greetings_goodbye_disabled: "Não vou dar adeus aos usuários de agora em diante
 greetings_goodbye_invalid_option: "Eu entendo 'on/yes' ou 'off/no' apenas!"
 greetings_goodbye_set_success: "Mensagem de adeus personalizada definida com sucesso!"
 greetings_goodbye_reset_success: "Mensagem de adeus resetada para o padrão com sucesso!"
+greetings_goodbye_not_configured: "Este chat ainda não tem uma mensagem de despedida salva. Defina uma com /setgoodbye."
 greetings_clean_welcome_status_should: "Eu deveria estar deletando mensagens de boas-vindas com até dois dias de idade."
 greetings_clean_welcome_status_not: "Atualmente não estou deletando mensagens de boas-vindas antigas!"
 greetings_clean_welcome_disabled: "Não vou deletar mensagens de boas-vindas antigas!"
@@ -1210,13 +1212,13 @@ captcha_wrong_answer_final: "❌ Resposta errada! Você foi %s."
 captcha_wrong_answer_remaining: "❌ Resposta errada! %d tentativas restantes."
 captcha_action_kicked: "expulso"
 captcha_action_banned: "banido"
-captcha_action_muted: "mutado permanentemente"
+captcha_action_muted: "mutado por 24 horas"
 captcha_refresh_success: "🔄 Novo captcha enviado!"
 captcha_timeout_failure_kicked: "❌ %s falhou em completar a verificação de captcha e foi expulso."
 captcha_timeout_failure_banned: "❌ %s falhou em completar a verificação de captcha e foi banido."
 captcha_timeout_failure_muted: "❌ %s falhou em completar a verificação de captcha e foi mutado."
 captcha_timeout_with_messages: "❌ %s falhou em completar a verificação de captcha e foi %s.\n\n📝 %d mensagem(s) foram tentadas mas deletadas devido à verificação incompleta."
-captcha_stored_messages_summary: "📝 %s tentou enviar %d mensagem(s) (%s) antes da verificação"
+captcha_stored_messages_summary: "📝 {user} tentou enviar {count} mensagem(s) ({types}) antes da verificação"
 captcha_pending_usage: "Uso: <code>/captchapending @user</code> ou <code>/captchapending user_id</code>"
 captcha_no_pending_messages: "Nenhuma mensagem pendente encontrada para este usuário."
 captcha_clear_usage: "Uso: <code>/captchaclear @user</code> ou <code>/captchaclear user_id</code>"
@@ -1474,6 +1476,7 @@ bot_updates_need_supergroup: "Desculpe, mas para usar todas minhas funcionalidad
 bot_updates_thanks_for_adding: "Obrigado por me adicionar em seu grupo!"
 bot_updates_make_me_admin: "Torne-me administrador para usar todos os meus recursos!"
 bot_updates_button_expired: "Este botão expirou, Por favor use o comando novamente."
+bot_updates_anon_unsupported_command: "Este comando não pode ser usado anonimamente. Publique-o como você mesmo e envie-o novamente."
 
 # Formatting module additional strings
 formatting_press_button: "Pressione o botão abaixo para obter Ajuda Markdown!"
@@ -1595,11 +1598,11 @@ aispam_help_msg: |
   Mensagens escritas em inglês agem a partir de 80% de confiança, e mensagens em qualquer outro idioma a partir de 90%, porque o modelo é otimizado para inglês.
 
 
-  *Comandos de administrador:*
+  <b>Comandos de administrador:</b>
 
   × /aispam: Mostra se o filtro está ativo e exatamente o que é enviado ao modelo.
 
-  × /aispam `<on/off>`: Ativa ou desativa o filtro neste chat.
+  × /aispam <code>&lt;on/off&gt;</code>: Ativa ou desativa o filtro neste chat.
 
 
   O filtro fica desativado em todos os chats até um administrador ativá-lo, e exige que o operador do bot tenha configurado uma chave de API.
@@ -2101,7 +2104,7 @@ backup_help_msg: |
 
   Faça backup e restaure as configurações do seu grupo usando estes comandos:
 
-  <b>Comandos de Usuário:</b>
+  <b>Comandos de Administrador:</b>
   • /export - Exportar todas as configurações do grupo para um arquivo JSON
   • /export notes filters rules - Exportar apenas módulos específicos
 
@@ -2121,12 +2124,12 @@ backup_import_button: "📥 Importar"
 backup_export_success: |
   <b>✅ Exportação Bem-Sucedida!</b>
 
-  <b>Chat:</b> %s
-  <b>Módulos exportados:</b> %d
-  <b>Exportado em:</b> %s
+  <b>Chat:</b> {chat}
+  <b>Módulos exportados:</b> {modules}
+  <b>Exportado em:</b> {time}
 
   <b>Módulos:</b>
-  %s
+  {list}
 
 backup_export_success_text: "✅ Exportados com sucesso {modules} módulos. Baixe o arquivo de backup acima."
 backup_export_rate_limited: "⏳ Por favor aguarde <b>{time}</b> antes de exportar novamente."
@@ -2136,10 +2139,10 @@ backup_export_failed: "❌ Falha ao exportar configurações. Por favor tente no
 backup_import_success: |
   <b>✅ Importação Bem-Sucedida!</b>
 
-  <b>Módulos importados:</b> %d
+  <b>Módulos importados:</b> {modules}
 
   <b>Módulos:</b>
-  %s
+  {list}
 
 backup_import_rate_limited: "⏳ Por favor aguarde <b>{time}</b> antes de importar novamente."
 backup_import_no_reply: "❌ Por favor responda a um arquivo de backup com <code>/import</code>."
@@ -2151,8 +2154,8 @@ backup_import_creator_only: "❌ Apenas o criador do grupo pode importar configu
 backup_import_confirm: |
   <b>⚠️ Confirmar Importação</b>
 
-  Você está prestes a importar <b>%s módulos</b>:
-  %s
+  Você está prestes a importar <b>{modules} módulos</b>:
+  {list}
 
   Isso sobrescreverá as configurações existentes. Tem certeza?
 
@@ -2163,18 +2166,18 @@ backup_import_failed: "❌ Falha na importação: %s"
 backup_reset_success: |
   <b>✅ Redefinição Bem-Sucedida!</b>
 
-  <b>Módulos redefinidos:</b> %d
+  <b>Módulos redefinidos:</b> {modules}
 
   <b>Módulos:</b>
-  %s
+  {list}
 
 backup_reset_rate_limited: "⏳ Por favor aguarde <b>{time}</b> antes de redefinir novamente."
 backup_reset_creator_only: "❌ Apenas o criador do grupo pode redefinir as configurações."
 backup_reset_confirm: |
   <b>⚠️ Confirmar Redefinição</b>
 
-  Você está prestes a redefinir <b>%s módulos</b>:
-  %s
+  Você está prestes a redefinir <b>{modules} módulos</b>:
+  {list}
 
   <b>Esta ação não pode ser desfeita!</b> Tem certeza?
 
@@ -2282,7 +2285,11 @@ federations_help_msg: |
   × /subfed /unsubfed /fedsubs: Subscribe to another fed (max 5).
   × /fbanlist [csv|json|minicsv]: Export fbans.
   × /importfbans: Import from a replied CSV/JSON file.
-  × /setfedlog /unsetfedlog: Federation log chat.
+  × /unsetfedlog: Clear the federation log chat.
+
+  *Federation log chat (owner):*
+  × /setfedlog: In a group, make that group the federation log (you must be an admin there).
+  × For a channel: post /setfedlog <fed_id> in the channel (I must be an admin there), then forward that post to me in private or to a group, from the owner account, within 1 hour.
 
   *Group owner:*
   × /joinfed <fed_id>: Join this chat to a federation.
@@ -2309,7 +2316,7 @@ logchannels_help_msg: |
   × /log <category>: Enable a category.
   × /nolog <category>: Disable a category.
 
-  Categories: settings, admin, user, automated, reports, other.
+  Categories: settings, admin, user, reports.
 feds_pm_only: "This command can only be used in private chat with me."
 feds_group_only: "This command can only be used in groups."
 feds_need_name: "Give your federation a name."
@@ -2376,6 +2383,8 @@ feds_subs_header: "Subscriptions:"
 feds_setfedlog_need_id: "Give a federation ID, or use this in a group that is in your fed."
 feds_not_owner: "Only the federation owner can set the fed log."
 feds_setfedlog_ok: "Federation log chat set."
+feds_setfedlog_forward_to_owner: "Pedido registrado. Agora encaminhe esta publicação para mim, a partir da conta do dono da federação, em um chat privado ou em um grupo em que eu esteja, em até 1 hora."
+feds_setfedlog_no_pending: "Esse encaminhamento não corresponde a nenhuma publicação /setfedlog pendente, ou ela expirou. Publique /setfedlog &lt;fed_id&gt; no canal de novo e encaminhe a nova publicação em até 1 hora."
 feds_unsetfedlog_ok: "Federation log chat cleared."
 feds_export_wait: "Please wait before exporting again."
 feds_export_empty: "This federation has no bans to export."
@@ -2391,7 +2400,7 @@ logs_set_ok: "Log channel set. Admin actions from this chat will be sent there."
 logs_unset_ok: "Log channel removed."
 logs_not_set: "No log channel is set for this chat."
 logs_current: "Log channel: <code>{id}</code>"
-logs_categories: "Categories: settings, admin, user, automated, reports, other."
+logs_categories: "Categories: settings, admin, user, reports."
 logs_enabled: "Enabled logging for: {cats}"
 logs_disabled: "Disabled logging for: {cats}"
 logs_unknown_category: "Unknown category. See /logcategories."
@@ -2602,6 +2611,7 @@ staff_act_fail_group_not_found: "grupo não encontrado"
 staff_act_fail_rate_limited: "limite de requisições atingido, desistiu após várias tentativas"
 staff_act_fail_internal: "erro interno"
 staff_act_fail_interrupted: "interrompido por uma reinicialização"
+staff_act_fail_time_ran_out: "o tempo da restrição já tinha acabado antes de ser aplicada aqui"
 staff_act_summary_done_collapsed: "{count} grupos concluídos"
 staff_act_summary_pending_collapsed: "{count} grupos em andamento"
 staff_act_summary_continued: "Mais grupos estão listados na próxima mensagem."
@@ -3066,6 +3076,7 @@ settings_edit_refuse_button_url: "O botão {n} tem um link que não posso usar. 
 settings_edit_refuse_buttons_limit: "São botões demais. Uma mensagem pode ter no máximo 100 botões e no máximo 8 por linha."
 settings_edit_refuse_text_buttons: "Esse texto contém linhas de botões. Envie o texto sem elas e defina os botões como uma parte separada."
 settings_edit_refuse_access_lost: "Não consigo mais confirmar que você pode alterar as configurações deste grupo, então parei de esperar. Nada mudou."
+settings_edit_refuse_slash: "Não consigo salvar um texto que começa com uma barra, porque parece um comando. Troque o primeiro caractere e envie de novo."
 settings_edit_preview_header: "👁 Prévia, preenchida com seu nome e o título do grupo."
 settings_edit_preview_header_rules: "👁 Prévia da mensagem de regras."
 settings_edit_preview_buttons_body: "👁 Estes são os botões."
@@ -3264,9 +3275,7 @@ settings_log_hint: "Um canal é vinculado com /setlog e removido com /unsetlog. 
 settings_log_cat_settings: "Ajustes"
 settings_log_cat_admin: "Ações de admin"
 settings_log_cat_user: "Ações de usuário"
-settings_log_cat_automated: "Automáticas"
 settings_log_cat_reports: "Denúncias"
-settings_log_cat_other: "Outras"
 settings_anon_hint: "Só o dono do grupo pode alterar isto, e eu preciso ser admin no grupo."
 settings_btn_anon_toggle: "Modo AnonAdmin: {state}"
 settings_locks_intro: "Apago as mensagens de um tipo bloqueado enviadas por membros que não são admins nem aprovados. Bloquear bots impede que não admins adicionem bots."

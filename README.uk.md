@@ -148,7 +148,7 @@ Staff-група — це одна група довірених адмінів,
 
 - **Федерації.** Спільні списки банів для кількох груп, підписки на інші федерації (не більш як 5), адміни федерації, чат журналу федерації, імпорт і експорт банів федерації у форматі CSV або JSON.
 - **Підключення.** Керування налаштуваннями групи з приватного чату.
-- **Канали журналу.** Канали журналу для кожної групи з шістьма категоріями: settings, admin, user, automated, reports і other.
+- **Канали журналу.** Канали журналу для кожної групи з чотирма категоріями: settings, admin, user і reports.
 - **Скарги та вимкнення.** Скарги `/report` і `@admin` та вимкнення команд у кожному чаті окремо.
 
 ### Мови й резервні копії
@@ -496,7 +496,8 @@ Staff-група — це одна група довірених адмінів,
 
 | Хто | Команди |
 | --- | --- |
-| Власник федерації (приватний чат) | `/newfed <name>`, `/renamefed <name>`, `/delfed`, `/fedpromote`, `/feddemote`, `/fedreason on/off`, `/fednotif on/off`, `/subfed`, `/unsubfed`, `/fedsubs`, `/fbanlist [csv/json/minicsv]`, `/importfbans`, `/setfedlog`, `/unsetfedlog` |
+| Власник федерації (приватний чат) | `/newfed <name>`, `/renamefed <name>`, `/delfed`, `/fedpromote`, `/feddemote`, `/fedreason on/off`, `/fednotif on/off`, `/subfed`, `/unsubfed`, `/fedsubs`, `/fbanlist [csv/json/minicsv]`, `/importfbans`, `/unsetfedlog` |
+| Власник федерації (журнал федерації) | `/setfedlog`, надіслана в групі, де ви адмін, робить її журналом федерації; для каналу опублікуйте в каналі `/setfedlog <fed_id>` і протягом години перешліть цей допис ботові в приватний чат або в групу |
 | Власник групи | `/joinfed <fed_id>`, `/leavefed`, `/quietfed on/off` |
 | Адміни федерації | `/fban`, `/unfban` (`/funban`), `/fedstat` (`/fbanstat`), `/feddemoteme` |
 | Будь-хто | `/fedinfo`, `/fedadmins`, `/chatfed`, `/myfeds` |
@@ -526,7 +527,7 @@ Staff-група — це одна група довірених адмінів,
 | --- | --- |
 | `/setlog` · `/unsetlog` | Задати або прибрати канал журналу |
 | `/logchannel` | Показати поточний канал журналу |
-| `/logcategories` | Список категорій: settings, admin, user, automated, reports, other |
+| `/logcategories` | Список категорій: settings, admin, user, reports |
 | `/log <category>` · `/nolog <category>` | Увімкнути або вимкнути категорію. Адміни, у групі із заданим каналом журналу |
 
 </details>

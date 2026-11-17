@@ -709,6 +709,7 @@ func (moduleStruct) applyFban(b *gotgbot.Bot, ctx *ext.Context, ban bool) error 
 			replyHTML(b, msg, text)
 			return ext.EndGroups
 		}
+		previous := federations.GetFedBanContext(tracing.UpdateContext(ctx), fed.FedID, targetID)
 		_, created, err := federations.Fban(fed.FedID, targetID, from.Id, reason)
 		if err != nil {
 			text, _ := tr.GetString("feds_fban_failed")
@@ -726,13 +727,17 @@ func (moduleStruct) applyFban(b *gotgbot.Bot, ctx *ext.Context, ban bool) error 
 			})
 			replyHTML(b, msg, text)
 		}
-		notifyFedAction(b, fed, from, fmt.Sprintf(
-			"FBAN <code>%d</code> by %s\nReason: %s",
-			targetID,
-			formatting.MentionHtml(from.Id, from.FirstName),
-			html.EscapeString(reason),
-		))
-		go applyActiveFban(b, fed.FedID, targetID)
+		// A repeated /fban with the same reason changes nothing: no second
+		// announcement and no second ban loop.
+		if fbanChanged(created, previous, reason) {
+			notifyFedAction(b, fed, from, fmt.Sprintf(
+				"FBAN <code>%d</code> by %s\nReason: %s",
+				targetID,
+				formatting.MentionHtml(from.Id, from.FirstName),
+				html.EscapeString(reason),
+			))
+			go applyActiveFban(b, fed.FedID, targetID)
+		}
 		return ext.EndGroups
 	}
 	if err := federations.Unfban(fed.FedID, targetID); err != nil {
@@ -750,7 +755,17 @@ func (moduleStruct) applyFban(b *gotgbot.Bot, ctx *ext.Context, ban bool) error 
 		targetID,
 		formatting.MentionHtml(from.Id, from.FirstName),
 	))
+	go applyActiveUnfban(b, fed.FedID, targetID)
 	return ext.EndGroups
+}
+
+// fbanChanged reports whether an /fban changed anything worth announcing: a new ban,
+// or a reason that differs from the stored one once both are trimmed.
+func fbanChanged(created bool, previous *models.FederationBan, reason string) bool {
+	if created || previous == nil {
+		return true
+	}
+	return strings.TrimSpace(previous.Reason) != strings.TrimSpace(reason)
 }
 
 func applyActiveFban(b *gotgbot.Bot, fedID string, userID int64) {
@@ -762,6 +777,28 @@ func applyActiveFban(b *gotgbot.Bot, fedID string, userID int64) {
 	for _, chatID := range federations.ChatsContainingUser(userID, chatIDs) {
 		if _, err := b.BanChatMember(chatID, userID, nil); err != nil {
 			log.Debugf("[Federations] active fban chat %d user %d: %v", chatID, userID, err)
+		}
+	}
+}
+
+// applyActiveUnfban mirrors applyActiveFban after an /unfban: it unbans the user, with
+// only_if_banned so a member is never removed, in every chat of the federation the bot
+// has seen them in. It does nothing while a federation this one subscribes to still
+// bans the user, because the passive check would ban them again at their next message.
+// Accepted: only_if_banned cannot tell a ban a chat admin placed separately apart, so
+// that one is lifted too.
+func applyActiveUnfban(b *gotgbot.Bot, fedID string, userID int64) {
+	defer error_handling.RecoverFromPanic("applyActiveUnfban", "Federations")
+	if ban, _ := federations.FindBanInFedTree(fedID, userID); ban != nil {
+		return
+	}
+	chatIDs, err := federations.ListFedChatIDs(fedID)
+	if err != nil {
+		return
+	}
+	for _, chatID := range federations.ChatsContainingUser(userID, chatIDs) {
+		if _, err := b.UnbanChatMember(chatID, userID, &gotgbot.UnbanChatMemberOpts{OnlyIfBanned: true}); err != nil {
+			log.Debugf("[Federations] active unfban chat %d user %d: %v", chatID, userID, err)
 		}
 	}
 }
@@ -945,40 +982,59 @@ func (moduleStruct) fedSubs(b *gotgbot.Bot, ctx *ext.Context) error {
 	return ext.EndGroups
 }
 
+// setfedlogPendingKey is the marker key of a channel post /setfedlog <fed id>; the value is the
+// fed ID. It sits outside the fuku:cache: prefix.
+func setfedlogPendingKey(channelID, messageID int64) string {
+	return fmt.Sprintf("fuku:setfedlog:%d:%d", channelID, messageID)
+}
+
+// setFedLog is /setfedlog. Posted in a channel with a fed ID it records a one-hour marker and asks
+// for the owner's forward (the post has no sender, so it neither checks nor reveals the
+// federation). That post forwarded by the federation owner, to the bot's private chat or to a
+// group, sets the federation log to the channel the post came from (setFedLogFromForward). Typed
+// in a group by an administrator of that group who owns a federation, it makes that group the
+// federation log.
 func (moduleStruct) setFedLog(b *gotgbot.Bot, ctx *ext.Context) error {
 	msg := ctx.EffectiveMessage
 	chat := ctx.EffectiveChat
-	from := requireUser(b, ctx)
-	if from == nil {
+	if chat == nil || msg == nil {
 		return ext.EndGroups
 	}
 	tr := ctxTr(ctx)
-	arg := strings.TrimSpace(strings.Join(ctx.Args()[1:], " "))
 	if chat.Type == "channel" {
-		fedID, ok := parseFedID(arg)
+		fedID, ok := parseFedID(strings.TrimSpace(strings.Join(ctx.Args()[1:], " ")))
 		if !ok {
 			text, _ := tr.GetString("feds_setfedlog_need_id")
 			replyHTML(b, msg, text)
 			return ext.EndGroups
 		}
-		fed := federations.GetFedContext(tracing.UpdateContext(ctx), fedID)
-		if fed == nil || fed.OwnerID != from.Id {
-			text, _ := tr.GetString("feds_not_owner")
+		if err := storePendingMarker(setfedlogPendingKey(chat.Id, msg.MessageId), []byte(fedID)); err != nil {
+			log.Errorf("[Federations] failed to store pending setfedlog for channel %d: %v", chat.Id, err)
+			text, _ := tr.GetString("common_settings_save_failed")
 			replyHTML(b, msg, text)
 			return ext.EndGroups
 		}
-		if err := federations.SetFedLogChat(fed.FedID, chat.Id); err != nil {
-			text, _ := tr.GetString("feds_create_failed")
-			replyHTML(b, msg, text)
-			return ext.EndGroups
-		}
-		text, _ := tr.GetString("feds_setfedlog_ok")
+		text, _ := tr.GetString("feds_setfedlog_forward_to_owner")
 		replyHTML(b, msg, text)
+		return ext.EndGroups
+	}
+	from := requireUser(b, ctx)
+	if from == nil {
+		return ext.EndGroups
+	}
+	if channelID, messageID, ok := channelForwardOrigin(msg); ok {
+		// A forwarded channel post never falls into the group branch: the bound chat is the
+		// channel the post came from, never the chat the forward was sent in.
+		setFedLogFromForward(b, ctx, from, channelID, messageID)
 		return ext.EndGroups
 	}
 	if chat_status.RequirePrivate(b, ctx, chat) {
 		text, _ := tr.GetString("feds_group_only")
 		replyHTML(b, msg, text)
+		return ext.EndGroups
+	}
+	if !chat_status.RequireUserAdmin(b, ctx, chat, from.Id) {
+		chat_status.NewPermissionResponder(b).Respond(ctx, "chat_status_user_admin_cmd_error", "chat_status_user_admin_button_error", chat_status.WithReplyFallback())
 		return ext.EndGroups
 	}
 	fed := ownedFedOrReply(b, ctx)
@@ -993,6 +1049,46 @@ func (moduleStruct) setFedLog(b *gotgbot.Bot, ctx *ext.Context) error {
 	text, _ := tr.GetString("feds_setfedlog_ok")
 	replyHTML(b, msg, text)
 	return ext.EndGroups
+}
+
+// setFedLogFromForward is step 2 of the channel flow. In order, each step refusing before the
+// next: the marker of the forwarded post is read without consuming it (none or expired:
+// feds_setfedlog_no_pending); the federation it names must be owned by the forwarder
+// (feds_not_owner, the marker left for the owner); the marker is consumed once (a lost race:
+// feds_setfedlog_no_pending); the federation log is set to the channel of the forward's origin.
+func setFedLogFromForward(b *gotgbot.Bot, ctx *ext.Context, from *gotgbot.User, channelID, messageID int64) {
+	msg := ctx.EffectiveMessage
+	tr := ctxTr(ctx)
+	reply := func(key string) {
+		text, _ := tr.GetString(key)
+		replyHTML(b, msg, text)
+	}
+	key := setfedlogPendingKey(channelID, messageID)
+	raw, ok := peekPendingMarker(key)
+	if !ok || messageID == 0 {
+		reply("feds_setfedlog_no_pending")
+		return
+	}
+	fedID, ok := parseFedID(string(raw))
+	if !ok {
+		reply("feds_setfedlog_no_pending")
+		return
+	}
+	fed := federations.GetFedContext(tracing.UpdateContext(ctx), fedID)
+	if fed == nil || fed.OwnerID != from.Id {
+		reply("feds_not_owner")
+		return
+	}
+	if !consumePendingMarker(key) {
+		reply("feds_setfedlog_no_pending")
+		return
+	}
+	if err := federations.SetFedLogChat(fed.FedID, channelID); err != nil {
+		log.Errorf("[Federations] SetFedLogChat to channel %d: %v", channelID, err)
+		reply("feds_create_failed")
+		return
+	}
+	reply("feds_setfedlog_ok")
 }
 
 func (moduleStruct) unsetFedLog(b *gotgbot.Bot, ctx *ext.Context) error {
@@ -1266,7 +1362,8 @@ func LoadFederations(dispatcher *ext.Dispatcher) {
 	dispatcher.AddHandler(helpers.NewBotCommand("unsubfed", federationsModule.unsubFed))
 	dispatcher.AddHandler(helpers.NewBotCommand("fedsubs", federationsModule.fedSubs))
 	helpers.AddCmdToDisableable("fedsubs")
-	dispatcher.AddHandler(helpers.NewBotCommand("setfedlog", federationsModule.setFedLog))
+	// A channel post has no sender, so setfedlog is a raw command with channel posts allowed.
+	dispatcher.AddHandler(helpers.NewBotCommand("setfedlog", federationsModule.setFedLog).SetAllowChannel(true))
 	dispatcher.AddHandler(helpers.NewBotCommand("unsetfedlog", federationsModule.unsetFedLog))
 	dispatcher.AddHandler(helpers.NewBotCommand("fbanlist", federationsModule.fbanList))
 	dispatcher.AddHandler(helpers.NewBotCommand("importfbans", federationsModule.importFBans))

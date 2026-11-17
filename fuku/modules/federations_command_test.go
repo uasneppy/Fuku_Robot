@@ -142,8 +142,10 @@ func TestImportFBansNeedsFileAndSetFedLogInChannel(t *testing.T) {
 	if err := federationsModule.setFedLog(bot, newModuleMessageContext(bot, channel, owner, "/setfedlog "+fed.FedID)); err != ext.EndGroups {
 		t.Fatalf("setFedLog channel: %v", err)
 	}
-	if federations.GetFed(fed.FedID).LogChatID != channel.Id {
-		t.Fatal("channel setfedlog did not persist")
+	// The channel post only records a marker: the federation owner's forward of it is what
+	// sets the log (TestSetFedLogFlowThroughDispatcher).
+	if got := federations.GetFed(fed.FedID).LogChatID; got != 0 {
+		t.Fatalf("a channel post set the fed log to %d before the owner forwarded it", got)
 	}
 
 	if ownedFedOrReply(bot, newModuleMessageContext(bot, pm, owner, "/noop")) == nil {
@@ -348,8 +350,14 @@ func TestUnfbanAndFedStat(t *testing.T) {
 }
 
 func TestFedSubscribeLogExportAndDelete(t *testing.T) {
-	bot := newModuleTestBot(newModuleBotClient())
+	client := newModuleBotClient()
+	bot := newModuleTestBot(client)
 	ownerID := uniquePositiveUserID()
+	// Typed /setfedlog in a group needs an administrator of that group.
+	client.responses["getChatAdministrators"] = json.RawMessage(
+		`[{"status":"administrator","user":{"id":999,"is_bot":true,"first_name":"Fuku"}},` +
+			`{"status":"administrator","user":{"id":` + strconv.FormatInt(ownerID, 10) + `,"is_bot":false,"first_name":"Owner"}}]`,
+	)
 	owner := gotgbot.User{Id: ownerID, FirstName: "Owner"}
 	fed, err := federations.CreateFederation(ownerID, "Export Fed")
 	require.NoError(t, err)

@@ -137,9 +137,10 @@ func raidCountMessageJoins(b *gotgbot.Bot, chat *gotgbot.Chat, msg *gotgbot.Mess
 // raidJoinSettings is what both join counters check before they count anything. It reports
 // the chat's raid detection settings and true when joins are to be counted: the chat is a
 // supergroup, Redis is available, the settings could be read (one bounded read under
-// raidSettingsTimeout; an unreadable answer counts nothing) and at least one trigger is on.
-// The flood switch counts too, because the join list is also what the flood trigger
-// reads to tell new members.
+// raidSettingsTimeout; an unreadable answer counts nothing) and at least one of the three
+// triggers is on. The join list is what both the flood trigger and the AI paths read to tell a
+// new member, which is why any of the three switches keeps it written; only the join surge
+// switch lets a count start a lockdown (raidRecordAndFire checks it on its own).
 func raidJoinSettings(chat *gotgbot.Chat) (*models.ChatRaidDetection, bool) {
 	if chat.Type != "supergroup" || raidRedis() == nil {
 		return nil, false
@@ -151,7 +152,7 @@ func raidJoinSettings(chat *gotgbot.Chat) (*models.ChatRaidDetection, bool) {
 		log.Debugf("[RaidDetection] settings of chat %d could not be read, counting nothing: %v", chat.Id, err)
 		return nil, false
 	}
-	if settings == nil || (!settings.JoinEnabled && !settings.FloodEnabled) {
+	if settings == nil || (!settings.JoinEnabled && !settings.FloodEnabled && !settings.AIEnabled) {
 		return nil, false
 	}
 	return settings, true

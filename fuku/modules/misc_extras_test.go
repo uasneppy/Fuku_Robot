@@ -1,6 +1,7 @@
 package modules
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 	"github.com/stretchr/testify/require"
 
+	"github.com/uasneppy/fuku_robot/fuku/config"
 	"github.com/uasneppy/fuku_robot/fuku/db"
 	"github.com/uasneppy/fuku_robot/fuku/db/chats"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
@@ -150,4 +152,46 @@ func TestFetchJSONUnexpectedStatus(t *testing.T) {
 	if err := fetchJSON("https://example.invalid/x", &dest); err == nil {
 		t.Fatal("expected status error")
 	}
+}
+
+// TestFetchJSONSendsUserAgent proves every lookup carries a descriptive User-Agent: Wikimedia
+// answers 403 to a request without one, which made /wiki answer "not found" for everything.
+func TestFetchJSONSendsUserAgent(t *testing.T) {
+	previous := config.AppConfig.BotVersion
+	config.AppConfig.BotVersion = ""
+	require.Equal(t, "Xenobot-72 (Telegram bot)", fetchUserAgent())
+	config.AppConfig.BotVersion = "9.8.7-ua"
+	t.Cleanup(func() { config.AppConfig.BotVersion = previous })
+	want := "Xenobot-72/9.8.7-ua (Telegram bot)"
+	var seen []string
+	withMiscHTTPClient(t, &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		agent := req.Header.Get("User-Agent")
+		seen = append(seen, req.URL.Host+" "+agent)
+		status, body := 200, `{"ok":true}`
+		if strings.Contains(req.URL.Host, "wikipedia.org") {
+			body = `["Go",["Go"],["A language"],["https://en.wikipedia.org/wiki/Go"]]`
+		}
+		if agent != want {
+			status, body = 403, `{"error":"no user agent"}`
+		}
+		return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
+	})})
+
+	var payload map[string]any
+	if err := fetchJSON("https://api.example.org/x", &payload); err != nil {
+		t.Fatalf("fetchJSON() error = %v (requests %v)", err, seen)
+	}
+
+	client := newModuleBotClient()
+	bot := newModuleTestBot(client)
+	chat := gotgbot.Chat{Id: uniqueModuleChatID(), Type: "private", FirstName: "User"}
+	user := gotgbot.User{Id: uniquePositiveUserID(), FirstName: "User"}
+	if err := miscModule.wiki(bot, newModuleMessageContext(bot, chat, user, "/wiki Go")); err != ext.EndGroups {
+		t.Fatalf("wiki: %v", err)
+	}
+	calls := client.callsFor("sendMessage")
+	require.Len(t, calls, 1)
+	require.Contains(t, fmt.Sprint(calls[0].Params["text"]), "en.wikipedia.org/wiki/Go", "requests %v", seen)
+	require.Len(t, seen, 2)
+	require.Equal(t, "en.wikipedia.org "+want, seen[1])
 }

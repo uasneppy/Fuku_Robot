@@ -848,9 +848,9 @@ captcha_error_processing: Kesalahan memproses jawaban
 captcha_invalid_refresh: Data refresh tidak valid
 
 # Captcha max attempts
-captcha_max_attempts_current: "Maksimum percobaan verifikasi saat ini: <b>%d</b>"
+captcha_max_attempts_current: "Maksimum percobaan verifikasi saat ini: <b>{attempts}</b>"
 captcha_max_attempts_invalid: "Nilai tidak valid. Silakan tentukan angka antara 1 dan 10."
-captcha_max_attempts_set: "Maksimum percobaan verifikasi diatur ke <b>%d</b>"
+captcha_max_attempts_set: "Maksimum percobaan verifikasi diatur ke <b>{attempts}</b>"
 
 # Captcha auto-unmute
 captcha_user_auto_unmute: "Pengguna %s akan dibuka bisunya secara otomatis dalam 24 jam."
@@ -1167,6 +1167,7 @@ greetings_welcome_disabled: "Saya tidak akan menyambut pengguna mulai sekarang."
 greetings_welcome_invalid_option: "Saya hanya mengerti 'on/yes' atau 'off/no'!"
 greetings_welcome_set_success: "Berhasil mengatur pesan selamat datang khusus!"
 greetings_welcome_reset_success: "Berhasil mengatur ulang pesan selamat datang ke default!"
+greetings_welcome_not_configured: "Belum ada pesan sambutan yang disimpan untuk obrolan ini. Atur dengan /setwelcome."
 greetings_goodbye_status: |
   Saya saat ini mengucapkan selamat tinggal: <code>%s</code>
   Saya saat ini menghapus selamat tinggal lama: <code>%s</code>
@@ -1177,6 +1178,7 @@ greetings_goodbye_disabled: "Saya tidak akan mengucapkan selamat tinggal penggun
 greetings_goodbye_invalid_option: "Saya hanya mengerti 'on/yes' atau 'off/no'!"
 greetings_goodbye_set_success: "Berhasil mengatur pesan selamat tinggal khusus!"
 greetings_goodbye_reset_success: "Berhasil mengatur ulang pesan selamat tinggal ke default!"
+greetings_goodbye_not_configured: "Belum ada pesan perpisahan yang disimpan untuk obrolan ini. Atur dengan /setgoodbye."
 greetings_clean_welcome_status_should: "Saya seharusnya menghapus pesan selamat datang hingga dua hari."
 greetings_clean_welcome_status_not: "Saya saat ini tidak menghapus pesan selamat datang lama!"
 greetings_clean_welcome_disabled: "Saya tidak akan menghapus pesan selamat datang lama!"
@@ -1220,13 +1222,13 @@ captcha_wrong_answer_final: "❌ Jawaban salah! Anda telah %s."
 captcha_wrong_answer_remaining: "❌ Jawaban salah! %d percobaan tersisa."
 captcha_action_kicked: "ditendang"
 captcha_action_banned: "diblokir"
-captcha_action_muted: "dibisukan secara permanen"
+captcha_action_muted: "dibisukan selama 24 jam"
 captcha_refresh_success: "🔄 Captcha baru dikirim!"
 captcha_timeout_failure_kicked: "❌ %s gagal menyelesaikan verifikasi captcha dan telah ditendang."
 captcha_timeout_failure_banned: "❌ %s gagal menyelesaikan verifikasi captcha dan telah diblokir."
 captcha_timeout_failure_muted: "❌ %s gagal menyelesaikan verifikasi captcha dan telah dibisukan."
 captcha_timeout_with_messages: "❌ %s gagal menyelesaikan verifikasi captcha dan telah %s.\n\n📝 %d pesan telah dicoba tetapi dihapus karena verifikasi tidak lengkap."
-captcha_stored_messages_summary: "📝 %s mencoba mengirim %d pesan (%s) sebelum verifikasi"
+captcha_stored_messages_summary: "📝 {user} mencoba mengirim {count} pesan ({types}) sebelum verifikasi"
 captcha_pending_usage: "Penggunaan: <code>/captchapending @user</code> atau <code>/captchapending user_id</code>"
 captcha_no_pending_messages: "Tidak ada pesan tertunda untuk pengguna ini."
 captcha_clear_usage: "Penggunaan: <code>/captchaclear @user</code> atau <code>/captchaclear user_id</code>"
@@ -1506,6 +1508,7 @@ bot_updates_need_supergroup: "Maaf, tetapi untuk menggunakan semua fitur saya, A
 bot_updates_thanks_for_adding: "Terima kasih telah menambahkan saya di grup Anda!"
 bot_updates_make_me_admin: "Jadikan saya admin agar semua fitur saya bisa digunakan!"
 bot_updates_button_expired: "Tombol ini telah kedaluwarsa, Silakan gunakan perintah lagi."
+bot_updates_anon_unsupported_command: "Perintah ini tidak dapat digunakan secara anonim. Kirim sebagai diri sendiri, lalu kirim ulang."
 
 # Formatting module additional strings
 formatting_press_button: "Tekan tombol di bawah untuk mendapatkan Bantuan Markdown!"
@@ -1605,11 +1608,11 @@ aispam_help_msg: |
   Pesan yang ditulis dalam bahasa Inggris bertindak mulai keyakinan 80%, dan pesan dalam bahasa lain mulai 90%, karena model ini dioptimalkan untuk bahasa Inggris.
 
 
-  *Perintah admin:*
+  <b>Perintah admin:</b>
 
   × /aispam: Menampilkan apakah filter aktif dan persisnya data apa yang dikirim ke model.
 
-  × /aispam `<on/off>`: Mengaktifkan atau menonaktifkan filter untuk chat ini.
+  × /aispam <code>&lt;on/off&gt;</code>: Mengaktifkan atau menonaktifkan filter untuk chat ini.
 
 
   Filter nonaktif di semua chat sampai seorang admin mengaktifkannya, dan memerlukan kunci API yang sudah dikonfigurasi oleh operator bot.
@@ -2110,7 +2113,7 @@ backup_help_msg: |
 
   Cadangkan dan pulihkan pengaturan grup Anda menggunakan perintah ini:
 
-  <b>Perintah Pengguna:</b>
+  <b>Perintah Admin:</b>
   • /export - Ekspor semua pengaturan grup ke file JSON
   • /export notes filters rules - Ekspor modul tertentu saja
 
@@ -2130,12 +2133,12 @@ backup_import_button: "📥 Impor"
 backup_export_success: |
   <b>✅ Ekspor Berhasil!</b>
 
-  <b>Obrolan:</b> %s
-  <b>Modul diekspor:</b> %d
-  <b>Diekspor pada:</b> %s
+  <b>Obrolan:</b> {chat}
+  <b>Modul diekspor:</b> {modules}
+  <b>Diekspor pada:</b> {time}
 
   <b>Modul:</b>
-  %s
+  {list}
 
 backup_export_success_text: "✅ Berhasil mengekspor {modules} modul. Unduh file cadangan di atas."
 backup_export_rate_limited: "⏳ Silakan tunggu <b>{time}</b> sebelum mengekspor lagi."
@@ -2145,10 +2148,10 @@ backup_export_failed: "❌ Gagal mengekspor pengaturan. Silakan coba lagi nanti.
 backup_import_success: |
   <b>✅ Impor Berhasil!</b>
 
-  <b>Modul diimpor:</b> %d
+  <b>Modul diimpor:</b> {modules}
 
   <b>Modul:</b>
-  %s
+  {list}
 
 backup_import_rate_limited: "⏳ Silakan tunggu <b>{time}</b> sebelum mengimpor lagi."
 backup_import_no_reply: "❌ Silakan balas ke file cadangan dengan <code>/import</code>."
@@ -2160,8 +2163,8 @@ backup_import_creator_only: "❌ Hanya pembuat grup yang dapat mengimpor pengatu
 backup_import_confirm: |
   <b>⚠️ Konfirmasi Impor</b>
 
-  Anda akan mengimpor <b>%s modul</b>:
-  %s
+  Anda akan mengimpor <b>{modules} modul</b>:
+  {list}
 
   Ini akan menimpa pengaturan yang ada. Apakah Anda yakin?
 
@@ -2172,18 +2175,18 @@ backup_import_failed: "❌ Impor gagal: %s"
 backup_reset_success: |
   <b>✅ Atur Ulang Berhasil!</b>
 
-  <b>Modul diatur ulang:</b> %d
+  <b>Modul diatur ulang:</b> {modules}
 
   <b>Modul:</b>
-  %s
+  {list}
 
 backup_reset_rate_limited: "⏳ Silakan tunggu <b>{time}</b> sebelum mengatur ulang lagi."
 backup_reset_creator_only: "❌ Hanya pembuat grup yang dapat mengatur ulang pengaturan."
 backup_reset_confirm: |
   <b>⚠️ Konfirmasi Atur Ulang</b>
 
-  Anda akan mengatur ulang <b>%s modul</b>:
-  %s
+  Anda akan mengatur ulang <b>{modules} modul</b>:
+  {list}
 
   <b>Tindakan ini tidak dapat dibatalkan!</b> Apakah Anda yakin?
 
@@ -2291,7 +2294,11 @@ federations_help_msg: |
   × /subfed /unsubfed /fedsubs: Subscribe to another fed (max 5).
   × /fbanlist [csv|json|minicsv]: Export fbans.
   × /importfbans: Import from a replied CSV/JSON file.
-  × /setfedlog /unsetfedlog: Federation log chat.
+  × /unsetfedlog: Clear the federation log chat.
+
+  *Federation log chat (owner):*
+  × /setfedlog: In a group, make that group the federation log (you must be an admin there).
+  × For a channel: post /setfedlog <fed_id> in the channel (I must be an admin there), then forward that post to me in private or to a group, from the owner account, within 1 hour.
 
   *Group owner:*
   × /joinfed <fed_id>: Join this chat to a federation.
@@ -2318,7 +2325,7 @@ logchannels_help_msg: |
   × /log <category>: Enable a category.
   × /nolog <category>: Disable a category.
 
-  Categories: settings, admin, user, automated, reports, other.
+  Categories: settings, admin, user, reports.
 feds_pm_only: "This command can only be used in private chat with me."
 feds_group_only: "This command can only be used in groups."
 feds_need_name: "Give your federation a name."
@@ -2385,6 +2392,8 @@ feds_subs_header: "Subscriptions:"
 feds_setfedlog_need_id: "Give a federation ID, or use this in a group that is in your fed."
 feds_not_owner: "Only the federation owner can set the fed log."
 feds_setfedlog_ok: "Federation log chat set."
+feds_setfedlog_forward_to_owner: "Permintaan dicatat. Sekarang teruskan postingan ini dari akun pemilik federasi ke saya, di obrolan pribadi atau di grup tempat saya berada, dalam 1 jam."
+feds_setfedlog_no_pending: "Pesan terusan itu tidak cocok dengan postingan /setfedlog yang tertunda, atau sudah kedaluwarsa. Kirim lagi /setfedlog &lt;fed_id&gt; di kanal dan teruskan postingan baru dalam 1 jam."
 feds_unsetfedlog_ok: "Federation log chat cleared."
 feds_export_wait: "Please wait before exporting again."
 feds_export_empty: "This federation has no bans to export."
@@ -2400,7 +2409,7 @@ logs_set_ok: "Log channel set. Admin actions from this chat will be sent there."
 logs_unset_ok: "Log channel removed."
 logs_not_set: "No log channel is set for this chat."
 logs_current: "Log channel: <code>{id}</code>"
-logs_categories: "Categories: settings, admin, user, automated, reports, other."
+logs_categories: "Categories: settings, admin, user, reports."
 logs_enabled: "Enabled logging for: {cats}"
 logs_disabled: "Disabled logging for: {cats}"
 logs_unknown_category: "Unknown category. See /logcategories."
@@ -2611,6 +2620,7 @@ staff_act_fail_group_not_found: "grup tidak ditemukan"
 staff_act_fail_rate_limited: "terkena batas laju, menyerah setelah beberapa percobaan"
 staff_act_fail_internal: "kesalahan internal"
 staff_act_fail_interrupted: "terhenti karena restart"
+staff_act_fail_time_ran_out: "durasi pembatasan sudah habis sebelum bisa diterapkan di sini"
 staff_act_summary_done_collapsed: "{count} grup selesai"
 staff_act_summary_pending_collapsed: "{count} grup sedang berjalan"
 staff_act_summary_continued: "Grup lainnya tercantum di pesan berikutnya."
@@ -3075,6 +3085,7 @@ settings_edit_refuse_button_url: "Tombol {n} punya tautan yang tidak bisa saya p
 settings_edit_refuse_buttons_limit: "Tombolnya terlalu banyak. Satu pesan bisa memiliki paling banyak 100 tombol, dan paling banyak 8 dalam satu baris."
 settings_edit_refuse_text_buttons: "Teks itu berisi baris tombol. Kirim teks tanpa baris tersebut, lalu atur tombol sebagai bagian tersendiri."
 settings_edit_refuse_access_lost: "Saya tidak bisa lagi memastikan bahwa Anda boleh mengubah pengaturan grup ini, jadi saya berhenti menunggu. Tidak ada yang berubah."
+settings_edit_refuse_slash: "Saya tidak bisa menyimpan teks yang diawali garis miring, karena terlihat seperti perintah. Ubah karakter pertama lalu kirim lagi."
 settings_edit_preview_header: "👁 Pratinjau, diisi dengan nama Anda dan judul grup."
 settings_edit_preview_header_rules: "👁 Pratinjau pesan aturan."
 settings_edit_preview_buttons_body: "👁 Ini tombolnya."
@@ -3273,9 +3284,7 @@ settings_log_hint: "Kanal ditautkan dengan /setlog dan dilepas dengan /unsetlog.
 settings_log_cat_settings: "Pengaturan"
 settings_log_cat_admin: "Tindakan admin"
 settings_log_cat_user: "Tindakan pengguna"
-settings_log_cat_automated: "Otomatis"
 settings_log_cat_reports: "Laporan"
-settings_log_cat_other: "Lainnya"
 settings_anon_hint: "Hanya pemilik grup yang bisa mengubahnya, dan saya harus menjadi admin di grup."
 settings_btn_anon_toggle: "Mode AnonAdmin: {state}"
 settings_locks_intro: "Saya menghapus jenis pesan yang dikunci dari anggota yang bukan admin atau yang disetujui. Mengunci bot mencegah non-admin menambahkan bot."

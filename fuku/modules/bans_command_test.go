@@ -567,8 +567,14 @@ func TestUnbanCommandUnbansUser(t *testing.T) {
 	if err := bansModule.unban(bot, ctx); err != ext.EndGroups {
 		t.Fatalf("unban() error = %v, want EndGroups", err)
 	}
-	if calls := client.callsFor("unbanChatMember"); len(calls) != 1 {
+	calls := client.callsFor("unbanChatMember")
+	if len(calls) != 1 {
 		t.Fatalf("unbanChatMember calls = %d, want 1", len(calls))
+	}
+	// Without only_if_banned Telegram removes a current member, so /unban of a member
+	// who is not banned would kick them.
+	if onlyIfBanned, ok := calls[0].Params["only_if_banned"].(bool); !ok || !onlyIfBanned {
+		t.Fatalf("only_if_banned = %#v, want true so a member who is not banned stays", calls[0].Params["only_if_banned"])
 	}
 	if calls := client.callsFor("sendMessage"); len(calls) != 1 {
 		t.Fatalf("sendMessage calls = %d, want 1", len(calls))

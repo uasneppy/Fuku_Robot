@@ -29,6 +29,22 @@ type moderationCtx struct {
 	Module *moduleStruct
 }
 
+// moderationReasonSuffix renders the reason line of a punishment reply: the locale
+// template key formatted with the HTML-escaped reason, or "" for an empty reason or a
+// missing template. The template comes from the locale file only; the reason is never
+// part of a format string, so a '%' in it is printed as typed and a '<' cannot make
+// Telegram reject the reply after the punishment already happened.
+func moderationReasonSuffix(c *moderationCtx, key, reason string) string {
+	if reason == "" {
+		return ""
+	}
+	temp, _ := c.Tr.GetString(key)
+	if temp == "" {
+		return ""
+	}
+	return fmt.Sprintf(temp, formatting.HtmlEscape(reason))
+}
+
 // replySuccess sends the success reply of a punishment command as a reply to the command and, when
 // it was sent, queues it for deletion under the manual punishment kind (D-13). Validation and error
 // replies, lists and question cards never go through it. The error is exactly what Msg.Reply returned.
@@ -141,7 +157,8 @@ func extractFromArgs(c *moderationCtx) (target, error) {
 
 // extractFromReply resolves the target from the replied-to message.
 func extractFromReply(c *moderationCtx) (target, error) {
-	if c.Msg.ReplyToMessage == nil {
+	reply := extraction.ReplyTarget(c.Msg)
+	if reply == nil {
 		text, _ := c.Tr.GetString("bans_dkick_no_reply")
 		if text == "" {
 			text, _ = c.Tr.GetString("common_no_reply_to_message")
@@ -153,7 +170,7 @@ func extractFromReply(c *moderationCtx) (target, error) {
 		}
 		return target{}, fmt.Errorf("no reply")
 	}
-	if c.Msg.ReplyToMessage.From == nil {
+	if reply.From == nil {
 		text, _ := c.Tr.GetString("bans_cannot_identify_user")
 		_, err := c.Msg.Reply(c.Bot, text, formatting.Shtml())
 		if err != nil {
@@ -162,7 +179,7 @@ func extractFromReply(c *moderationCtx) (target, error) {
 		}
 		return target{}, fmt.Errorf("nil from")
 	}
-	uid := c.Msg.ReplyToMessage.From.Id
+	uid := reply.From.Id
 	if chat_status.IsChannelId(uid) {
 		anonKey := "bans_anonymous_ban_only_error"
 		text, _ := c.Tr.GetString(anonKey)

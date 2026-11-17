@@ -150,7 +150,7 @@ Notes, filters and greetings are where I get to be friendly. Today's ration is t
 
 - **Federations.** Shared ban lists across groups, with subscriptions to other federations (at most 5), federation admins, a federation log chat, and import and export of federation bans as CSV or JSON.
 - **Connections.** Manage a group's settings from a private chat.
-- **Log channels.** Per-group log channels with six categories: settings, admin, user, automated, reports and other.
+- **Log channels.** Per-group log channels with four categories: settings, admin, user and reports.
 - **Reports and disabling.** `/report` and `@admin` reports, and per-chat command disabling.
 
 ### Languages and backup
@@ -498,7 +498,8 @@ Federations share a ban list across groups. The roles below come from the shippe
 
 | Who | Commands |
 | --- | --- |
-| Federation owner (private chat) | `/newfed <name>`, `/renamefed <name>`, `/delfed`, `/fedpromote`, `/feddemote`, `/fedreason on/off`, `/fednotif on/off`, `/subfed`, `/unsubfed`, `/fedsubs`, `/fbanlist [csv/json/minicsv]`, `/importfbans`, `/setfedlog`, `/unsetfedlog` |
+| Federation owner (private chat) | `/newfed <name>`, `/renamefed <name>`, `/delfed`, `/fedpromote`, `/feddemote`, `/fedreason on/off`, `/fednotif on/off`, `/subfed`, `/unsubfed`, `/fedsubs`, `/fbanlist [csv/json/minicsv]`, `/importfbans`, `/unsetfedlog` |
+| Federation owner (federation log) | `/setfedlog` typed in a group you administer makes it the federation log; for a channel, post `/setfedlog <fed_id>` in the channel and forward that post to the bot in private or to a group within an hour |
 | Group owner | `/joinfed <fed_id>`, `/leavefed`, `/quietfed on/off` |
 | Federation admins | `/fban`, `/unfban` (`/funban`), `/fedstat` (`/fbanstat`), `/feddemoteme` |
 | Anyone | `/fedinfo`, `/fedadmins`, `/chatfed`, `/myfeds` |
@@ -528,7 +529,7 @@ Everything I do gets filed. Add me as an admin of a channel, send `/setlog` ther
 | --- | --- |
 | `/setlog` · `/unsetlog` | Set or remove the log channel |
 | `/logchannel` | Show the current log channel |
-| `/logcategories` | List the categories: settings, admin, user, automated, reports, other |
+| `/logcategories` | List the categories: settings, admin, user, reports |
 | `/log <category>` · `/nolog <category>` | Turn a category on or off. Admins, in a group with a log channel set |
 
 </details>

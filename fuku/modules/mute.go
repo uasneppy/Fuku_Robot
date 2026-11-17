@@ -27,13 +27,11 @@ func muteReplyWithButton(c *moderationCtx, t *target) error {
 	}
 
 	baseStr, _ := c.Tr.GetString("mutes_mute_message")
-	if t.reason != "" {
-		temp, _ := c.Tr.GetString("mutes_reason_suffix")
-		baseStr += fmt.Sprintf(temp, t.reason)
-	}
+	text := fmt.Sprintf(baseStr, formatting.MentionHtml(muteUser.Id, muteUser.FirstName)) +
+		moderationReasonSuffix(c, "mutes_reason_suffix", t.reason)
 
 	err = c.replySuccess(
-		fmt.Sprintf(baseStr, formatting.MentionHtml(muteUser.Id, muteUser.FirstName)),
+		text,
 		&gotgbot.SendMessageOpts{
 			ParseMode: formatting.HTML,
 			ReplyMarkup: gotgbot.InlineKeyboardMarkup{
@@ -106,11 +104,8 @@ func moderationTmute(m *moduleStruct) *moderationCommand {
 			}
 
 			temp, _ := c.Tr.GetString("mutes_tmute_message")
-			baseStr := fmt.Sprintf(temp, formatting.MentionHtml(muteUser.Id, muteUser.FirstName), t.timeVal)
-			if t.reason != "" {
-				temp, _ := c.Tr.GetString("mutes_reason_suffix")
-				baseStr += fmt.Sprintf(temp, t.reason)
-			}
+			baseStr := fmt.Sprintf(temp, formatting.MentionHtml(muteUser.Id, muteUser.FirstName), t.timeVal) +
+				moderationReasonSuffix(c, "mutes_reason_suffix", t.reason)
 
 			err = c.replySuccess(baseStr, formatting.Shtml())
 			if err != nil {
@@ -162,7 +157,7 @@ func moderationDmute(m *moduleStruct) *moderationCommand {
 		gates:   []gateFn{deleteModGates},
 		extract: extractFromArgs,
 		validate: func(c *moderationCtx, t *target) error {
-			if c.Msg.ReplyToMessage == nil {
+			if extraction.ReplyTarget(c.Msg) == nil {
 				text, _ := c.Tr.GetString("mute_reply_to_dmute")
 				if text == "" {
 					text, _ = c.Tr.GetString("common_no_reply_to_message")
@@ -177,7 +172,7 @@ func moderationDmute(m *moduleStruct) *moderationCommand {
 			return muteTargetValidation(c, t)
 		},
 		execute: func(c *moderationCtx, t *target) error {
-			_, err := c.Msg.ReplyToMessage.Delete(c.Bot, nil)
+			_, err := extraction.ReplyTarget(c.Msg).Delete(c.Bot, nil)
 			if err != nil {
 				log.Error(err)
 				return err

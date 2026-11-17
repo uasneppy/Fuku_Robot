@@ -23,7 +23,7 @@ func hasUserPermission(
 	msg := ctx.EffectiveMessage
 	sender := ctx.EffectiveSender
 
-	if isAdmin, shouldReturn := checkAnonAdmin(b, chat, msg, sender); shouldReturn {
+	if isAdmin, shouldReturn := checkAnonAdmin(b, ctx, chat, msg, sender); shouldReturn {
 		return isAdmin
 	}
 

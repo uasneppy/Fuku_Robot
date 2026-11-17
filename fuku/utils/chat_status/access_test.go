@@ -532,7 +532,7 @@ func TestAnonymousAdminHelpersUseGotgbotSenderAndReplyMarkup(t *testing.T) {
 		Text:      "/ban 42",
 	}
 
-	isAdmin, shouldReturn := checkAnonAdmin(bot, chat, msg, &gotgbot.Sender{
+	isAdmin, shouldReturn := checkAnonAdmin(bot, nil, chat, msg, &gotgbot.Sender{
 		User: &gotgbot.User{Id: 42, FirstName: "Member"},
 	})
 	if isAdmin || shouldReturn {
@@ -606,7 +606,7 @@ func TestCheckAnonAdminFollowsGotgbotSenderClassification(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			isAdmin, shouldReturn := checkAnonAdmin(bot, chat, msg, tt.sender)
+			isAdmin, shouldReturn := checkAnonAdmin(bot, nil, chat, msg, tt.sender)
 			if isAdmin || shouldReturn {
 				t.Fatalf("checkAnonAdmin(%s) = (%v, %v), want false, false", tt.name, isAdmin, shouldReturn)
 			}
@@ -644,7 +644,7 @@ func TestCheckAnonAdminHonorsBypassAndVerificationModes(t *testing.T) {
 	if err := admin.SetAnonAdminMode(chat.Id, true); err != nil {
 		t.Fatalf("SetAnonAdminMode(true) error = %v", err)
 	}
-	isAdmin, shouldReturn := checkAnonAdmin(bot, chat, msg, anonSender)
+	isAdmin, shouldReturn := checkAnonAdmin(bot, nil, chat, msg, anonSender)
 	if !isAdmin || !shouldReturn {
 		t.Fatalf("checkAnonAdmin(enabled) = (%v, %v), want true, true", isAdmin, shouldReturn)
 	}
@@ -655,7 +655,7 @@ func TestCheckAnonAdminHonorsBypassAndVerificationModes(t *testing.T) {
 	if err := admin.SetAnonAdminMode(chat.Id, false); err != nil {
 		t.Fatalf("SetAnonAdminMode(false) error = %v", err)
 	}
-	isAdmin, shouldReturn = checkAnonAdmin(bot, chat, msg, anonSender)
+	isAdmin, shouldReturn = checkAnonAdmin(bot, nil, chat, msg, anonSender)
 	if isAdmin || !shouldReturn {
 		t.Fatalf("checkAnonAdmin(verify) = (%v, %v), want false, true", isAdmin, shouldReturn)
 	}

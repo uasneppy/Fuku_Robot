@@ -90,8 +90,10 @@ func logGoldenCalls(t *testing.T, client *moduleBotClient, chatID, channelID int
 	return strings.Join(lines, "\n")
 }
 
-// logGoldenFlags is the six category flags of the chat's stored row, in the order of
-// logchannels.AllCategories, as a string of 1 and 0, or "none" when the chat has no row.
+// logGoldenFlags is the six category columns of the chat's stored row (settings, admin, user,
+// automated, reports, other: the table still has the two columns no command accepts any more), as
+// a string of 1 and 0, or "none" when the chat has no row. It reads the columns straight from the
+// row so the six-character flags of every case stay byte-identical.
 func logGoldenFlags(t *testing.T, chatID int64) string {
 	t.Helper()
 	var row models.LogChannel
@@ -103,8 +105,8 @@ func logGoldenFlags(t *testing.T, chatID int64) string {
 		t.Fatalf("read log_channels row: %v", err)
 	}
 	var out strings.Builder
-	for _, name := range logchannels.AllCategories {
-		if logchannels.CategoryEnabled(&row, name) {
+	for _, on := range []bool{row.CatSettings, row.CatAdmin, row.CatUser, row.CatAutomated, row.CatReports, row.CatOther} {
+		if on {
 			out.WriteByte('1')
 		} else {
 			out.WriteByte('0')
@@ -155,7 +157,9 @@ func TestLegacyLogCategoryRequests(t *testing.T) {
 		{name: "one_category_on", command: "/log admin", enable: true, from: admin, off: []string{"admin"}, wantFlags: "111111"},
 		{name: "one_category_mixed_case", command: "/log RePorts", enable: true, from: admin, off: []string{"reports"}, wantFlags: "111111"},
 		{name: "several_on", command: "/log admin user", enable: true, from: admin, off: []string{"admin", "user"}, wantFlags: "111111"},
-		{name: "several_off", command: "/nolog admin user other", from: admin, wantFlags: "100110"},
+		// Changed on purpose (audit 261116 Q1 item 3): "other" is no longer an accepted name, so
+		// only admin and user apply and the other column stays on.
+		{name: "several_off", command: "/nolog admin user other", from: admin, wantFlags: "100111"},
 		{name: "repeated_category", command: "/nolog admin admin", from: admin, wantFlags: "101111"},
 		{name: "already_in_state", command: "/log admin", enable: true, from: admin, wantFlags: "111111"},
 		{name: "nolog_settings_itself", command: "/nolog settings", from: admin, wantFlags: "011111"},
@@ -240,7 +244,7 @@ var goldenLogCategoryRequests = map[string]string{
 	"one_category_on":             "sendMessage {\"chat_id\":<chat>,\"link_preview_options\":{\"is_disabled\":true},\"parse_mode\":\"HTML\",\"reply_parameters\":{\"message_id\":101,\"allow_sending_without_reply\":true},\"text\":\"Журнал увімкнено для: admin\"}\nsendMessage {\"chat_id\":<chan>,\"parse_mode\":\"HTML\",\"text\":\"\\u003cb\\u003eLog Golden\\u003c/b\\u003e (\\u003ccode\\u003e<chat>\\u003c/code\\u003e)\\n#SETTINGS\\nAdmin: \\u003ca href=\\\"tg://user?id=777000\\\"\\u003eTelegram\\u003c/a\\u003e\\nlogs_enabled admin\"}",
 	"one_category_mixed_case":     "sendMessage {\"chat_id\":<chat>,\"link_preview_options\":{\"is_disabled\":true},\"parse_mode\":\"HTML\",\"reply_parameters\":{\"message_id\":101,\"allow_sending_without_reply\":true},\"text\":\"Журнал увімкнено для: reports\"}\nsendMessage {\"chat_id\":<chan>,\"parse_mode\":\"HTML\",\"text\":\"\\u003cb\\u003eLog Golden\\u003c/b\\u003e (\\u003ccode\\u003e<chat>\\u003c/code\\u003e)\\n#SETTINGS\\nAdmin: \\u003ca href=\\\"tg://user?id=777000\\\"\\u003eTelegram\\u003c/a\\u003e\\nlogs_enabled reports\"}",
 	"several_on":                  "sendMessage {\"chat_id\":<chat>,\"link_preview_options\":{\"is_disabled\":true},\"parse_mode\":\"HTML\",\"reply_parameters\":{\"message_id\":101,\"allow_sending_without_reply\":true},\"text\":\"Журнал увімкнено для: admin, user\"}\nsendMessage {\"chat_id\":<chan>,\"parse_mode\":\"HTML\",\"text\":\"\\u003cb\\u003eLog Golden\\u003c/b\\u003e (\\u003ccode\\u003e<chat>\\u003c/code\\u003e)\\n#SETTINGS\\nAdmin: \\u003ca href=\\\"tg://user?id=777000\\\"\\u003eTelegram\\u003c/a\\u003e\\nlogs_enabled admin, user\"}",
-	"several_off":                 "sendMessage {\"chat_id\":<chat>,\"link_preview_options\":{\"is_disabled\":true},\"parse_mode\":\"HTML\",\"reply_parameters\":{\"message_id\":101,\"allow_sending_without_reply\":true},\"text\":\"Журнал вимкнено для: admin, user, other\"}\nsendMessage {\"chat_id\":<chan>,\"parse_mode\":\"HTML\",\"text\":\"\\u003cb\\u003eLog Golden\\u003c/b\\u003e (\\u003ccode\\u003e<chat>\\u003c/code\\u003e)\\n#SETTINGS\\nAdmin: \\u003ca href=\\\"tg://user?id=777000\\\"\\u003eTelegram\\u003c/a\\u003e\\nlogs_disabled admin, user, other\"}",
+	"several_off":                 "sendMessage {\"chat_id\":<chat>,\"link_preview_options\":{\"is_disabled\":true},\"parse_mode\":\"HTML\",\"reply_parameters\":{\"message_id\":101,\"allow_sending_without_reply\":true},\"text\":\"Журнал вимкнено для: admin, user\"}\nsendMessage {\"chat_id\":<chan>,\"parse_mode\":\"HTML\",\"text\":\"\\u003cb\\u003eLog Golden\\u003c/b\\u003e (\\u003ccode\\u003e<chat>\\u003c/code\\u003e)\\n#SETTINGS\\nAdmin: \\u003ca href=\\\"tg://user?id=777000\\\"\\u003eTelegram\\u003c/a\\u003e\\nlogs_disabled admin, user\"}",
 	"repeated_category":           "sendMessage {\"chat_id\":<chat>,\"link_preview_options\":{\"is_disabled\":true},\"parse_mode\":\"HTML\",\"reply_parameters\":{\"message_id\":101,\"allow_sending_without_reply\":true},\"text\":\"Журнал вимкнено для: admin, admin\"}\nsendMessage {\"chat_id\":<chan>,\"parse_mode\":\"HTML\",\"text\":\"\\u003cb\\u003eLog Golden\\u003c/b\\u003e (\\u003ccode\\u003e<chat>\\u003c/code\\u003e)\\n#SETTINGS\\nAdmin: \\u003ca href=\\\"tg://user?id=777000\\\"\\u003eTelegram\\u003c/a\\u003e\\nlogs_disabled admin, admin\"}",
 	"already_in_state":            "sendMessage {\"chat_id\":<chat>,\"link_preview_options\":{\"is_disabled\":true},\"parse_mode\":\"HTML\",\"reply_parameters\":{\"message_id\":101,\"allow_sending_without_reply\":true},\"text\":\"Журнал увімкнено для: admin\"}\nsendMessage {\"chat_id\":<chan>,\"parse_mode\":\"HTML\",\"text\":\"\\u003cb\\u003eLog Golden\\u003c/b\\u003e (\\u003ccode\\u003e<chat>\\u003c/code\\u003e)\\n#SETTINGS\\nAdmin: \\u003ca href=\\\"tg://user?id=777000\\\"\\u003eTelegram\\u003c/a\\u003e\\nlogs_enabled admin\"}",
 	"nolog_settings_itself":       "sendMessage {\"chat_id\":<chat>,\"link_preview_options\":{\"is_disabled\":true},\"parse_mode\":\"HTML\",\"reply_parameters\":{\"message_id\":101,\"allow_sending_without_reply\":true},\"text\":\"Журнал вимкнено для: settings\"}",

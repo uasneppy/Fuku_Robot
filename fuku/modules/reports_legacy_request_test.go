@@ -205,15 +205,12 @@ func TestLegacyReportsPrivateRequests(t *testing.T) {
 			client := newModuleBotClient()
 			bot := newModuleTestBot(client)
 			privateChat := gotgbot.Chat{Id: admin.Id, Type: "private", FirstName: "Telegram"}
-			client.responses["getChat"] = []byte(fmt.Sprintf(`{"id":%d,"type":"supergroup","title":"Connected Report Chat"}`, connectedID))
-			if err := connections.ConnectId(admin.Id, connectedID); err != nil {
-				t.Fatalf("connect the user to the group: %v", err)
+			// A private /reports with no stored connection is the user's own preference (quick task
+			// 261116-wh2): the goldens below pin exactly that request, unchanged, so the case runs with
+			// no connection; a connected private chat now speaks about the connected group.
+			if err := connections.DisconnectId(admin.Id); err != nil {
+				t.Fatalf("clear the user's connection: %v", err)
 			}
-			t.Cleanup(func() {
-				if err := connections.DisconnectId(admin.Id); err != nil {
-					t.Errorf("disconnect the user: %v", err)
-				}
-			})
 
 			ctx := newModuleMessageContext(bot, privateChat, admin, tc.text)
 			if err := reportsModule.reports(bot, ctx); err != ext.EndGroups {

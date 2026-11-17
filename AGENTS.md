@@ -152,7 +152,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Modules register in `init()` via `RegisterLegacyModule(name, priority, load)`. Use a unique name; duplicates are
   dropped silently. Priority sets load order and group-0 precedence; `LoadHelp` loads last.
 - New commands use `helpers.WrapCommand(dispatcher, CommandDescriptor{...}, handler)`. Set `Disableable: true` for any
-  command chats may disable. Do not add replies for failed checks; the pipeline sends them. Every command handler,
+  command chats may disable, and make its handler check the name it was registered under (`helpers.CheckDisabled` or
+  `chat_status.CheckDisabledCmd` with that name; `Disableable` itself only adds the name to the list): `/disable`
+  accepts every name in the list, so an unchecked name is a silent no-op (`TestDisableRefusesNamesThatHaveNoCheck`).
+  `/blocklists` checks its own name and then `blacklists`, so disabling either silences the alias. Do not add replies for failed checks; the pipeline sends them. Every command handler,
   wrapped or raw, is built by `helpers.NewBotCommand` (`fuku/utils/helpers/command_registry.go`), which records the
   lower-cased name and returns the library's own command handler unchanged (so routing is the library's). Command
   deletion reads the registry through `helpers.IsBotCommand`, so only a command this bot registers is ever deleted.
@@ -165,7 +168,21 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   re-entered command, the `RequiredChecks` that `anonPipelineHandler` re-runs, and `PermissionResponder` see the
   command's chat as if the admin had sent it, with the tapper as the sender. `verifyAnonymousAdmin` refuses the tap as
   an invalid request, deleting and running nothing, unless the callback's `c`, the proof button's chat and the cached
-  command's chat are the same chat.
+  command's chat are the same chat. The cached command (`fuku:anonAdmin:<chat>:<message>`, 20 s) is the message as JSON
+  bytes, written by `chat_status.StoreAnonAdminCommand` and read by `chat_status.LoadAnonAdminCommand` (gotgbot's own
+  unmarshalers, so a reply to a forwarded or pin service message survives; msgpack of the struct could not decode its
+  interface fields). A value that does not decode, the old msgpack format included, and a decoder panic read as an
+  expired button. Rolling deploy: a replica on older code reads the new value as expired too (a 20 s window). The tap
+  answers the callback query exactly once on every path (`answer` in `verifyAnonymousAdmin`, with a deferred empty
+  answer for the expired, failed-delete and other text-less paths, and an empty answer before a command runs). The
+  command name is read as gotgbot's matcher reads it (`botCommandName`: first field up to any whitespace, lower case,
+  this bot's `@suffix`), so `/Ban` and `/ban` followed by a newline find the registry. A name with no registered
+  re-entry (`hasAnonymousAdminHandler` false, e.g. `/filter`) is answered with the alert
+  `bot_updates_anon_unsupported_command`, the prompt stays deleted and nothing runs. `kick`, `dkick`, `purgefrom` and
+  `purgeto` are registered for re-entry like their siblings. A permission check that sends the proof prompt marks the
+  update (`chat_status.AnonProofPrompted`, in `ctx.Data`), and `PermissionResponder.Respond` sends nothing for a marked
+  update, so the prompt is the only reply; a prompt that failed to send marks nothing. `chat_status.CheckAnonymousAdmin`
+  is that decision for a raw command that judges its own sender.
 - The `StaffActions` module (priority 65) registers raw interceptors, built through `helpers.NewBotCommand`, at group 0 ahead of Bans (70)
   and Mutes (80), looping over a table so the docs generator skips them. Outside a Staff Group they return
   `ext.ContinueGroups` with no reply, write or Telegram call. They are a documented exception to the `WrapCommand`
@@ -413,9 +430,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `handlers.NewMessage(settingsInputIsPrivate, ...)` at group `settingsInputGroup` = 1, after the group-0 commands and
   before every group that could end a private update) reads the owner's next private message after Set. A candidate is a
   new private message whose sender is the chat itself (not the bot, not a Telegram service identity), with no
-  `rich_message` and no command (`settingsInputLooksLikeCommand`: a `bot_command` entity at offset 0 or a slash followed
-  by a non-space, in the text or the caption); anything else, and a sender with neither a wait nor a marker, returns
-  `ext.ContinueGroups` with no reply, no write and no Telegram call, so ordinary private chat is untouched. The order is
+  `rich_message`. A message that looks like a command (`settingsInputLooksLikeCommand`: a `bot_command` entity at offset 0
+  or a slash followed by a non-space, in the text or the caption) is never content: a registered command (a name
+  `botCommandName` accepts for this bot and `helpers.IsBotCommand` knows) returns `ext.ContinueGroups` at once with no I/O;
+  any other (an unregistered word, or a command addressed to another bot) is a slash text, which with a live wait goes
+  through the album gate and the live checks below and, once authority holds (editor path and list path alike,
+  `refuseSlash`), is refused with `settings_edit_refuse_slash`, a blank line, `settings_edit_still_waiting` and the page's or
+  list's Cancel button, the wait kept, not claimed and not extended, nothing stored (quick task 261116-wh3); with no wait
+  or only a marker a slash text is untouched and the marker stays. Anything else that is not a candidate, and a sender with
+  neither a wait nor a marker, returns `ext.ContinueGroups` with no reply, no write and no Telegram call, so ordinary
+  private chat is untouched. The order is
   fixed, each step refusing before the next: `settingsInputRead` (an error or no Redis is not the door's); no wait but a
   marker is one plain `settings_edit_wait_ended_note` naming the part (the marker taken with `GETDEL`, so two deliveries
   answer once; nothing is saved); with a live wait, a message whose `media_group_id` is 1 to 20 digits passes the album gate
@@ -1030,9 +1054,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   changes the other value the page shows: a first limit write stores mode `mute` and a first action write stores limit 3 (the
   repository's upserts). Every press redraws from the row the apply function read back (a refusal or a failed save,
   `common_settings_save_failed`, from the row read before), and a press of the stored value writes the same row again (the
-  command's upsert is idempotent) and shows no notice. Known and left to the owner: `/reset warnings` stores an empty mode
-  (`backup.go`), which the page shows as Not set with the inert line and the warn module does not act on; the fix is one
-  line in the reset and a backup test, outside this phase (`18-SPIKE.md`, check 3). `TestSettingsWarnsOpens`,
+  command's upsert is idempotent) and shows no notice. `/reset warnings` stores limit 3 and mode mute, and a backup import
+  whose warns block has no mode or an empty one stores mute (`backup.go`, quick task 261116-wh3); an empty mode can still
+  exist only when written by hand or by an older build, and the page then draws it as Not set with the inert line, which the
+  warn module does not act on. `TestSettingsWarnsOpens`,
   `TestSettingsParityWarnLimit`, `TestSettingsParityWarnMode`, `TestSettingsWarnsInertAction`, `TestSettingsWarnsBounds`,
   `TestSettingsWarnsForged`, `TestSettingsDriftWarns`, `TestSettingsAuthorityParityWarns`, `TestSettingsWarnsCallbackBytes`,
   `TestSettingsWarnsPageFitsEveryLocale` and `TestSettingsWarnsReadsCreateNothing` hold it (`settings_warns_test.go`,
@@ -1102,13 +1127,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `TestSettingsAuthorityParityLanguage` hold it (`settings_language_test.go`, `settings_language_screens_test.go`).
 - The Log channel page (`settings_logchannel.go`, page `o`, `Order` 88, icon 🧾, `settings_page_log`, between Language and
   Access, Phase 18, plan 18-09) registers from its own file through `registerSettingsPage`, with no `Hidden`, so a Staff Group's
-  own menu shows it too. It turns each of the six log categories on or off as `/log` and `/nolog` do. The six come from one table
-  (`settingsLogCategories`: the control code `s a u m r o`, the repository name `settings admin user automated reports other`,
+  own menu shows it too. It turns each of the four log categories on or off as `/log` and `/nolog` do. The four come from one table
+  (`settingsLogCategories`: the control code `s a u r`, the repository name `settings admin user reports`,
   the `settings_log_cat_*` name key; its order is that of `logchannels.AllCategories`) and the controls, the body lines and the
   cells are all built from it. Each control is `tg` only (`Actions`, so an `st` is an invalid request before any I/O) with
   `Validate` exactly `0` or `1` (`settingsEditSwitchValue`) and right `settingsRightAdmin`, as `/log` and `/nolog` ask for
   `RequireUserAdmin` and nothing more (no bot check). A press goes through `settingsToggleSet` and writes exactly its own
-  category through `applyLogCategory`, the function the commands call, so the other five categories are untouched. After a
+  category through `applyLogCategory`, the function the commands call, so the other three categories are untouched. After a
   stored change the page answers and redraws first and only then posts the same `#SETTINGS` audit entry the commands post,
   `actionlog.Settings(bot, group, presser, key+" "+name)` with the apply function's `logs_enabled` or `logs_disabled` key and the
   repository name (`settingsLogControl`; the commands inline the call, there is no shared poster). `actionlog.Destination` gates
@@ -1121,13 +1146,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   seam: the `log_channel:<chat>` key the commands read, its error returned, a chat with no channel read as `nil`, nothing created)
   and a failed read is the cannot-open edit and the unknown mark on Main. Privacy (D-07): the page is read by every member of
   a group menu while the log channel is private to the administrators, so the renderer (`renderSettingsLogChannel`, pure) receives
-  only `settingsLogState` (linked or not, and the six flags) and never the row, `logs_current` is never used and no screen, notice
+  only `settingsLogState` (linked or not, and the four flags) and never the row, `logs_current` is never used and no screen, notice
   or alert names the channel's title or ID. The body is `settings_log_status` with `settings_state_linked` or
   `settings_state_not_linked`, one `settings_main_state_line` per category (check or cross, the name, On or Off), a blank line and
   the hint `settings_log_hint` (linking and unlinking stay `/setlog` and `/unsetlog`); the keyboard is the shared two-column
   toggle grid `settingsToggleGrid` (`settings_toggle.go`: cells "icon name", two to a row, an odd last cell alone, the icons
-  passed in; the Locks page reuses it with the lock icons) then Back and Close, so the rows are `{2,2,2,2}`. Main's state is Linked
-  or Not linked. With no channel linked (`settingsLogStateOf(nil)`) the six lines read Off, the cells are still drawn and a press is
+  passed in; the Locks page reuses it with the lock icons) then Back and Close, so the rows are `{2,2,2}`. Main's state is Linked
+  or Not linked. With no channel linked (`settingsLogStateOf(nil)`) the four lines read Off, the cells are still drawn and a press is
   refused with the command's own notice `logs_not_set` (a warn line over the redraw, the callback answered once): `applyLogCategory`
   answers `logNotSet` before any write, so no row is created, and nothing is posted; a channel unlinked after the page was drawn is
   refused the same way and the redraw reads Not linked. A failed save (`logSaveFailed`) redraws the stored state with
@@ -1144,7 +1169,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   a plain member is refused by both, an administrator the owner gate refuses is refused by the menu only, the documented
   carve-out), `TestSettingsLogChannelReadsCreateNothing` (no row, no chats row and no cache key for a chat with no channel, the
   commands' own key for a linked one, a failing reader is the cannot-open edit and the unknown mark) and the worst-case
-  tests `TestSettingsLogChannelCallbackBytes` (45 bytes private, 41 group, `{2,2,2,2}` for every one of the 65 states) and
+  tests `TestSettingsLogChannelCallbackBytes` (45 bytes private, 41 group, `{2,2,2}` for every one of the 17 states) and
   `TestSettingsLogChannelPageFitsEveryLocale` (3800 UTF-16 units and 20-code-point cells in 8 languages)
   (`settings_logchannel_screens_test.go`).
 - The Anonymous admins page (`settings_anonadmin.go`, page `y`, `Order` 89, icon 🎭, `settings_page_anon`, between Log channel and
@@ -1480,6 +1505,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `helpers.CheckFunc` replies and is valid only inside `WrapCommand`.
 - `IsUserAdmin` returns false for channel and non-positive IDs. Never pass a chat ID as a user ID.
 - `*ForUpdate` predicates are memoised per update. Watchers only, never after a state change in the same update.
+- PM connections: a command that ran `IsUserConnected` passes the connected chat to every later admin predicate
+  (`RequireUserAdmin(b, ctx, chat, ...)`, never the nil form), because `RequireUserAdmin` and the other `chat_status`
+  predicates resolve a nil chat from `ctx.Update`, not from `ctx.EffectiveChat`, so in the bot's private chat the nil
+  form asks about the private chat and refuses a real admin (`/lock`, `/unlock`, `/setwarnmode`, `/setwarnlimit`,
+  `/welcome on|off`, `/notes`, `/get <note> noformat`). A test of this uses a real user ID listed as an administrator of
+  the connected group, never 777000 or 1087968824, which `tgAdminList` makes an admin of every chat
+  (`TestConnectedAdminCommandsInPrivateChat`).
 - `/lockdown` and `/unlockdown` authority is `requireLockdownAuthority`, a live `getChatMember` of the sender (creator,
   or administrator with `can_restrict_members`), never the admin cache, the Telegram service IDs or a chat's AnonAdmin
   setting; a failed lookup refuses. Lockdowns need a supergroup, and `/lockdown` is refused, with nothing recorded,
@@ -2042,6 +2074,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   dropped the legacy `chk_blacklists_action` of 20250805204145, which lacked `none` and made `/blacklistaction none` fail on a
   chain-built PostgreSQL database (Phase 19, research C-16). SQLite test databases are built from the model, which carries the
   eight-value check only.
+- `warns_settings.warn_mode` is checked only by `chk_warn_mode` (NULL, empty or one of ban, kick, mute, tban, tmute, NOT VALID)
+  since migration 20261116120000 dropped the legacy `chk_warns_mode` of 20250805204145, which refused the empty mode on a
+  chain-built PostgreSQL database (quick task 261116-wh3).
 - `chat_settings_access` (migration 20261104120000) is the owner switch "Admins can change settings", one row per chat; a
   chat without a row means owner only. It is read only through `menuaccess.AdminsAllowedFresh`, a fresh query that is never
   cached (so no `DeleteCache` applies, and a cache added later needs `skipLocal` and a `DeleteCache` on every write), and an
@@ -2370,6 +2405,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 ## Subsystem traps
 
 - Approved users skip antiflood, locks, blacklists, and captcha.
+- `/lock` and `/unlock` (raw handlers, `lockCommandAuthorized`) decide authority in the connected chat (the group, or the
+  connected group in the bot's private chat): an anonymous admin is an admin while the chat's AnonAdmin mode is on and
+  otherwise gets the proof prompt (`chat_status.CheckAnonymousAdmin`), whose tap re-enters the command through the
+  registry (`RegisterAnonymousAdminHandler("lock"/"unlock", ...)`, no `anonPipelineHandler`) with the tapper checked live;
+  every other sender is judged by their own ID, never the group's. The lock watchers (`permHandler`, `restHandler`) leave an
+  anonymous admin's messages alone under every lock, `comments` included (`lockWatchSkipsSender`, after the pure
+  `anyLockHit` check and before any lookup, because the group's own ID is never a chat member), and exempt the linked
+  channel's posts (`IsLinkedChannel` or `IsAutomaticForward`) from every lock but `anonchannel` and `comments`, which keep
+  their own rules (`lockSenderExempt`). `anonchannel` matches anonymous channels only (`IsAnonymousChannel`), never the
+  linked channel; an anonymous channel's posts and every member's stay subject to every lock.
 - Antiflood first write (D-27): on a chat with no `antiflood_settings` row, the first `/setfloodmode` (pinned for ban) or
   `/delflood` stores `flood_limit` 5, the model's `default:5`, because the repository's `FirstOrCreate` insert leaves
   the limit at its Go zero value; an admin who only picks an action or turns message deleting on therefore also turns
@@ -3006,7 +3051,20 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   Telegram answers "group chat was upgraded" (or the `migrate_to_chat_id` parameter), which `deletionClassify` reads as
   `gone`: the worker latches the old chat, drops its rows and deletes nothing. The owner sets the rules again on the new group.
 - Entity offsets are UTF-16: slice with `extractEntityText`, and match against both `Entities` and `CaptionEntities`.
-- Captcha allows one attempt per `(user, chat)`; group `-10` stores the pending user's messages for replay.
+- Private note links (`notes.go`): Telegram accepts only 1 to 64 characters of `A-Za-z0-9_-` as a start parameter, so a
+  Cyrillic or long note name broke the old `note_<chat>_<name>` payload. Every link the bot builds now goes through
+  `noteDeepLinkURL` and carries `noteid_<chat id>_<row id>` (the group button of the watcher and `/get`, the private
+  `/notes` list and the `notes_` list deep link, whose entries come from `notes.GetNotesListEntriesContext`, the same
+  `notes_list` key with the row ID beside the name). `noteIDDeepLinkHandler` (prefix `noteid_`, longer than `note_` and
+  `note`) parses strictly before any Telegram call (three parts, a negative chat, a positive row ID of at most 19 digits),
+  checks membership, reads the note with `notes.GetNoteEntryFresh(chat, id)`, so another chat's ID is not found, and
+  shares `sendDeepLinkNote` (the admin-only check and the send) with the old `note_` handler, which stays for buttons
+  already posted. An entry cached by an earlier build has no ID and falls back to the name form until `notes_list` is
+  dropped. Note names in the two HTML lists are escaped.
+- Captcha allows one attempt per `(user, chat)`; group `-10` stores the pending user's messages for replay. Service messages
+  (join, leave, pin and the other deletion-table kinds, `memberContentMessage` false) are never held: group `-10` returns
+  `ext.ContinueGroups` for them first, so the lockdown guard, fed-ban, the service deletion watcher and `cleanService` still
+  see the joiner's own join message (`TestCaptchaPendingLetsJoinServiceMessageThrough`).
 - `fuku:cache:captcha_pending:<chat>` is a per-chat pending flag; any new code that inserts into `captcha_attempts`
   must `DeleteCache` it after commit.
 - Turnstile captcha: a Turnstile attempt is an ordinary `captcha_attempts` row whose answer is the reserved `ts1:` plus
@@ -3204,7 +3262,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   start runs synchronously in the handler, and only the posts that follow it run on goroutines (see the announcement
   bullet above); a crash half way leaves an unconfirmed row the worker settles. The counter shares its one live `getChatMember` of the performer with the guard (it returns the
   status it read and whether it asked), so a join or a join message still makes at most one performer lookup. Settings come from
-  `raidSettingsLookup`, a test seam; an unreadable read counts nothing.
+  `raidSettingsLookup`, a test seam; an unreadable read counts nothing. Joins are recorded while any of the three triggers is
+  on (`raidJoinSettings`), because the flood and AI paths read `fuku:raid:{<chat>}:joined` to tell a new member, and only the
+  surge switch lets a count start a lockdown.
 - The flood trigger is counted by two watchers that share one function, `raidFloodCountUpdate`: the group `-4` watcher
   (`raidFloodWatcher`, registered in `LoadLockdown`) and the group `12` watcher (`raidFloodLateWatcher`,
   `raidFloodLateGroup`). Both return `ext.ContinueGroups` on every path, so aispam, antiflood, locks and blacklists still
@@ -3336,7 +3396,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - A lockdown never touches another group: every lockdown query is keyed by `chat_id` or `lockdown_id`, and the worker
   calls Telegram with the row's own chat, so two locked groups lift in either order without a call or post in the other.
 - The old raid mode is retired (`antiraid.go`, LOCK-15). `/antiraid`, `/raidtime` and `/raidactiontime` are one pointer
-  command (`antiraidRetiredDesc`, `Disableable`, no checks) that replies `lockdown_antiraid_retired` and changes
+  command (`antiraidRetiredDesc`, not `Disableable` because its handler checks no disabled name, no checks) that replies `lockdown_antiraid_retired` and changes
   nothing; a press on an old `antiraid|` button is answered once with the same text and changes nothing. `/autoantiraid`
   (`autoantiraidDesc`) is kept as an alias of the join-surge threshold: with words it runs `autolockdownApply` with
   `joins` in front, alone it shows the triggers, and it has exactly `/autolockdown`'s checks
@@ -3577,10 +3637,20 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   UTF-16 offset, or an `@username` (4-32 of `A-Za-z0-9_`). A username resolves through `user.FindUsersByUsername` (users
   table only, case-insensitive, up to 10 rows, newest activity first) behind the `staffUserLookup` seam: no row is
   "never seen", more than one is refused with each name, ID and last-seen date, and a database error is "could not
-  check". Never call `extraction.GetUserId` or the extract-user helpers for staff targets: they are case-sensitive and
-  fall back to the channels table and live `getChat`. A reply is never a target (a bare reply gets a hint; a reply plus
+  check". Never call `extraction.GetUserId` or the extract-user helpers for staff targets: they match a username
+  case-insensitively and refuse one two accounts hold (`user.GetUserIdByUserName` goes through `FindUsersByUsername`),
+  but they still fall back to the channels table and live `getChat`. A reply is never a target (a bare reply gets a hint; a reply plus
   an explicit target uses the explicit one). `/sban`, `/dban`, `/skick`, `/dkick`, `/smute` and `/dmute` are
   intercepted in a Staff Group only to be refused with a hint (`staffCommandSpec.Refused`), after the anonymous check.
+- Per-group targets and delete ranges are never read from the raw `reply_to_message`, only through
+  `extraction.ReplyTarget`: in a forum supergroup Telegram sets `reply_to_message` to the topic's `forum_topic_created`
+  service message on every topic message that is not an explicit reply, so `ReplyTarget` answers nil for that message
+  and for a topic message's own thread root (`IsTopicMessage` with `MessageThreadId` equal to the reply's ID; outside a
+  forum replying to a thread's root is a real reply). `ExtractUserAndText`, `IdFromReply`, `extractFromReply`, `/dkick`,
+  `/dban`, `/dmute`, `/purge`, `/del`, `/purgefrom`, `/purgeto` and `/id` use it. In `ExtractUserAndText` an explicit
+  target (a `text_mention` at the argument, an `@username` or a numeric ID) always beats the reply: the reply is the
+  fallback only when the first argument named nobody, and `/id` shows a reply's details only when the resolved user is
+  the reply's sender.
 - A staff action card has one writer once its run starts: the run's coordinator goroutine, which edits at most every
   2.5 s (`staffActionEditEvery`), only when a result changed, and never before a progress edit's 429 `retry_after` has
   passed. The summary never drops a group: over 3800 UTF-16 units (counted on the escaped HTML) only done lines
@@ -3592,7 +3662,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Staff durations: `/ban` and `/mute` take an optional `<digits><m|h|d|w>` token right after the target, `/tban` and
   `/tmute` require it, and the grammar is `extraction.ParseDurationToken`, shared with the per-group commands. Longer
   than 366 days means permanent on the card and in the call, never a clamped value. The card stores the duration, not
-  an end date: `until_date` is computed once at Confirm and that one value goes to every group.
+  an end date: `until_date` is computed once at Confirm and that one value goes to every group. Telegram treats an
+  `until_date` less than 30 s away as permanent, so right before every ban or restrict write, inside the paced closure
+  of `executeStaffCall` (so a retry after a 429 wait is checked again), an end date under `staffUntilMinLead` (35 s)
+  away or past is not sent (`staffUntilTooClose`, `errStaffTimeRanOut`): that group fails with `fail_time_ran_out`
+  (`staff_act_fail_time_ran_out`) and nobody is restricted for good. The one `until_date` for every group is unchanged,
+  and the undo path has no such guard.
 - Greeting media types (Phase 12): `db.ANIMATION` (9) is a GIF saved by `/setwelcome`, `/setgoodbye` or the message
   editor's media part, stored with the animation's file ID and sent with `sendAnimation`. Only the greeting extraction
   returns it: `extractGreetingMedia` (animation first, then `extractMediaFromReply`) sits behind `ExtractWelcome` and
@@ -3647,8 +3722,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   The reports switch (Phase 18) is `applyReportsEnabled` in `reports.go`: it wraps only the group branch of `/reports on|off`
   (`reportsWrites.ChatStatus`, default `reports.SetChatReportStatus`, which writes `enabled` and `status` together; the
   `/report` path reads `status`) and returns a `reportsApplyResult` (outcome, the command's reply key, the status read
-  back, the error). The private-chat branch writes the user's own preference through `reports.SetUserReportSettings` and
-  stays in the command. `report_chat_settings` has no cache, so there is no key to drop and nothing is skewed across
+  back, the error). In a private chat with no stored connection (`reportsPersonalMode`) `/reports on|off` and the bare
+  status write and show the user's own preference through `reports.SetUserReportSettings`, need no connection and run no
+  admin check (a personal preference grants nothing over any group); that branch stays in the command. In a private
+  chat with a connection the same words set and show the connected group's switch through `applyReportsEnabled`, after
+  `IsUserConnected(true, true)` and the admin and bot-admin checks on the connected chat (passed explicitly: with a nil
+  chat they would judge the private chat), so a connected non-admin changes nothing (`TestReportsPrivateConnection`,
+  quick task 261116-wh2). `block`, `unblock` and `showblocklist` still answer the group-only text in any private chat.
+  `report_chat_settings` has no cache, so there is no key to drop and nothing is skewed across
   replicas. The page reads through `reports.LoadChatStatusContext`, one plain `SELECT` that creates no `chats` or report
   row, returns its error and reads a chat with no row as on (the model default); the command's own status text still
   reads `GetChatReportSettings`, which creates the row as before (`TestLegacyReportsRequests` and
@@ -3694,7 +3775,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `/nolog` (`setLogCategories`) keep their own loop, their group, admin and not-linked checks, their `#SETTINGS` audit post
   to the log channel and their quirk, and call it once per category: a failed save is logged and the loop goes on, so when
   every save fails the reply is `logs_enabled` (or `logs_disabled`) with an empty list and the audit post carries the same
-  empty list (`TestLegacyLogCategoryRequests` pins every request and stored row, never to be re-recorded). The audit post is
+  empty list (`TestLegacyLogCategoryRequests` pins every request and stored row, never to be re-recorded; only its `several_off`
+  case changed on purpose when the two dead categories were dropped, audit 261116 Q1 item 3: `other` is now an unknown name, so
+  only `admin, user` apply and are audited, and its six-character flags read the stored columns straight from the row). The
+  accepted categories are `settings`, `admin`, `user` and `reports` (`logchannels.AllCategories`); the columns
+  `cat_automated` and `cat_other` and their JSON keys stay in the table and the model for old rows and backup exports (an old
+  export carrying all six flags still imports, `TestImportLogChannelsOldExportKeepsAllSixFlags`), and nothing writes or reads
+  them: nothing ever posted to those two categories. The audit post is
   the commands' (a page posts the same entry itself after a change). The page reads through `logchannels.LoadContext`, the
   `log_channel:<chat>` key and loader `GetContext` uses (they share one function), which returns `(nil, nil)` for a chat with
   no linked channel, returns a failed read as an error, creates nothing and caches nothing for a miss. `log_channel` is not in
@@ -3726,7 +3813,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   control code a button carries (never the lock's name, never the pager's `kg` or a core action code), the kind, the name key
   and the page (12 on page 1, 10 on page 2). `TestSettingsLocksTableMatchesCommand` holds it equal to `/locktypes` in both
   directions (a lock added to `lockMap` or `restrMap` needs a row, and the reverse) and `TestSettingsLocksKeysExist`
-  holds every name key, the Locks words, the six Phase 18 page titles and the six log category names in all 8 languages,
+  holds every name key, the Locks words, the six Phase 18 page titles and the four log category names in all 8 languages,
   because `make check-translations` cannot see table fields. The page that draws the table is the Locks page (see the settings
   Callbacks bullets).
   The blacklist (Phase 19) is written by four apply functions in `blacklists.go`, through the `blacklistWrites` seam (defaults
@@ -3780,6 +3867,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   to `CACHE_LOCAL_TTL`, exactly as after the commands, and every write drops it on this replica. The apply functions log the chat ID
   and the error only, never a note name. `TestLegacyNoteRequests` pins every request and stored row of the three commands and is
   never re-recorded.
+  The `/save` and `/filter` overwrite cards share one authority step, `overwritePressTarget` (`overwrite.go`), which both callbacks
+  run right after parsing the data and before any token is consumed: in a group the target is the card's chat, the presser must be
+  an administrator there and a card naming another chat is cancelled (unchanged); in a private chat (a card made through a PM
+  connection) the card is read without consuming it, and the press is refused (the expired or cancelled text, nothing consumed, so
+  the holder can still press) unless the presser is the card's creator (`UserID` non-zero and equal), the card names a group and
+  the presser is a live administrator of that group (`IsUserAdmin` on the card's `ChatID`, the `chat_status_user_admin_button_error`
+  alert otherwise). The target chat comes only from the card, never from callback data (`TestOverwriteCardThroughPrivateConnection`).
   `/save` refuses a note name that contains white space, starts with `#` or is over 100 code points with the reply
   `notes_name_invalid` and stores nothing (`noteNameInvalid` in `list_validation.go`, run by `checkNoteName` after the blank check
   and before the existence read, outcome `noteNameBadShape`): `#name` and `/get` take the first space-separated token, so such a
@@ -3913,6 +4007,33 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   and its `settings_edit_refuse_too_long_filled` wording without media (so removing the media keeps a long text up to 3800), and counts no `{rules}`
   token of its stored text as a button, because `/rules` adds none (`TestSettingsRulesCaptionParity` holds the Rules and Welcome boundaries
   together for every media kind).
+- The log channel link (`/setlog`, `logchannels.go`) is a two-step proof. Step 1: `/setlog` posted in the channel stores a
+  one-hour marker `fuku:setlog:<channel>:<message>` (outside the `fuku:cache:` prefix, `storePendingMarker`) and asks for
+  the forward; the post needs no sender, because only a channel administrator can post there. Step 2: that post forwarded
+  to a group by a live administrator of the group binds the channel as the group's log channel (`bindSetLogForward`: group
+  or supergroup, a channel origin with a message ID, the sender, `chat_status.RequireUserAdmin` of that group, and only then
+  the single-use consume, `consumePendingMarker`, GETDEL with Redis, so a member's forward never burns the marker, then
+  `logchannels.Set`, `logs_set_ok` and the `#SETTINGS` audit post). `setlog` is a documented raw `helpers.NewBotCommand`
+  with `SetAllowChannel(true)` (like the other log channel commands it is not wrapped), because a channel post has no
+  sender and `WrapCommand` would reply to it. The forward still
+  carries the command text and entity, so the group-0 command binds it itself; the group-11 watcher
+  (`captureSetLogForward`) stays for a forward that carries no command text, and both call `bindSetLogForward`. A plain
+  `/setlog`, a member's forward and a forward with no live marker answer `logs_need_channel`. Stated limit of the design:
+  an administrator of another group who forwards a public channel's marked post within the hour binds that channel to
+  their own group (the marker is single use). `TestSetLogFlowThroughDispatcher` (memory store and miniredis) holds it.
+- The federation log chat (`/setfedlog`, `federations.go`) uses the same two-step proof for a channel. Step 1: `/setfedlog
+  <fed id>` posted in the channel stores a one-hour marker `fuku:setfedlog:<channel>:<message>` whose value is the fed ID
+  (outside the `fuku:cache:` prefix, single use) and answers `feds_setfedlog_forward_to_owner`; the post needs no sender
+  and neither checks nor reveals the federation (a missing or malformed ID answers `feds_setfedlog_need_id` and stores
+  nothing). Step 2 is part of the `setfedlog` command (a raw `helpers.NewBotCommand` with `SetAllowChannel(true)`; no
+  watcher, because every marked post is a command message and its forward keeps the text): a forward whose origin is a
+  channel, in the bot's private chat or in a group, never falls into the group branch (`setFedLogFromForward`): the marker
+  is read without consuming it (none: `feds_setfedlog_no_pending`), the federation it names must be owned by the
+  forwarder (else `feds_not_owner`, the marker left for the owner), then the marker is consumed once and the federation
+  log is set to the CHANNEL of the forward's origin, never the chat the forward was sent in. Typed `/setfedlog` in a group
+  makes that group the federation log only for a sender who is an administrator of that group
+  (`chat_status.RequireUserAdmin`, the usual refusal) and owns a federation; in a private chat it answers
+  `feds_group_only`. `TestSetFedLogFlowThroughDispatcher` (memory store and miniredis) holds it.
 
 ## Go rules
 
@@ -3930,6 +4051,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `net/http` errors embed it. Rebuild a transport error from `url.Error.Err`, report a bad status as the code alone,
   follow no redirect (`CheckRedirect` returning `http.ErrUseLastResponse`), and never wrap or `%v` a request or a file
   (`raidAIDownload` is the pattern).
+- Outbound lookups through `fetchJSON` (`/wiki`, `/github`, `/ud`) send the User-Agent `fetchUserAgent()` gives,
+  `Xenobot-72/<BotVersion> (Telegram bot)`, because Wikimedia answers 403 to a request without a descriptive one
+  (`TestFetchJSONSendsUserAgent`).
 - `fuku/utils/claude` imports the standard library only, so `scripts/claude-spike` can use it (and the leaf
   `fuku/utils/namecanon`, see below) without the pre-main database connection of `fuku/config` and `fuku/db`. The Anthropic key travels only in the `x-api-key` header, never
   in a URL, and no error that package returns contains it. No sampling parameter (`temperature`, `top_p`, `top_k`) is
@@ -3955,6 +4079,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `TestCanonVerdictKey` pin one vector each for that reason.
 - A missing i18n key returns `""` with an error callers ignore; a typo'd key in Go ships an empty message. Copy key
   names from `locales/en.yml`. `locales/config.yml` is the help alt-name pseudo-locale, not a language.
+- A string filled with `i18n.TranslationParams` uses `{name}` placeholders equal to the param names. A `%s` or `%d`
+  verb is filled only from the keys `0` to `9` or the fixed common names of `extractOrderedValues`, and prints raw
+  for any other name (`modules`, `list`, `chat`, `time`, `types`, `attempts` did). `TestRawPlaceholderKeysRender`
+  (`fuku/i18n`) renders the backup and captcha keys that once printed raw verbs through the real locale files.
 - The docs generator finds raw commands in the module source by the shim's call, `helpers.NewBotCommand("name", ...)`
   (`scripts/generate_docs/parsers.go`); a command registered another way is not listed, and the guard test rejects it.
 - The docs generator reads only `locales/en.yml`. Pages marked `<!-- MANUALLY MAINTAINED: do not regenerate -->` in
@@ -4118,6 +4246,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `UPDATE blacklists SET action = v` succeeds for warn, mute, kick, ban and none and fails with SQLSTATE 23514 for any other
   value, and exactly one CHECK mentions the column, `chk_blacklist_action`; PostgreSQL only, it skips locally;
   `TestBlacklistActionMigrationStatements` is its database-free half and runs in `make test`).
+  The warn mode guarantee (quick task 261116-wh3) is `TestWarnModeCheckOnPostgres` (`./fuku/db/migrations`: on a chain-built
+  database `warns_settings.warn_mode` accepts NULL, the empty mode and the five modes and refuses any other value with SQLSTATE
+  23514, and exactly one CHECK mentions the column, `chk_warn_mode`; PostgreSQL only, it skips locally;
+  `TestWarnModeCheckMigrationStatements` is its database-free half and runs in `make test`).
   The forward blocklist guarantees (quick task 261113-tjj) are `TestStaffForwardBlockConstraints` (`./fuku/db/staff`: the
   unique key, `chk_staff_forward_blocks_source` and `chk_staff_forward_block_action` refuse a duplicate, a non-negative
   source and an action outside the five; it also runs on SQLite in `make test`) and `TestStaffForwardBlockMigrationDefaults`
@@ -4282,12 +4414,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   goroutines uses Mute or Kick and never Warn (the warn module's SQLite transaction); a test that joins, rejoins or sends with
   a date takes the date before the message and at least 2 s apart; and a test never `t.Skip`s (CI's
   `scripts/check_test_results` fails on an unexpected skip, so a case that cannot run in a menu kind is not registered
-  there). The locale files now hold 452 `settings_` keys and 31 `mreq_` keys, each `settings_` key one row of the limits table
+  there). The locale files now hold 464 `settings_` keys and 31 `mreq_` keys, each `settings_` key one row of the limits table
   of `fuku/i18n/settings_locale_test.go` (Phase 19 plan 19-02 added two, `settings_state_private_only` and `settings_entries_group_note`, and plan 19-03 seven for the Blacklist page in task 1, three for its delete card in task 2 and seven for its action screen in task 3, and plan 19-04 nine for the typed add in task 1 and seven (the wait-ended note, the five part words and the no-addable-word refusal) in task 2; the typed add's tests are `TestSettingsListDoor*` (`settings_list_door_test.go`: one step, refusals, authority with the live bot classification, replaced waits, expiry, Cancel, albums, no Redis), `TestSettingsParityBlacklistAdd` and the typed column of `TestSettingsAuthorityParityBlacklist` (`settings_blacklist_test.go`); the list toolkit is `settings_list_env_test.go`: `newSettingsListEnv`, `settingsListSeedBlacklist`, `settingsListCleanup`, `settingsListOpenPrivate`, `settingsListSentinel`; plan 19-06 adds four keys, rows 11 to 14 of the UI-SPEC (the step line, the closed step-1 prompt, the blank-entry refusal and the content limits), and `withTestSettingsList(t, def)`, which installs a test-only list page over the registries by saving the entries of its key, its list table and its action codes and replacing them, restoring every one in `t.Cleanup` (never `registerSettingsPage`, which panics on a duplicate key, so a test page may reuse key `i` or `e` before or after the real page exists); the two-step engine is proved on such a page, `settingsListTestTwoStepDef` with key `i` and codes `zg zx zy za zc`, by `TestSettingsListTwoStepFlow` and `TestSettingsListTwoStepBranches` (`settings_list_twostep_test.go`: every step-1 refusal including U+3000 alone, a `Check` error, the Add gate, the `q` guard, a poll, a `Check` that now refuses, a taken and a failed `Apply`, an album, Add at step 2, expiry and `/cancel`); plan 19-07 adds the Filters page's 14 keys, rows 40 to 53 of the UI-SPEC (the page name, the list page, the Add button, both prompts, the key line, the two refusals, the delete card and the two notices; the keys are read through table fields and `settingsListExtraKeys`, so `TestSettingsListKeysExist` and the limits rows are their guard) and the tests `TestSettingsFiltersOpens`, `TestSettingsFiltersDelete` (`settings_filters_test.go`), `TestSettingsListDoorTwoStep`, `TestSettingsListDoorTwoStepRefusals` and `TestSettingsListDoorTwoStepCap` (`settings_list_door_test.go`) on the toolkit `newSettingsFiltersFlow`, `settingsFiltersOwner` (a live creator, so `can_change_info` holds) and `settingsListSeedFilters`; plan 19-09 adds the Notes page's 14 keys, rows 54 to 67 of the UI-SPEC, 11 in task 1 and the refusal, delete card and removed notice in task 2, read through table fields and `settingsListExtraKeys`, and the tests `TestSettingsNotesOpens`, `TestSettingsListDoorTwoStepNotes`, `TestSettingsNotesDelete` and `TestSettingsListDoorNotesRefusals` in `settings_notes_test.go` on `newSettingsNotesFlow`, which wraps the Filters flow, and `settingsListSeedNotes`) and each `mreq_` key one row of `memberReqLocaleLimits`. Phase 18 added 55 `settings_`
   keys (four of them, the Warnings page's, in plan 18-01 and 51 in plan 18-02: the six page names, three Main state words,
   the Warnings, Switches, Language, Log channel and Anonymous admins lines, and the Locks intro, two state words and 22 lock
   names), each one row of `settingsLocaleLimits` (`settings_sw_ai_unavailable` also in `settingsAlertKeys`, being the alert of
-  a stale On press). The page names, the six log category names and the 22 lock names are read through table fields that
+  a stale On press). The page names, the four log category names and the 22 lock names are read through table fields that
   `make check-translations` cannot see, so the limits table, `TestSettingsLabelLengths` (the page cells, every lock name with
   🔒 and 🔓, every category with ✅ and ❌, each file's own Language cell `language_flag` plus `language_name` plain and marked,
   the four full-width toggles with the longer state word at most 40, and the two Main state words with their largest count)
