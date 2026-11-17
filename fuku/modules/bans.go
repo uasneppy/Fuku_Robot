@@ -397,7 +397,9 @@ func moderationUnban(m *moduleStruct) *moderationCommand {
 				}
 				return nil
 			}
-			_, err := c.Chat.UnbanMember(c.Bot, t.userID, nil)
+			// only_if_banned: without it Telegram removes a current member, so /unban
+			// of a member who is not banned would kick them.
+			_, err := c.Chat.UnbanMember(c.Bot, t.userID, &gotgbot.UnbanChatMemberOpts{OnlyIfBanned: true})
 			return err
 		},
 		reply: func(c *moderationCtx, t *target) error {
