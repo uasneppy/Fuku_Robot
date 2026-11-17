@@ -83,6 +83,15 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`raidPosts`, a counter and not a `sync.WaitGroup`, because the drain gives up after its wait while a new post can still
   start). A post is best effort: the lockdown it announces is already in place and its alert is driven by the database,
   so a post still running when the 2 s are up is cut off with the process and only that notice is lost.
+- `DrainAISpamChecks` is the `/aispam` pool's drain, a plain shutdown handler (`RegisterHandler`, the 10 s default) that
+  `main.go` registers right after `RegisterRaidAIDrain`, so LIFO runs it before `StopRaidAI`. It sets `aispamDraining`
+  for good (a late update is shed, never started; nothing resets it), cancels the pool's root context first
+  (`aispamContext`: every TypeSafe call of a check derives from it, so all of them abort at once, and a check cut off or
+  dropped from the queue counts as shed, never as a provider failure or a breaker count), then waits at most
+  `aispamDrainTimeout` (9 s, under the handler's 10 s) for the workers. A lockdown start an AI verdict asks for is
+  refused once `raidAIDraining` is set (`raidAIFireAsync` counts the start in `raidAIFires` before it reads the flag), so
+  no start begins behind `StopRaidAI`'s back. Tests wait for checks with `waitAISpamChecks`, which closes and cancels
+  nothing, and a test that runs the drain restores the pool with `restoreAISpamPool` (`TestShutdownDrainsAISpamChecks`).
 - `StopRaidAI` is a drain registered after DB-close as well, through `RegisterRaidAIDrain` (`raidAIStopWait`, 1 s, plus
   grace), in `main.go` right after `RegisterRaidPostsDrain`. Shutdown is LIFO, so it runs after `DrainAISpamChecks`
   (whose verdicts can start lockdowns) and before `StopRaidPosts` (a start can post a notice) and the database close. It

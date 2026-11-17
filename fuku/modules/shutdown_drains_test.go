@@ -4,13 +4,19 @@ package modules
 
 import (
 	"context"
+	"io"
+	"net/http"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/PaulSonOfLars/gotgbot/v2"
+	"github.com/PaulSonOfLars/gotgbot/v2/ext"
+
 	"github.com/uasneppy/fuku_robot/fuku/db"
+	"github.com/uasneppy/fuku_robot/fuku/db/aispam"
 	"github.com/uasneppy/fuku_robot/fuku/db/deletion"
 	"github.com/uasneppy/fuku_robot/fuku/db/lockdown"
 	"github.com/uasneppy/fuku_robot/fuku/db/memberreq"
@@ -573,4 +579,111 @@ func TestShutdownEndsDeletionWorker(t *testing.T) {
 		return env.deletionRowCount(env.chat.Id) == 0
 	})
 	StopDeletionWorker()
+}
+
+// restoreAISpamPool gives the /aispam pool back its working state after a test ran the
+// shutdown drain, which sets the draining flag and cancels the root context for good.
+func restoreAISpamPool(t *testing.T) {
+	t.Helper()
+	t.Cleanup(func() {
+		aispamDraining.Store(false)
+		aispamPoolContext.mu.Lock()
+		defer aispamPoolContext.mu.Unlock()
+		aispamPoolContext.ctx, aispamPoolContext.cancel = context.WithCancel(context.Background())
+	})
+}
+
+// TestShutdownDrainsAISpamChecks holds the /aispam shutdown drain: it cancels the provider
+// call of a check in flight at once, so it returns well inside the 10 s a shutdown handler
+// gets; a check cut off is no verdict and no breaker failure; the queue stays closed after
+// the drain (a late update is shed, not started); and an AI burst lockdown start asked for
+// while the raid AI pool is draining is refused, not started behind the drain's back.
+func TestShutdownDrainsAISpamChecks(t *testing.T) {
+	t.Run("the drain cancels a check in flight and keeps the queue closed", func(t *testing.T) {
+		resetAISpamRuntime()
+		t.Cleanup(resetAISpamRuntime)
+		restoreAISpamPool(t)
+		withAISpamTestConfig(t, "typesafe-test-key", true, 0)
+
+		started := make(chan struct{}, 1)
+		cancelled := make(chan struct{}, 1)
+		withAISpamJevServer(t, func(w http.ResponseWriter, r *http.Request) {
+			_, _ = io.Copy(io.Discard, r.Body)
+			select {
+			case started <- struct{}{}:
+			default:
+			}
+			select {
+			case <-r.Context().Done():
+				cancelled <- struct{}{}
+			case <-time.After(20 * time.Second):
+			}
+		})
+
+		client := newModuleBotClient()
+		bot := newModuleTestBot(client)
+		chat := gotgbot.Chat{Id: uniqueModuleChatID(), Type: "supergroup", Title: "Drain Chat"}
+		if err := aispam.SetAISpamEnabled(chat.Id, true); err != nil {
+			t.Fatalf("SetAISpamEnabled() error = %v", err)
+		}
+		dispatcher := ext.NewDispatcher(&ext.DispatcherOpts{MaxRoutines: -1})
+		LoadAISpam(dispatcher)
+
+		aispamProcessUpdate(t, dispatcher, bot, chat, gotgbot.User{Id: 42, FirstName: "Member"}, 601, "BUY CHEAP COINS t.me/scam")
+		select {
+		case <-started:
+		case <-time.After(10 * time.Second):
+			t.Fatal("the provider never received the check")
+		}
+
+		if !returnsWithin(3*time.Second, DrainAISpamChecks) {
+			t.Fatal("the drain waited on a hung provider call instead of cancelling it")
+		}
+		select {
+		case <-cancelled:
+		case <-time.After(3 * time.Second):
+			t.Error("the provider call in flight was not cancelled")
+		}
+		if aispamBreakerPaused(chat.Id) {
+			t.Error("a check cut off by the shutdown paused the chat's breaker")
+		}
+		if _, _, _, _, failed := GetAISpamStats(); failed != 0 {
+			t.Errorf("failed checks = %d, want 0: a check cut off by the shutdown is no provider failure", failed)
+		}
+
+		if aispamEnqueue(aispamTask{chatID: chat.Id, userID: 42}) {
+			t.Error("a check was queued after the drain returned: the queue must stay closed")
+		}
+	})
+
+	t.Run("no AI burst lockdown starts while the raid AI pool drains", func(t *testing.T) {
+		withMiniredis(t)
+		restoreRaidAIPool(t)
+		raidAIDraining.Store(true)
+
+		client := newModuleBotClient()
+		bot := newModuleTestBot(client)
+		chat := gotgbot.Chat{Id: uniqueModuleChatID(), Type: "supergroup", Title: "Draining Chat"}
+		raidCleanup(t, chat.Id)
+		raidAIFireAsync(bot, chat, raidTrigger{Kind: models.LockdownTriggerAIBurst, Count: 5, Window: 120})
+		raidAIFires.wait()
+
+		redisClient := raidRedis()
+		if redisClient == nil {
+			t.Fatal("the test harness has no Redis, so the fire latch cannot show whether a start ran")
+		}
+		n, err := redisClient.Exists(context.Background(), raidKey(chat.Id, raidPartFire)).Result()
+		if err != nil {
+			t.Fatalf("read the fire latch: %v", err)
+		}
+		if n != 0 {
+			t.Error("a lockdown start ran while the raid AI pool was draining (the fire latch was taken)")
+		}
+		client.mu.Lock()
+		calls := len(client.calls)
+		client.mu.Unlock()
+		if calls != 0 {
+			t.Errorf("%d Telegram calls were made by a start refused while draining, want 0", calls)
+		}
+	})
 }
