@@ -79,8 +79,7 @@ var (
 			return arabmatch.MatchString(msg.Text)
 		},
 		"anonchannel": func(msg *gotgbot.Message) bool {
-			sender := msg.GetSender()
-			return sender.IsAnonymousChannel() || sender.IsLinkedChannel()
+			return msg.GetSender().IsAnonymousChannel()
 		},
 	}
 
@@ -431,12 +430,30 @@ func chatLocksForUpdate(ctx *ext.Context, chatID int64) map[string]bool {
 	})
 }
 
-// anyLockHit reports whether msg trips any lock that is enabled in chatLocks.
-// It only inspects the message, so it never calls Telegram or the database.
+// lockSenderExempt reports whether a lock of kind never applies to msg's sender. The linked channel's
+// posts (its automatic forwards) are exempt from every lock but the two that are about channel
+// senders on purpose, anonchannel and comments, which keep their own rules. Anonymous admins are
+// admins and are let through before any lock is looked at (lockWatchSkipsSender).
+func lockSenderExempt(sender *gotgbot.Sender, msg *gotgbot.Message, kind string) bool {
+	if kind == "anonchannel" || kind == "comments" {
+		return false
+	}
+	return sender.IsLinkedChannel() || (msg != nil && msg.IsAutomaticForward)
+}
+
+// lockWatchSkipsSender reports whether the lock watchers leave every message of sender alone: an
+// anonymous admin is an admin, and the group's own ID is never a chat member, so the admin and
+// member lookups for it could only fail.
+func lockWatchSkipsSender(sender *gotgbot.Sender) bool {
+	return sender.IsAnonymousAdmin()
+}
+
+// anyLockHit reports whether msg trips any lock that is enabled in chatLocks and applies to
+// sender. It only inspects the message, so it never calls Telegram or the database.
 // The lock named skip is ignored.
-func anyLockHit(chatLocks map[string]bool, lockFilters map[string]filters.Message, msg *gotgbot.Message, skip string) bool {
+func anyLockHit(chatLocks map[string]bool, lockFilters map[string]filters.Message, msg *gotgbot.Message, skip string, sender *gotgbot.Sender) bool {
 	for key, filter := range lockFilters {
-		if key != skip && chatLocks[key] && filter(msg) {
+		if key != skip && chatLocks[key] && !lockSenderExempt(sender, msg, key) && filter(msg) {
 			return true
 		}
 	}
@@ -455,7 +472,7 @@ func (moduleStruct) restHandler(b *gotgbot.Bot, ctx *ext.Context) error {
 	chatLocks := chatLocksForUpdate(ctx, chat.Id)
 	// Pure in-memory check first so unlocked content never pays for the
 	// admin/approval/bot-permission lookups below.
-	if !anyLockHit(chatLocks, restrMap, msg, "") {
+	if !anyLockHit(chatLocks, restrMap, msg, "", sender) || lockWatchSkipsSender(sender) {
 		return ext.ContinueGroups
 	}
 
@@ -473,7 +490,7 @@ func (moduleStruct) restHandler(b *gotgbot.Bot, ctx *ext.Context) error {
 	}
 
 	for restr, filter := range restrMap {
-		if !filter(msg) || !chatLocks[restr] {
+		if !filter(msg) || !chatLocks[restr] || lockSenderExempt(sender, msg, restr) {
 			continue
 		}
 
@@ -506,7 +523,7 @@ func (moduleStruct) permHandler(b *gotgbot.Bot, ctx *ext.Context) error {
 	chatLocks := chatLocksForUpdate(ctx, chat.Id)
 	// Pure in-memory check first so unlocked content never pays for the
 	// admin/approval/bot-permission lookups below.
-	if !anyLockHit(chatLocks, lockMap, msg, "bots") {
+	if !anyLockHit(chatLocks, lockMap, msg, "bots", sender) || lockWatchSkipsSender(sender) {
 		return ext.ContinueGroups
 	}
 
@@ -524,7 +541,7 @@ func (moduleStruct) permHandler(b *gotgbot.Bot, ctx *ext.Context) error {
 	}
 
 	for perm, filter := range lockMap {
-		if !filter(msg) || !chatLocks[perm] {
+		if !filter(msg) || !chatLocks[perm] || lockSenderExempt(sender, msg, perm) {
 			continue
 		}
 

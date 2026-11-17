@@ -2399,7 +2399,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   connected group in the bot's private chat): an anonymous admin is an admin while the chat's AnonAdmin mode is on and
   otherwise gets the proof prompt (`chat_status.CheckAnonymousAdmin`), whose tap re-enters the command through the
   registry (`RegisterAnonymousAdminHandler("lock"/"unlock", ...)`, no `anonPipelineHandler`) with the tapper checked live;
-  every other sender is judged by their own ID, never the group's.
+  every other sender is judged by their own ID, never the group's. The lock watchers (`permHandler`, `restHandler`) leave an
+  anonymous admin's messages alone under every lock, `comments` included (`lockWatchSkipsSender`, after the pure
+  `anyLockHit` check and before any lookup, because the group's own ID is never a chat member), and exempt the linked
+  channel's posts (`IsLinkedChannel` or `IsAutomaticForward`) from every lock but `anonchannel` and `comments`, which keep
+  their own rules (`lockSenderExempt`). `anonchannel` matches anonymous channels only (`IsAnonymousChannel`), never the
+  linked channel; an anonymous channel's posts and every member's stay subject to every lock.
 - Antiflood first write (D-27): on a chat with no `antiflood_settings` row, the first `/setfloodmode` (pinned for ban) or
   `/delflood` stores `flood_limit` 5, the model's `default:5`, because the repository's `FirstOrCreate` insert leaves
   the limit at its Go zero value; an admin who only picks an action or turns message deleting on therefore also turns

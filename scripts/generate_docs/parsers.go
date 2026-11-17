@@ -438,7 +438,7 @@ func getLockDescription(lockName, category string) string {
 		"game":        "Blocks game messages",
 		"location":    "Blocks location/venue messages",
 		"rtl":         "Blocks messages containing right-to-left (Arabic) text",
-		"anonchannel": "Blocks messages from anonymous channels and linked channel posts",
+		"anonchannel": "Blocks messages from anonymous channels",
 
 		// Restriction locks (from restrMap)
 		"messages": "Blocks all text, media, contacts, locations, games, stickers, and GIFs",
