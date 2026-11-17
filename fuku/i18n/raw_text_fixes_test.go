@@ -82,3 +82,21 @@ func TestRawPlaceholderKeysRender(t *testing.T) {
 		}
 	}
 }
+
+// TestGreetingsNotConfiguredKeysExist proves the two keys the greetings module reads through a
+// struct field (so check-translations cannot see them) exist and are plain text in every locale.
+func TestGreetingsNotConfiguredKeysExist(t *testing.T) {
+	for _, code := range staffLocales {
+		data := loadStaffLocale(t, code)
+		for _, key := range []string{"greetings_welcome_not_configured", "greetings_goodbye_not_configured"} {
+			value, ok := data[key].(string)
+			if !ok || strings.TrimSpace(value) == "" {
+				t.Errorf("%s: %s is missing or empty", code, key)
+				continue
+			}
+			if strings.ContainsAny(value, "%{}") {
+				t.Errorf("%s: %s holds a verb or a brace: %q", code, key, value)
+			}
+		}
+	}
+}

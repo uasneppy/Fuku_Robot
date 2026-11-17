@@ -1114,6 +1114,7 @@ greetings_welcome_disabled: "मैं अब से उपयोगकर्त
 greetings_welcome_invalid_option: "मैं केवल 'on/yes' या 'off/no' समझता हूं!"
 greetings_welcome_set_success: "सफलतापूर्वक कस्टम स्वागत संदेश सेट किया गया!"
 greetings_welcome_reset_success: "कस्टम स्वागत संदेश सफलतापूर्वक डिफ़ॉल्ट पर रीसेट किया गया!"
+greetings_welcome_not_configured: "इस चैट के लिए अभी कोई स्वागत संदेश सहेजा नहीं गया है। /setwelcome से एक सेट करें।"
 greetings_goodbye_status: |
   मैं वर्तमान में उपयोगकर्ताओं को अलविदा कह रहा हूं: <code>%s</code>
   मैं वर्तमान में पुराने अलविदा हटा रहा हूं: <code>%s</code>
@@ -1124,6 +1125,7 @@ greetings_goodbye_disabled: "मैं अब से उपयोगकर्त
 greetings_goodbye_invalid_option: "मैं केवल 'on/yes' या 'off/no' समझता हूं!"
 greetings_goodbye_set_success: "सफलतापूर्वक कस्टम अलविदा संदेश सेट किया गया!"
 greetings_goodbye_reset_success: "कस्टम अलविदा संदेश सफलतापूर्वक डिफ़ॉल्ट पर रीसेट किया गया!"
+greetings_goodbye_not_configured: "इस चैट के लिए अभी कोई विदाई संदेश सहेजा नहीं गया है। /setgoodbye से एक सेट करें।"
 greetings_clean_welcome_status_should: "मुझे दो दिन पुराने स्वागत संदेश हटाने चाहिए।"
 greetings_clean_welcome_status_not: "मैं वर्तमान में पुराने स्वागत संदेश नहीं हटा रहा हूं!"
 greetings_clean_welcome_disabled: "मैं पुराने स्वागत संदेश नहीं हटाऊंगा!"

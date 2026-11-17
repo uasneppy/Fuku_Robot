@@ -641,6 +641,7 @@ greetings_welcome_disabled: "Je n'accueillerai plus les utilisateurs."
 greetings_welcome_invalid_option: "Je comprends uniquement 'on/yes' ou 'off/no' !"
 greetings_welcome_set_success: "Message de bienvenue personnalisé défini avec succès !"
 greetings_welcome_reset_success: "Message de bienvenue réinitialisé par défaut avec succès !"
+greetings_welcome_not_configured: "Aucun message de bienvenue n'est encore enregistré pour ce chat. Définissez-en un avec /setwelcome."
 greetings_goodbye_status: |
   Je dis au revoir aux utilisateurs : <code>%s</code>
   Je supprime actuellement les anciens messages d'au revoir : <code>%s</code>
@@ -651,6 +652,7 @@ greetings_goodbye_disabled: "Je ne dirai plus au revoir aux utilisateurs."
 greetings_goodbye_invalid_option: "Je comprends uniquement 'on/yes' ou 'off/no' !"
 greetings_goodbye_set_success: "Message d'au revoir personnalisé défini avec succès !"
 greetings_goodbye_reset_success: "Message d'au revoir réinitialisé par défaut avec succès !"
+greetings_goodbye_not_configured: "Aucun message d'au revoir n'est encore enregistré pour ce chat. Définissez-en un avec /setgoodbye."
 greetings_clean_welcome_status_should: "Je devrais supprimer les messages de bienvenue vieux de jusqu'à deux jours."
 greetings_clean_welcome_status_not: "Je ne supprime actuellement pas les anciens messages de bienvenue !"
 greetings_clean_welcome_disabled: "Je ne supprimerai pas les anciens messages de bienvenue !"

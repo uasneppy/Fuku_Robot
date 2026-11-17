@@ -1175,6 +1175,7 @@ greetings_welcome_disabled: "No daré la bienvenida a los usuarios de ahora en a
 greetings_welcome_invalid_option: "¡Solo entiendo 'on/yes' o 'off/no'!"
 greetings_welcome_set_success: "¡Mensaje de bienvenida personalizado establecido exitosamente!"
 greetings_welcome_reset_success: "¡Mensaje de bienvenida personalizado restablecido exitosamente al predeterminado!"
+greetings_welcome_not_configured: "Este chat aún no tiene un mensaje de bienvenida guardado. Configúralo con /setwelcome."
 greetings_goodbye_status: |
   Actualmente estoy despidiendo usuarios: <code>%s</code>
   Actualmente estoy eliminando despedidas antiguas: <code>%s</code>
@@ -1185,6 +1186,7 @@ greetings_goodbye_disabled: "No me despediré de los usuarios de ahora en adelan
 greetings_goodbye_invalid_option: "¡Solo entiendo 'on/yes' o 'off/no'!"
 greetings_goodbye_set_success: "¡Mensaje de despedida personalizado establecido exitosamente!"
 greetings_goodbye_reset_success: "¡Mensaje de despedida personalizado restablecido exitosamente al predeterminado!"
+greetings_goodbye_not_configured: "Este chat aún no tiene un mensaje de despedida guardado. Configúralo con /setgoodbye."
 greetings_clean_welcome_status_should: "Debería estar eliminando mensajes de bienvenida de hasta dos días de antigüedad."
 greetings_clean_welcome_status_not: "¡Actualmente no estoy eliminando mensajes de bienvenida antiguos!"
 greetings_clean_welcome_disabled: "¡No eliminaré mensajes de bienvenida antiguos!"

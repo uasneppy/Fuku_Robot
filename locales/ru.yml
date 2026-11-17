@@ -999,6 +999,7 @@ greetings_welcome_disabled: "Я не буду приветствовать по�
 greetings_welcome_invalid_option: "Я понимаю только 'on/yes' или 'off/no'!"
 greetings_welcome_set_success: "Пользовательское приветственное сообщение успешно установлено!"
 greetings_welcome_reset_success: "Приветственное сообщение успешно сброшено на стандартное!"
+greetings_welcome_not_configured: "Для этого чата ещё не сохранено приветствие. Задайте его командой /setwelcome."
 greetings_goodbye_status: |
   Я в данный момент прощаюсь с пользователями: <code>%s</code>
   Я в данный момент удаляю старые прощания: <code>%s</code>
@@ -1009,6 +1010,7 @@ greetings_goodbye_disabled: "Я не буду прощаться с пользо
 greetings_goodbye_invalid_option: "Я понимаю только 'on/yes' или 'off/no'!"
 greetings_goodbye_set_success: "Пользовательское прощальное сообщение успешно установлено!"
 greetings_goodbye_reset_success: "Прощальное сообщение успешно сброшено на стандартное!"
+greetings_goodbye_not_configured: "Для этого чата ещё не сохранено прощание. Задайте его командой /setgoodbye."
 greetings_clean_welcome_status_should: "Я должен удалять приветственные сообщения до двух дней."
 greetings_clean_welcome_status_not: "Я в данный момент не удаляю старые приветственные сообщения!"
 greetings_clean_welcome_disabled: "Я не буду удалять старые приветственные сообщения!"
