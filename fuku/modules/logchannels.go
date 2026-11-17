@@ -37,31 +37,82 @@ func setlogPendingKey(channelID, messageID int64) string {
 	return fmt.Sprintf("fuku:setlog:%d:%d", channelID, messageID)
 }
 
+// pendingMarkerTTL is how long a channel post's marker waits for its forward (/setlog and
+// /setfedlog).
+const pendingMarkerTTL = time.Hour
+
+// storePendingMarker records the marker of a channel post under key for pendingMarkerTTL. The key
+// sits outside the fuku:cache: prefix. It fails when there is no marshaler, so a caller can tell
+// the poster the request was not recorded.
+func storePendingMarker(key string, value []byte) error {
+	m := cache.GetMarshal()
+	if m == nil {
+		return errors.New("no cache marshaler")
+	}
+	return m.Set(cache.Context, key, value, store.WithExpiration(pendingMarkerTTL))
+}
+
+// peekPendingMarker reads a marker without consuming it. It fails closed: no marshaler, a miss
+// and a read error are all "no marker".
+func peekPendingMarker(key string) ([]byte, bool) {
+	m := cache.GetMarshal()
+	if m == nil {
+		return nil, false
+	}
+	var marker []byte
+	if _, err := m.Get(cache.Context, key, &marker); err != nil {
+		return nil, false
+	}
+	return marker, true
+}
+
+// consumePendingMarker takes a marker once. With Redis it is one GETDEL, so concurrent forwards of
+// the same channel post bind once; without Redis it is the marshaler's get then delete.
+func consumePendingMarker(key string) bool {
+	if rdb := cache.GetRedisClient(); rdb != nil {
+		return rdb.GetDel(cache.Context, key).Err() == nil
+	}
+	m := cache.GetMarshal()
+	if m == nil {
+		return false
+	}
+	var marker []byte
+	if _, err := m.Get(cache.Context, key, &marker); err != nil {
+		return false
+	}
+	_ = m.Delete(cache.Context, key)
+	return true
+}
+
+// channelForwardOrigin reports the channel and the message ID a forwarded channel post came
+// from. It is false for a nil message, a message that is not a forward, and a forward whose
+// origin is not a channel.
+func channelForwardOrigin(msg *gotgbot.Message) (channelID, messageID int64, ok bool) {
+	if msg == nil || msg.ForwardOrigin == nil {
+		return 0, 0, false
+	}
+	origin := msg.ForwardOrigin.MergeMessageOrigin()
+	if origin.Chat == nil || origin.Chat.Type != "channel" {
+		return 0, 0, false
+	}
+	return origin.Chat.Id, origin.MessageId, true
+}
+
+// setLog is /setlog. In a channel (step 1) the post needs no sender: it records a one-hour marker
+// for the post and asks for the forward. In a group, a forward of a marked post by a live
+// administrator binds the channel (step 2, bindSetLogForward), because the forward still carries
+// the command text and this handler sees it before the group-11 watcher; anything else answers
+// logs_need_channel.
 func (moduleStruct) setLog(b *gotgbot.Bot, ctx *ext.Context) error {
 	msg := ctx.EffectiveMessage
 	chat := ctx.EffectiveChat
-	from := requireUser(b, ctx)
-	if from == nil {
-		return ext.EndGroups
-	}
-	tr := ctxTr(ctx)
 	if chat == nil || msg == nil {
 		return ext.EndGroups
 	}
 	if chat.Type == "channel" {
-		m := cache.GetMarshal()
-		if m == nil {
-			text, _ := tr.GetString("common_settings_save_failed")
-			replyHTML(b, msg, text)
-			return ext.EndGroups
-		}
-		if err := m.Set(
-			cache.Context,
-			setlogPendingKey(chat.Id, msg.MessageId),
-			[]byte("1"),
-			store.WithExpiration(time.Hour),
-		); err != nil {
-			log.Errorf("[LogChannels] failed to store pending setlog: %v", err)
+		tr := ctxTr(ctx)
+		if err := storePendingMarker(setlogPendingKey(chat.Id, msg.MessageId), []byte("1")); err != nil {
+			log.Errorf("[LogChannels] failed to store pending setlog for channel %d: %v", chat.Id, err)
 			text, _ := tr.GetString("common_settings_save_failed")
 			replyHTML(b, msg, text)
 			return ext.EndGroups
@@ -70,6 +121,13 @@ func (moduleStruct) setLog(b *gotgbot.Bot, ctx *ext.Context) error {
 		replyHTML(b, msg, text)
 		return ext.EndGroups
 	}
+	if requireUser(b, ctx) == nil {
+		return ext.EndGroups
+	}
+	if bindSetLogForward(b, ctx) {
+		return ext.EndGroups
+	}
+	tr := ctxTr(ctx)
 	text, _ := tr.GetString("logs_need_channel")
 	replyHTML(b, msg, text)
 	return ext.EndGroups
@@ -266,61 +324,56 @@ func (moduleStruct) setLogCategories(b *gotgbot.Bot, ctx *ext.Context, enable bo
 	return ext.EndGroups
 }
 
-func (moduleStruct) captureSetLogForward(b *gotgbot.Bot, ctx *ext.Context) error {
+// bindSetLogForward is step 2 of /setlog, shared by the command and the group-11 watcher: a
+// forward, in a group, of a channel post that carries a live /setlog marker, by a live
+// administrator of that group, binds the channel as the group's log channel. The admin check runs
+// before the marker is consumed, so a member's forward never burns it. It replies logs_set_ok and
+// posts the #SETTINGS audit entry only when the channel was stored, returns true then, and replies
+// nothing on every other path.
+func bindSetLogForward(b *gotgbot.Bot, ctx *ext.Context) bool {
 	msg := ctx.EffectiveMessage
 	chat := ctx.EffectiveChat
-	if msg == nil || chat == nil || chat.Type == "private" || chat.Type == "channel" {
-		return ext.ContinueGroups
+	if msg == nil || chat == nil || (chat.Type != "group" && chat.Type != "supergroup") {
+		return false
 	}
-	if msg.ForwardOrigin == nil {
-		return ext.ContinueGroups
-	}
-	origin := msg.ForwardOrigin.MergeMessageOrigin()
-	if origin.Chat == nil || origin.Chat.Type != "channel" {
-		return ext.ContinueGroups
+	channelID, messageID, ok := channelForwardOrigin(msg)
+	if !ok || messageID == 0 {
+		return false
 	}
 	from := chat_status.RequireUser(b, ctx)
 	if from == nil {
-		return ext.ContinueGroups
+		return false
 	}
 	if !chat_status.RequireUserAdmin(b, ctx, chat, from.Id) {
-		return ext.ContinueGroups
+		return false
 	}
-	if origin.MessageId == 0 {
-		return ext.ContinueGroups
+	if !consumePendingMarker(setlogPendingKey(channelID, messageID)) {
+		return false
 	}
-	pending := false
-	key := setlogPendingKey(origin.Chat.Id, origin.MessageId)
-	if rdb := cache.GetRedisClient(); rdb != nil {
-		// Atomic consume: concurrent forwards of the same channel message bind once.
-		if err := rdb.GetDel(cache.Context, key).Err(); err == nil {
-			pending = true
-		}
-	} else if m := cache.GetMarshal(); m != nil {
-		var marker []byte
-		if _, err := m.Get(cache.Context, key, &marker); err == nil {
-			pending = true
-			_ = m.Delete(cache.Context, key)
-		}
-	}
-	if !pending {
-		return ext.ContinueGroups
-	}
-	if err := logchannels.Set(chat.Id, chat.Title, origin.Chat.Id); err != nil {
-		log.Errorf("[LogChannels] Set: %v", err)
-		return ext.ContinueGroups
+	if err := logchannels.Set(chat.Id, chat.Title, channelID); err != nil {
+		log.Errorf("[LogChannels] Set for chat %d: %v", chat.Id, err)
+		return false
 	}
 	tr := ctxTr(ctx)
 	text, _ := tr.GetString("logs_set_ok")
 	replyHTML(b, msg, text)
 	actionlog.Settings(b, chat, from, "set log channel")
+	return true
+}
+
+// captureSetLogForward is the group-11 watcher for a forward of a marked post that carries no
+// command text (the group-0 command binds every forward that does). It never ends an update.
+func (moduleStruct) captureSetLogForward(b *gotgbot.Bot, ctx *ext.Context) error {
+	bindSetLogForward(b, ctx)
 	return ext.ContinueGroups
 }
 
 func LoadLogChannels(dispatcher *ext.Dispatcher) {
 	SetModuleEnabled(logChannelsModule.moduleName, true)
 
-	dispatcher.AddHandler(helpers.NewBotCommand("setlog", logChannelsModule.setLog))
+	// A channel post has no sender, so setlog is a raw command with channel posts allowed:
+	// WrapCommand would reply to the sender-less update.
+	dispatcher.AddHandler(helpers.NewBotCommand("setlog", logChannelsModule.setLog).SetAllowChannel(true))
 	dispatcher.AddHandler(helpers.NewBotCommand("unsetlog", logChannelsModule.unsetLog))
 	dispatcher.AddHandler(helpers.NewBotCommand("logchannel", logChannelsModule.logChannel))
 	dispatcher.AddHandler(helpers.NewBotCommand("logcategories", logChannelsModule.logCategories))

@@ -3929,6 +3929,20 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   and its `settings_edit_refuse_too_long_filled` wording without media (so removing the media keeps a long text up to 3800), and counts no `{rules}`
   token of its stored text as a button, because `/rules` adds none (`TestSettingsRulesCaptionParity` holds the Rules and Welcome boundaries
   together for every media kind).
+- The log channel link (`/setlog`, `logchannels.go`) is a two-step proof. Step 1: `/setlog` posted in the channel stores a
+  one-hour marker `fuku:setlog:<channel>:<message>` (outside the `fuku:cache:` prefix, `storePendingMarker`) and asks for
+  the forward; the post needs no sender, because only a channel administrator can post there. Step 2: that post forwarded
+  to a group by a live administrator of the group binds the channel as the group's log channel (`bindSetLogForward`: group
+  or supergroup, a channel origin with a message ID, the sender, `chat_status.RequireUserAdmin` of that group, and only then
+  the single-use consume, `consumePendingMarker`, GETDEL with Redis, so a member's forward never burns the marker, then
+  `logchannels.Set`, `logs_set_ok` and the `#SETTINGS` audit post). `setlog` is a documented raw `helpers.NewBotCommand`
+  with `SetAllowChannel(true)` (like the other log channel commands it is not wrapped), because a channel post has no
+  sender and `WrapCommand` would reply to it. The forward still
+  carries the command text and entity, so the group-0 command binds it itself; the group-11 watcher
+  (`captureSetLogForward`) stays for a forward that carries no command text, and both call `bindSetLogForward`. A plain
+  `/setlog`, a member's forward and a forward with no live marker answer `logs_need_channel`. Stated limit of the design:
+  an administrator of another group who forwards a public channel's marked post within the hour binds that channel to
+  their own group (the marker is single use). `TestSetLogFlowThroughDispatcher` (memory store and miniredis) holds it.
 
 ## Go rules
 
