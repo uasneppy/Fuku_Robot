@@ -507,7 +507,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   on the wait), so the next message is read as the keyword again, and an error is `settings_check_failed` with the wait kept. An accepted step 1 is one
   `settingsInputAdvance` (the normalised entry in `w`, this message's ID in `q`, a new nonce, ten fresh minutes: a lost advance, from a second
   delivery, a Cancel or a newer Add, sends nothing), then the step-2 prompt is sent as a reply to the step-1 message and recorded as `m`
-  (`settingsInputSetPrompt`) and the step-1 prompt is edited to `settings_entries_step_done` with no keyboard. Step 2 ignores with no reply a message
+  (`settingsInputSetPrompt`; the send has its own 10 s bound and the record its own detached context, so a slow send never leaves `m` unrecorded) and the step-1 prompt is edited to `settings_entries_step_done` with no keyboard. Step 2 ignores with no reply a message
   whose ID is not greater than `q` (U-11: a redelivered keyword message is never stored as the content), extracts the content with
   `content.ExtractTypedNoteOrFilter(msg, w, IsFilter, the sender's language)` (a refusal is `DataType == -1`, which the commands read the same way,
   because the result is created holding the "needs content" text and never cleared; the wait stays with `w`), runs `Check` again (a refusal now ends
