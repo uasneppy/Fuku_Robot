@@ -2366,6 +2366,21 @@ func unmuteExpiredCaptchaUsers(bot *gotgbot.Bot) {
 	log.Infof("[CaptchaUnmute] Processing %d users to unmute", len(users))
 
 	for _, user := range users {
+		// The schedule is a snapshot: the member may have been banned or left since. A restrict
+		// on a banned member would replace the ban, so only a member or a restricted member is
+		// unmuted, and a schedule for anyone else is dropped (C3).
+		member, liveErr := bot.GetChatMember(user.ChatID, user.UserID, nil)
+		if liveErr != nil {
+			log.Warnf("[CaptchaUnmute] Could not read user %d in chat %d (will retry): %v", user.UserID, user.ChatID, liveErr)
+			continue
+		}
+		if status := member.GetStatus(); status != "member" && status != "restricted" {
+			log.Infof("[CaptchaUnmute] User %d in chat %d is %s, removing from muted list", user.UserID, user.ChatID, status)
+			if _, deleteErr := captcha.DeleteMutedUserIfUnchanged(user.ID, user.UnmuteAt); deleteErr != nil {
+				log.Errorf("[CaptchaUnmute] Failed to delete schedule %d: %v", user.ID, deleteErr)
+			}
+			continue
+		}
 		err := unmuteCaptchaUser(bot, user.ChatID, user.UserID)
 		if err != nil {
 			if isPermanentUnmuteError(err) {

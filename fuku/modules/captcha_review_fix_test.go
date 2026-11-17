@@ -112,6 +112,53 @@ func (e *captchaReviewTimeoutEnv) liveStatus(status string) {
 		status, e.userID))
 }
 
+// TestUnmuteExpiredCaptchaUsersReadsLiveMember pins C3: the fallback unmute worker reads the
+// member live before it restricts, because restrictChatMember on a banned member would replace
+// the ban. A banned or departed member's row is deleted with no restrict; an unreadable record
+// keeps the row for the next tick.
+func TestUnmuteExpiredCaptchaUsersReadsLiveMember(t *testing.T) {
+	cases := []struct {
+		name        string
+		live        string
+		liveErr     error
+		wantRestore bool
+		wantRow     bool
+	}{
+		{name: "banned", live: "kicked"},
+		{name: "left", live: "left"},
+		{name: "still muted", live: "restricted", wantRestore: true},
+		{name: "record unreadable", liveErr: &gotgbot.TelegramError{Code: 500, Description: "Internal Server Error"}, wantRow: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newCaptchaReviewTimeoutEnv(t)
+			if tc.live != "" {
+				env.liveStatus(tc.live)
+			}
+			if tc.liveErr != nil {
+				env.client.errors["getChatMember"] = tc.liveErr
+			}
+			if err := captcha.CreateMutedUser(env.userID, env.chatID, time.Now().Add(-time.Minute)); err != nil {
+				t.Fatalf("CreateMutedUser() error = %v", err)
+			}
+
+			unmuteExpiredCaptchaUsers(env.bot)
+
+			restricts := len(callsForUser(env.client, "restrictChatMember", env.userID))
+			if (restricts > 0) != tc.wantRestore {
+				t.Fatalf("restrictChatMember calls = %d, want restored %v", restricts, tc.wantRestore)
+			}
+			row, err := captcha.GetMutedUser(env.userID, env.chatID)
+			if err != nil {
+				t.Fatalf("GetMutedUser() error = %v", err)
+			}
+			if (row != nil) != tc.wantRow {
+				t.Fatalf("muted row = %+v, want present %v", row, tc.wantRow)
+			}
+		})
+	}
+}
+
 // TestCaptchaTimeoutFailedActionReadsLiveMember pins C2: a failure action Telegram answered
 // with an error is judged from the member's live record. Removed is applied; a definite 4xx
 // other than 429 with the member still there releases and unmutes them (WR-07) with no
