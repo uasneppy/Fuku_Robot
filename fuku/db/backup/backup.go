@@ -386,7 +386,23 @@ func exportFiltersData(chatID int64) (*FiltersBackup, error) {
 
 func exportGreetingsData(chatID int64) (*GreetingsBackup, error) {
 	settings, err := findChatSetting[models.GreetingSettings](chatID)
+	dropGreetingMessageIDs(settings)
 	return &GreetingsBackup{Settings: settings}, err
+}
+
+// dropGreetingMessageIDs clears the IDs of the last welcome and goodbye. They name messages of the group
+// the settings come from, so an export leaves them out and an import never stores them: "Delete last" in
+// another group would otherwise delete a message of its own that happens to carry that ID.
+func dropGreetingMessageIDs(settings *models.GreetingSettings) {
+	if settings == nil {
+		return
+	}
+	if settings.WelcomeSettings != nil {
+		settings.WelcomeSettings.LastMsgId = 0
+	}
+	if settings.GoodbyeSettings != nil {
+		settings.GoodbyeSettings.LastMsgId = 0
+	}
 }
 
 func exportLocksData(chatID int64) (*LocksBackup, error) {
@@ -707,6 +723,7 @@ func importGreetings(tx *gorm.DB, chatID int64, payload interface{}) ([]string, 
 		if data.Settings.GoodbyeSettings == nil {
 			data.Settings.GoodbyeSettings = &models.GoodbyeSettings{}
 		}
+		dropGreetingMessageIDs(data.Settings)
 	}
 	if err := replaceChatSetting(tx, chatID, data.Settings); err != nil {
 		return nil, err
