@@ -172,13 +172,19 @@ func (moduleStruct) unsetLog(b *gotgbot.Bot, ctx *ext.Context) error {
 func (moduleStruct) logChannel(b *gotgbot.Bot, ctx *ext.Context) error {
 	msg := ctx.EffectiveMessage
 	chat := ctx.EffectiveChat
-	if chat_status.RequireUser(b, ctx) == nil {
+	from := chat_status.RequireUser(b, ctx)
+	if from == nil {
 		return ext.EndGroups
 	}
 	tr := ctxTr(ctx)
 	if chat == nil || chat.Type == "private" {
 		text, _ := tr.GetString("logs_group_only")
 		replyHTML(b, msg, text)
+		return ext.EndGroups
+	}
+	// The log channel is private to the administrators: a member is never shown its ID.
+	if !chat_status.RequireUserAdmin(b, ctx, chat, from.Id) {
+		chat_status.NewPermissionResponder(b).Respond(ctx, "chat_status_user_admin_cmd_error", "chat_status_user_admin_button_error", chat_status.WithReplyFallback())
 		return ext.EndGroups
 	}
 	settings := logchannels.GetContext(tracing.UpdateContext(ctx), chat.Id)

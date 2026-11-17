@@ -262,13 +262,20 @@ func SendNote(b *gotgbot.Bot, ctx *ext.Context, chat *gotgbot.Chat, note *db.Not
 	keyb := keyboard.BuildKeyboard(buttons)
 	keyboardMarkup := gotgbot.InlineKeyboardMarkup{InlineKeyboard: keyb}
 
+	// The note goes where the request came from: a /get sent in the private chat connected to a group
+	// answers in that private chat, never in the group (ctx.EffectiveChat is then the group).
+	destination := ctx.EffectiveChat.Id
+	if ctx.EffectiveMessage != nil {
+		destination = ctx.EffectiveMessage.Chat.Id
+	}
+
 	return Send(b, Content{
 		Text:    noteCopy.NoteContent,
 		FileID:  noteCopy.FileID,
 		MsgType: noteCopy.MsgType,
 		Name:    noteCopy.NoteName,
 	}, Options{
-		ChatID:            ctx.EffectiveChat.Id,
+		ChatID:            destination,
 		ReplyMsgID:        replyMsgID,
 		ThreadID:          threadID,
 		Keyboard:          &keyboardMarkup,

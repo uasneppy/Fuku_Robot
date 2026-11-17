@@ -323,7 +323,7 @@ func (m moduleStruct) addFilter(b *gotgbot.Bot, ctx *ext.Context) error {
 			log.Errorf("[Filters][addFilter] Recovered from panic: %v", r)
 		}
 	}()
-	msg := ctx.EffectiveMessage
+	msg := withRealReply(ctx.EffectiveMessage)
 	connectedChat := chat_status.IsUserConnected(b, ctx, true, false)
 	if connectedChat == nil {
 		return ext.EndGroups
@@ -851,12 +851,9 @@ func (moduleStruct) filtersWatcher(b *gotgbot.Bot, ctx *ext.Context) error {
 		return ext.ContinueGroups
 	}
 
-	if noformatMatch {
-		if !chat_status.RequireUserAdmin(b, ctx, nil, user.Id) {
-			chat_status.NewPermissionResponder(b).Respond(ctx, "chat_status_user_admin_cmd_error", "chat_status_user_admin_button_error", chat_status.WithReplyFallback())
-			return ext.EndGroups
-		}
-
+	// The raw form is for administrators. A member's "noformat" suffix is ignored and they get the filter's
+	// normal answer: a watcher never refuses, and never ends the update.
+	if noformatMatch && chat_status.RequireUserAdmin(b, ctx, nil, user.Id) {
 		// Copy: filtData aliases the shared read-through cache entry (loader hands
 		// one pointer to all coalesced waiters); mutating it races concurrent watchers.
 		noformatData := *filtData

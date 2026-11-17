@@ -667,9 +667,9 @@ bans_cannot_identify_user: "उत्तर दिए गए संदेश स
 bans_anonymous_ban_only_error: इस कमांड का उपयोग गुमनाम उपयोगकर्ता पर नहीं किया जा सकता, इन उपयोगकर्ताओं को केवल बैन/अनबैन किया जा सकता है।
 
 # Blacklists module strings
-blacklists_bl_watcher_banned_user: "%s के कारण %s को बैन किया गया"
-blacklists_bl_watcher_kicked_user: "%s के कारण %s को किक किया गया"
-blacklists_bl_watcher_muted_user: "%s के कारण %s को म्यूट किया गया"
+blacklists_bl_watcher_banned_user: "%[2]s के कारण %[1]s को बैन किया गया"
+blacklists_bl_watcher_kicked_user: "%[2]s के कारण %[1]s को किक किया गया"
+blacklists_bl_watcher_muted_user: "%[2]s के कारण %[1]s को म्यूट किया गया"
 blacklists_blacklist_added_bl: "इन शब्दों को ब्लैकलिस्ट के रूप में जोड़ा गया:"
 blacklists_blacklist_already_blacklisted: "ये शब्द पहले से ही ब्लैकलिस्ट किए गए हैं:"
 blacklists_blacklist_give_bl_word: कृपया मुझे ब्लैकलिस्ट में जोड़ने के लिए एक शब्द दें!
@@ -1491,6 +1491,7 @@ rules_button_set_successfully: "नियम बटन सफलतापूर�
 rules_button_not_set: 'आपने अभी तक कोई कस्टम नियम बटन सेट नहीं किया है। डिफ़ॉल्ट टेक्स्ट "%s" उपयोग किया जाएगा।'
 rules_button_current: "नियम बटन वर्तमान में निम्नलिखित टेक्स्ट पर सेट है:\n%s"
 rules_button_cleared: कस्टम नियम बटन टेक्स्ट सफलतापूर्वक साफ़ किया गया!
+rules_reply_needs_text: "उस संदेश में नियमों के रूप में इस्तेमाल करने के लिए कोई टेक्स्ट या कैप्शन नहीं है। टेक्स्ट वाले संदेश का जवाब दें, या कमांड के बाद नियम लिखें।"
 rules_need_text: "आपको मुझे सेट करने के लिए नियम देने होंगे!\nया तो कमांड के साथ प्रदान करने के लिए किसी संदेश का जवाब दें।"
 rules_extended_docs: |
   <b>विशेषताएं:</b>
@@ -1860,6 +1861,7 @@ backup_export_success: |
 backup_export_success_text: "✅ सफलतापूर्वक {modules} मॉड्यूल एक्सपोर्ट किए गए। ऊपर दी गई बैकअप फाइल डाउनलोड करें।"
 backup_export_rate_limited: "⏳ फिर से एक्सपोर्ट करने से पहले <b>{time}</b> प्रतीक्षा करें।"
 backup_export_no_modules: "❌ इस चैट के लिए कोई एक्सपोर्ट करने योग्य मॉड्यूल नहीं मिले।"
+backup_export_start_bot: "📬 बैकअप आपको निजी चैट में भेजा जाता है। पहले मेरे साथ निजी चैट शुरू करें, फिर दोबारा /export भेजें।"
 backup_export_failed: "❌ सेटिंग्स एक्सपोर्ट करने में विफल। कृपया बाद में पुनः प्रयास करें।"
 
 backup_import_success: |
@@ -1870,6 +1872,8 @@ backup_import_success: |
   <b>मॉड्यूल:</b>
   {list}
 
+backup_import_skipped_entries: "⚠️ <b>{count}</b> फ़िल्टर, ब्लैकलिस्ट शब्द या नोट छोड़ दिए गए क्योंकि वे यहाँ मान्य नहीं हैं।"
+backup_import_log_skipped: "⚠️ लॉग चैनल सेटिंग्स इम्पोर्ट नहीं हुईं: इस ग्रुप का कोई लॉग चैनल नहीं है। /setlog से एक जोड़ें, फिर दोबारा इम्पोर्ट करें।"
 backup_import_rate_limited: "⏳ फिर से इम्पोर्ट करने से पहले <b>{time}</b> प्रतीक्षा करें।"
 backup_import_no_reply: "❌ कृपया बैकअप फाइल का जवाब <code>/import</code> के साथ दें।"
 backup_import_invalid_file: "❌ अमान्य बैकअप फाइल प्रारूप। कृपया एक मान्य JSON बैकअप फाइल भेजें।"

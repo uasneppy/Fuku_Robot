@@ -58,14 +58,17 @@ type noteWriteSeams struct {
 	// RemoveByID deletes one row by ID only when it belongs to the chat and returns its name.
 	RemoveByID func(ctx context.Context, chatID, id int64) (name string, removed bool, err error)
 	Exists     func(ctx context.Context, chatID int64, noteName string) (bool, error)
+	// PrivateNotes turns the chat's private notes switch (/privnote) on or off.
+	PrivateNotes func(chatID int64, on bool) error
 }
 
 // noteWrites is the one place the note commands reach the repository through.
 var noteWrites = noteWriteSeams{
-	Add:        notes.AddNoteContext,
-	Remove:     notes.RemoveNoteContext,
-	RemoveByID: notes.RemoveNoteByID,
-	Exists:     notes.NoteExistsContext,
+	Add:          notes.AddNoteContext,
+	Remove:       notes.RemoveNoteContext,
+	RemoveByID:   notes.RemoveNoteByID,
+	Exists:       notes.NoteExistsContext,
+	PrivateNotes: notes.TooglePrivateNote,
 }
 
 // noteAddOutcome is what applyNoteAdd did; its zero value is a stored note.
@@ -286,7 +289,7 @@ func (m moduleStruct) addNote(b *gotgbot.Bot, ctx *ext.Context) error {
 	}
 	ctx.EffectiveChat = connectedChat
 	chat := ctx.EffectiveChat
-	msg := ctx.EffectiveMessage
+	msg := withRealReply(ctx.EffectiveMessage)
 	user := chat_status.RequireUser(b, ctx)
 	if user == nil {
 		return ext.EndGroups
@@ -484,14 +487,16 @@ func (moduleStruct) privNote(b *gotgbot.Bot, ctx *ext.Context) error {
 		case "on", "yes", "true":
 			tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 			txt, _ = tr.GetString("notes_private_enabled")
-			if err := notes.TooglePrivateNote(chat.Id, true); err != nil {
+			if err := noteWrites.PrivateNotes(chat.Id, true); err != nil {
 				log.Errorf("[Notes] Failed to enable private notes for chat %d: %v", chat.Id, err)
+				txt, _ = tr.GetString("common_settings_save_failed")
 			}
 		case "off", "no", "false":
 			tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 			txt, _ = tr.GetString("notes_private_disabled")
-			if err := notes.TooglePrivateNote(chat.Id, false); err != nil {
+			if err := noteWrites.PrivateNotes(chat.Id, false); err != nil {
 				log.Errorf("[Notes] Failed to disable private notes for chat %d: %v", chat.Id, err)
+				txt, _ = tr.GetString("common_settings_save_failed")
 			}
 		default:
 			tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
@@ -887,7 +892,7 @@ func (m moduleStruct) notesWatcher(b *gotgbot.Bot, ctx *ext.Context) error {
 	var replyMsgId int64
 	var err error
 
-	if reply := msg.ReplyToMessage; reply != nil {
+	if reply := extraction.ReplyTarget(msg); reply != nil {
 		replyMsgId = reply.MessageId
 	} else {
 		replyMsgId = msg.MessageId
@@ -912,7 +917,7 @@ func (m moduleStruct) notesWatcher(b *gotgbot.Bot, ctx *ext.Context) error {
 			log.Error(err)
 			return err
 		}
-		return ext.EndGroups
+		return nil
 	}
 
 	if noteData.AdminOnly {
@@ -924,16 +929,18 @@ func (m moduleStruct) notesWatcher(b *gotgbot.Bot, ctx *ext.Context) error {
 				log.Error(err)
 				return err
 			}
-			return ext.EndGroups
+			return nil
 		}
 	}
 
 	if noformatNote {
 		err = m.sendNoFormatNote(b, ctx, replyMsgId, noteData)
 		if err != nil {
-			if !errors.Is(err, ext.EndGroups) && !errors.Is(err, ext.ContinueGroups) {
-				log.Error(err)
+			if errors.Is(err, ext.EndGroups) || errors.Is(err, ext.ContinueGroups) {
+				// The refusal was answered; the message still goes on to the later groups.
+				return nil
 			}
+			log.Error(err)
 			return err
 		}
 	} else {
@@ -977,7 +984,9 @@ func (m moduleStruct) notesWatcher(b *gotgbot.Bot, ctx *ext.Context) error {
 		return err
 	}
 
-	return ext.EndGroups
+	// nil leaves group 0 but lets the later groups (locks, blacklists, antiflood, the log channel) see
+	// the message: ext.EndGroups would let a "#note" prefix carry anything past them.
+	return nil
 }
 
 func (m moduleStruct) getNotes(b *gotgbot.Bot, ctx *ext.Context) error {

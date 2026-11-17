@@ -819,6 +819,7 @@ rules_help_msg: |
   × /resetrulesbtn : Identique à ci-dessus.
 rules_not_set: Ce chat n'a pas de règles définies !
 rules_for_chat: "Règles pour <b>%s</b> :\n\n%s"
+rules_reply_needs_text: "Ce message n'a ni texte ni légende à utiliser comme règles. Répondez à un message avec du texte ou écrivez les règles après la commande."
 rules_need_text: "Vous devez me donner des règles à définir !\nRépondez à un message pour les fournir avec la commande."
 rules_cleared_successfully: Règles supprimées avec succès !
 rules_private_pm_usage: L'utilisation de /rules enverra les règles en MP à l'utilisateur.
@@ -2091,6 +2092,7 @@ backup_export_success: |
 backup_export_success_text: "✅ {modules} modules exportés avec succès. Téléchargez le fichier de sauvegarde ci-dessus."
 backup_export_rate_limited: "⏳ Veuillez attendre <b>{time}</b> avant d'exporter à nouveau."
 backup_export_no_modules: "❌ Aucun module exportable trouvé pour ce chat."
+backup_export_start_bot: "📬 La sauvegarde vous est envoyée en message privé. Démarrez d'abord une conversation privée avec moi, puis renvoyez /export."
 backup_export_failed: "❌ Échec de l'export des paramètres. Veuillez réessayer plus tard."
 
 backup_import_success: |
@@ -2101,6 +2103,8 @@ backup_import_success: |
   <b>Modules :</b>
   {list}
 
+backup_import_skipped_entries: "⚠️ <b>{count}</b> filtres, mots de la liste noire ou notes ont été ignorés car ils ne sont pas valides ici."
+backup_import_log_skipped: "⚠️ Les réglages du canal de journal n'ont pas été importés : ce groupe n'a pas de canal de journal. Liez-en un avec /setlog, puis importez à nouveau."
 backup_import_rate_limited: "⏳ Veuillez attendre <b>{time}</b> avant d'importer à nouveau."
 backup_import_no_reply: "❌ Veuillez répondre à un fichier de sauvegarde avec <code>/import</code>."
 backup_import_invalid_file: "❌ Format de fichier de sauvegarde invalide. Veuillez envoyer un fichier JSON de sauvegarde valide."

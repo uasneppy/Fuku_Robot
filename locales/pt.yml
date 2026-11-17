@@ -875,6 +875,7 @@ mute_reply_to_dmute: Você precisa responder a uma mensagem para deletá-la e si
 bot_updates_need_admin: Você precisa ser admin para fazer isso!
 
 # Rules module strings
+rules_reply_needs_text: "Essa mensagem não tem texto nem legenda para usar como regras. Responda a uma mensagem com texto ou escreva as regras depois do comando."
 rules_need_text: "Você precisa me dar regras para definir!\nOu responda a uma mensagem para fornecê-las com o comando."
 
 # Notes module strings
@@ -2136,6 +2137,7 @@ backup_export_success: |
 backup_export_success_text: "✅ Exportados com sucesso {modules} módulos. Baixe o arquivo de backup acima."
 backup_export_rate_limited: "⏳ Por favor aguarde <b>{time}</b> antes de exportar novamente."
 backup_export_no_modules: "❌ Nenhum módulo exportável encontrado para este chat."
+backup_export_start_bot: "📬 O backup é enviado para você no chat privado. Primeiro inicie um chat privado comigo e depois envie /export de novo."
 backup_export_failed: "❌ Falha ao exportar configurações. Por favor tente novamente mais tarde."
 
 backup_import_success: |
@@ -2146,6 +2148,8 @@ backup_import_success: |
   <b>Módulos:</b>
   {list}
 
+backup_import_skipped_entries: "⚠️ <b>{count}</b> filtros, palavras da lista negra ou notas foram ignorados porque não são válidos aqui."
+backup_import_log_skipped: "⚠️ As configurações do canal de registro não foram importadas: este grupo não tem canal de registro. Vincule um com /setlog e importe de novo."
 backup_import_rate_limited: "⏳ Por favor aguarde <b>{time}</b> antes de importar novamente."
 backup_import_no_reply: "❌ Por favor responda a um arquivo de backup com <code>/import</code>."
 backup_import_invalid_file: "❌ Formato de arquivo de backup inválido. Por favor envie um arquivo de backup JSON válido."

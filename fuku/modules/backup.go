@@ -259,15 +259,22 @@ func (m moduleStruct) exportHandler(b *gotgbot.Bot, ctx *ext.Context) error {
 	fileName := fmt.Sprintf("xenobot72_backup_%d_%s.json", chat.Id, time.Now().Format("20060102_150405"))
 	caption := buildExportCaption(tr, bkp)
 
+	// The backup holds every note, filter and setting of the group, so it goes to the admin's private chat
+	// and never into the group.
 	_, err = b.SendDocument(
-		chat.Id,
+		user.Id,
 		gotgbot.InputFileByReader(fileName, bytes.NewReader(jsonData)),
 		&gotgbot.SendDocumentOpts{
-			Caption:         caption,
-			ParseMode:       "HTML",
-			ReplyParameters: &gotgbot.ReplyParameters{MessageId: msg.MessageId},
+			Caption:   caption,
+			ParseMode: "HTML",
 		},
 	)
+	if settingsEditIsForbidden(err) {
+		limiter.ReleaseExport(chat.Id)
+		text, _ := tr.GetString("backup_export_start_bot")
+		_, _ = msg.Reply(b, text, formatting.Shtml())
+		return ext.EndGroups
+	}
 	if err != nil {
 		log.Errorf("[Backup] Failed to send document: %v", err)
 		text, _ := tr.GetString("backup_export_success_text", i18n.TranslationParams{
@@ -602,7 +609,8 @@ func (m moduleStruct) handleConfirmImport(b *gotgbot.Bot, ctx *ext.Context, tr *
 		return ext.EndGroups
 	}
 
-	if err := backup.ImportChatData(chat.Id, bkp, modules); err != nil {
+	report, err := backup.ImportChatDataReport(chat.Id, bkp, modules)
+	if err != nil {
 		log.Errorf("[Backup] Import failed for chat %d: %v", chat.Id, err)
 		text, _ := tr.GetString("backup_import_failed", i18n.TranslationParams{
 			"error": err.Error(),
@@ -615,7 +623,15 @@ func (m moduleStruct) handleConfirmImport(b *gotgbot.Bot, ctx *ext.Context, tr *
 		"modules": fmt.Sprintf("%d", len(modules)),
 		"list":    buildModuleList(modules),
 	})
-	_, err := b.SendMessage(chat.Id, text, formatting.Shtml())
+	if report.Skipped > 0 {
+		skipped, _ := tr.GetString("backup_import_skipped_entries", i18n.TranslationParams{"count": report.Skipped})
+		text += "\n" + skipped
+	}
+	if report.LogChannelSkipped {
+		logSkipped, _ := tr.GetString("backup_import_log_skipped")
+		text += "\n" + logSkipped
+	}
+	_, err = b.SendMessage(chat.Id, text, formatting.Shtml())
 	if err != nil {
 		log.Errorf("[Backup] Failed to send success message: %v", err)
 	}

@@ -885,6 +885,7 @@ mute_reply_to_dmute: Anda perlu membalas pesan untuk menghapusnya dan membisukan
 bot_updates_need_admin: Anda perlu menjadi admin untuk melakukan ini!
 
 # Rules module strings
+rules_reply_needs_text: "Pesan itu tidak punya teks atau keterangan untuk dijadikan aturan. Balas pesan yang berisi teks, atau tulis aturannya setelah perintah."
 rules_need_text: "Anda perlu memberikan aturan untuk diatur!\nBalas ke pesan untuk memberikannya dengan perintah."
 
 # Notes module strings
@@ -2145,6 +2146,7 @@ backup_export_success: |
 backup_export_success_text: "✅ Berhasil mengekspor {modules} modul. Unduh file cadangan di atas."
 backup_export_rate_limited: "⏳ Silakan tunggu <b>{time}</b> sebelum mengekspor lagi."
 backup_export_no_modules: "❌ Tidak ada modul yang dapat diekspor untuk obrolan ini."
+backup_export_start_bot: "📬 Cadangan dikirim kepada Anda lewat obrolan pribadi. Mulai obrolan pribadi dengan saya dulu, lalu kirim /export lagi."
 backup_export_failed: "❌ Gagal mengekspor pengaturan. Silakan coba lagi nanti."
 
 backup_import_success: |
@@ -2155,6 +2157,8 @@ backup_import_success: |
   <b>Modul:</b>
   {list}
 
+backup_import_skipped_entries: "⚠️ <b>{count}</b> filter, kata daftar hitam, atau catatan dilewati karena tidak valid di sini."
+backup_import_log_skipped: "⚠️ Pengaturan kanal log tidak diimpor: grup ini tidak punya kanal log. Tautkan satu dengan /setlog, lalu impor lagi."
 backup_import_rate_limited: "⏳ Silakan tunggu <b>{time}</b> sebelum mengimpor lagi."
 backup_import_no_reply: "❌ Silakan balas ke file cadangan dengan <code>/import</code>."
 backup_import_invalid_file: "❌ Format file cadangan tidak valid. Silakan kirim file cadangan JSON yang valid."

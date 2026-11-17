@@ -108,8 +108,8 @@ func TestNoteDeepLinkBuildersUseRowID(t *testing.T) {
 		for _, row := range []*models.Notes{cyrillic, long} {
 			client := newModuleBotClient()
 			bot := newModuleTestBot(client)
-			if err := notesModule.notesWatcher(bot, newModuleMessageContext(bot, group, member, "#"+row.NoteName)); err != ext.EndGroups {
-				t.Fatalf("notesWatcher(%q) = %v, want EndGroups", row.NoteName, err)
+			if err := notesModule.notesWatcher(bot, newModuleMessageContext(bot, group, member, "#"+row.NoteName)); err != nil {
+				t.Fatalf("notesWatcher(%q) = %v, want nil", row.NoteName, err)
 			}
 			wantNoteIDLinks(t, "watcher", startParams(t, client, "sendMessage"), chatID, row)
 

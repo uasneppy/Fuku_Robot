@@ -231,12 +231,13 @@ func TestFiltersWatcherNoFormatPathRequiresAdmin(t *testing.T) {
 		t.Fatalf("AddFilter setup error = %v", err)
 	}
 
+	// A member's noformat suffix is ignored: they get the normal answer and the update goes on.
 	memberCtx := newModuleMessageContext(bot, chat, member, "raw noformat")
-	if err := filtersModule.filtersWatcher(bot, memberCtx); err != ext.EndGroups {
-		t.Fatalf("filtersWatcher member noformat error = %v, want EndGroups", err)
+	if err := filtersModule.filtersWatcher(bot, memberCtx); err != ext.ContinueGroups {
+		t.Fatalf("filtersWatcher member noformat error = %v, want ContinueGroups", err)
 	}
-	if calls := client.callsFor("sendMessage"); len(calls) != 1 {
-		t.Fatalf("sendMessage calls = %d, want admin denial", len(calls))
+	if calls := client.callsFor("sendMessage"); len(calls) != 1 || calls[0].Params["text"] != "<b>Raw</b>" {
+		t.Fatalf("sendMessage calls = %+v, want the normal filter answer", calls)
 	}
 
 	adminCtx := newModuleMessageContext(bot, chat, admin, "raw noformat")
@@ -245,7 +246,7 @@ func TestFiltersWatcherNoFormatPathRequiresAdmin(t *testing.T) {
 	}
 	calls := client.callsFor("sendMessage")
 	if len(calls) != 2 {
-		t.Fatalf("sendMessage calls = %d, want denial plus raw filter reply", len(calls))
+		t.Fatalf("sendMessage calls = %d, want normal answer plus raw filter reply", len(calls))
 	}
 	if text := calls[len(calls)-1].Params["text"].(string); !strings.Contains(text, "Raw") {
 		t.Fatalf("raw filter reply = %q, want stored content", text)

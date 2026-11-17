@@ -149,6 +149,9 @@ func TestAllModulesRoundTripEveryMeaningfulField(t *testing.T) {
 	require.NoError(t, federations.SetQuietFed(srcChat, true))
 	require.NoError(t, logchannels.Set(srcChat, "backup_source", logChannelID))
 	require.NoError(t, logchannels.SetCategory(srcChat, "admin", false))
+	// An import never takes the source's log channel: the target keeps its own and takes the categories.
+	dstLogChannelID := srcChat + 6
+	require.NoError(t, logchannels.Set(dstChat, "backup_destination", dstLogChannelID))
 
 	exported, err := ExportChatData(srcChat, "source", 42, nil)
 	require.NoError(t, err)
@@ -232,7 +235,7 @@ func TestAllModulesRoundTripEveryMeaningfulField(t *testing.T) {
 	assert.True(t, greetingsData.Settings.ShouldAutoApprove)
 	require.NotNil(t, greetingsData.Settings.WelcomeSettings)
 	assert.True(t, greetingsData.Settings.WelcomeSettings.CleanWelcome)
-	assert.Equal(t, int64(111), greetingsData.Settings.WelcomeSettings.LastMsgId)
+	assert.Zero(t, greetingsData.Settings.WelcomeSettings.LastMsgId, "the last welcome ID is not exported")
 	assert.False(t, greetingsData.Settings.WelcomeSettings.ShouldWelcome)
 	assert.Equal(t, "welcome", greetingsData.Settings.WelcomeSettings.WelcomeText)
 	assert.Equal(t, "welcome-file", greetingsData.Settings.WelcomeSettings.FileID)
@@ -242,7 +245,7 @@ func TestAllModulesRoundTripEveryMeaningfulField(t *testing.T) {
 	assert.True(t, greetingsData.Settings.WelcomeSettings.Once)
 	require.NotNil(t, greetingsData.Settings.GoodbyeSettings)
 	assert.True(t, greetingsData.Settings.GoodbyeSettings.CleanGoodbye)
-	assert.Equal(t, int64(222), greetingsData.Settings.GoodbyeSettings.LastMsgId)
+	assert.Zero(t, greetingsData.Settings.GoodbyeSettings.LastMsgId, "the last goodbye ID is not exported")
 	assert.True(t, greetingsData.Settings.GoodbyeSettings.ShouldGoodbye)
 	assert.Equal(t, "goodbye", greetingsData.Settings.GoodbyeSettings.GoodbyeText)
 	assert.Equal(t, "goodbye-file", greetingsData.Settings.GoodbyeSettings.FileID)
@@ -324,7 +327,7 @@ func TestAllModulesRoundTripEveryMeaningfulField(t *testing.T) {
 	logsData, err := exportLogChannelsData(dstChat)
 	require.NoError(t, err)
 	require.NotNil(t, logsData.Settings)
-	assert.Equal(t, logChannelID, logsData.Settings.LogChannelID)
+	assert.Equal(t, dstLogChannelID, logsData.Settings.LogChannelID)
 	assert.False(t, logsData.Settings.CatAdmin)
 	assert.True(t, logsData.Settings.CatReports)
 }

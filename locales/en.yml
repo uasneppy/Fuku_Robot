@@ -259,6 +259,7 @@ mute_reply_to_dmute: "Reply to a message to delete it and mute the user."
 bot_updates_need_admin: "Access denied. You need to be an admin to do this."
 
 # Rules module strings
+rules_reply_needs_text: "That message has no text or caption to use as the rules. Reply to a message with text, or put the rules after the command."
 rules_need_text: "Give me the regulations to file.\nReply to a message, or put them after the command."
 
 # Notes module strings
@@ -1147,10 +1148,13 @@ backup_export_success: "<b>✅ Export complete.</b>\n\n<b>Chat:</b> {chat}\n<b>M
 backup_export_success_text: "✅ Modules exported: {modules}. Download the backup file above."
 backup_export_rate_limited: "⏳ Wait <b>{time}</b> before exporting again."
 backup_export_no_modules: "❌ No exportable modules found for this chat."
+backup_export_start_bot: "📬 The backup is sent to you in a private chat. Start a private chat with me first, then send /export again."
 backup_export_failed: "❌ Malfunction: could not export settings. Try again."
 
 backup_import_success: "<b>✅ Import complete.</b>\n\n<b>Modules imported:</b> {modules}\n\n<b>Modules:</b>\n{list}\n"
 
+backup_import_skipped_entries: "⚠️ <b>{count}</b> filters, blacklist words or notes were left out because they are not valid here."
+backup_import_log_skipped: "⚠️ The log channel settings were not imported: this group has no log channel. Link one with /setlog, then import again."
 backup_import_rate_limited: "⏳ Wait <b>{time}</b> before importing again."
 backup_import_no_reply: "❌ Reply to a backup file with <code>/import</code>."
 backup_import_invalid_file: "❌ Invalid backup file format. Send a valid JSON backup file."
