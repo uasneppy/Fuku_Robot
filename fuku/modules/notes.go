@@ -685,11 +685,6 @@ func (m moduleStruct) noteOverWriteHandler(b *gotgbot.Bot, ctx *ext.Context) err
 	}
 	user := query.From
 
-	if !chat_status.RequireUserAdmin(b, ctx, nil, user.Id) {
-		chat_status.NewPermissionResponder(b).Respond(ctx, "chat_status_user_admin_cmd_error", "chat_status_user_admin_button_error", chat_status.WithReplyFallback())
-		return ext.EndGroups
-	}
-
 	var helpText string
 	action, token, ok := parseOverwriteCallbackData(query.Data, "notes.overwrite")
 	if !ok {
@@ -697,7 +692,34 @@ func (m moduleStruct) noteOverWriteHandler(b *gotgbot.Bot, ctx *ext.Context) err
 		return ext.EndGroups
 	}
 
+	var pressChat *gotgbot.Chat
+	if query.Message != nil {
+		qchat := query.Message.GetChat()
+		pressChat = &qchat
+	} else if ctx.EffectiveChat != nil {
+		pressChat = ctx.EffectiveChat
+	}
+	targetChatID, press := overwritePressTarget(b, ctx, pressChat, user.Id, func() (*overwriteBase, error) {
+		card, err := getOverwriteCache[overwriteNote](noteOverwriteCacheKey(token))
+		if err != nil {
+			return nil, err
+		}
+		return &card.overwriteBase, nil
+	})
 	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
+	switch press {
+	case overwritePressNotAdmin:
+		chat_status.NewPermissionResponder(b).Respond(ctx, "chat_status_user_admin_cmd_error", "chat_status_user_admin_button_error", chat_status.WithReplyFallback())
+		return ext.EndGroups
+	case overwritePressStale:
+		helpText, _ = tr.GetString("notes_overwrite_cancelled")
+		if _, err := query.Answer(b, &gotgbot.AnswerCallbackQueryOpts{Text: helpText}); err != nil {
+			log.Error(err)
+			return err
+		}
+		return ext.EndGroups
+	}
+
 	switch action {
 	case "no":
 		if token != "" {
@@ -723,20 +745,10 @@ func (m moduleStruct) noteOverWriteHandler(b *gotgbot.Bot, ctx *ext.Context) err
 		}
 		chatId = noteData.ChatID
 		if chatId == 0 {
-			if query.Message != nil {
-				chatId = query.Message.GetChat().Id
-			} else if ctx.EffectiveChat != nil {
-				chatId = ctx.EffectiveChat.Id
-			}
+			chatId = targetChatID
 		}
 
-		callbackChatID := int64(0)
-		if query.Message != nil {
-			callbackChatID = query.Message.GetChat().Id
-		} else if ctx.EffectiveChat != nil {
-			callbackChatID = ctx.EffectiveChat.Id
-		}
-		if noteData.ChatID != 0 && callbackChatID != 0 && noteData.ChatID != callbackChatID {
+		if noteData.ChatID != 0 && targetChatID != 0 && noteData.ChatID != targetChatID {
 			helpText, _ = tr.GetString("notes_overwrite_cancelled")
 			break
 		}

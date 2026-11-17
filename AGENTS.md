@@ -3848,6 +3848,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   to `CACHE_LOCAL_TTL`, exactly as after the commands, and every write drops it on this replica. The apply functions log the chat ID
   and the error only, never a note name. `TestLegacyNoteRequests` pins every request and stored row of the three commands and is
   never re-recorded.
+  The `/save` and `/filter` overwrite cards share one authority step, `overwritePressTarget` (`overwrite.go`), which both callbacks
+  run right after parsing the data and before any token is consumed: in a group the target is the card's chat, the presser must be
+  an administrator there and a card naming another chat is cancelled (unchanged); in a private chat (a card made through a PM
+  connection) the card is read without consuming it, and the press is refused (the expired or cancelled text, nothing consumed, so
+  the holder can still press) unless the presser is the card's creator (`UserID` non-zero and equal), the card names a group and
+  the presser is a live administrator of that group (`IsUserAdmin` on the card's `ChatID`, the `chat_status_user_admin_button_error`
+  alert otherwise). The target chat comes only from the card, never from callback data (`TestOverwriteCardThroughPrivateConnection`).
   `/save` refuses a note name that contains white space, starts with `#` or is over 100 code points with the reply
   `notes_name_invalid` and stores nothing (`noteNameInvalid` in `list_validation.go`, run by `checkNoteName` after the blank check
   and before the existence read, outcome `noteNameBadShape`): `#name` and `/get` take the first space-separated token, so such a
