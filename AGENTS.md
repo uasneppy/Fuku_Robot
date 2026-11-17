@@ -4042,6 +4042,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `net/http` errors embed it. Rebuild a transport error from `url.Error.Err`, report a bad status as the code alone,
   follow no redirect (`CheckRedirect` returning `http.ErrUseLastResponse`), and never wrap or `%v` a request or a file
   (`raidAIDownload` is the pattern).
+- Outbound lookups through `fetchJSON` (`/wiki`, `/github`, `/ud`) send the User-Agent `fetchUserAgent()` gives,
+  `Xenobot-72/<BotVersion> (Telegram bot)`, because Wikimedia answers 403 to a request without a descriptive one
+  (`TestFetchJSONSendsUserAgent`).
 - `fuku/utils/claude` imports the standard library only, so `scripts/claude-spike` can use it (and the leaf
   `fuku/utils/namecanon`, see below) without the pre-main database connection of `fuku/config` and `fuku/db`. The Anthropic key travels only in the `x-api-key` header, never
   in a URL, and no error that package returns contains it. No sampling parameter (`temperature`, `top_p`, `top_k`) is
