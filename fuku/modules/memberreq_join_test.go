@@ -119,6 +119,22 @@ func TestMemberReqJoinNoCaptcha(t *testing.T) {
 		}
 	})
 
+	t.Run("a join mute whose notice was undelivered and lifted is welcomed (Q4)", func(t *testing.T) {
+		env := mreqJoinEnv(t, map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionMute}, true)
+		env.fake.setChatPermsRaw(env.chat.Id, `{"can_send_messages":true}`)
+		env.fake.script("sendMessage", env.chat.Id, mreqRefusals(2)...)
+		member := env.mreqMember("Alex", "", "alex")
+
+		env.mreqJoin(member)
+
+		if n := env.mreqCallsAbout(member.Id, "restrictChatMember"); n != 2 {
+			t.Fatalf("restrictChatMember calls = %d, want the mute and its lift", n)
+		}
+		if got := mreqCountText(env.mreqSentTexts(), mreqWelcomeWord); got != 1 {
+			t.Errorf("welcomes = %d, want one: the mute was lifted, so nothing holds the welcome", got)
+		}
+	})
+
 	t.Run("a warn posts its notice and then the usual welcome", func(t *testing.T) {
 		env := mreqJoinEnv(t, map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionWarn}, true)
 		member := env.mreqMember("Alex", "", "alex")

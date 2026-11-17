@@ -2777,7 +2777,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `memberReqLookupJoinBudget` (a joiner whose lookup does not finish in 4 s is welcomed, leaves no hold, and is caught at their first
   message, so a raid of joins never parks a dispatcher goroutine for the entry's 15 s; `memberReqJoinThenWelcome` itself is unchanged,
   because `memberreq.AnyRuleOn` reads the eight-rule table, so a group with only the photo rule on is screened at join): a kick or ban sends no welcome, a mute sends none and has stored `welcome_held` on its hold
-  at the claim, a warn posts its notice and the usual welcome follows (a warn whose limit action kicked or banned is a
+  at the claim (unless its notice could not be delivered and `memberReqUndeliveredMute` lifted the mute again: the
+  executor then answers `memberReqNotApplied` and the joiner is welcomed, Q4), a warn posts its notice and the usual welcome follows (a warn whose limit action kicked or banned is a
   removal and gets none), and a clean member, an exempt one (approved, a live administrator, a bot), a check that could
   not be answered, and a joiner whose Mute is refused because an administrator's restriction is on them (CR-01: a rejoiner
   restricted for good, say; `memberReqNone`, no hold) are welcomed. The settings the entry read are only the pre-filter:

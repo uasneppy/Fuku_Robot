@@ -554,23 +554,24 @@ func memberReqApplyStep(ctx context.Context, b *gotgbot.Bot, c memberReqCase, tr
 // memberReqAnnounce posts the one notice of the episode and stores its message ID on the hold.
 // A failure is logged by IDs only and the punishment stays, except for a mute: a mute whose
 // notice could not be delivered even after its retry is lifted again (memberReqUndeliveredMute),
-// because no member may be left muted without the button.
-func memberReqAnnounce(ctx context.Context, b *gotgbot.Bot, c memberReqCase, tr *i18n.Translator, user gotgbot.User, hold *models.ChatRequirementHold, warn *warnApplyResult) {
+// because no member may be left muted without the button. It reports whether such a lift
+// happened (Q4), so the caller counts the punishment as not applied.
+func memberReqAnnounce(ctx context.Context, b *gotgbot.Bot, c memberReqCase, tr *i18n.Translator, user gotgbot.User, hold *models.ChatRequirementHold, warn *warnApplyResult) (lifted bool) {
 	text := memberReqNoticeText(tr, user, hold.Rules, hold.Action, warn)
 	msgID, err := memberReqPostNotice(ctx, b, c.Chat.Id, text, memberReqNoticeKeyboard(tr, hold.Action, hold.ID, user.Id))
 	if err != nil {
 		if hold.Action == models.RequirementActionMute {
-			memberReqUndeliveredMute(ctx, b, c, hold)
-			return
+			return memberReqUndeliveredMute(ctx, b, c, hold)
 		}
 		log.Warnf("[MemberReq] the notice for user %d in chat %d was not delivered: %s", c.User.Id, c.Chat.Id, memberReqErrText(err))
-		return
+		return false
 	}
 	recordCtx, cancel := memberReqRecordCtx(ctx)
 	defer cancel()
 	if _, err := memberreq.SetHoldNotice(recordCtx, hold.ID, msgID); err != nil {
 		log.Warnf("[MemberReq] storing the notice of user %d in chat %d failed: %s", c.User.Id, c.Chat.Id, memberReqErrText(err))
 	}
+	return false
 }
 
 // memberReqPunish applies the claimed hold's punishment and, once it took effect, posts the
@@ -581,7 +582,11 @@ func memberReqPunish(ctx context.Context, b *gotgbot.Bot, c memberReqCase, user 
 	if outcome == memberReqNotApplied {
 		return memberReqResult{Outcome: outcome, Hold: hold}
 	}
-	memberReqAnnounce(ctx, b, c, tr, user, hold, warn)
+	if memberReqAnnounce(ctx, b, c, tr, user, hold, warn) {
+		// The mute was lifted again because its notice could not be delivered: the member is
+		// free, so the join entry welcomes them (Q4).
+		return memberReqResult{Outcome: memberReqNotApplied, Hold: hold}
+	}
 	return memberReqResult{Outcome: outcome, Hold: hold}
 }
 
