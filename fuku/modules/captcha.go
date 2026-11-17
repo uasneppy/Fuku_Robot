@@ -2141,6 +2141,12 @@ func (moduleStruct) captchaRefreshCallback(bot *gotgbot.Bot, ctx *ext.Context) e
 func (moduleStruct) handlePendingCaptchaMessage(bot *gotgbot.Bot, ctx *ext.Context) error {
 	msg := ctx.EffectiveMessage
 	chat := ctx.EffectiveChat
+	// A service message (the joiner's own join or leave message, a pin, a title change and the
+	// other deletion-table kinds) is never held: the lockdown guard, fed-ban, the service deletion
+	// watcher and cleanService must still see it.
+	if !memberContentMessage(msg) {
+		return ext.ContinueGroups
+	}
 	user := chat_status.RequireUser(bot, ctx)
 	if user == nil {
 		return ext.ContinueGroups

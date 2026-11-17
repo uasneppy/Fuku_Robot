@@ -3010,7 +3010,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   Telegram answers "group chat was upgraded" (or the `migrate_to_chat_id` parameter), which `deletionClassify` reads as
   `gone`: the worker latches the old chat, drops its rows and deletes nothing. The owner sets the rules again on the new group.
 - Entity offsets are UTF-16: slice with `extractEntityText`, and match against both `Entities` and `CaptionEntities`.
-- Captcha allows one attempt per `(user, chat)`; group `-10` stores the pending user's messages for replay.
+- Captcha allows one attempt per `(user, chat)`; group `-10` stores the pending user's messages for replay. Service messages
+  (join, leave, pin and the other deletion-table kinds, `memberContentMessage` false) are never held: group `-10` returns
+  `ext.ContinueGroups` for them first, so the lockdown guard, fed-ban, the service deletion watcher and `cleanService` still
+  see the joiner's own join message (`TestCaptchaPendingLetsJoinServiceMessageThrough`).
 - `fuku:cache:captcha_pending:<chat>` is a per-chat pending flag; any new code that inserts into `captcha_attempts`
   must `DeleteCache` it after commit.
 - Turnstile captcha: a Turnstile attempt is an ordinary `captcha_attempts` row whose answer is the reserved `ts1:` plus
