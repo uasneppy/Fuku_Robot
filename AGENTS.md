@@ -145,7 +145,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `-1` users tracker · `0` commands/help/greetings · `1` settings typed-reply door (private messages only;
   `ext.ContinueGroups` for anyone with no wait and no marker, consumes and ends the update otherwise) · `2` raid AI candidate watcher (hands a new member's suspicious
   item to the raid AI pool, never ends an update) · `3` aispam · `4` antiflood · `5`/`6` locks · `7` blacklists ·
-  `8` reports+reactions · `9` filters · `10` pins · `11` log-channel · `12` late raid flood counter (slash-prefixed texts only; keep it
+  `8` reports+reactions (the `@admin` watcher, `reportWatch`, returns `nil` after reporting so groups 9 to 12 still run) · `9` filters · `10` pins · `11` log-channel · `12` late raid flood counter (slash-prefixed texts only; keep it
   after every other group).
 - gotgbot stops a group at the first matching handler. Watchers return `ext.ContinueGroups`; commands return
   `ext.EndGroups`. A group-0 watcher returning `nil` silently kills every later group-0 handler.
@@ -3652,7 +3652,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   service message on every topic message that is not an explicit reply, so `ReplyTarget` answers nil for that message
   and for a topic message's own thread root (`IsTopicMessage` with `MessageThreadId` equal to the reply's ID; outside a
   forum replying to a thread's root is a real reply). `ExtractUserAndText`, `IdFromReply`, `extractFromReply`, `/dkick`,
-  `/dban`, `/dmute`, `/dwarn`, `/purge`, `/del`, `/purgefrom`, `/purgeto` and `/id` use it. In `ExtractUserAndText` an explicit
+  `/dban`, `/dmute`, `/dwarn`, `/report`, the `@admin` watcher, `/reports block|unblock`, `/purge`, `/del`, `/purgefrom`, `/purgeto` and `/id` use it. In `ExtractUserAndText` an explicit
   target (a `text_mention` at the argument, an `@username` or a numeric ID) always beats the reply: the reply is the
   fallback only when the first argument named nobody, and `/id` shows a reply's details only when the resolved user is
   the reply's sender. `/dban`, `/dmute` and `/dwarn` delete the replied message, so an explicit target that did not send
