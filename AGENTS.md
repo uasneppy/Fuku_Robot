@@ -987,8 +987,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - The Deletion page (`settings_deletion.go`, page `d`, `Order` 85, icon 🧹, `settings_page_del`, between Member requirements and
   Access, Phase 16) registers from its own file. Its one framework hook is the optional `settingsPage.Hidden func(group
   *gotgbot.Chat) bool` (D-28, the only edit to `settings_pages.go` and its matching guard in `openPage`): `settingsMainEntries`
-  skips a hidden page without calling its `MainState`, and `openPage` refuses it with `common_callback_invalid_request`, so
-  the page is not drawn or opened in a Staff Group (D-18). `Hidden` is a fresh Staff Group read (`deletionStaffLookup`,
+  skips a hidden page without calling its `MainState`, `openPage` refuses it with `common_callback_invalid_request`, and
+  `runControl` and `runPageAction` refuse every control and action of a hidden page with the same alert before its right is
+  judged (`settingsPress.pageHidden`), so the page is not drawn, opened or written in a Staff Group (D-18) and a forged press
+  is answered alike whoever presses it. `Hidden` is a fresh Staff Group read (`deletionStaffLookup`,
   true only for a definite row; an error hides nothing), `MainState` makes the same read and answers the unknown mark on an
   error, and `Open` is the cannot-open edit for an unreadable row. Three levels, all built from two tables (the sections
   `settingsDelSections`, `s` Service messages, `b` Bot messages and, since Phase 17, `m` Member messages, icon 💬, and the
@@ -1018,7 +1020,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   settings_del_right_unknown` for anything that could not be established, never an error text, a refusal or the
   cannot-open edit, and no button is ever disabled (a rule can be set with the line showing). Main makes no Telegram call.
   `dl`, `dr` and every control run `settingsDelStaffGate` first, after the press pipeline and before any read or write
-  (a Staff Group answers the generic invalid-request alert and writes nothing, an unreadable row is the cannot-open edit).
+  (a Staff Group answers the generic invalid-request alert and writes nothing, an unreadable row is the cannot-open edit);
+  in a Staff Group the framework's `Hidden` check already refuses them before the right, so an administrator without
+  `can_change_info` gets the same invalid-request alert.
   The Member messages section (`m`, Phase 17, 17-09) is table entries only (`settings_pages.go`, `settings_menu.go` and
   `settings_card.go` are not edited). Its hub cell is the odd last one alone on its row, so the hub is three state lines and
   rows of widths `[2 1 2]` (the grid, then Back and Close, which opens Main), and its list (`a=dl&t=m`, no list hint) is
@@ -1410,9 +1414,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `PrivateOnly` (a group menu, the Staff Group's own included, shows the framework's note and reads nothing) and gives the list table's new
   optional `Hidden func(*gotgbot.Chat) bool` (`settingsFwdBlockHidden`: true unless the cached gate `staff.GetStaffGroup` answers a Staff
   Group, an error or a missing row hides the page, and the gate is the variable `settingsFwdBlockStaffGate`). `settingsListPage` passes `Hidden`
-  to the page, so Main leaves the page out and `openPage` refuses a forged `op` with `common_callback_invalid_request`, and
-  `settingsListGuardHidden` wraps the `Run` of every action of a table that has the hook, so a forged press of any of the page's seven codes in
-  a chat that is not a Staff Group (or whose gate says no) is the same invalid-request alert, writes nothing and reads nothing. The
+  to the page, so Main leaves the page out and `openPage` refuses a forged `op` with `common_callback_invalid_request`, and the
+  framework's `Hidden` check in `runPageAction` (`settingsPress.pageHidden`, before the right) refuses every action of the page, so a forged
+  press of any of the page's seven codes in a chat that is not a Staff Group (or whose gate says no) is the same invalid-request alert,
+  whoever presses it (never the owner-only alert of the write right), writes nothing and reads nothing. The
   codes are `vg` (pager), `vx` (delete ask), `vy` (delete Yes), `va` (Add), `vc` (Cancel, `t` = `s`), `ve` (the action screen, view only) and
   `vs` (the action set, `v` one of `blacklistActionValues`), each with the owner field `c`, and the static part table gains `(v,s)`. Writes
   (the delete ask and Yes, Add and `vs`, and so the typed reply) declare the tenth right `settingsRightStaffOwner`, the live creator of the

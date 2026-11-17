@@ -593,27 +593,6 @@ func settingsListActions(def settingsListDef) map[string]settingsPageAction {
 	for code, action := range def.Actions {
 		actions[code] = action
 	}
-	return settingsListGuardHidden(def, actions)
-}
-
-// settingsListGuardHidden wraps the Run of every action of a table that has a Hidden hook, so a press of one of its
-// codes in a group where the page is hidden answers the invalid-request alert and does nothing. A table without a hook
-// is returned as it is.
-func settingsListGuardHidden(def settingsListDef, actions map[string]settingsPageAction) map[string]settingsPageAction {
-	if def.Hidden == nil {
-		return actions
-	}
-	for code, action := range actions {
-		run := action.Run
-		action.Run = func(p *settingsPress) *settingsScreen {
-			if def.Hidden(p.group) {
-				p.answer(settingsText(p.tr, "common_callback_invalid_request"), true)
-				return nil
-			}
-			return run(p)
-		}
-		actions[code] = action
-	}
 	return actions
 }
 
