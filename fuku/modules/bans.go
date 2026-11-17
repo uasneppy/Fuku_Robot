@@ -53,18 +53,12 @@ func kickReply(c *moderationCtx, t *target) error {
 		return err
 	}
 
-	baseStr, _ := c.Tr.GetString(strings.ToLower(c.Module.moduleName) + "_kick_kicked_user")
-	if t.reason != "" {
-		temp, _ := c.Tr.GetString(strings.ToLower(c.Module.moduleName) + "_kick_kicked_reason")
-		if temp != "" {
-			baseStr += fmt.Sprintf(temp, t.reason)
-		}
-	}
+	prefix := strings.ToLower(c.Module.moduleName)
+	baseStr, _ := c.Tr.GetString(prefix + "_kick_kicked_user")
+	text := fmt.Sprintf(baseStr, formatting.MentionHtml(kickuser.Id, kickuser.FirstName)) +
+		moderationReasonSuffix(c, prefix+"_kick_kicked_reason", t.reason)
 
-	err = c.replySuccess(
-		fmt.Sprintf(baseStr, formatting.MentionHtml(kickuser.Id, kickuser.FirstName)),
-		formatting.Shtml(),
-	)
+	err = c.replySuccess(text, formatting.Shtml())
 	if err != nil {
 		log.Error(err)
 		return err
@@ -118,13 +112,8 @@ func moderationTban(m *moduleStruct) *moderationCommand {
 			}
 
 			temp, _ := c.Tr.GetString(strings.ToLower(c.Module.moduleName) + "_ban_tban")
-			baseStr := fmt.Sprintf(temp, formatting.MentionHtml(banUser.Id, banUser.FirstName), t.timeVal)
-			if t.reason != "" {
-				temp, _ := c.Tr.GetString(strings.ToLower(c.Module.moduleName) + "_ban_ban_reason")
-				if temp != "" {
-					baseStr += fmt.Sprintf(temp, t.reason)
-				}
-			}
+			baseStr := fmt.Sprintf(temp, formatting.MentionHtml(banUser.Id, banUser.FirstName), t.timeVal) +
+				moderationReasonSuffix(c, strings.ToLower(c.Module.moduleName)+"_ban_ban_reason", t.reason)
 
 			err = c.replySuccess(baseStr, formatting.Shtml())
 			if err != nil {
@@ -144,13 +133,10 @@ func banReplyWithButton(c *moderationCtx, t *target) error {
 		return err
 	}
 
-	baseStr, _ := c.Tr.GetString(strings.ToLower(c.Module.moduleName) + "_ban_normal_ban")
-	if t.reason != "" {
-		temp, _ := c.Tr.GetString(strings.ToLower(c.Module.moduleName) + "_ban_ban_reason")
-		baseStr += fmt.Sprintf(temp, t.reason)
-	}
-
-	text := fmt.Sprintf(baseStr, formatting.MentionHtml(banUser.Id, banUser.FirstName))
+	prefix := strings.ToLower(c.Module.moduleName)
+	baseStr, _ := c.Tr.GetString(prefix + "_ban_normal_ban")
+	text := fmt.Sprintf(baseStr, formatting.MentionHtml(banUser.Id, banUser.FirstName)) +
+		moderationReasonSuffix(c, prefix+"_ban_ban_reason", t.reason)
 
 	err = c.replySuccess(text,
 		&gotgbot.SendMessageOpts{
