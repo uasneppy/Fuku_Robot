@@ -38,6 +38,12 @@ func NewPermissionResponder(b *gotgbot.Bot) *PermissionResponder {
 }
 
 func (r *PermissionResponder) Respond(ctx *ext.Context, cmdKey, btnKey string, opts ...respondOpt) bool {
+	// The proof prompt the failed check just sent is this update's reply; a second "you lack
+	// the right" would contradict it.
+	if AnonProofPrompted(ctx) {
+		return false
+	}
+
 	cfg := respondCfg{}
 	for _, o := range opts {
 		o(&cfg)

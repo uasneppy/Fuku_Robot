@@ -3,11 +3,15 @@
 package chat_status
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
+	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 
+	"github.com/uasneppy/fuku_robot/fuku/db/admin"
 	"github.com/uasneppy/fuku_robot/fuku/utils/cache"
 )
 
@@ -139,4 +143,115 @@ func TestAnonAdminCommandOldFormatReadsAsExpired(t *testing.T) {
 	if got, err := LoadAnonAdminCommand(anonCommandChat.Id, 902); err == nil || got != nil {
 		t.Fatalf("LoadAnonAdminCommand(missing) = (%#v, %v), want nil and an error", got, err)
 	}
+}
+
+// anonPromptClient answers like chatStatusBotClient and counts sendMessage requests; when
+// failSends is set every sendMessage fails.
+type anonPromptClient struct {
+	sends     int
+	failSends bool
+}
+
+func (c *anonPromptClient) RequestWithContext(ctx context.Context, token, method string, params map[string]any, opts *gotgbot.RequestOpts) (json.RawMessage, error) {
+	if method == "sendMessage" {
+		c.sends++
+		if c.failSends {
+			return nil, &gotgbot.TelegramError{Code: 400, Description: "Bad Request: not enough rights to send text messages"}
+		}
+	}
+	return chatStatusBotClient{}.RequestWithContext(ctx, token, method, params, opts)
+}
+
+func (c *anonPromptClient) GetAPIURL(*gotgbot.RequestOpts) string { return "https://api.telegram.org" }
+
+func (c *anonPromptClient) FileURL(token, path string, _ *gotgbot.RequestOpts) string {
+	return "https://api.telegram.org/file/bot" + token + "/" + path
+}
+
+// anonSenderContext is a fresh update context of an anonymous admin's /ban in chat.
+func anonSenderContext(chat gotgbot.Chat) *ext.Context {
+	senderChat := chat
+	msg := anonCommand(1, nil)
+	msg.Chat = chat
+	msg.SenderChat = &senderChat
+	return &ext.Context{
+		Update:           &gotgbot.Update{UpdateId: 1, Message: msg},
+		EffectiveMessage: msg,
+		EffectiveChat:    &chat,
+		EffectiveSender:  &gotgbot.Sender{User: msg.From, Chat: msg.SenderChat, ChatId: chat.Id},
+	}
+}
+
+func TestAnonProofPromptMarker(t *testing.T) {
+	cache.SetupTestMemoryMarshaler(t)
+	chat := gotgbot.Chat{Id: -1009926116130, Type: "supergroup", Title: "Anon marker chat"}
+
+	t.Run("a sent prompt silences the responder for this update only", func(t *testing.T) {
+		client := &anonPromptClient{}
+		bot := &gotgbot.Bot{Token: "999:test", BotClient: client, User: gotgbot.User{Id: 999, IsBot: true}}
+		ctx := anonSenderContext(chat)
+
+		if CanUserRestrict(bot, ctx, nil, groupAnonymousBot) {
+			t.Fatal("CanUserRestrict() = true for an anonymous admin with AnonAdmin off, want the proof")
+		}
+		if client.sends != 1 || !AnonProofPrompted(ctx) {
+			t.Fatalf("sends = %d, marker = %v, want the one prompt and the marker", client.sends, AnonProofPrompted(ctx))
+		}
+		NewPermissionResponder(bot).Respond(ctx, "chat_status_restrict_cmd_error", "", WithReply())
+		if client.sends != 1 {
+			t.Fatalf("sends = %d after the responder, want the prompt alone", client.sends)
+		}
+
+		next := anonSenderContext(chat)
+		if AnonProofPrompted(next) {
+			t.Fatal("the marker outlived its update")
+		}
+		NewPermissionResponder(bot).Respond(next, "chat_status_restrict_cmd_error", "", WithReply())
+		if client.sends != 2 {
+			t.Fatalf("sends = %d, want the next update's refusal sent", client.sends)
+		}
+	})
+
+	t.Run("a failed prompt leaves the responder's reply", func(t *testing.T) {
+		client := &anonPromptClient{failSends: true}
+		bot := &gotgbot.Bot{Token: "999:test", BotClient: client, User: gotgbot.User{Id: 999, IsBot: true}}
+		ctx := anonSenderContext(chat)
+
+		if CanUserRestrict(bot, ctx, nil, groupAnonymousBot) {
+			t.Fatal("CanUserRestrict() = true, want false")
+		}
+		if AnonProofPrompted(ctx) {
+			t.Fatal("a prompt that was not sent set the marker")
+		}
+		NewPermissionResponder(bot).Respond(ctx, "chat_status_restrict_cmd_error", "", WithReply())
+		if client.sends != 2 {
+			t.Fatalf("sends = %d, want the failed prompt and the responder's reply", client.sends)
+		}
+	})
+
+	t.Run("CheckAnonymousAdmin", func(t *testing.T) {
+		client := &anonPromptClient{}
+		bot := &gotgbot.Bot{Token: "999:test", BotClient: client, User: gotgbot.User{Id: 999, IsBot: true}}
+
+		if isAdmin, handled := CheckAnonymousAdmin(bot, anonSenderContext(chat), nil); isAdmin || !handled || client.sends != 1 {
+			t.Fatalf("AnonAdmin off: (%v, %v) with %d sends, want (false, true) and the prompt", isAdmin, handled, client.sends)
+		}
+
+		real := anonSenderContext(chat)
+		user := &gotgbot.User{Id: 10, FirstName: "Real"}
+		real.EffectiveMessage.From = user
+		real.EffectiveMessage.SenderChat = nil
+		real.EffectiveSender = &gotgbot.Sender{User: user, ChatId: chat.Id}
+		if isAdmin, handled := CheckAnonymousAdmin(bot, real, nil); isAdmin || handled || client.sends != 1 {
+			t.Fatalf("real user: (%v, %v) with %d sends, want (false, false) and nothing sent", isAdmin, handled, client.sends)
+		}
+
+		if err := admin.SetAnonAdminMode(chat.Id, true); err != nil {
+			t.Fatalf("SetAnonAdminMode(true) error = %v", err)
+		}
+		t.Cleanup(func() { _ = admin.SetAnonAdminMode(chat.Id, false) })
+		if isAdmin, handled := CheckAnonymousAdmin(bot, anonSenderContext(chat), nil); !isAdmin || !handled || client.sends != 1 {
+			t.Fatalf("AnonAdmin on: (%v, %v) with %d sends, want (true, true) and nothing sent", isAdmin, handled, client.sends)
+		}
+	})
 }

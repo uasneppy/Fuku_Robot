@@ -176,7 +176,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   this bot's `@suffix`), so `/Ban` and `/ban` followed by a newline find the registry. A name with no registered
   re-entry (`hasAnonymousAdminHandler` false, e.g. `/filter`) is answered with the alert
   `bot_updates_anon_unsupported_command`, the prompt stays deleted and nothing runs. `kick`, `dkick`, `purgefrom` and
-  `purgeto` are registered for re-entry like their siblings.
+  `purgeto` are registered for re-entry like their siblings. A permission check that sends the proof prompt marks the
+  update (`chat_status.AnonProofPrompted`, in `ctx.Data`), and `PermissionResponder.Respond` sends nothing for a marked
+  update, so the prompt is the only reply; a prompt that failed to send marks nothing. `chat_status.CheckAnonymousAdmin`
+  is that decision for a raw command that judges its own sender.
 - The `StaffActions` module (priority 65) registers raw interceptors, built through `helpers.NewBotCommand`, at group 0 ahead of Bans (70)
   and Mutes (80), looping over a table so the docs generator skips them. Outside a Staff Group they return
   `ext.ContinueGroups` with no reply, write or Telegram call. They are a documented exception to the `WrapCommand`

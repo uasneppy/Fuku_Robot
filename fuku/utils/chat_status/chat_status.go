@@ -61,7 +61,11 @@ func callbackQueryFromContext(ctx *ext.Context) (*gotgbot.CallbackQuery, bool) {
 	return update.CallbackQuery, true
 }
 
-func checkAnonAdmin(b *gotgbot.Bot, chat *gotgbot.Chat, msg *gotgbot.Message, sender *gotgbot.Sender) (isAdmin bool, shouldReturn bool) {
+// anonProofPromptedKey marks, in ctx.Data, an update whose anonymous admin was just sent the proof
+// prompt, so the PermissionResponder of the check that sent it stays silent (the prompt is the reply).
+const anonProofPromptedKey = "chat_status.anon_proof_prompted"
+
+func checkAnonAdmin(b *gotgbot.Bot, ctx *ext.Context, chat *gotgbot.Chat, msg *gotgbot.Message, sender *gotgbot.Sender) (isAdmin bool, shouldReturn bool) {
 	if sender == nil || !sender.IsAnonymousAdmin() {
 		return false, false
 	}
@@ -75,8 +79,41 @@ func checkAnonAdmin(b *gotgbot.Bot, chat *gotgbot.Chat, msg *gotgbot.Message, se
 	_, err := sendAnonAdminKeyboard(b, msg, chat)
 	if err != nil {
 		log.Error(err)
+		return false, true
+	}
+	if ctx != nil {
+		if ctx.Data == nil {
+			ctx.Data = make(map[string]any)
+		}
+		ctx.Data[anonProofPromptedKey] = true
 	}
 	return false, true
+}
+
+// AnonProofPrompted reports whether this update's anonymous admin was sent the proof prompt by a
+// permission check. A failed prompt send sets nothing.
+func AnonProofPrompted(ctx *ext.Context) bool {
+	if ctx == nil || ctx.Data == nil {
+		return false
+	}
+	prompted, _ := ctx.Data[anonProofPromptedKey].(bool)
+	return prompted
+}
+
+// CheckAnonymousAdmin is the anonymous-admin decision the permission checks make, for a raw command
+// that judges its own sender: (true, true) when the update's sender is an anonymous admin and the
+// chat's AnonAdmin mode is on, (false, true) after the proof prompt was sent (the prompt is the
+// reply; a tap re-enters the command as the tapper), and (false, false) for any other sender, who
+// must be judged by their own ID. A nil chat is the update's chat.
+func CheckAnonymousAdmin(b *gotgbot.Bot, ctx *ext.Context, chat *gotgbot.Chat) (isAdmin, handled bool) {
+	if ctx == nil {
+		return false, false
+	}
+	chat = extractChatFromContext(ctx, chat)
+	if chat == nil {
+		return false, false
+	}
+	return checkAnonAdmin(b, ctx, chat, ctx.EffectiveMessage, ctx.EffectiveSender)
 }
 
 // PromptAnonAdminProof always asks an anonymous admin to prove who they are, whatever
@@ -338,7 +375,7 @@ func CanInvite(b *gotgbot.Bot, ctx *ext.Context, chat *gotgbot.Chat, msg *gotgbo
 	}
 	sender := ctx.EffectiveSender
 
-	if isAdmin, shouldReturn := checkAnonAdmin(b, chat, msg, sender); shouldReturn {
+	if isAdmin, shouldReturn := checkAnonAdmin(b, ctx, chat, msg, sender); shouldReturn {
 		return isAdmin
 	}
 

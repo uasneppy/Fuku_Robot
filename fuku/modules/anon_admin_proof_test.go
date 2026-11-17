@@ -354,3 +354,26 @@ func TestAnonAdminTapAnswersOnce(t *testing.T) {
 		})
 	}
 }
+
+func TestAnonAdminProofSingleReply(t *testing.T) {
+	t.Run("the prompt is the only reply", func(t *testing.T) {
+		env, _, target := newAnonBanEnv(t)
+		env.sendAnonymous(fmt.Sprintf("/ban %d spam", target.Id))
+		sent := env.replies()
+		if len(sent) != 1 {
+			t.Fatalf("messages sent for the anonymous /ban = %d, want the one proof prompt", len(sent))
+		}
+		env.wantProofPrompt()
+		env.wantNoBotReplyContains(staffMarker("chat_status_restrict_cmd_error"))
+	})
+
+	t.Run("a prompt that could not be sent leaves the refusal", func(t *testing.T) {
+		env, _, target := newAnonBanEnv(t)
+		env.fake.script("sendMessage", env.chat.Id, staffFakeError(400, "Bad Request: not enough rights to send text messages"))
+		env.sendAnonymous(fmt.Sprintf("/ban %d spam", target.Id))
+		if calls := env.calls("sendMessage"); len(calls) != 2 {
+			t.Fatalf("sendMessage calls = %d, want the failed prompt and the refusal", len(calls))
+		}
+		env.wantReplyHas(staffMarker("chat_status_restrict_cmd_error"))
+	})
+}
