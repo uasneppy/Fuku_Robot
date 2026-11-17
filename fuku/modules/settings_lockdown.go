@@ -365,5 +365,6 @@ func settingsLockdownLiftYes(p *settingsPress) *settingsScreen {
 	} else {
 		wakeLockdownWorker()
 	}
+	lockdownPostInlineTally(p.b, result.Row, result.Lift)
 	return nil
 }

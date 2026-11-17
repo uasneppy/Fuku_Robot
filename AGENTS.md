@@ -72,7 +72,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`lockdownWorkerStopWait` plus grace). It cancels the lockdown worker and waits at most
   5 s (`lockdownWorkerStopWait`), because every lockdown row resumes from the database: a cycle cut off at shutdown
   loses nothing, and a restart or a second replica picks the rows up again. A claim (an acting or unbanning joiner row
-  with `claimed_at`) older than 2 minutes (`lockdownStaleClaim`) belongs to a worker that stopped: the first cycle of any
+  with `claimed_at`) older than 5 minutes (`lockdownStaleClaim`, above the 4 min 40 s one paced call can take with
+  `lockdownPacerOptions`, `TestLockdownStaleClaimOutlastsAPacedCall`) belongs to a worker that stopped: the first cycle of any
   replica releases it through `lockdown.ReleaseStaleClaims`, before any other step and without counting an attempt.
   Acting goes back to pending in an active lockdown, to banned (a ban) or cancelled (a join request) in a lifting one,
   and unbanning goes back to banned, so a restart resumes every ban, decline and unban and the live check at the lift
@@ -563,8 +564,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   Telegram service identity (`staffServiceUserIDs`) is answered "post as yourself" (`lockdown_alert_post_as_yourself`)
   before any read; `r` must parse (`lockdownParseCopyID`, 1 up to the largest 63-bit value) and name an existing copy,
   else "no longer valid"; the copy row is honoured only on the chat it was posted in (`dest_chat_id` equals the pressed
-  message's chat), else "no longer valid" with no lockdown read and no presser lookup; the lockdown must exist; a
-  lockdown that is not active makes the press stale (below); only then does the action run. Every path answers the
+  message's chat), else "no longer valid" with no lockdown read and no presser lookup; a card's Confirm (`lc`, `bc`,
+  `rc`) or Cancel (`x`) is honoured only on a card of that copy (`lockdownIsCardOf`: a message that replies to the copy's
+  message and is not the copy itself), else "no longer valid" with no lockdown read, no presser lookup and no edit, so
+  forged card data sent on the alert copy or another message edits nothing (`TestLockdownAlertForgedCardPress`); the
+  lockdown must exist; a lockdown that is not active makes the press stale (below); only then does the action run. Every path answers the
   callback query exactly once.
 - Actions: Lift is `a=lk&r=..` (first row of the alert), Ban recent joiners is `a=bn&r=..` (second row; the label
   carries N, or a generic label when N is 0 or unreadable) and Revoke link is `a=rk&r=..` (third row). Each ask posts a
@@ -584,7 +588,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`lockdownInviteAuthority`); the restrict right is not enough.
 - A press on a button of a lockdown that is not active (lifting or lifted) is judged before any action
   (`lockdownStalePress`): it answers "Already lifted by X at T", changes nothing, posts no card, and closes that copy at
-  once (`lockdownCloseSlotNow`, or edits a confirm card to the same text). The copy row names its own lockdown, so the
+  once (`lockdownCloseSlotNow`, or edits a confirm card of that copy to the same text; any other message is left as it
+  is). The copy row names its own lockdown, so the
   handler never looks at the chat's current lockdown and an old alert's button cannot reach a newer lockdown of the
   same group.
 - Revoke link is shown only while the copy's stored link is one the bot can revoke (`lockdownLinkRevocable`: a link in
@@ -3227,8 +3232,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   attempt follows. It acts only on a confirmed lockdown (`locked_at` set); an unconfirmed row is not a lockdown yet and
   every join path lets the joiner through. Its write to the `fuku:lockdown:recent:<chat>` tracker comes first, is best
   effort and its result is ignored. It never gates a ban on Redis, never uses the cached admin predicates (a
-  performer is judged by a live `getChatMember`, and `decideLockdownJoin` bans everything but a user a live creator or
-  administrator, or an anonymous admin, added), and never makes a Telegram write: the worker (`StartLockdownWorker`, a
+  performer is judged by a live `getChatMember`, and `decideLockdownJoin` bans everything but a user a live human creator
+  or administrator, or an anonymous admin, added), and never makes a Telegram write: the worker (`StartLockdownWorker`, a
   DB-driven loop on every replica that claims rows with conditional updates) makes every write and bans with
   `until_date` = the row's `ban_until`, 330 days after the join, the marker that tells the lockdown's own ban from a
   deliberate one. Before every ban `lockdownBanOne` reads the joiner's live `getChatMember` in the same paced unit: a
@@ -3244,8 +3249,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   Deduplication is the `(lockdown_id, user_id)` row alone and never Redis (it does not use `claimRecentJoinProcessing`):
   the first path to insert decides, a second delivery within 20 s (`lockdownJoinDedupeWindow`) of the row's last change
   is the same join, and an older finished row (`lockdownReclaimStates`) is a re-join, reclaimed by one conditional
-  update with a new `ban_until`. Only a user added by a live creator or administrator, or by an anonymous admin, is
-  exempt, and bots never are (D-07, D-08); a failed performer lookup bans. The chat_member path may turn a still
+  update with a new `ban_until`. Only a user added by a live creator or administrator who is not a bot account
+  (`PerformerIsBot`, from the update's or the message's `from`; another bot administrator is no gate past a lockdown and
+  costs no performer lookup), or by an anonymous admin, is exempt, and bots never are (D-07, D-08); a failed performer
+  lookup bans. The raid join counter (`raidJoinCounts`) keeps its own rule and does not read `PerformerIsBot`. The chat_member path may turn a still
   pending row exempt, because that update shows an admin added or approved the user; once the worker claimed the row
   the ban stands until the lift (D-24). The service message's `NewChatMembers` is filtered in place to the users let in
   and the bot itself, so greetings welcome only them, and the update ends when nobody is left. The join message ID is
@@ -3266,7 +3273,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   trigger's lockdown is exactly a `/lockdown`: the live bot-rights check, the raw permissions snapshot, the insert behind
   `uk_chat_lockdowns_active`, the lock call, the confirmation and the worker wake. Of two simultaneous callers for one
   chat exactly one gets `lockdownStartStarted` and the other `lockdownStartAlreadyActive` with the running row. It judges
-  no person's authority (the caller has) and `/lockdown` maps each outcome to the reply it always sent.
+  no person's authority (the caller has) and `/lockdown` maps each outcome to the reply it always sent. When the
+  confirmation matches no row because an `/unlockdown` of the unconfirmed row lifted it while the lock call was on its
+  way, the row is read again and, lifting or lifted, the stored permissions are put back once more and the outcome is
+  `lockdownStartLiftedMeanwhile` (`/lockdown` answers `lockdown_already_lifted`, a trigger posts nothing), so a lock that
+  landed after the lift's restore never leaves the group locked with no lockdown (`TestLockdownStartLiftedDuringLock`).
 - The join surge trigger is counted by both group `-7` join guards, `lockdownOnJoinMember` through
   `raidCountMemberJoin` and `lockdownOnJoinMessage` (the `new_chat_members` service message) through
   `raidCountMessageJoins`, right after the lockdown join tracker write and before the lockdown is read, so the join
@@ -3429,12 +3440,21 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `fuku/db/antiraid` repository is gone, since nothing but tests called it, and no command reads the timing columns
   any more.
 - The lockdown lift runs in the same worker after `/unlockdown` restored the permissions. It unbans (`only_if_banned=true`)
-  only a joiner whose live `getChatMember` shows kicked with that row's `ban_until` (`isLockdownBan`, 2 s tolerance); anyone
+  only a joiner whose live `getChatMember`, read in the same paced unit as the unban (so a slot wait or a 429 retry reads
+  again, `TestLockdownUnbanRereadsAfterWait`), shows kicked with that row's `ban_until` (`isLockdownBan`, 2 s tolerance); anyone
   else, a deliberate `/ban` or `/tban` included, is kept and never touched (a staff `/ban` or `/tban` over a lockdown's
-  ban replaces it with its own end date, so it falls here too; see the StaffActions bullet). Joiners still pending when
-  the lift starts are
-  cancelled and never banned. Rows are handled in the order they were recorded, and the tally is posted once, by the
-  replica whose `FinishLift` conditional update won; a lockdown with nothing to report posts none.
+  ban replaces it with its own end date, so it falls here too; see the StaffActions bullet). A ban call that failed
+  without a refusal (a 5xx, a timeout) may still have taken effect, so before anything else the lift (inline in
+  `liftLockdownRow` before `FinishLift`, and in every worker cycle before `CancelPending`) moves every `ban_failed` row
+  and every pending row with an attempt counted (join requests excepted) to `banned` with detail
+  `models.JoinerDetailLiftCheck` and the attempts at zero (`lockdown.RouteUncertainBans`): the live check then unbans a
+  marker ban, keeps a ban of another date, and cancels the row when the member carries no ban at all, so a ban that
+  never landed is not counted as kept (`TestLockdownLiftChecksBansWhoseAnswerFailed`). The other joiners still pending
+  when the lift starts are cancelled and never banned. Rows are handled in the order they were recorded, and the tally is posted once, by the
+  replica whose `FinishLift` conditional update won; a lockdown with nothing to report posts none. When the lift itself
+  wins `FinishLift` (nothing was left for the worker, e.g. only kept bans), the caller (`/unlockdown`, the alert's Lift
+  Confirm, the settings menu's Lift Yes) posts that same tally after its own announcement through
+  `lockdownPostInlineTally` (`TestLockdownInlineLiftPostsTally`).
 - A lockdown has no end date but its bans do: each joiner's ban lasts `lockdownBanSpan` (330 days) from the join, so a
   lockdown that outlasts that stops banning the raiders it removed (Telegram bans of 30 s to 366 days are the only
   finite ones, and a longer one would be permanent and look like a deliberate ban). This is an accepted limit; the
@@ -3459,7 +3479,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   lockdown's copy is never sent. The alert shows the trigger, the counts, a sample of up to 10 accounts and the invite
   link (see `chat_lockdown_burst`), and every name, username and link is escaped and spliced in after the translator.
 - The alert copies resume like joiner rows. A copy claimed (`posting`) or close-claimed (`posted` with `claimed_at`) for
-  over 2 minutes (`lockdownStaleClaim`) is released by the first cycle of any replica, in `lockdownReleaseStale` through
+  over 5 minutes (`lockdownStaleClaim`) is released by the first cycle of any replica, in `lockdownReleaseStale` through
   `lockdown.ReleaseStaleAlertClaims`, without counting an attempt, so a crash between the send and the record can post a
   second copy (accepted over a lost one). A send is tried three times (`lockdownMaxAttempts`, then `FailAlertSlot` with
   Telegram's reason), a rate limit or a shutdown costs no attempt, each copy has its own claim and attempts so one
@@ -3480,13 +3500,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`lockdownPlanReminders`, right before the poster in `runLockdownCycle`) plans one reminder copy per alert destination:
   kind `reminder`, `seq = floor((now - alert_started_at) / lockdownReminderEvery)`, inserted by
   `lockdown.PlanReminderSlots` with `ON CONFLICT DO NOTHING` on the slot key, so exactly one row exists per reminder and
-  destination whichever replica plans it. Only the current seq is ever planned (no backlog after downtime, and an
+  destination whichever replica plans it. A cycle reads `lockdownReminderBatch` (50) remindable lockdowns after the
+  in-memory cursor `lockdownReminderCursor` (`lockdown.ListRemindableFresh(afterID, limit)`) and a short batch starts
+  over from the lowest ID, so more due lockdowns than one batch are all reached within a few cycles
+  (`TestLockdownRemindersReachEveryLockdown`). Only the current seq is ever planned (no backlog after downtime, and an
   alert older than this feature does not fire a burst), and a pending reminder behind the current seq is marked failed
   with detail `superseded` instead of posted. The destinations are the alert's destination kinds
   (`lockdown.AlertDestKinds`) resolved again by `lockdownAlertDestinations`, so a Staff Group unlinked since, a kind the
   alert never went to and a log channel whose `admin` category is now off get none. Reminders use the alert's claims,
   retries and stale-claim release, so the duplicate-over-lost rule above holds: a reminder claimed in `posting` for over
-  2 minutes is released and its send repeated, which can post it twice after a crash, unless a newer reminder is due by
+  5 minutes (`lockdownStaleClaim`) is released and its send repeated, which can post it twice after a crash, unless a newer reminder is due by
   then, in which case it is superseded and lost on purpose. Posting a reminder calls `lockdown.SupersedeReminders`: the
   older reminders of that destination get `buttons_live` false and `edit_pending` true and lose their buttons through the
   sync step; the original alert copy keeps its buttons until the lift. Planning stops with the lockdown being active

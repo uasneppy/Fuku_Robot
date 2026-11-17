@@ -20,13 +20,24 @@ import (
 // callback carries the real presser in from.
 func pressLockdownButton(env *lockdownEnv, from gotgbot.User, chat gotgbot.Chat, msgID int64, data string) {
 	env.t.Helper()
+	pressed := gotgbot.Message{MessageId: msgID, Date: 1, Chat: chat}
+	// Telegram hands the pressed message over with the message it replies to, so a
+	// confirm card, posted as a reply to the alert, arrives with that reply.
+	for _, sent := range env.fake.sentTo(chat.Id) {
+		if sent.MessageID != msgID {
+			continue
+		}
+		if reply, ok := sent.Params["reply_parameters"].(*gotgbot.ReplyParameters); ok && reply != nil {
+			pressed.ReplyToMessage = &gotgbot.Message{MessageId: reply.MessageId, Date: 1, Chat: chat}
+		}
+	}
 	id := env.updateID()
 	update := &gotgbot.Update{
 		UpdateId: id,
 		CallbackQuery: &gotgbot.CallbackQuery{
 			Id:           fmt.Sprintf("cb-%d", id),
 			From:         from,
-			Message:      gotgbot.Message{MessageId: msgID, Date: 1, Chat: chat},
+			Message:      pressed,
 			Data:         data,
 			ChatInstance: "lockdown-alert-test",
 		},

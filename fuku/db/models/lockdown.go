@@ -84,6 +84,13 @@ const JoinerDetailBanExpired = "ban_expired"
 // and counts it as left alone on purpose, and /lockdownstatus still counts it as removed.
 const JoinerDetailResponseBan = "response_ban"
 
+// JoinerDetailLiftCheck is the detail of a joiner row the lift moved to banned because
+// its ban call failed with an answer that does not say the ban was refused (a 5xx, a
+// timeout): the ban may have taken effect. The lift's unban looks at the live member,
+// removes a ban that carries the row's marker and cancels the row when no such ban is
+// in place, so a ban that never landed is not counted as one left on purpose.
+const JoinerDetailLiftCheck = "lift_check"
+
 // How a joiner reached the group, as stored in chat_lockdown_joiners.join_path.
 const (
 	// JoinPathMember is the chat_member update.

@@ -29,13 +29,17 @@ import (
 // reservation and retry_after block live in Redis, so every replica shares one
 // budget, separate from the staff fan-outs' budget. It is a variable so tests can
 // install a fast one.
-var lockdownPacer = ratelimit.NewTelegramPacer(ratelimit.TelegramPacerOptions{
+var lockdownPacer = ratelimit.NewTelegramPacer(lockdownPacerOptions)
+
+// lockdownPacerOptions are the production options of lockdownPacer. lockdownStaleClaim
+// is sized from them.
+var lockdownPacerOptions = ratelimit.TelegramPacerOptions{
 	NextKey:    "fuku:lockdown:pace:next",
 	BlockKey:   "fuku:lockdown:pace:block",
 	Interval:   100 * time.Millisecond,
 	MaxRetries: 3,
 	MaxWait:    60 * time.Second,
-})
+}
 
 // lockdownPaced runs one Telegram call under the lockdown pacer: it waits for its
 // slot and, on a 429, waits out Telegram's retry_after and repeats the same closure.
@@ -63,10 +67,11 @@ const (
 )
 
 // lockdownStaleClaim is how old a claim (acting or unbanning with claimed_at) must be
-// before it is taken to belong to a worker that stopped. It is far above the 10 s a
-// Telegram call may take, so a live claim is never released. A variable so a test can
-// shorten it.
-var lockdownStaleClaim = 2 * time.Minute
+// before it is taken to belong to a worker that stopped. It is above the longest one
+// paced call can take, (MaxRetries+1) x (MaxWait + lockdownCallTimeout) = 4 min 40 s
+// with lockdownPacerOptions, so a live claim waiting out the pacer is never released
+// (TestLockdownStaleClaimOutlastsAPacedCall). A variable so a test can shorten it.
+var lockdownStaleClaim = 5 * time.Minute
 
 // lockdownReleaseStale gives back the claims older than lockdownStaleClaim on every
 // lockdown, on any replica: the joiner rows' and the alert copies' (a send or a close
@@ -231,7 +236,7 @@ func StartLockdownWorker(b *gotgbot.Bot) {
 // lockdownWorkerStopWait, so no cycle is still writing when shutdown closes the
 // database. A call that is blocked in Telegram does not hold shutdown up: the wait
 // ends and the row it was working on is resumed from the database, by a restart or by
-// another replica once its claim is two minutes old. It is safe to call when the
+// another replica once its claim is lockdownStaleClaim old. It is safe to call when the
 // worker is not running, and more than once.
 func StopLockdownWorker() {
 	lockdownWorkerMu.Lock()
@@ -507,6 +512,15 @@ func lockdownProcessLifts(ctx context.Context, b *gotgbot.Bot) bool {
 // lockdownProcessLift is one cycle of one lift.
 func lockdownProcessLift(ctx context.Context, b *gotgbot.Bot, ld models.ChatLockdown) bool {
 	progress := false
+	// A ban whose call failed without a refusal (a 5xx, a timeout) may have taken
+	// effect, so those rows are unbanned through the live check like any other ban
+	// before the rest of the pending rows are cancelled.
+	if routed, err := lockdown.RouteUncertainBans(ld.ID); err != nil {
+		log.Errorf("[Lockdown] uncertain bans of lockdown %d were not routed to the unban: %v", ld.ID, err)
+		return progress
+	} else if routed > 0 {
+		progress = true
+	}
 	if cancelled, err := lockdown.CancelPending(ld.ID); err != nil {
 		log.Errorf("[Lockdown] pending joiners of lockdown %d were not cancelled: %v", ld.ID, err)
 	} else if cancelled > 0 {
@@ -554,10 +568,15 @@ func lockdownProcessLift(ctx context.Context, b *gotgbot.Bot, ld models.ChatLock
 // call can never remove a member; anyone else, a deliberate ban included, is kept and
 // never touched. It reports whether the row reached a final state.
 func lockdownUnbanOne(ctx context.Context, b *gotgbot.Bot, row models.LockdownJoiner) bool {
+	// The live read and the unban are one paced unit, like the worker's ban: a wait for
+	// a slot or a 429 retry re-runs the whole closure, so the unban never acts on a
+	// status read before the wait (an admin's ban placed meanwhile would be lifted).
 	var member gotgbot.MergedChatMember
+	var unbanned bool
 	err := lockdownPaced(ctx, func(callCtx context.Context) error {
 		call, cancel := context.WithTimeout(callCtx, lockdownCallTimeout)
 		defer cancel()
+		unbanned = false
 		live, lookupErr := b.GetChatMemberWithContext(call, row.ChatID, row.UserID, nil)
 		if lookupErr != nil {
 			return lookupErr
@@ -566,29 +585,34 @@ func lockdownUnbanOne(ctx context.Context, b *gotgbot.Bot, row models.LockdownJo
 			return errors.New("getChatMember returned no member")
 		}
 		member = live.MergeChatMember()
-		return nil
-	})
-	if err != nil {
-		return lockdownUnbanFailed(ctx, row, err)
-	}
-
-	if !isLockdownBan(member, row.BanUntil) {
-		detail := ""
-		if lockdownBanExpired(member, row.BanUntil, time.Now()) {
-			detail = models.JoinerDetailBanExpired
+		if !isLockdownBan(member, row.BanUntil) {
+			return nil
 		}
-		moveLockdownJoiner(row.ID, models.JoinerStateUnbanning, models.JoinerStateKept, detail, false)
-		return true
-	}
-
-	err = lockdownPaced(ctx, func(callCtx context.Context) error {
-		call, cancel := context.WithTimeout(callCtx, lockdownCallTimeout)
-		defer cancel()
 		_, unbanErr := b.UnbanChatMemberWithContext(call, row.ChatID, row.UserID, &gotgbot.UnbanChatMemberOpts{OnlyIfBanned: true})
+		if unbanErr == nil {
+			unbanned = true
+		}
 		return unbanErr
 	})
 	if err != nil {
 		return lockdownUnbanFailed(ctx, row, err)
+	}
+
+	if !unbanned {
+		// A row the lift routed here because its ban answer failed, and whose member
+		// carries no ban at all, was never banned: it ends like a pending row the lift
+		// cancels, and is not counted as a ban left alone on purpose.
+		expired := lockdownBanExpired(member, row.BanUntil, time.Now())
+		if row.Detail == models.JoinerDetailLiftCheck && !expired && member.Status != gotgbot.ChatMemberStatusKicked {
+			moveLockdownJoiner(row.ID, models.JoinerStateUnbanning, models.JoinerStateCancelled, "", false)
+			return true
+		}
+		detail := ""
+		if expired {
+			detail = models.JoinerDetailBanExpired
+		}
+		moveLockdownJoiner(row.ID, models.JoinerStateUnbanning, models.JoinerStateKept, detail, false)
+		return true
 	}
 	moveLockdownJoiner(row.ID, models.JoinerStateUnbanning, models.JoinerStateUnbanned, "", false)
 	return true
@@ -607,7 +631,12 @@ func lockdownUnbanFailed(ctx context.Context, row models.LockdownJoiner, err err
 		moveLockdownJoiner(row.ID, models.JoinerStateUnbanning, models.JoinerStateUnbanFailed, telegramErrorDetail(err), true)
 		return true
 	}
-	moveLockdownJoiner(row.ID, models.JoinerStateUnbanning, models.JoinerStateBanned, telegramErrorDetail(err), true)
+	detail := telegramErrorDetail(err)
+	if row.Detail == models.JoinerDetailLiftCheck {
+		// The retry must still know the ban may never have landed.
+		detail = models.JoinerDetailLiftCheck
+	}
+	moveLockdownJoiner(row.ID, models.JoinerStateUnbanning, models.JoinerStateBanned, detail, true)
 	return false
 }
 
@@ -709,7 +738,7 @@ func lockdownPostTally(ctx context.Context, b *gotgbot.Bot, ld models.ChatLockdo
 }
 
 // moveLockdownJoiner moves a row and logs a failed write; the row then stays in its
-// claimed state until the stale-claim release returns it two minutes later.
+// claimed state until the stale-claim release returns it lockdownStaleClaim later.
 func moveLockdownJoiner(id uint, from, to, detail string, countAttempt bool) {
 	if _, err := lockdown.MoveJoiner(id, from, to, detail, countAttempt); err != nil {
 		log.Errorf("[Lockdown] joiner row %d could not move from %s to %s: %v", id, from, to, err)

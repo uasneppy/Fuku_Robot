@@ -116,7 +116,7 @@ func TestLockdownBanRun(t *testing.T) {
 			Where("chat_id = ? AND user_id = ?", env.chat.Id, raider.Id).
 			Updates(map[string]any{
 				"state":      models.BurstStateActing,
-				"claimed_at": time.Now().UTC().Add(-3 * time.Minute),
+				"claimed_at": time.Now().UTC().Add(-lockdownStaleClaim - time.Minute),
 			}).Error
 		if err != nil {
 			t.Fatalf("leave the burst row acting: %v", err)
@@ -693,7 +693,7 @@ func TestLockdownBanReportResumes(t *testing.T) {
 		env, staffChat, card, logChannel := finishedUnreported(t)
 		run := env.finishedRun()
 		err := db.DB.Model(&models.ChatLockdownBanRun{}).Where("id = ?", run.ID).
-			Update("report_claimed_at", time.Now().UTC().Add(-3*time.Minute)).Error
+			Update("report_claimed_at", time.Now().UTC().Add(-lockdownStaleClaim-time.Minute)).Error
 		if err != nil {
 			t.Fatalf("leave the report claimed: %v", err)
 		}

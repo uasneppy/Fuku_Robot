@@ -64,7 +64,7 @@ func TestLockdownLiftResumesAfterRestart(t *testing.T) {
 
 	// The worker that was unbanning A stopped five minutes ago. B is being unbanned
 	// by another replica right now.
-	env.claimJoiner(a.Id, models.JoinerStateUnbanning, 5*time.Minute)
+	env.claimJoiner(a.Id, models.JoinerStateUnbanning, lockdownStaleClaim+time.Minute)
 	env.claimJoiner(b.Id, models.JoinerStateUnbanning, 0)
 
 	// A fresh replica after the restart.
@@ -91,8 +91,8 @@ func TestLockdownLiftResumesAfterRestart(t *testing.T) {
 		t.Errorf("tally messages = %d, want none before the lift is finished", got)
 	}
 
-	// B's claim passes two minutes: the replica that held it is gone.
-	env.claimJoiner(b.Id, models.JoinerStateUnbanning, 3*time.Minute)
+	// B's claim passes lockdownStaleClaim: the replica that held it is gone.
+	env.claimJoiner(b.Id, models.JoinerStateUnbanning, lockdownStaleClaim+time.Minute)
 	env.cycle()
 
 	if row := env.joinerRow(b.Id); row.State != models.JoinerStateUnbanned {
@@ -154,7 +154,7 @@ func TestLockdownStopDuringCall(t *testing.T) {
 	}
 
 	// Whatever claim the stopped worker left is two minutes old by now.
-	ageClaims(t, ld.ID, 5*time.Minute)
+	ageClaims(t, ld.ID, lockdownStaleClaim+time.Minute)
 	env.fake.setDelay("unbanChatMember", env.chat.Id, 0)
 	StartLockdownWorker(env.bot)
 

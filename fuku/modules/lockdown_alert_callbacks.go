@@ -78,6 +78,15 @@ func (m moduleStruct) lockdownAlertCallback(b *gotgbot.Bot, ctx *ext.Context) er
 		return ext.EndGroups
 	}
 
+	// A confirm card's Confirm and Cancel are honoured only on a card of this copy: a
+	// message that replies to the copy and is not the copy itself. Callback data is not
+	// authenticated, so the same data sent on the alert copy or on any other message
+	// would otherwise edit that message.
+	if lockdownCardAction(fields["a"]) && !lockdownIsCardOf(query, slot) {
+		answerStaffCallback(b, query, lockdownText(tr, "lockdown_alert_expired"), false)
+		return ext.EndGroups
+	}
+
 	// A button of a lockdown that is lifting or lifted does nothing but say so. This runs
 	// before any action and before any lookup of the chat's current lockdown: the copy row
 	// names its own lockdown, so an old alert can never reach a newer one.
@@ -103,6 +112,37 @@ func (m moduleStruct) lockdownAlertCallback(b *gotgbot.Bot, ctx *ext.Context) er
 	}
 	answerStaffCallback(b, query, lockdownText(tr, "lockdown_alert_expired"), false)
 	return ext.EndGroups
+}
+
+// lockdownCardAction reports whether act is a button of a confirm card (a Confirm or
+// the shared Cancel), as opposed to a button of the alert copy itself.
+func lockdownCardAction(act string) bool {
+	switch act {
+	case lockdownActLiftConfirm, lockdownActBanConfirm, lockdownActRevokeConfirm, lockdownActCancel:
+		return true
+	}
+	return false
+}
+
+// lockdownIsCardOf reports whether the pressed message is a confirm card of the alert
+// copy slot: a message of the copy's chat, not the copy itself, that replies to the
+// copy. Every card is posted as such a reply, and Telegram hands the pressed message
+// over with the message it replies to.
+func lockdownIsCardOf(query *gotgbot.CallbackQuery, slot *models.ChatLockdownAlert) bool {
+	var pressed *gotgbot.Message
+	switch msg := query.Message.(type) {
+	case gotgbot.Message:
+		pressed = &msg
+	case *gotgbot.Message:
+		pressed = msg
+	}
+	if pressed == nil || slot.MessageID <= 0 {
+		return false
+	}
+	if pressed.Chat.Id != slot.DestChatID || pressed.MessageId == slot.MessageID {
+		return false
+	}
+	return pressed.ReplyToMessage != nil && pressed.ReplyToMessage.MessageId == slot.MessageID
 }
 
 // lockdownParseCopyID reads the alert copy row ID r: an integer from 1 to the largest
@@ -153,7 +193,11 @@ func (m moduleStruct) lockdownStalePress(
 		lockdownCloseSlotNow(context.Background(), b, slot, ld)
 		return ext.EndGroups
 	}
-	editStaffCallbackMessage(b, query, lockdownAlreadyLiftedText(tr, ld, true))
+	// Only a confirm card of this copy is edited; any other message the data was sent
+	// on is left as it is.
+	if lockdownIsCardOf(query, slot) {
+		editStaffCallbackMessage(b, query, lockdownAlreadyLiftedText(tr, ld, true))
+	}
 	return ext.EndGroups
 }
 
@@ -314,6 +358,7 @@ func (m moduleStruct) lockdownLiftConfirm(
 	editStaffCallbackMessage(b, query, lockdownGroupText(tr, "lockdown_alert_lift_done", ld,
 		lockdownNameToken, lockdownMention(query.From.Id, name)))
 	lockdownAnnounceLift(b, ld, query.From.Id, name, res)
+	lockdownPostInlineTally(b, ld, res)
 	return ext.EndGroups
 }
 

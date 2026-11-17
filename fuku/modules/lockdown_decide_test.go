@@ -54,6 +54,12 @@ func TestDecideLockdownJoin(t *testing.T) {
 				in.PerformerStatus = gotgbot.ChatMemberStatusAdministrator
 			}),
 			lockdownJoinBan, false},
+		{"a join another bot administrator performed is banned",
+			with(func(in *lockdownJoinInput) {
+				in.PerformerIsBot = true
+				in.PerformerStatus = gotgbot.ChatMemberStatusAdministrator
+			}),
+			lockdownJoinBan, false},
 		{"an anonymous admin adding someone is exempt",
 			with(func(in *lockdownJoinInput) { in.PerformerAnonymousAdmin = true }), lockdownJoinExempt, false},
 		{"a live administrator adding someone is exempt",

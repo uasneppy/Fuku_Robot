@@ -155,6 +155,30 @@ func DeletePendingJoin(id uint) (bool, error) {
 	return result.RowsAffected == 1, nil
 }
 
+// RouteUncertainBans moves the joiner rows of a lockdown whose ban may have taken
+// effect although its answer was a failure (a 5xx, a timeout) to banned, so the lift's
+// live-checked unban looks at them: a ban_failed row, and a pending row with an attempt
+// counted. A join request is never one: its pending row is a decline to retry. Each row
+// moved carries models.JoinerDetailLiftCheck and starts the unban with its attempt
+// counter at zero. It returns how many rows it moved, and runs before CancelPending.
+func RouteUncertainBans(lockdownID uint) (int64, error) {
+	result := db.DB.Model(&models.LockdownJoiner{}).
+		Where("lockdown_id = ? AND join_path <> ? AND (state = ? OR (state = ? AND attempts > 0))",
+			lockdownID, models.JoinPathRequest, models.JoinerStateBanFailed, models.JoinerStatePending).
+		Updates(map[string]any{
+			"state":      models.JoinerStateBanned,
+			"detail":     models.JoinerDetailLiftCheck,
+			"attempts":   0,
+			"claimed_at": nil,
+			"updated_at": now(),
+		})
+	if result.Error != nil {
+		log.Errorf("[Lockdown] RouteUncertainBans: %v", result.Error)
+		return 0, fukuerrors.Wrapf(result.Error, "route uncertain bans of lockdown %d", lockdownID)
+	}
+	return result.RowsAffected, nil
+}
+
 // CancelPending moves every pending joiner row of a lockdown to cancelled and
 // returns how many it moved. It is what a lift does with joiners that were recorded
 // but not yet banned: they are never banned.

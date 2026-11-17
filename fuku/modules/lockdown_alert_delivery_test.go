@@ -462,7 +462,7 @@ func TestLockdownAlertDelivery(t *testing.T) {
 			t.Fatal("lockdownPlanAlerts decided nothing, want the alert decided")
 		}
 		row := env.alertRowTo(staffChat.Id)
-		env.forceAlertClaim(row.ID, models.AlertStatePosting, 3*time.Minute)
+		env.forceAlertClaim(row.ID, models.AlertStatePosting, lockdownStaleClaim+time.Minute)
 
 		env.cycle()
 		env.cycle()
@@ -510,7 +510,7 @@ func TestLockdownAlertDelivery(t *testing.T) {
 		}
 		env.send(env.admin, "/unlockdown")
 		staffRow := env.alertRowTo(staffChat.Id)
-		env.forceAlertClaim(staffRow.ID, "", 3*time.Minute)
+		env.forceAlertClaim(staffRow.ID, "", lockdownStaleClaim+time.Minute)
 
 		env.cycle()
 		env.cycle()
