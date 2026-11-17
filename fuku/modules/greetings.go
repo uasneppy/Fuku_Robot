@@ -514,7 +514,7 @@ func (moduleStruct) displayGreeting(bot *gotgbot.Bot, ctx *ext.Context, config g
 
 		if noformat {
 			greetingText += content.RevertButtons(buttons)
-			_, err := media.SendGreetingMessage(bot, ctx.EffectiveChat.Id, media.GreetingMessage{
+			_, err := media.SendGreetingMessage(bot, msg.Chat.Id, media.GreetingMessage{
 				Text:         greetingText,
 				FileID:       fileID,
 				MsgType:      greetingDataType,
@@ -528,7 +528,7 @@ func (moduleStruct) displayGreeting(bot *gotgbot.Bot, ctx *ext.Context, config g
 			}
 		} else {
 			greetingText, kb := renderGreeting(bot, chat, user, greetingText, buttons)
-			_, err := media.SendGreetingMessage(bot, ctx.EffectiveChat.Id, media.GreetingMessage{
+			_, err := media.SendGreetingMessage(bot, msg.Chat.Id, media.GreetingMessage{
 				Text:         greetingText,
 				FileID:       fileID,
 				MsgType:      greetingDataType,
