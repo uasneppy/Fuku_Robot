@@ -229,17 +229,34 @@ func editStaffMessage(
 // nothing, when there is no message or its chat is not a Staff Group; the caller
 // answers the callback.
 func staffRerenderPanel(b *gotgbot.Bot, msg gotgbot.MaybeInaccessibleMessage, tr *i18n.Translator) error {
-	if msg == nil {
-		return errStaffPanelGone
-	}
-	group, err := staff.GetStaffGroupFresh(msg.GetChat().Id)
+	group, err := staffPanelGroupOf(msg)
 	if err != nil {
 		return err
 	}
-	if group == nil {
-		return errStaffPanelGone
+	return staffRenderPanelOf(b, msg, tr, *group)
+}
+
+// staffPanelGroupOf reads, from the database only, the Staff Group whose panel msg
+// is. It returns errStaffPanelGone when there is no message or its chat is not a
+// Staff Group. It makes no Telegram call, so a press can be answered right after it.
+func staffPanelGroupOf(msg gotgbot.MaybeInaccessibleMessage) (*models.StaffGroup, error) {
+	if msg == nil {
+		return nil, errStaffPanelGone
 	}
-	text, keyboard, err := buildStaffPanel(b, tr, *group, 0)
+	group, err := staff.GetStaffGroupFresh(msg.GetChat().Id)
+	if err != nil {
+		return nil, err
+	}
+	if group == nil {
+		return nil, errStaffPanelGone
+	}
+	return group, nil
+}
+
+// staffRenderPanelOf builds group's /staff panel, with its live checks of every
+// link, and edits msg to show it.
+func staffRenderPanelOf(b *gotgbot.Bot, msg gotgbot.MaybeInaccessibleMessage, tr *i18n.Translator, group models.StaffGroup) error {
+	text, keyboard, err := buildStaffPanel(b, tr, group, 0)
 	if err != nil {
 		return err
 	}
@@ -248,13 +265,18 @@ func staffRerenderPanel(b *gotgbot.Bot, msg gotgbot.MaybeInaccessibleMessage, tr
 
 // staffUnlinkExpired answers a press whose link no longer exists (or whose button
 // data is unusable) with the "expired" toast and refreshes the panel, so the stale
-// button disappears.
+// button disappears. The press is answered before the rebuild, whose live checks can
+// outlast the callback's answer window.
 func staffUnlinkExpired(b *gotgbot.Bot, query *gotgbot.CallbackQuery, tr *i18n.Translator) {
-	if err := staffRerenderPanel(b, query.Message, tr); err != nil && !errors.Is(err, errStaffPanelGone) {
-		log.Warnf("[Staff] refresh after expired unlink press: %v", err)
-	}
+	group, err := staffPanelGroupOf(query.Message)
 	text, _ := tr.GetString("staff_cb_expired")
 	answerStaffCallback(b, query, text, false)
+	if err == nil {
+		err = staffRenderPanelOf(b, query.Message, tr, *group)
+	}
+	if err != nil && !errors.Is(err, errStaffPanelGone) {
+		log.Warnf("[Staff] refresh after expired unlink press: %v", err)
+	}
 }
 
 // answerUnlinkRefusal answers a refused Unlink press once: an owner-only alert for
@@ -407,12 +429,22 @@ func (moduleStruct) staffUnlinkCancel(
 
 // finishStaffPanelPress re-renders the panel in place and answers the press once:
 // with the expired toast when there is no Staff Group panel any more, otherwise
-// with an empty answer (a failed edit is logged and does not undo the change).
+// with an empty answer (a failed edit is logged and does not undo the change). The
+// press is answered before the rebuild, whose live checks of every link can outlast
+// the callback's answer window; only the database read that tells the two answers
+// apart comes first.
 func finishStaffPanelPress(b *gotgbot.Bot, query *gotgbot.CallbackQuery, tr *i18n.Translator) {
-	if err := staffRerenderPanel(b, query.Message, tr); errors.Is(err, errStaffPanelGone) {
+	group, err := staffPanelGroupOf(query.Message)
+	if errors.Is(err, errStaffPanelGone) {
 		text, _ := tr.GetString("staff_cb_expired")
 		answerStaffCallback(b, query, text, false)
 		return
 	}
 	answerStaffCallback(b, query, "", false)
+	if err == nil {
+		err = staffRenderPanelOf(b, query.Message, tr, *group)
+	}
+	if err != nil {
+		log.Warnf("[Staff] refresh of the panel after a press: %v", err)
+	}
 }
