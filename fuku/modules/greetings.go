@@ -521,6 +521,7 @@ func (moduleStruct) displayGreeting(bot *gotgbot.Bot, ctx *ext.Context, config g
 				CaptionAbove: mediaBelow,
 				Keyboard:     &gotgbot.InlineKeyboardMarkup{InlineKeyboard: nil},
 				ThreadID:     ctx.EffectiveMessage.MessageThreadId,
+				ReplyMsgID:   msg.MessageId,
 			})
 			if err != nil {
 				log.Error(err)
@@ -535,6 +536,7 @@ func (moduleStruct) displayGreeting(bot *gotgbot.Bot, ctx *ext.Context, config g
 				CaptionAbove: mediaBelow,
 				Keyboard:     kb,
 				ThreadID:     ctx.EffectiveMessage.MessageThreadId,
+				ReplyMsgID:   msg.MessageId,
 			})
 			if err != nil {
 				log.Error(err)

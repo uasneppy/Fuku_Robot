@@ -3820,7 +3820,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `show_caption_above_media` only in `sendPhoto`, `sendVideo` and `sendAnimation` (now one `sendCaptioned`; no other
   sender reads it) and a false flag adds no parameter, so every request of a message saved before is unchanged.
   `media.CaptionAboveEligible` (photo, video, animation) is the one predicate of "Media under text works for this
-  media". `media.SendGreetingMessage` ANDs the flag with it, and `media.SendGreeting` is its flag-off wrapper. Rolling
+  media". `media.SendGreetingMessage` ANDs the flag with it, and `media.SendGreeting` is its flag-off wrapper. `GreetingMessage.ReplyMsgID`
+  is set only by `displayGreeting` (the greeting `/welcome` and `/goodbye` show replies to the command); a join, a leave
+  and a preview send it zero, a plain message. Rolling
   deploy caveat (accepted, like the others here): a replica on the previous code sends a type 9 welcome as its text
   only (`Unknown message type 9, falling back to text`) until it is replaced.
 - One setting, one code path (the settings menu): every setting the menu changes has one apply function beside its
@@ -4321,7 +4323,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   and `fuku/db/backup/testmain_test.go`. The Phase 12 characterization tests record what the code did before the phase and
   must never be re-recorded to make a change pass: `TestRulesLegacyRowSendsTodaysRequest` (a Rules row with no media sends
   today's request) and `TestLegacyGreetingsRequestsUnchanged` (an old greetings row sends today's request), both in
-  `rules_legacy_request_test.go`. Phase 18's goldens follow the same rule: `TestLegacyWarnSettingsRequests`
+  `rules_legacy_request_test.go`. One case of the latter changed once on purpose: `welcome_display_photo` gained
+  `reply_parameters` when the greeting `/welcome` and `/goodbye` show became a reply to the command (owner decision N2 of
+  the 2026-11-17 review, `TestGreetingDisplayRepliesToCommand`); the join and leave cases are unchanged. Phase 18's goldens follow the same rule: `TestLegacyWarnSettingsRequests`
   (`warns_legacy_request_test.go`, every request and stored row of `/setwarnlimit` and `/setwarnmode`, committed before the
   extraction into `applyWarnLimit` and `applyWarnMode`) is never re-recorded, and every `TestLegacy*Requests` golden of Phase 18
   joins that rule as its plan records it. The other Phase 12 families are `TestGreetOnce*` (`greet_once_test.go`),
