@@ -2042,6 +2042,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   dropped the legacy `chk_blacklists_action` of 20250805204145, which lacked `none` and made `/blacklistaction none` fail on a
   chain-built PostgreSQL database (Phase 19, research C-16). SQLite test databases are built from the model, which carries the
   eight-value check only.
+- `warns_settings.warn_mode` is checked only by `chk_warn_mode` (NULL, empty or one of ban, kick, mute, tban, tmute, NOT VALID)
+  since migration 20261116120000 dropped the legacy `chk_warns_mode` of 20250805204145, which refused the empty mode on a
+  chain-built PostgreSQL database (quick task 261116-wh3).
 - `chat_settings_access` (migration 20261104120000) is the owner switch "Admins can change settings", one row per chat; a
   chat without a row means owner only. It is read only through `menuaccess.AdminsAllowedFresh`, a fresh query that is never
   cached (so no `DeleteCache` applies, and a cache added later needs `skipLocal` and a `DeleteCache` on every write), and an
@@ -4118,6 +4121,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `UPDATE blacklists SET action = v` succeeds for warn, mute, kick, ban and none and fails with SQLSTATE 23514 for any other
   value, and exactly one CHECK mentions the column, `chk_blacklist_action`; PostgreSQL only, it skips locally;
   `TestBlacklistActionMigrationStatements` is its database-free half and runs in `make test`).
+  The warn mode guarantee (quick task 261116-wh3) is `TestWarnModeCheckOnPostgres` (`./fuku/db/migrations`: on a chain-built
+  database `warns_settings.warn_mode` accepts NULL, the empty mode and the five modes and refuses any other value with SQLSTATE
+  23514, and exactly one CHECK mentions the column, `chk_warn_mode`; PostgreSQL only, it skips locally;
+  `TestWarnModeCheckMigrationStatements` is its database-free half and runs in `make test`).
   The forward blocklist guarantees (quick task 261113-tjj) are `TestStaffForwardBlockConstraints` (`./fuku/db/staff`: the
   unique key, `chk_staff_forward_blocks_source` and `chk_staff_forward_block_action` refuse a duplicate, a non-negative
   source and an action outside the five; it also runs on SQLite in `make test`) and `TestStaffForwardBlockMigrationDefaults`
