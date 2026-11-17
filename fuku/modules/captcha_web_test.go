@@ -437,7 +437,7 @@ func TestCaptchaWebTracerJoinVerifyUnmute(t *testing.T) {
 	t.Run("stale initData is invalid", func(t *testing.T) {
 		env := newCaptchaWebEnv(t)
 		token := env.join(member)
-		stale := captchaweb.InitDataForTest(env.bot.Token, member.Id, member.FirstName, "en", token, time.Now().Add(-6*time.Minute))
+		stale := captchaweb.InitDataForTest(env.bot.Token, member.Id, member.FirstName, "en", token, time.Now().Add(-captchaweb.InitDataMaxAge-time.Minute))
 
 		status, answer := env.verifyBody(env.verifyJSON(stale, captchaweb.TurnstileTokenForTest(token), token))
 		if status != http.StatusOK || answer.Result != captchaweb.ResultInvalid {

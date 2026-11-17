@@ -808,7 +808,7 @@ func TestCaptchaWebNeverLogsInputs(t *testing.T) {
 		}, ResultInvalid},
 		{"stale initData", func(o *outcomeHandler) (int, Answer, []string) {
 			token, _ := o.issue(member)
-			initData := InitDataForTest(outcomeBotToken, member, "Ünïcode Name", "en", token, time.Now().Add(-6*time.Minute))
+			initData := InitDataForTest(outcomeBotToken, member, "Ünïcode Name", "en", token, time.Now().Add(-InitDataMaxAge-time.Minute))
 			status, answer := o.postBody(o.body(initData, TurnstileTokenForTest(token), token))
 			return status, answer, []string{token, TurnstileTokenForTest(token), initData}
 		}, ResultInvalid},
