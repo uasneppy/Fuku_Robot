@@ -123,7 +123,7 @@ func TestRaidAIPool(t *testing.T) {
 		env.spamFrom(accounts[2], 1)
 		gated.wantEntered(t)
 
-		if !returnsWithin(10*time.Second, DrainAISpamChecks) {
+		if !returnsWithin(10*time.Second, waitAISpamChecks) {
 			gated.open()
 			t.Fatal("the /aispam checks were still running while the lockdown start waited for Telegram")
 		}

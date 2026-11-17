@@ -3,6 +3,7 @@
 package modules
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -403,4 +404,29 @@ func TestStaffUndoPresserRights(t *testing.T) {
 	}
 	wantMember(t, env.fake, groupA, staffTestTarget, gotgbot.ChatMemberStatusLeft)
 	wantMember(t, env.fake, groupB, staffTestTarget, gotgbot.ChatMemberStatusLeft)
+}
+
+// TestStaffUndoRestoreTimeRanOut: a restore whose recorded end date is under 35 s away
+// when its paced unit runs is not sent, because Telegram would make it permanent (S5).
+// The verdict was made while the end was still far enough; the clock is moved to the
+// moment the write is due.
+func TestStaffUndoRestoreTimeRanOut(t *testing.T) {
+	env := newStaffActionEnv(t, 1)
+	group := env.groups[0]
+	until := time.Now().Add(10 * time.Minute).Unix()
+	mreqSwap(t, &staffUntilNow, func() time.Time { return time.Unix(until-10, 0) })
+	verdict := staffUndoVerdict{
+		staffVerdict: staffDo(staffCallRestore, staffReasonUndoneRestrictionRestored),
+		Until:        until,
+		Perms:        gotgbot.ChatPermissions{CanSendMessages: true},
+	}
+
+	err := executeStaffUndoCall(t.Context(), env.bot, group, staffTestTarget, verdict)
+
+	if !errors.Is(err, errStaffTimeRanOut) {
+		t.Fatalf("executeStaffUndoCall = %v, want errStaffTimeRanOut", err)
+	}
+	if calls := env.callsTo("restrictChatMember", group); len(calls) != 0 {
+		t.Fatalf("restrictChatMember calls = %+v, want none for an end date 10 s away", calls)
+	}
 }

@@ -388,12 +388,20 @@ func (r *settingsInputReply) plain(text string) {
 // send posts text to the private chat, as a reply to the message when reply is set. It returns
 // the ID of the message sent, 0 when nothing was sent.
 func (r *settingsInputReply) send(text string, keyboard *gotgbot.InlineKeyboardMarkup, reply bool) int64 {
+	return r.sendWithin(text, keyboard, reply, 0)
+}
+
+// sendWithin is send with a request bound of its own; a zero timeout keeps the client's default.
+func (r *settingsInputReply) sendWithin(text string, keyboard *gotgbot.InlineKeyboardMarkup, reply bool, timeout time.Duration) int64 {
 	if text == "" {
 		return 0
 	}
 	opts := &gotgbot.SendMessageOpts{
 		ParseMode:          formatting.HTML,
 		LinkPreviewOptions: &gotgbot.LinkPreviewOptions{IsDisabled: true},
+	}
+	if timeout > 0 {
+		opts.RequestOpts = &gotgbot.RequestOpts{Timeout: timeout}
 	}
 	if reply {
 		opts.ReplyParameters = &gotgbot.ReplyParameters{MessageId: r.msg.MessageId, AllowSendingWithoutReply: true}

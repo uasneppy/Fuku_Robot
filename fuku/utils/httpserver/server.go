@@ -13,7 +13,6 @@ import (
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
-	"github.com/eko/gocache/lib/v4/store"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel/attribute"
@@ -93,25 +92,24 @@ func checkDatabase() bool {
 	return sqlDB.PingContext(ctx) == nil
 }
 
+// checkRedis asks Redis with PING (I8): it writes no key, so replicas probing at once share
+// nothing, and it reports false when there is no Redis client.
 func checkRedis() bool {
-	mgr := cache.GetCacheManager()
-	if mgr == nil {
+	client := cache.GetRedisClient()
+	if client == nil {
 		return false
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	testKey := "health_check_test"
-	err := mgr.Set(ctx, testKey, "ok", store.WithExpiration(5*time.Second))
-	if err != nil {
-		return false
-	}
+	return client.Ping(ctx).Err() == nil
+}
 
-	_, err = mgr.Get(ctx, testKey)
-	_ = mgr.Delete(ctx, testKey)
-
-	return err == nil
+// redisRequired reports whether /health needs Redis: with DISABLE_CACHE=true the bot starts and
+// runs without it (InitCache continues with no client), so its absence is not unhealthy then.
+func redisRequired() bool {
+	return config.AppConfig == nil || !config.AppConfig.DisableCache
 }
 
 func (s *Server) RegisterHealth() {
@@ -131,7 +129,7 @@ func (s *Server) RegisterHealth() {
 			Uptime:  time.Since(s.startTime).String(),
 		}
 
-		if !dbHealthy || !redisHealthy {
+		if !dbHealthy || (!redisHealthy && redisRequired()) {
 			status.Status = "unhealthy"
 			w.WriteHeader(http.StatusServiceUnavailable)
 		}
@@ -198,8 +196,13 @@ func (s *Server) RegisterDBMetrics() {
 	log.Info("[HTTPServer] Registered /db_metrics endpoint")
 }
 
+// RegisterPPROF mounts the pprof handlers behind the metrics bearer token when one is set: the
+// profiles expose memory, goroutine stacks and the command line. Call SetMetricsAuthToken first.
 func (s *Server) RegisterPPROF() {
-	s.mux.Handle("/debug/pprof/", http.DefaultServeMux)
+	if s.metricsAuthToken == "" {
+		log.Warn("[HTTPServer] METRICS_AUTH_TOKEN is not set — /debug/pprof/ is unauthenticated")
+	}
+	s.mux.Handle("/debug/pprof/", s.requireMetricsAuth(http.DefaultServeMux))
 
 	s.pprofEnabled = true
 	log.Info("[HTTPServer] Registered /debug/pprof/* endpoints")

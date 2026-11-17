@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -351,5 +352,37 @@ func TestAISpamJevDecideSendsStateAsDataNotInstructions(t *testing.T) {
 	}
 	if !strings.Contains(string(encodedState), injection) {
 		t.Fatalf("state dropped the message text: %s", encodedState)
+	}
+}
+
+// TestAISpamJevDecideRefusesRedirect holds that the production TypeSafe client never
+// follows a redirect: a 3xx would carry the bearer key to whatever host the answer names,
+// so it is a failed check (no verdict) and the second host sees no request.
+func TestAISpamJevDecideRefusesRedirect(t *testing.T) {
+	var followed atomic.Int64
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		followed.Add(1)
+		_, _ = w.Write([]byte(aispamDecisionBody(0.99, "scam")))
+	}))
+	t.Cleanup(target.Close)
+
+	for _, status := range []int{http.StatusFound, http.StatusTemporaryRedirect, http.StatusPermanentRedirect} {
+		redirector := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, target.URL, status)
+		}))
+		t.Cleanup(redirector.Close)
+
+		previous := aispamJevEndpoint
+		aispamJevEndpoint = redirector.URL
+		// The production client is kept on purpose: the guard must live in it.
+		verdict, err := aispamJevDecide(context.Background(), "ts-key", aispamTestState())
+		aispamJevEndpoint = previous
+
+		if err == nil || verdict != nil {
+			t.Errorf("status %d: aispamJevDecide() = %#v, %v; want no verdict and an error", status, verdict, err)
+		}
+	}
+	if got := followed.Load(); got != 0 {
+		t.Errorf("the redirect target received %d requests, want 0", got)
 	}
 }

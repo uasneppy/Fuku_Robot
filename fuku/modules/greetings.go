@@ -514,13 +514,14 @@ func (moduleStruct) displayGreeting(bot *gotgbot.Bot, ctx *ext.Context, config g
 
 		if noformat {
 			greetingText += content.RevertButtons(buttons)
-			_, err := media.SendGreetingMessage(bot, ctx.EffectiveChat.Id, media.GreetingMessage{
+			_, err := media.SendGreetingMessage(bot, msg.Chat.Id, media.GreetingMessage{
 				Text:         greetingText,
 				FileID:       fileID,
 				MsgType:      greetingDataType,
 				CaptionAbove: mediaBelow,
 				Keyboard:     &gotgbot.InlineKeyboardMarkup{InlineKeyboard: nil},
 				ThreadID:     ctx.EffectiveMessage.MessageThreadId,
+				ReplyMsgID:   msg.MessageId,
 			})
 			if err != nil {
 				log.Error(err)
@@ -528,13 +529,14 @@ func (moduleStruct) displayGreeting(bot *gotgbot.Bot, ctx *ext.Context, config g
 			}
 		} else {
 			greetingText, kb := renderGreeting(bot, chat, user, greetingText, buttons)
-			_, err := media.SendGreetingMessage(bot, ctx.EffectiveChat.Id, media.GreetingMessage{
+			_, err := media.SendGreetingMessage(bot, msg.Chat.Id, media.GreetingMessage{
 				Text:         greetingText,
 				FileID:       fileID,
 				MsgType:      greetingDataType,
 				CaptionAbove: mediaBelow,
 				Keyboard:     kb,
 				ThreadID:     ctx.EffectiveMessage.MessageThreadId,
+				ReplyMsgID:   msg.MessageId,
 			})
 			if err != nil {
 				log.Error(err)

@@ -10,8 +10,8 @@ import (
 )
 
 var (
-	paramRegex       = regexp.MustCompile(`\{([^}]+)\}`)
-	legacyParamRegex = regexp.MustCompile(`%[sdvfbtoxX]`)
+	// interpolationToken matches a {name} placeholder, an escaped %% or a legacy verb.
+	interpolationToken = regexp.MustCompile(`\{[^}]+\}|%%|%[sdvfbtoxX]`)
 )
 
 func (t *Translator) GetString(key string, params ...TranslationParams) (string, error) {
@@ -72,31 +72,52 @@ func (t *Translator) GetStringSlice(key string) ([]string, error) {
 	return slices.Clone(result), nil
 }
 
+// interpolateParams fills the template in one pass over the raw template text: each {name}
+// placeholder takes its param, and each legacy verb (%s, %d, ...) the next ordered value, with
+// %% printing %. The verbs are counted on the template alone, never on a filled-in value, so a
+// value that holds a verb or a {name} (text a user typed) is printed as it is and can neither
+// shift nor block the template's own verbs (I4). The verbs are filled only when the template
+// has no more of them than there are ordered values, as before; otherwise they stay raw.
 func (t *Translator) interpolateParams(text string, params TranslationParams) (string, error) {
 	if params == nil {
 		return text, nil
 	}
 
-	result := text
-
-	result = paramRegex.ReplaceAllStringFunc(result, func(match string) string {
-		keyName := match[1 : len(match)-1]
-		if value, exists := params[keyName]; exists {
-			return fmt.Sprintf("%v", value)
+	verbs := 0
+	for _, token := range interpolationToken.FindAllString(text, -1) {
+		if token[0] == '%' && token != "%%" {
+			verbs++
 		}
-		return match
-	})
-
-	if legacyParamRegex.MatchString(result) {
-		if orderedValues := extractOrderedValues(params); len(orderedValues) > 0 {
-			specCount := len(legacyParamRegex.FindAllString(result, -1))
-			if specCount <= len(orderedValues) {
-				result = fmt.Sprintf(result, orderedValues[:specCount]...)
+	}
+	var ordered []any
+	if verbs > 0 {
+		if values := extractOrderedValues(params); len(values) > 0 {
+			if verbs <= len(values) {
+				ordered = values[:verbs]
 			} else {
-				log.Warnf("Translation specifier count mismatch: %d specifiers, %d values for key in lang %s", specCount, len(orderedValues), t.langCode)
+				log.Warnf("Translation specifier count mismatch: %d specifiers, %d values for key in lang %s", verbs, len(values), t.langCode)
 			}
 		}
 	}
+
+	next := 0
+	result := interpolationToken.ReplaceAllStringFunc(text, func(token string) string {
+		switch {
+		case token[0] == '{':
+			if value, exists := params[token[1:len(token)-1]]; exists {
+				return fmt.Sprintf("%v", value)
+			}
+			return token
+		case ordered == nil:
+			return token
+		case token == "%%":
+			return "%"
+		default:
+			value := ordered[next]
+			next++
+			return fmt.Sprintf(token, value)
+		}
+	})
 
 	return result, nil
 }

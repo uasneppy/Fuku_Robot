@@ -283,6 +283,22 @@ func DropPendingMessage(ctx context.Context, chatID, messageID int64, kind strin
 	return result.RowsAffected, nil
 }
 
+// DropPendingMessageAnyKind deletes every pending row of one (chat, message), whatever its kind,
+// and returns how many went: a pinned message stays (D-11), whether a member rule or a bot rule
+// queued it. An acting row is left to the worker that claimed it, and no other chat is touched.
+func DropPendingMessageAnyKind(ctx context.Context, chatID, messageID int64) (int64, error) {
+	if db.DB == nil {
+		return 0, fukuerrors.Wrap(errNoDatabase, "drop a queued deletion")
+	}
+	result := db.DB.WithContext(ctx).
+		Where("chat_id = ? AND message_id = ? AND state = ?", chatID, messageID, models.ScheduledDeletionPending).
+		Delete(&models.ScheduledDeletion{})
+	if result.Error != nil {
+		return 0, fukuerrors.Wrapf(result.Error, "drop the queued deletions of a message of chat %d", chatID)
+	}
+	return result.RowsAffected, nil
+}
+
 // NewClaimToken returns a fresh claim token: 16 random bytes as 32 hex characters. Use one
 // token per claim, because ClaimDue reads its rows back by token.
 func NewClaimToken() string {

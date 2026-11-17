@@ -245,6 +245,9 @@ func TestLegacyGreetingsRequestsUnchanged(t *testing.T) {
 
 // Goldens of the requests rules rows saved before Phase 12 send, recorded on the code as
 // it was at bd2f794 (rules.go, sender.go and greetings.go untouched) and never re-recorded.
+// One exception, made on purpose: goldenWelcomeShowPhoto gained reply_parameters when /welcome and
+// /goodbye started replying to the command (owner decision N2 of the 2026-11-17 review); the join and
+// leave goldens are unchanged.
 const (
 	goldenRulesPrivateOff     = `{"chat_id":-1009912001201,"parse_mode":"HTML","reply_markup":{},"reply_parameters":{"message_id":101,"allow_sending_without_reply":true},"text":"Регламент \u003cb\u003eLegacy \u0026amp; Rules\u003c/b\u003e:\n\nRead \u003cb\u003ethis\u003c/b\u003e first: https://example.com/rules"}`
 	goldenRulesReply          = `{"chat_id":-1009912001202,"parse_mode":"HTML","reply_markup":{},"reply_parameters":{"message_id":55,"allow_sending_without_reply":true},"text":"Регламент \u003cb\u003eLegacy \u0026amp; Rules\u003c/b\u003e:\n\nRead \u003cb\u003ethis\u003c/b\u003e first: https://example.com/rules"}`
@@ -255,6 +258,6 @@ const (
 	goldenJoinText            = `{"chat_id":-1009912001207,"link_preview_options":{"is_disabled":true},"parse_mode":"HTML","reply_markup":{},"text":"Welcome Newbie"}`
 	goldenJoinPhoto           = `{"caption":"Hi Newbie","chat_id":-1009912001208,"parse_mode":"HTML","photo":"photo-legacy","reply_markup":{}}`
 	goldenLeaveVideo          = `{"caption":"Bye Newbie","chat_id":-1009912001209,"parse_mode":"HTML","reply_markup":{},"thumbnail":null,"video":"video-legacy"}`
-	goldenWelcomeShowPhoto    = `{"caption":"Hi Telegram","chat_id":-1009912001210,"parse_mode":"HTML","photo":"photo-legacy","reply_markup":{}}`
+	goldenWelcomeShowPhoto    = `{"caption":"Hi Telegram","chat_id":-1009912001210,"parse_mode":"HTML","photo":"photo-legacy","reply_markup":{},"reply_parameters":{"message_id":101,"allow_sending_without_reply":true}}`
 	goldenJoinDocument        = `{"caption":"Gif Newbie","chat_id":-1009912001211,"document":"gif-as-document","parse_mode":"HTML","reply_markup":{},"thumbnail":null}`
 )

@@ -9,9 +9,9 @@ admin_adminlist: "Administrateurs de <b>%s</b> :"
 admin_anon_admin_already_disabled: Le mode AnonAdmin est déjà <b>désactivé</b> pour %s
 admin_anon_admin_already_enabled: Le mode AnonAdmin est déjà <b>activé</b> pour %s
 admin_anon_admin_disabled: "Le mode AnonAdmin est actuellement <b>désactivé</b> pour %s.\n\nCela nécessite que les administrateurs anonymes appuient sur un bouton pour confirmer leurs permissions."
-admin_anon_admin_disabled_now: "Le mode AnonAdmin est maintenant <b>désactivé</b> pour %s.\n\nDésormais, je ne demanderai plus aux administrateurs anonymes de vérifier leurs permissions."
+admin_anon_admin_disabled_now: "Le mode AnonAdmin est maintenant <b>désactivé</b> pour %s.\n\nDésormais, les administrateurs anonymes doivent appuyer sur un bouton pour confirmer leurs permissions."
 admin_anon_admin_enabled: "Le mode AnonAdmin est actuellement <b>activé</b> pour %s.\n\nCela permet à tous les administrateurs anonymes d'effectuer des actions d'administration sans restriction."
-admin_anon_admin_enabled_now: "Le mode AnonAdmin est maintenant <b>activé</b> pour %s.\n\nDésormais, je demanderai aux administrateurs de vérifier les permissions des administrateurs anonymes."
+admin_anon_admin_enabled_now: "Le mode AnonAdmin est maintenant <b>activé</b> pour %s.\n\nDésormais, les administrateurs anonymes peuvent agir sans confirmer leurs permissions."
 admin_anon_admin_invalid_arg: "Argument invalide, je comprends uniquement <code>on</code>, <code>off</code>, <code>yes</code>, <code>no</code>"
 admin_demote_not_admin: "Cette personne n'est pas administrateur, comment suis-je censé la rétrograder ?"
 admin_demote_is_bot_itself: Je ne vais pas me rétrograder moi-même.
@@ -77,9 +77,11 @@ common_anonymous_ban_error: Cette commande ne peut pas être utilisée sur un ut
 common_cannot_identify_user: Impossible d'identifier l'utilisateur. Cette commande ne peut pas être utilisée par les chaînes.
 common_no_user_specified: Je ne sais pas de qui vous parlez, vous allez devoir spécifier un utilisateur... !
 common_user_not_in_chat: Cet utilisateur n'est pas dans ce chat, comment puis-je le restreindre ?
+common_member_check_failed: "Impossible de vérifier le statut de cet utilisateur. Rien n'a été modifié. Réessayez."
 common_cannot_target_admin: "Je ne peux pas effectuer cette action sur les administrateurs du groupe."
 common_cannot_target_self: "Je ne peux pas effectuer cette action sur moi-même."
 common_no_reply_to_message: "Vous devez répondre au message d'un utilisateur pour effectuer cette action."
+common_reply_target_mismatch: "L'utilisateur indiqué n'a pas écrit le message auquel vous avez répondu. Répondez à son message ou n'indiquez pas de nom."
 
 # Common action verbs (for dynamic error messages)
 common_action_ban: "bannir"
@@ -817,6 +819,7 @@ rules_help_msg: |
   × /resetrulesbtn : Identique à ci-dessus.
 rules_not_set: Ce chat n'a pas de règles définies !
 rules_for_chat: "Règles pour <b>%s</b> :\n\n%s"
+rules_reply_needs_text: "Ce message n'a ni texte ni légende à utiliser comme règles. Répondez à un message avec du texte ou écrivez les règles après la commande."
 rules_need_text: "Vous devez me donner des règles à définir !\nRépondez à un message pour les fournir avec la commande."
 rules_cleared_successfully: Règles supprimées avec succès !
 rules_private_pm_usage: L'utilisation de /rules enverra les règles en MP à l'utilisateur.
@@ -2089,6 +2092,7 @@ backup_export_success: |
 backup_export_success_text: "✅ {modules} modules exportés avec succès. Téléchargez le fichier de sauvegarde ci-dessus."
 backup_export_rate_limited: "⏳ Veuillez attendre <b>{time}</b> avant d'exporter à nouveau."
 backup_export_no_modules: "❌ Aucun module exportable trouvé pour ce chat."
+backup_export_start_bot: "📬 La sauvegarde vous est envoyée en message privé. Démarrez d'abord une conversation privée avec moi, puis renvoyez /export."
 backup_export_failed: "❌ Échec de l'export des paramètres. Veuillez réessayer plus tard."
 
 backup_import_success: |
@@ -2099,6 +2103,8 @@ backup_import_success: |
   <b>Modules :</b>
   {list}
 
+backup_import_skipped_entries: "⚠️ <b>{count}</b> filtres, mots de la liste noire ou notes ont été ignorés car ils ne sont pas valides ici."
+backup_import_log_skipped: "⚠️ Les réglages du canal de journal n'ont pas été importés : ce groupe n'a pas de canal de journal. Liez-en un avec /setlog, puis importez à nouveau."
 backup_import_rate_limited: "⏳ Veuillez attendre <b>{time}</b> avant d'importer à nouveau."
 backup_import_no_reply: "❌ Veuillez répondre à un fichier de sauvegarde avec <code>/import</code>."
 backup_import_invalid_file: "❌ Format de fichier de sauvegarde invalide. Veuillez envoyer un fichier JSON de sauvegarde valide."
@@ -2545,6 +2551,7 @@ staff_act_abort_check_failed: "Je n'ai pas pu vérifier cela pour le moment. Rie
 staff_act_line_skipped: "ignoré : {reason}"
 staff_act_line_failed: "échec : {reason}"
 staff_act_banned_not_in_group: "banni (absent du groupe)"
+staff_act_banned_restriction_lost: "banni ; sa restriction plus longue ne reviendra pas à la fin du bannissement"
 staff_act_skip_issuer_not_admin: "vous n'êtes pas admin là-bas"
 staff_act_skip_issuer_no_right: "vous ne pouvez pas restreindre de membres là-bas"
 staff_act_skip_target_admin: "c'est un admin là-bas"
@@ -2553,9 +2560,11 @@ staff_act_skip_target_service: "c'est un compte de service Telegram"
 staff_act_skip_already_banned: "déjà banni"
 staff_act_skip_not_in_group: "absent du groupe"
 staff_act_skip_already_muted: "déjà en sourdine"
+staff_act_skip_restricted_longer: "déjà restreint plus longtemps"
 staff_act_skip_not_banned: "pas banni"
 staff_act_skip_not_muted: "pas en sourdine"
 staff_act_skip_link_removed: "lien supprimé, le propriétaire a changé"
+staff_act_skip_no_longer_linked: "n'est plus lié"
 staff_act_skip_staff_group: "c'est le groupe Staff"
 staff_act_fail_owner_unknown: "impossible de vérifier le propriétaire du groupe"
 staff_act_fail_lookup: "impossible de vérifier les membres"
@@ -2629,9 +2638,9 @@ lockdown_help_msg: |
 
   Quand ce groupe est verrouillé, je publie une alerte dans son groupe Staff (s'il est lié) et son canal de journal (si la catégorie admin est activée) : le déclencheur, combien de personnes sont arrivées juste avant et depuis, jusqu'à 10 de ces comptes, et le lien d'invitation le plus utilisé.
 
-  Je verrouille aussi ce groupe de moi-même quand un raid commence : 15 arrivées en 60 secondes (vague), ou 30 messages, photos, GIF ou stickers en 30 secondes, dont au moins 60 % viennent d'au moins 3 membres arrivés depuis moins de 24 heures (déluge). Valeurs par défaut, déclencheurs actifs par défaut ; <code>/autolockdown</code> affiche celles de ce groupe. Ne comptent jamais les admins, les utilisateurs approuvés ni les commandes que je traite. Je publie un court avis au verrouillage, et l'alerte indique le déclencheur. Dans les 10 minutes après une levée, je ne reverrouille pas seul. Si je vois un raid sans pouvoir verrouiller (admin avec le droit de restreindre des membres, dans un supergroupe), j'en avertis le groupe Staff et le canal de journal, au plus une fois par jour. Ces réglages ne sont pas sauvegardés.
+  Je verrouille aussi ce groupe de moi-même quand un raid commence : 15 arrivées en 60 secondes (vague), ou 30 messages, photos, GIF ou stickers en 30 secondes, dont au moins 60 % viennent d'au moins 3 membres arrivés depuis moins de 24 heures (déluge). Valeurs par défaut, déclencheurs actifs par défaut ; <code>/autolockdown</code> affiche celles de ce groupe. Ne comptent jamais les admins, les utilisateurs approuvés ni les commandes que je traite. Je publie un court avis au verrouillage, et l'alerte indique le déclencheur. Dans les 10 minutes après une levée, je ne reverrouille pas seul. Si je vois un raid sans pouvoir verrouiller (admin avec le droit de restreindre des membres, dans un supergroupe), j'en avertis le groupe Staff et le canal de journal, au plus une fois par jour.
 
-  Déclencheur IA : les textes suspects de membres arrivés depuis moins de 24 h sont vérifiés par TypeSafe, leurs photos, GIF et stickers par Anthropic Claude (si configuré). 5 verdicts de spam venant de 3 comptes en 120 s verrouillent le groupe ; un seul verdict ne le fait jamais, et l'IA ne supprime ni ne bannit jamais.
+  Déclencheur IA : les textes suspects de membres arrivés depuis moins de 24 h sont vérifiés par TypeSafe, leurs photos, GIF, stickers et miniatures vidéo par Anthropic Claude (si configuré). Avec /aispam activé, chaque message qu'il supprime compte aussi, de tout membre. 5 verdicts de spam venant de 3 comptes en 120 s verrouillent le groupe ; un seul verdict ne le fait jamais.
 
   🔓 Lever le verrouillage : lève le verrouillage comme <code>/unlockdown</code>. Mêmes droits que /unlockdown, vérifiés en direct ; être dans le groupe Staff ne suffit pas.
 

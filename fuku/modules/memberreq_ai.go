@@ -30,12 +30,15 @@ import (
 //  2. one pipelined round reads the cached verdict (nv), the member's baseline (nm, the hash of
 //     the names the bot last accepted for this account) and the new-member marker (nu, per chat
 //     and user); a Redis error is unknown;
-//  3. a readable verdict decides first (below the bar records a pass, at or above it sets the
-//     marker and is a breach), and it is answered before any provider call;
-//  4. a member who is not joining, has no marker and a baseline equal to the current names passes
-//     with no write, and one with no baseline at all is recorded with SET NX and passes with no
-//     call (an established member's first sighting costs nothing, so switching the rule on in a
-//     large group causes no burst of provider calls);
+//  3. a member who is not joining (and whose caller does not ignore the baseline), has no marker
+//     and a baseline equal to the current names passes first, with no write and before the
+//     verdict cache is looked at (SEC-01: another account's cached breach of the same string never
+//     reaches a member who never renamed);
+//  4. otherwise a readable verdict decides (below the bar records a pass, at or above it sets the
+//     marker and is a breach), answered before any provider call, and a member who is not joining,
+//     has no marker and no baseline at all is recorded with SET NX and passes with no call (an
+//     established member's first sighting costs nothing, so switching the rule on in a large
+//     group causes no burst of provider calls);
 //  5. everyone else (a joiner, a member with a marker, a rename) is judged through one flight, and
 //     the caller records the answer: a pass writes nm = h and deletes nu in one step, a breach
 //     sets nu, an unknown writes nothing.

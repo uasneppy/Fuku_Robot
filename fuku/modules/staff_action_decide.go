@@ -39,6 +39,10 @@ type staffReason string
 const (
 	staffReasonBanned             staffReason = "banned"
 	staffReasonBannedNotInGroup   staffReason = "banned_not_in_group"
+	// staffReasonBannedRestrictionLost: a timed ban was sent to a target restricted until
+	// later or for good; the ban replaces that restriction, so it will not come back when
+	// the ban ends (owner decision S3-ban). The summary says so.
+	staffReasonBannedRestrictionLost staffReason = "banned_restriction_lost"
 	staffReasonMuted              staffReason = "muted"
 	staffReasonKicked             staffReason = "kicked"
 	staffReasonUnbanned           staffReason = "unbanned"
@@ -53,7 +57,13 @@ const (
 	staffReasonSkipAlreadyMuted   staffReason = "skip_already_muted"
 	staffReasonSkipNotBanned      staffReason = "skip_not_banned"
 	staffReasonSkipNotMuted       staffReason = "skip_not_muted"
-	staffReasonSkipLinkRemoved    staffReason = "skip_link_removed"
+	// staffReasonSkipRestrictedLonger: the target is restricted (not muted) until a
+	// later date or for good, and a mute would replace that restriction with a shorter one.
+	staffReasonSkipRestrictedLonger staffReason = "skip_restricted_longer"
+	staffReasonSkipLinkRemoved      staffReason = "skip_link_removed"
+	// staffReasonSkipNoLongerLinked: the group was unlinked, or linked again under a
+	// new link, after the run started, so it got no write.
+	staffReasonSkipNoLongerLinked staffReason = "skip_no_longer_linked"
 	staffReasonSkipStaffGroup     staffReason = "skip_staff_group"
 	staffReasonFailOwnerUnknown   staffReason = "fail_owner_unknown"
 	staffReasonFailLookup         staffReason = "fail_lookup"
@@ -83,7 +93,7 @@ const (
 // staffReasonOutcome maps a reason to the outcome it stands for.
 func staffReasonOutcome(r staffReason) staffOutcome {
 	switch r {
-	case staffReasonBanned, staffReasonBannedNotInGroup, staffReasonMuted, staffReasonKicked,
+	case staffReasonBanned, staffReasonBannedNotInGroup, staffReasonBannedRestrictionLost, staffReasonMuted, staffReasonKicked,
 		staffReasonUnbanned, staffReasonUnmuted, staffReasonUndoneUnbanned, staffReasonUndoneUnmuted,
 		staffReasonUndoneBanRestored, staffReasonUndoneRestrictionRestored:
 		return staffOutcomeDone
@@ -92,7 +102,7 @@ func staffReasonOutcome(r staffReason) staffOutcome {
 		staffReasonSkipLinkRemoved, staffReasonSkipStaffGroup, staffReasonSkipNotInGroup,
 		staffReasonSkipAlreadyMuted, staffReasonSkipNotBanned, staffReasonSkipNotMuted,
 		staffReasonSkipNotApplied, staffReasonSkipChangedSince, staffReasonSkipRestrictionEnded,
-		staffReasonSkipNoPriorState:
+		staffReasonSkipNoPriorState, staffReasonSkipRestrictedLonger, staffReasonSkipNoLongerLinked:
 		return staffOutcomeSkipped
 	case staffReasonFailOwnerUnknown, staffReasonFailLookup, staffReasonFailTelegram,
 		staffReasonFailRateLimited, staffReasonFailBotNotAdmin, staffReasonFailBotNoRights,
@@ -229,6 +239,12 @@ func decideStaffBan(st staffTargetState, newUntil int64) staffVerdict {
 	case gotgbot.ChatMemberStatusLeft:
 		return staffVerdict{Call: staffCallBan, Reason: staffReasonBannedNotInGroup}
 	case gotgbot.ChatMemberStatusRestricted:
+		if newUntil != 0 && staffEndsLater(st.Until, newUntil) {
+			// banChatMember replaces the restriction, and it does not come back when the
+			// ban ends. The ban is still what staff asked for, so it is sent and the
+			// summary says the restriction is lost (owner decision S3-ban).
+			return staffVerdict{Call: staffCallBan, Reason: staffReasonBannedRestrictionLost}
+		}
 		if !st.IsMember {
 			return staffVerdict{Call: staffCallBan, Reason: staffReasonBannedNotInGroup}
 		}
@@ -240,7 +256,9 @@ func decideStaffBan(st staffTargetState, newUntil int64) staffVerdict {
 }
 
 // decideStaffMute is the mute column. Only a current member is muted (D-11); a
-// muted member is muted again only when the new mute ends later (D-12, D-13), and
+// muted member is muted again only when the new mute ends later (D-12, D-13), a
+// member restricted (not muted) until a later date or for good is left alone,
+// because restrictChatMember would replace that restriction with a shorter one, and
 // a banned target is never touched, because restrictChatMember would replace the
 // ban.
 func decideStaffMute(st staffTargetState, newUntil int64) staffVerdict {
@@ -253,6 +271,9 @@ func decideStaffMute(st staffTargetState, newUntil int64) staffVerdict {
 		}
 		if st.Muted && !staffEndsLater(newUntil, st.Until) {
 			return staffSkip(staffReasonSkipAlreadyMuted)
+		}
+		if !st.Muted && staffEndsLater(st.Until, newUntil) {
+			return staffSkip(staffReasonSkipRestrictedLonger)
 		}
 		return staffDo(staffCallMute, staffReasonMuted)
 	case gotgbot.ChatMemberStatusLeft, gotgbot.ChatMemberStatusKicked:
@@ -449,7 +470,9 @@ func decideStaffUndoUnban(prior staffPriorState, now int64) staffUndoVerdict {
 	if prior.Status != gotgbot.ChatMemberStatusKicked {
 		return staffUndoSkip(staffReasonSkipNoPriorState)
 	}
-	if staffUndoEnded(prior.Until, now) {
+	// The lifted ban was a lockdown's own ban and that lockdown is over: its lift would
+	// have ended the ban, and no lift will come to end it if it is put back (S6).
+	if prior.LockdownBanEnded || staffUndoEnded(prior.Until, now) {
 		return staffUndoSkip(staffReasonSkipRestrictionEnded)
 	}
 	return staffUndoDo(staffCallBan, staffReasonUndoneBanRestored, prior.Until)
@@ -486,7 +509,9 @@ func decideStaffUndoBan(prior staffPriorState, now int64) staffUndoVerdict {
 		}
 		return staffUndoRestore(prior)
 	case gotgbot.ChatMemberStatusKicked:
-		if staffUndoEnded(prior.Until, now) {
+		// A lockdown's own ban of a lockdown no longer active is not put back: no lift
+		// would ever end it, so the staff ban is only lifted (S6).
+		if prior.LockdownBanEnded || staffUndoEnded(prior.Until, now) {
 			return staffUndoDo(staffCallUnban, staffReasonUndoneUnbanned, 0)
 		}
 		return staffUndoDo(staffCallBan, staffReasonUndoneBanRestored, prior.Until)

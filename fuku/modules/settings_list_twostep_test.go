@@ -453,3 +453,23 @@ func TestSettingsListTwoStepBranches(t *testing.T) {
 		}
 	})
 }
+
+// TestSettingsListTwoStepSlowPrompt proves that a step-2 prompt whose send outlasts the advance's read bound is still
+// recorded as the wait's prompt, so its Cancel button ends the wait (review T3).
+func TestSettingsListTwoStepSlowPrompt(t *testing.T) {
+	e := newSettingsListTwoStepEnv(t)
+	m := e.begin()
+	mreqSwap(t, &settingsListStepAdvanceTimeout, 400*time.Millisecond)
+	e.fake.setDelay("sendMessage", e.user.Id, 900*time.Millisecond)
+	t.Cleanup(func() { e.fake.setDelay("sendMessage", e.user.Id, 0) })
+
+	sentBefore := e.sent()
+	e.say("Price  List")
+	step2 := e.reply(sentBefore, "settings_bl_wait", "settings_entries_wait_content_limits")
+	if got := e.field("m"); got != strconv.FormatInt(step2.MessageID, 10) {
+		t.Errorf("the wait's prompt = %q, want the slow step-2 prompt %d", got, step2.MessageID)
+	}
+	if closed, _ := m.last(); !strings.Contains(closed, staffMarker("settings_entries_step_done")) {
+		t.Errorf("the step-1 prompt reads %q, want settings_entries_step_done", closed)
+	}
+}

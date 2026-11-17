@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"html"
 	"strings"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
@@ -569,7 +570,7 @@ func (m moduleStruct) setTitle(c *helpers.CommandContext) error {
 	_, err = msg.Reply(c.Bot,
 		func() string {
 			temp, _ := tr.GetString(strings.ToLower(m.moduleName) + "_title_success_set")
-			return fmt.Sprintf(temp, mem.User.FirstName, mem.CustomTitle)
+			return fmt.Sprintf(temp, html.EscapeString(mem.User.FirstName), html.EscapeString(mem.CustomTitle))
 		}()+extraText,
 		formatting.Shtml(),
 	)

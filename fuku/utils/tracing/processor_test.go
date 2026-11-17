@@ -215,9 +215,28 @@ func TestTracingProcessorProcessUpdateCountsTopLevelUpdatesOnly(t *testing.T) {
 		t.Fatalf("updates processed delta = %v, want 1", got)
 	}
 
-	nested := &ext.Context{Data: map[string]any{ContextDataKey: context.Background()}}
+	// A webhook update arrives with its own request context in ContextDataKey (I3). It is a
+	// top-level update all the same: counted once, given a per-update memo, its context kept.
+	webhookCtx := context.WithValue(context.Background(), contextTestKey("webhook"), "true")
+	webhook := &ext.Context{Data: map[string]any{ContextDataKey: webhookCtx}}
 	before = testutil.ToFloat64(metrics.UpdatesProcessed)
-	if err := processor.ProcessUpdate(dispatcher, &gotgbot.Bot{}, nested); err != nil {
+	if err := processor.ProcessUpdate(dispatcher, &gotgbot.Bot{}, webhook); err != nil {
+		t.Fatalf("webhook ProcessUpdate() error = %v", err)
+	}
+	if got := testutil.ToFloat64(metrics.UpdatesProcessed) - before; got != 1 {
+		t.Fatalf("webhook updates processed delta = %v, want 1", got)
+	}
+	if updatememo.From(webhook) == nil {
+		t.Fatal("a webhook update got no per-update memo")
+	}
+	if got := webhook.Data[ContextDataKey]; got != webhookCtx {
+		t.Fatalf("the webhook context was replaced: got %v", got)
+	}
+
+	// Running the processor again on an update it already processes (a nested call) is not a
+	// second update: the dedicated marker, not the context key, tells it apart.
+	before = testutil.ToFloat64(metrics.UpdatesProcessed)
+	if err := processor.ProcessUpdate(dispatcher, &gotgbot.Bot{}, webhook); err != nil {
 		t.Fatalf("nested ProcessUpdate() error = %v", err)
 	}
 	if got := testutil.ToFloat64(metrics.UpdatesProcessed) - before; got != 0 {

@@ -554,23 +554,24 @@ func memberReqApplyStep(ctx context.Context, b *gotgbot.Bot, c memberReqCase, tr
 // memberReqAnnounce posts the one notice of the episode and stores its message ID on the hold.
 // A failure is logged by IDs only and the punishment stays, except for a mute: a mute whose
 // notice could not be delivered even after its retry is lifted again (memberReqUndeliveredMute),
-// because no member may be left muted without the button.
-func memberReqAnnounce(ctx context.Context, b *gotgbot.Bot, c memberReqCase, tr *i18n.Translator, user gotgbot.User, hold *models.ChatRequirementHold, warn *warnApplyResult) {
+// because no member may be left muted without the button. It reports whether such a lift
+// happened (Q4), so the caller counts the punishment as not applied.
+func memberReqAnnounce(ctx context.Context, b *gotgbot.Bot, c memberReqCase, tr *i18n.Translator, user gotgbot.User, hold *models.ChatRequirementHold, warn *warnApplyResult) (lifted bool) {
 	text := memberReqNoticeText(tr, user, hold.Rules, hold.Action, warn)
 	msgID, err := memberReqPostNotice(ctx, b, c.Chat.Id, text, memberReqNoticeKeyboard(tr, hold.Action, hold.ID, user.Id))
 	if err != nil {
 		if hold.Action == models.RequirementActionMute {
-			memberReqUndeliveredMute(ctx, b, c, hold)
-			return
+			return memberReqUndeliveredMute(ctx, b, c, hold)
 		}
 		log.Warnf("[MemberReq] the notice for user %d in chat %d was not delivered: %s", c.User.Id, c.Chat.Id, memberReqErrText(err))
-		return
+		return false
 	}
 	recordCtx, cancel := memberReqRecordCtx(ctx)
 	defer cancel()
 	if _, err := memberreq.SetHoldNotice(recordCtx, hold.ID, msgID); err != nil {
 		log.Warnf("[MemberReq] storing the notice of user %d in chat %d failed: %s", c.User.Id, c.Chat.Id, memberReqErrText(err))
 	}
+	return false
 }
 
 // memberReqPunish applies the claimed hold's punishment and, once it took effect, posts the
@@ -581,7 +582,11 @@ func memberReqPunish(ctx context.Context, b *gotgbot.Bot, c memberReqCase, user 
 	if outcome == memberReqNotApplied {
 		return memberReqResult{Outcome: outcome, Hold: hold}
 	}
-	memberReqAnnounce(ctx, b, c, tr, user, hold, warn)
+	if memberReqAnnounce(ctx, b, c, tr, user, hold, warn) {
+		// The mute was lifted again because its notice could not be delivered: the member is
+		// free, so the join entry welcomes them (Q4).
+		return memberReqResult{Outcome: memberReqNotApplied, Hold: hold}
+	}
 	return memberReqResult{Outcome: outcome, Hold: hold}
 }
 
@@ -596,7 +601,8 @@ func memberReqPunish(ctx context.Context, b *gotgbot.Bot, c memberReqCase, user 
 //     otherwise it is Held, and with Delete messages on its message is deleted when the sender
 //     is established as a non-admin;
 //  4. a paused chat (memberReqPaused) punishes nobody and posts nothing; its message is deleted
-//     only when the cached admin list knows the sender as a non-admin, with no Telegram call;
+//     only when the sender's names break a name rule (memberReqNameBreach: a lookup miss is never
+//     deleted) and the cached admin list knows the sender as a non-admin, with no Telegram call;
 //  5. one live getChatMember through the pacer, the admin check and the source of the names;
 //  6. the settings read again (an unreadable row punishes nobody), then the rules on the live
 //     names and the strictest punishment of the broken ones, all from that fresh row, which
@@ -639,8 +645,10 @@ func memberReqEnforce(ctx context.Context, b *gotgbot.Bot, c memberReqCase) memb
 	}
 	if memberReqPaused(ctx, c.Chat.Id) {
 		// A pause stops punishments and notices, not deletes. With no Telegram call to decide it,
-		// the message goes only when the cached admin list knows the sender as a non-admin.
-		if memberReqDeletes(c) && memberReqSenderNonAdmin(ctx, b, c.Chat.Id, c.User.Id, false) {
+		// the message goes only when the sender's names break a name rule of the case's settings (what
+		// the watcher saw; a lookup miss with clean names has established nothing, Q1) and the cached
+		// admin list knows the sender as a non-admin.
+		if memberReqDeletes(c) && memberReqNameBreach(c) && memberReqSenderNonAdmin(ctx, b, c.Chat.Id, c.User.Id, false) {
 			memberReqDeleteMessage(ctx, b, c)
 		}
 		return memberReqResult{}
@@ -654,7 +662,7 @@ func memberReqEnforce(ctx context.Context, b *gotgbot.Bot, c memberReqCase) memb
 	if memberReqMuteOverRestriction(ctx, b, c, member, action, keepUntil) {
 		return memberReqResult{}
 	}
-	if !memberReqCapAllow(ctx, b, c.Chat.Id) {
+	if !memberReqCapAllow(ctx, b, c.Chat.Id, c.User.Id) {
 		memberReqDeleteMessage(ctx, b, c)
 		return memberReqResult{}
 	}
@@ -691,6 +699,14 @@ func memberReqDeleteMessage(ctx context.Context, b *gotgbot.Bot, c memberReqCase
 	if err != nil {
 		log.Warnf("[MemberReq] deleting message %d of user %d in chat %d failed: %s", c.MessageID, c.User.Id, c.Chat.Id, memberReqErrText(err))
 	}
+}
+
+// memberReqNameBreach reports whether the case's own member breaks a name rule of the case's
+// settings: the pure check the watcher made before it handed the member to a job. A case the
+// watcher handed over only for a lookup miss (clean names, no cached photo, subscription or AI
+// positive) answers false, because nothing has established that the member breaks anything.
+func memberReqNameBreach(c memberReqCase) bool {
+	return c.Settings != nil && memberReqBroken(c.Settings, memberReqNamesOf(c.User)) != 0
 }
 
 // memberReqDeletes reports whether the case calls for a delete at all: a message case with a

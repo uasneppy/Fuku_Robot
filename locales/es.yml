@@ -8,8 +8,7 @@ admin_anon_admin_disabled:
 admin_anon_admin_disabled_now:
   "El modo AnonAdmin ahora está <b>deshabilitado</b> para %s.
 
-  De ahora en adelante, no pediré a los administradores que verifiquen permisos de
-  administradores anónimos."
+  De ahora en adelante, los administradores anónimos deberán pulsar un botón para confirmar sus permisos."
 admin_anon_admin_enabled:
   "El modo AnonAdmin está actualmente <b>habilitado</b> para %s.
 
@@ -17,7 +16,7 @@ admin_anon_admin_enabled:
 admin_anon_admin_enabled_now:
   "El modo AnonAdmin ahora está <b>habilitado</b> para %s.
 
-  De ahora en adelante, pediré a los administradores que verifiquen permisos de administradores anónimos."
+  De ahora en adelante, los administradores anónimos podrán actuar sin confirmar sus permisos."
 admin_anon_admin_invalid_arg: Argumento inválido, solo entiendo <code>on</code>,
   <code>off</code>, <code>yes</code>, <code>no</code>
 admin_demote_not_admin:
@@ -891,6 +890,7 @@ mute_reply_to_dmute: ¡Necesitas responder a un mensaje para eliminarlo y silenc
 bot_updates_need_admin: ¡Necesitas ser administrador para hacer esto!
 
 # Rules module strings
+rules_reply_needs_text: "Ese mensaje no tiene texto ni pie de foto para usar como reglas. Responde a un mensaje con texto o escribe las reglas después del comando."
 rules_need_text: "¡Necesitas darme reglas para establecer!\nYa sea respondiendo a un mensaje para proporcionarlas con el comando."
 
 # Notes module strings
@@ -912,9 +912,11 @@ common_anonymous_ban_error: Este comando no se puede usar en usuario anónimo, e
 common_cannot_identify_user: No se puede identificar al usuario. Este comando no puede ser usado por canales.
 common_no_user_specified: No sé de quién estás hablando, ¡vas a necesitar especificar un usuario...!
 common_user_not_in_chat: Este usuario no está en este chat, ¿cómo puedo restringirlo?
+common_member_check_failed: "No se pudo comprobar el estado de este usuario. No se cambió nada. Inténtalo de nuevo."
 common_cannot_target_admin: "No puedo realizar esta acción en los administradores del grupo."
 common_cannot_target_self: "No puedo realizar esta acción en mí mismo."
 common_no_reply_to_message: "Debes responder al mensaje de un usuario para realizar esta acción."
+common_reply_target_mismatch: "El usuario que indicaste no escribió el mensaje al que respondiste. Responde a su mensaje o no indiques el nombre."
 
 # Common action verbs (for dynamic error messages)
 common_action_ban: "banear"
@@ -2152,6 +2154,7 @@ backup_export_success: |
 backup_export_success_text: "✅ Exportados exitosamente {modules} módulos. Descarga el archivo de copia de seguridad de arriba."
 backup_export_rate_limited: "⏳ Por favor espera <b>{time}</b> antes de exportar de nuevo."
 backup_export_no_modules: "❌ No se encontraron módulos exportables para este chat."
+backup_export_start_bot: "📬 La copia de seguridad se te envía por chat privado. Primero inicia un chat privado conmigo y luego envía /export de nuevo."
 backup_export_failed: "❌ Error al exportar la configuración. Por favor inténtalo de nuevo más tarde."
 
 backup_import_success: |
@@ -2162,6 +2165,8 @@ backup_import_success: |
   <b>Módulos:</b>
   {list}
 
+backup_import_skipped_entries: "⚠️ Se omitieron <b>{count}</b> filtros, palabras de la lista negra o notas porque no son válidos aquí."
+backup_import_log_skipped: "⚠️ No se importó la configuración del canal de registro: este grupo no tiene canal de registro. Vincula uno con /setlog y vuelve a importar."
 backup_import_rate_limited: "⏳ Por favor espera <b>{time}</b> antes de importar de nuevo."
 backup_import_no_reply: "❌ Por favor responde a un archivo de copia de seguridad con <code>/import</code>."
 backup_import_invalid_file: "❌ Formato de archivo de copia de seguridad inválido. Por favor envía un archivo JSON de copia de seguridad válido."
@@ -2608,6 +2613,7 @@ staff_act_abort_check_failed: "No pude comprobarlo ahora mismo. No se hizo nada;
 staff_act_line_skipped: "omitido: {reason}"
 staff_act_line_failed: "falló: {reason}"
 staff_act_banned_not_in_group: "baneado (no está en el grupo)"
+staff_act_banned_restriction_lost: "baneado; su restricción más larga no volverá cuando termine el baneo"
 staff_act_skip_issuer_not_admin: "no eres admin allí"
 staff_act_skip_issuer_no_right: "no puedes restringir miembros allí"
 staff_act_skip_target_admin: "es admin allí"
@@ -2616,9 +2622,11 @@ staff_act_skip_target_service: "es una cuenta de servicio de Telegram"
 staff_act_skip_already_banned: "ya está baneado"
 staff_act_skip_not_in_group: "no está en el grupo"
 staff_act_skip_already_muted: "ya está silenciado"
+staff_act_skip_restricted_longer: "ya está restringido por más tiempo"
 staff_act_skip_not_banned: "no está baneado"
 staff_act_skip_not_muted: "no está silenciado"
 staff_act_skip_link_removed: "vínculo eliminado, cambió el propietario"
+staff_act_skip_no_longer_linked: "ya no está vinculado"
 staff_act_skip_staff_group: "este es el Grupo de Staff"
 staff_act_fail_owner_unknown: "no se pudo verificar al propietario del grupo"
 staff_act_fail_lookup: "no se pudo comprobar a los miembros"
@@ -2692,9 +2700,9 @@ lockdown_help_msg: |
 
   Cuando este grupo está bloqueado, publico una alerta en su Grupo de Staff (si está vinculado) y en su canal de registro (si la categoría de registro de admin está activada): lo que lo activó, cuántas personas entraron justo antes y desde entonces, hasta 10 de esas cuentas y el enlace de invitación que usaron la mayoría.
 
-  También bloqueo este grupo por mi cuenta cuando empieza una raid: cuando 15 personas entran en 60 segundos (oleada de entradas), o cuando llegan 30 mensajes, fotos, GIF o stickers en 30 segundos, al menos el 60 % de ellos de al menos 3 miembros que entraron en las últimas 24 horas (avalancha). Son los valores por defecto, con ambos activados; <code>/autolockdown</code> muestra las cifras de este grupo. Nunca cuentan los admins, los usuarios aprobados ni los comandos que gestiono, así que aprobar a los recién llegados de confianza los deja fuera. Publico un aviso breve cuando bloqueo el grupo, y la alerta indica qué disparador se activó. Durante 10 minutos tras un levantamiento no vuelvo a bloquear solo. Si veo una raid pero no puedo bloquear (debo ser admin con ese permiso, en un supergrupo), aviso al Grupo de Staff y al canal de registro, como máximo una vez al día. Estos ajustes no van en las copias de seguridad.
+  También bloqueo este grupo por mi cuenta cuando empieza una raid: cuando 15 personas entran en 60 segundos (oleada de entradas), o cuando llegan 30 mensajes, fotos, GIF o stickers en 30 segundos, al menos el 60 % de ellos de al menos 3 miembros que entraron en las últimas 24 horas (avalancha). Son los valores por defecto, con ambos activados; <code>/autolockdown</code> muestra las cifras de este grupo. Nunca cuentan los admins, los usuarios aprobados ni los comandos que gestiono, así que aprobar a los recién llegados de confianza los deja fuera. Publico un aviso breve cuando bloqueo el grupo, y la alerta indica qué disparador se activó. Durante 10 minutos tras un levantamiento no vuelvo a bloquear solo. Si veo una raid pero no puedo bloquear (debo ser admin con ese permiso, en un supergrupo), aviso al Grupo de Staff y al canal de registro, como máximo una vez al día.
 
-  Disparador IA: el texto sospechoso de miembros que entraron hace menos de 24 h lo revisa TypeSafe, y sus fotos, GIF y stickers, Anthropic Claude (si está configurado). 5 veredictos de spam de 3 cuentas en 120 s bloquean el grupo; uno solo nunca lo hace, y la IA nunca borra ni banea.
+  Disparador IA: el texto sospechoso de miembros que entraron hace menos de 24 h lo revisa TypeSafe, y sus fotos, GIF, stickers y miniaturas de vídeo, Anthropic Claude (si está configurado). Con /aispam activo cuenta todo mensaje que borra, de cualquier miembro. 5 veredictos de spam de 3 cuentas en 120 s bloquean el grupo; uno solo nunca lo hace.
 
   🔓 Levantar bloqueo: levanta el bloqueo como <code>/unlockdown</code>. Mismos derechos que /unlockdown, comprobados en el momento; estar en el Grupo de Staff no basta.
 

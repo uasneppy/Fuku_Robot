@@ -402,6 +402,56 @@ func TestStaffUnlinkButtonBadLinkID(t *testing.T) {
 	}
 }
 
+// TestStaffUnlinkAnswersBeforeRebuild: the panel rebuild makes live Telegram calls
+// for every link and can outlast the callback's answer window, so the press is
+// answered before the rebuild starts (S9): before any of the rebuild's bot lookups
+// and before the panel edit.
+func TestStaffUnlinkAnswersBeforeRebuild(t *testing.T) {
+	cases := []struct {
+		name   string
+		action string
+		expire bool
+	}{
+		{"cancel", staffActUnlinkCancel, false},
+		{"confirm", staffActUnlinkConfirm, false},
+		{"expired press", staffActUnlinkCancel, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newUnlinkEnv(t)
+			if tc.expire {
+				if deleted, err := staff.DeleteLink(env.link.ID); err != nil || !deleted {
+					t.Fatalf("DeleteLink = (%v, %v)", deleted, err)
+				}
+			}
+
+			env.press(t, env.owner(), tc.action, env.link.ID)
+
+			env.wantAnswers(t, 1)
+			env.client.mu.Lock()
+			methods := make([]string, len(env.client.calls))
+			for i, call := range env.client.calls {
+				methods[i] = call.Method
+			}
+			env.client.mu.Unlock()
+			answered := -1
+			for i, method := range methods {
+				if method == "answerCallbackQuery" {
+					answered = i
+				}
+			}
+			for i, method := range methods {
+				if (method == "getChatMember" || method == "editMessageText") && i < answered {
+					t.Fatalf("%s at call %d came before the answer at call %d: %v", method, i, answered, methods)
+				}
+			}
+			if len(env.edits()) != 1 {
+				t.Fatalf("edits = %+v, want the panel re-rendered after the answer", env.edits())
+			}
+		})
+	}
+}
+
 func TestStaffUnlinkButtonOnlyNamedLinkGoes(t *testing.T) {
 	env := newUnlinkEnv(t)
 

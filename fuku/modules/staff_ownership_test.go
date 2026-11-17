@@ -462,6 +462,35 @@ func TestStaffOwnershipConcurrentRechecksPostOnce(t *testing.T) {
 	}
 }
 
+// TestRecheckLinkGoneRow: a link whose row was deleted (an unlink) is not OK even
+// while its maker still owns both chats, and a link made again under a new ID does
+// not stand in for the old one (S2).
+func TestRecheckLinkGoneRow(t *testing.T) {
+	env := newOwnershipEnv(t)
+	link := env.addGroup(t, env.ownerID, "Group One")
+	if got := recheckLink(env.bot, link, nil); got != staffRecheckOK {
+		t.Fatalf("recheckLink of a live link = %v, want staffRecheckOK", got)
+	}
+	if deleted, err := staff.DeleteLink(link.ID); err != nil || !deleted {
+		t.Fatalf("DeleteLink = %v, %v", deleted, err)
+	}
+	if got := recheckLink(env.bot, link, nil); got != staffRecheckGone {
+		t.Fatalf("recheckLink of a deleted link = %v, want staffRecheckGone", got)
+	}
+	again := env.addGroup(t, env.ownerID, "Group One")
+	if again.GroupChatID == link.GroupChatID {
+		t.Fatal("addGroup reused the chat ID")
+	}
+	moved := link
+	moved.GroupChatID = again.GroupChatID
+	if got := recheckLink(env.bot, moved, nil); got != staffRecheckGone {
+		t.Fatalf("recheckLink of a row under another ID = %v, want staffRecheckGone", got)
+	}
+	if notices := textsToChat(env.client, env.staffID); len(notices) != 0 {
+		t.Fatalf("notices = %q, want none for a link that is simply gone", notices)
+	}
+}
+
 func TestStaffOwnershipPassAsksOncePerKey(t *testing.T) {
 	env := newOwnershipEnv(t)
 	pass := newStaffOwnerPass()

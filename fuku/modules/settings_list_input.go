@@ -361,6 +361,13 @@ func (r *settingsInputReply) listStepCheck(ts *settingsListTwoStep, norm string)
 	return refusal, true
 }
 
+// settingsListStepAdvanceTimeout bounds the advance of a two-step add's wait to step 2. It is a variable only so a
+// test can shorten it.
+var settingsListStepAdvanceTimeout = settingsReadTimeout
+
+// settingsListStepSendTimeout bounds the send of the step-2 prompt of a two-step add.
+const settingsListStepSendTimeout = 10 * time.Second
+
 // listStepOne is step 1 of a two-step add: the first typed message is the keyword or name. It needs text, a
 // non-blank normalised entry and the page's Check; a refusal keeps the wait at step 1 so the next message is read as
 // the keyword again. An accepted one moves the wait to step 2 in one atomic advance (the normalised entry in w, this
@@ -394,7 +401,7 @@ func (r *settingsInputReply) listStepOne(def settingsListDef, part settingsListP
 		return
 	}
 	until := time.Now().Add(settingsInputTTL)
-	ctx, cancel := context.WithTimeout(context.Background(), settingsReadTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), settingsListStepAdvanceTimeout)
 	defer cancel()
 	advanced, err := settingsInputAdvance(ctx, r.user.Id, r.wait.Nonce, settingsInputWait{
 		GroupID:     r.wait.GroupID,
@@ -415,11 +422,17 @@ func (r *settingsInputReply) listStepOne(def settingsListDef, part settingsListP
 		return
 	}
 	screen := renderSettingsListPrompt(r.view(), def, part.Next, until, false, norm)
-	id := r.send(screen.Text, &screen.Keyboard, true)
+	// The send has a bound of its own, and the prompt is recorded on a fresh bounded context detached from the advance's,
+	// so a slow send (a pacer wait, a slow Bot API) never leaves the step-2 prompt unrecorded and its Cancel dead.
+	id := r.sendWithin(screen.Text, &screen.Keyboard, true, settingsListStepSendTimeout)
 	if id == 0 {
 		log.Warnf("[Settings] the step-2 prompt of user %d could not be sent", r.user.Id)
-	} else if err := settingsInputSetPrompt(ctx, r.user.Id, nonce, id); err != nil {
-		log.Warnf("[Settings] recording the step-2 prompt of user %d failed: %v", r.user.Id, err)
+	} else {
+		promptCtx, promptCancel := context.WithTimeout(context.WithoutCancel(ctx), settingsInputRedisTimeout)
+		if err := settingsInputSetPrompt(promptCtx, r.user.Id, nonce, id); err != nil {
+			log.Warnf("[Settings] recording the step-2 prompt of user %d failed: %v", r.user.Id, err)
+		}
+		promptCancel()
 	}
 	r.editPrompt("settings_entries_step_done")
 }

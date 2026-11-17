@@ -155,6 +155,30 @@ func DeletePendingJoin(id uint) (bool, error) {
 	return result.RowsAffected == 1, nil
 }
 
+// RouteUncertainBans moves the joiner rows of a lockdown whose ban may have taken
+// effect although its answer was a failure (a 5xx, a timeout) to banned, so the lift's
+// live-checked unban looks at them: a ban_failed row, and a pending row with an attempt
+// counted. A join request is never one: its pending row is a decline to retry. Each row
+// moved carries models.JoinerDetailLiftCheck and starts the unban with its attempt
+// counter at zero. It returns how many rows it moved, and runs before CancelPending.
+func RouteUncertainBans(lockdownID uint) (int64, error) {
+	result := db.DB.Model(&models.LockdownJoiner{}).
+		Where("lockdown_id = ? AND join_path <> ? AND (state = ? OR (state = ? AND attempts > 0))",
+			lockdownID, models.JoinPathRequest, models.JoinerStateBanFailed, models.JoinerStatePending).
+		Updates(map[string]any{
+			"state":      models.JoinerStateBanned,
+			"detail":     models.JoinerDetailLiftCheck,
+			"attempts":   0,
+			"claimed_at": nil,
+			"updated_at": now(),
+		})
+	if result.Error != nil {
+		log.Errorf("[Lockdown] RouteUncertainBans: %v", result.Error)
+		return 0, fukuerrors.Wrapf(result.Error, "route uncertain bans of lockdown %d", lockdownID)
+	}
+	return result.RowsAffected, nil
+}
+
 // CancelPending moves every pending joiner row of a lockdown to cancelled and
 // returns how many it moved. It is what a lift does with joiners that were recorded
 // but not yet banned: they are never banned.
@@ -388,4 +412,38 @@ func HasJoinerBanFresh(chatID, userID, until int64) (bool, error) {
 		return false, fukuerrors.Wrapf(err, "look up a lockdown ban of user %d in chat %d", userID, chatID)
 	}
 	return count > 0, nil
+}
+
+// HasEndedJoinerBanFresh reports whether a ban of the user in the chat that ends at
+// until is a lockdown's own ban (as HasJoinerBanFresh matches it) of a lockdown that
+// is no longer active, read straight from the database: no joiner row of an active
+// lockdown matches, and one of an earlier lockdown does. Such a ban is never lifted by
+// a lockdown any more, which is why a staff undo does not put it back. An until of 0
+// never matches and costs no query.
+func HasEndedJoinerBanFresh(chatID, userID, until int64) (bool, error) {
+	if until == 0 {
+		return false, nil
+	}
+	var rows []struct {
+		State string
+	}
+	err := db.DB.Model(&models.LockdownJoiner{}).
+		Select("chat_lockdowns.state AS state").
+		Joins("JOIN chat_lockdowns ON chat_lockdowns.id = chat_lockdown_joiners.lockdown_id").
+		Where("chat_lockdown_joiners.chat_id = ? AND chat_lockdown_joiners.user_id = ? AND chat_lockdown_joiners.ban_until BETWEEN ? AND ?",
+			chatID, userID, until-joinerBanTolerance, until+joinerBanTolerance).
+		Scan(&rows).Error
+	if err != nil {
+		log.Errorf("[Lockdown] HasEndedJoinerBanFresh: %v", err)
+		return false, fukuerrors.Wrapf(err, "look up an ended lockdown ban of user %d in chat %d", userID, chatID)
+	}
+	if len(rows) == 0 {
+		return false, nil
+	}
+	for _, row := range rows {
+		if row.State == models.LockdownStateActive {
+			return false, nil
+		}
+	}
+	return true, nil
 }

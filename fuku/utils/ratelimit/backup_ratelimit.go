@@ -45,6 +45,28 @@ func (r *BackupRateLimiter) AcquireExport(chatID int64) (bool, time.Duration) {
 	return r.acquireOperation(exportRatePrefix+strconv.FormatInt(chatID, 10), DefaultExportCooldown)
 }
 
+// ReleaseExport gives back the export cooldown of chatID, for an export that delivered nothing (the admin had
+// not started the bot), so they can try again once they have.
+func (r *BackupRateLimiter) ReleaseExport(chatID int64) {
+	r.releaseOperation(exportRatePrefix + strconv.FormatInt(chatID, 10))
+}
+
+func (r *BackupRateLimiter) releaseOperation(cacheKey string) {
+	if client := cache.GetRedisClient(); client != nil {
+		if err := client.Del(cache.Context, cacheKey).Err(); err != nil {
+			log.Debugf("[BackupRateLimit] Failed to release operation for key %s: %v", cacheKey, err)
+		}
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if m := cache.GetMarshal(); m != nil {
+		if err := m.Delete(context.Background(), cacheKey); err != nil {
+			log.Debugf("[BackupRateLimit] Failed to release operation for key %s: %v", cacheKey, err)
+		}
+	}
+}
+
 func (r *BackupRateLimiter) AcquireImport(chatID int64) (bool, time.Duration) {
 	return r.acquireOperation(importRatePrefix+strconv.FormatInt(chatID, 10), DefaultImportCooldown)
 }

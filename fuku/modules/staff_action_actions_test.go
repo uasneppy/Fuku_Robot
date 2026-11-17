@@ -4,11 +4,14 @@ package modules
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
+
+	"github.com/uasneppy/fuku_robot/fuku/db/staff"
 )
 
 // runStaffCommand has the issuer send a staff command in the Staff Group, confirm
@@ -283,6 +286,164 @@ func TestStaffActionMuteNeverShortens(t *testing.T) {
 		t.Fatalf("write calls in group B = %+v, want none for a permanent mute", writes)
 	}
 	wantSkippedLine(t, summary, "Group B", "staff_act_skip_already_muted")
+}
+
+// TestStaffActionMuteNeverShortensRestriction: a member restricted (not muted) until
+// later than the staff mute, or for good, keeps that restriction. restrictChatMember
+// replaces it, so a timed mute would end it sooner (S3).
+func TestStaffActionMuteNeverShortensRestriction(t *testing.T) {
+	env := newStaffActionEnv(t, 2)
+	g1, g2 := env.groups[0], env.groups[1]
+	media := gotgbot.ChatPermissions{CanSendMessages: true}
+	env.fake.setMember(g1, staffTestTarget, staffFakeMember{
+		Status: gotgbot.ChatMemberStatusRestricted, IsMember: true, CanSendMessages: true,
+		UntilDate: time.Now().Add(48 * time.Hour).Unix(), Perms: &media,
+	})
+	env.fake.setMember(g2, staffTestTarget, staffFakeMember{
+		Status: gotgbot.ChatMemberStatusRestricted, IsMember: true, CanSendMessages: true, Perms: &media,
+	})
+
+	summary, _ := env.runStaffCommand("/mute 4242 1h")
+
+	for _, group := range []int64{g1, g2} {
+		if writes := env.writes(group); len(writes) != 0 {
+			t.Fatalf("write calls in group %d = %+v, want none over a longer restriction", group, writes)
+		}
+	}
+	wantSkippedLine(t, summary, "Group A", "staff_act_skip_restricted_longer")
+	wantSkippedLine(t, summary, "Group B", "staff_act_skip_restricted_longer")
+}
+
+// TestStaffActionTimedBanOverLongerRestriction: a timed staff ban on a member restricted
+// for longer than the ban is still sent, because banning is what staff asked for, but the
+// summary says the restriction will not come back when the ban ends (owner decision S3-ban).
+func TestStaffActionTimedBanOverLongerRestriction(t *testing.T) {
+	env := newStaffActionEnv(t, 2)
+	g1, g2 := env.groups[0], env.groups[1]
+	media := gotgbot.ChatPermissions{CanSendMessages: true}
+	env.fake.setMember(g1, staffTestTarget, staffFakeMember{
+		Status: gotgbot.ChatMemberStatusRestricted, IsMember: true, CanSendMessages: true, Perms: &media,
+	})
+	env.fake.setMember(g2, staffTestTarget, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+
+	summary, _ := env.runStaffCommand("/tban 4242 1h")
+
+	for _, group := range []int64{g1, g2} {
+		if calls := env.callsTo("banChatMember", group); len(calls) != 1 {
+			t.Fatalf("banChatMember calls in group %d = %+v, want the ban sent", group, calls)
+		}
+	}
+	wantDoneLine(t, summary, "Group A")
+	wantDoneLine(t, summary, "Group B")
+	note := staffMarker("staff_act_banned_restriction_lost")
+	if line := summaryLine(t, summary, "Group A"); !strings.Contains(line, note) {
+		t.Fatalf("line for Group A = %q, want it to say the restriction will not come back", line)
+	}
+	if line := summaryLine(t, summary, "Group B"); strings.Contains(line, note) {
+		t.Fatalf("line for Group B = %q, want no restriction note for a plain member", line)
+	}
+}
+
+// TestStaffActionRereadsBeforeWrite: a target banned between the read the verdict was
+// made on and the write is not muted or kicked, because both calls would lift the ban
+// (S1). The ban lands right after the prior state is stored, the last step before the
+// write.
+func TestStaffActionRereadsBeforeWrite(t *testing.T) {
+	for _, command := range []string{"/mute 4242", "/kick 4242"} {
+		t.Run(command, func(t *testing.T) {
+			env := newStaffActionEnv(t, 1)
+			g1 := env.groups[0]
+			env.fake.setMember(g1, staffTestTarget, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+			banUntil := time.Now().Add(72 * time.Hour).Unix()
+			previous := staffSavePrior
+			staffSavePrior = func(actionID uint, groupChatID int64, prior staff.ActionPrior) error {
+				err := previous(actionID, groupChatID, prior)
+				env.fake.setMember(groupChatID, staffTestTarget, staffFakeMember{
+					Status: gotgbot.ChatMemberStatusKicked, UntilDate: banUntil,
+				})
+				return err
+			}
+			t.Cleanup(func() { staffSavePrior = previous })
+
+			summary, _ := env.runStaffCommand(command)
+
+			if writes := env.writes(g1); len(writes) != 0 {
+				t.Fatalf("write calls = %+v, want none for a target banned before the write", writes)
+			}
+			if m := wantMember(t, env.fake, g1, staffTestTarget, gotgbot.ChatMemberStatusKicked); m.UntilDate != banUntil {
+				t.Fatalf("ban end = %d, want the ban left at %d", m.UntilDate, banUntil)
+			}
+			wantSkippedLine(t, summary, "Group A", "staff_act_skip_not_in_group")
+		})
+	}
+}
+
+// TestStaffActionSkipsUnlinkedGroup: a group unlinked while the fan-out runs gets no
+// write. The link is read fresh right before the write and must still be the same
+// link of the same Staff Group (S2). The unlink lands after the prior state is
+// stored, the last step before the write; the other group is acted on.
+func TestStaffActionSkipsUnlinkedGroup(t *testing.T) {
+	env := newStaffActionEnv(t, 2)
+	g1, g2 := env.groups[0], env.groups[1]
+	env.fake.setMember(g1, staffTestTarget, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+	env.fake.setMember(g2, staffTestTarget, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+	previous := staffSavePrior
+	staffSavePrior = func(actionID uint, groupChatID int64, prior staff.ActionPrior) error {
+		err := previous(actionID, groupChatID, prior)
+		if groupChatID == g1 {
+			link, lookupErr := staff.GetLinkOfGroupFresh(g1)
+			if lookupErr != nil || link == nil {
+				t.Errorf("link of group A = %v, %v", link, lookupErr)
+			} else if deleted, delErr := staff.DeleteLink(link.ID); delErr != nil || !deleted {
+				t.Errorf("DeleteLink = %v, %v", deleted, delErr)
+			}
+		}
+		return err
+	}
+	t.Cleanup(func() { staffSavePrior = previous })
+
+	summary, _ := env.runStaffCommand("/ban 4242")
+
+	if writes := env.writes(g1); len(writes) != 0 {
+		t.Fatalf("write calls in the unlinked group = %+v, want none", writes)
+	}
+	wantSkippedLine(t, summary, "Group A", "staff_act_skip_no_longer_linked")
+	wantDoneLine(t, summary, "Group B")
+}
+
+// TestStaffActionOwnerChangeOneNotice: when the Staff Group's owner changed, the run's
+// owner recheck removes every link; the Staff Group gets one combined notice naming
+// all of them, not one notice per worker (S7).
+func TestStaffActionOwnerChangeOneNotice(t *testing.T) {
+	env := newStaffActionEnv(t, 3)
+	for _, group := range env.groups {
+		env.fake.setMember(group, staffTestTarget, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+	}
+	env.send(env.issuer, "/ban 4242")
+	token, msgID := env.card()
+	env.fake.setCreator(env.staffChat, env.owner+1000)
+	env.tap(env.issuer, staffActRunConfirm, token, msgID)
+	env.waitRuns()
+
+	var notices []string
+	for _, sent := range env.fake.sentTo(env.staffChat) {
+		if text := fmt.Sprint(sent.Params["text"]); strings.Contains(text, staffMarker("staff_notice_unlinked_staff_owner_changed")) {
+			notices = append(notices, text)
+		}
+	}
+	if len(notices) != 1 {
+		t.Fatalf("owner-change notices = %q, want exactly one combined notice", notices)
+	}
+	for _, title := range []string{"Group A", "Group B", "Group C"} {
+		if !strings.Contains(notices[0], title) {
+			t.Fatalf("notice %q does not name %s", notices[0], title)
+		}
+	}
+	for _, group := range env.groups {
+		if writes := env.writes(group); len(writes) != 0 {
+			t.Fatalf("write calls in group %d = %+v, want none after the link was removed", group, writes)
+		}
+	}
 }
 
 func TestStaffActionKickClearsMute(t *testing.T) {

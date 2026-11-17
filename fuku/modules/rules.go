@@ -19,6 +19,7 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/db/rules"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
 	"github.com/uasneppy/fuku_robot/fuku/utils/chat_status"
+	"github.com/uasneppy/fuku_robot/fuku/utils/extraction"
 	"github.com/uasneppy/fuku_robot/fuku/utils/formatting"
 	"github.com/uasneppy/fuku_robot/fuku/utils/helpers"
 	"github.com/uasneppy/fuku_robot/fuku/utils/keyboard"
@@ -399,11 +400,23 @@ func (moduleStruct) setRules(bot *gotgbot.Bot, ctx *ext.Context) error {
 	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 	var text string
 
-	if len(args) == 1 && msg.ReplyToMessage == nil {
+	reply := extraction.ReplyTarget(msg)
+	if len(args) == 1 && reply == nil {
 		text, _ = tr.GetString("rules_need_text")
 	} else {
-		if msg.ReplyToMessage != nil {
-			text = msg.ReplyToMessage.OriginalMDV2()
+		if reply != nil {
+			// The rules are the replied message's text or caption, with its formatting. A reply with
+			// neither (a sticker, a bare photo) is refused and the stored rules stay as they are.
+			if reply.GetText() == "" {
+				text, _ = tr.GetString("rules_reply_needs_text")
+				_, err := msg.Reply(bot, text, formatting.Shtml())
+				if err != nil {
+					log.Error(err)
+					return err
+				}
+				return ext.EndGroups
+			}
+			text = reply.OriginalTextMDV2()
 		} else {
 			parts := strings.SplitN(msg.OriginalMDV2(), " ", 2)
 			if len(parts) >= 2 {

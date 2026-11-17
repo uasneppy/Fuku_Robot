@@ -725,11 +725,11 @@ func TestStaffReasonText(t *testing.T) {
 		staffReasonBanned, staffReasonMuted, staffReasonKicked, staffReasonUnbanned, staffReasonUnmuted,
 	}
 	worded := []staffReason{
-		staffReasonBannedNotInGroup,
+		staffReasonBannedNotInGroup, staffReasonBannedRestrictionLost,
 		staffReasonSkipIssuerNotAdmin, staffReasonSkipIssuerNoRight, staffReasonSkipTargetAdmin,
 		staffReasonSkipTargetBot, staffReasonSkipTargetService, staffReasonSkipAlreadyBanned,
 		staffReasonSkipNotInGroup, staffReasonSkipAlreadyMuted, staffReasonSkipNotBanned,
-		staffReasonSkipNotMuted, staffReasonSkipLinkRemoved, staffReasonSkipStaffGroup,
+		staffReasonSkipNotMuted, staffReasonSkipRestrictedLonger, staffReasonSkipLinkRemoved, staffReasonSkipNoLongerLinked, staffReasonSkipStaffGroup,
 		staffReasonFailOwnerUnknown, staffReasonFailLookup, staffReasonFailTelegram,
 		staffReasonFailRateLimited, staffReasonFailBotNotAdmin, staffReasonFailBotNoRights,
 		staffReasonFailGroupNotFound, staffReasonFailInternal, staffReasonFailInterrupted,

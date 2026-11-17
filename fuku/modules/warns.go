@@ -195,7 +195,12 @@ func applyWarn(ctx context.Context, b *gotgbot.Bot, chat *gotgbot.Chat, userID i
 	mu := warnPunishLock(chat.Id, userID)
 	mu.Lock()
 	defer mu.Unlock()
-	settings := warns.GetWarnSettingContext(ctx, chat.Id)
+	// A settings read that fails stores no warn and punishes nobody (fail closed): the
+	// caller answers common_settings_save_failed.
+	settings, err := warns.GetWarnSettingErrContext(ctx, chat.Id)
+	if err != nil {
+		return res, err
+	}
 	numWarns, reasons, err := warns.WarnUser(userID, chat.Id, reason)
 	if err != nil {
 		return res, err
@@ -302,8 +307,8 @@ func (moduleStruct) warnThisUser(b *gotgbot.Bot, ctx *ext.Context, userId int64,
 	res, err := applyWarn(tracing.UpdateContext(ctx), b, chat, userId, reason, func() {
 		switch warnType {
 		case "dwarn":
-			if msg.ReplyToMessage != nil {
-				if _, deleteErr := msg.ReplyToMessage.Delete(b, nil); deleteErr != nil {
+			if reply := extraction.ReplyTarget(msg); reply != nil {
+				if _, deleteErr := reply.Delete(b, nil); deleteErr != nil {
 					log.Errorf("[Warns] Failed to delete message: %v", deleteErr)
 				}
 			}
@@ -344,8 +349,9 @@ func (moduleStruct) warnThisUser(b *gotgbot.Bot, ctx *ext.Context, userId int64,
 		}
 		reply += sb.String()
 	} else {
-		rules := rules.GetChatRulesInfo(chat.Id)
-		if len(rules.Rules) >= 1 {
+		// The Rules button shows whenever the rules are set (a text, a media or buttons),
+		// the same test /rules and a welcome's {rules} button use.
+		if rules.GetChatRulesInfo(chat.Id).HasContent() {
 			keyboard = gotgbot.InlineKeyboardMarkup{
 				InlineKeyboard: [][]gotgbot.InlineKeyboardButton{
 					{
@@ -440,14 +446,12 @@ func (m moduleStruct) dispatchWarn(b *gotgbot.Bot, ctx *ext.Context, warnType st
 	if !chat_status.IsUserInChat(b, chat, userId) {
 		return ext.EndGroups
 	}
-	var warnusr int64
-	if msg.ReplyToMessage != nil && msg.ReplyToMessage.From != nil && msg.ReplyToMessage.From.Id == userId {
-		warnusr = msg.ReplyToMessage.From.Id
-	} else {
-		warnusr = userId
+	if warnType == "dwarn" && replyTargetMismatch(msg, userId) {
+		_ = refuseReplyMismatch(mc)
+		return ext.EndGroups
 	}
 
-	return m.warnThisUser(b, ctx, warnusr, reason, warnType, warnSourceManual)
+	return m.warnThisUser(b, ctx, userId, reason, warnType, warnSourceManual)
 }
 
 func (m moduleStruct) warnUser(b *gotgbot.Bot, ctx *ext.Context) error {

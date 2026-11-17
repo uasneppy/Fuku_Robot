@@ -141,7 +141,15 @@ var raidAIFires raidPostTracker
 // neither crash the bot nor be lost to the shutdown unseen. raidFire keeps its own bounded
 // context and its 60 s latch, which bounds how many starts exist per chat.
 func raidAIFireAsync(b *gotgbot.Bot, chat gotgbot.Chat, trig raidTrigger) {
+	// Counted before the draining flag is read, as raidAIEnqueue does: a start counted here
+	// is either waited for by StopRaidAI or sees the flag and is refused, so no start
+	// begins behind the drain's back once it gave up waiting.
 	raidAIFires.start()
+	if raidAIDraining.Load() {
+		raidAIFires.finish()
+		log.Debugf("[RaidDetection] AI burst lockdown of chat %d not started: shutting down", chat.Id)
+		return
+	}
 	go func() {
 		defer raidAIFires.finish()
 		defer error_handling.RecoverFromPanic("raidAIFire", "Lockdown")

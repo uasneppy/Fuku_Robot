@@ -520,8 +520,8 @@ func TestNotesWatcherSendsMatchingNote(t *testing.T) {
 	}
 
 	ctx := newModuleMessageContext(bot, chat, member, "#rules")
-	if err := notesModule.notesWatcher(bot, ctx); err != ext.EndGroups {
-		t.Fatalf("notesWatcher() error = %v, want EndGroups", err)
+	if err := notesModule.notesWatcher(bot, ctx); err != nil {
+		t.Fatalf("notesWatcher() error = %v, want nil", err)
 	}
 	calls := client.callsFor("sendMessage")
 	if len(calls) != 1 {
@@ -543,8 +543,8 @@ func TestNotesWatcherPrivateAdminOnlyAndNoFormatBranches(t *testing.T) {
 		t.Fatalf("AddNote(private) setup error = %v", err)
 	}
 	privateCtx := newModuleMessageContext(bot, chat, member, "#secret")
-	if err := notesModule.notesWatcher(bot, privateCtx); err != ext.EndGroups {
-		t.Fatalf("notesWatcher private note error = %v, want EndGroups", err)
+	if err := notesModule.notesWatcher(bot, privateCtx); err != nil {
+		t.Fatalf("notesWatcher private note error = %v, want nil", err)
 	}
 	if calls := client.callsFor("sendMessage"); len(calls) != 1 || calls[0].Params["reply_markup"] == nil {
 		t.Fatalf("private note calls = %+v, want click-through button", calls)
@@ -554,13 +554,13 @@ func TestNotesWatcherPrivateAdminOnlyAndNoFormatBranches(t *testing.T) {
 		t.Fatalf("AddNote(admin) setup error = %v", err)
 	}
 	memberAdminCtx := newModuleMessageContext(bot, chat, member, "#admin")
-	if err := notesModule.notesWatcher(bot, memberAdminCtx); err != ext.EndGroups {
-		t.Fatalf("notesWatcher admin-only member error = %v, want EndGroups", err)
+	if err := notesModule.notesWatcher(bot, memberAdminCtx); err != nil {
+		t.Fatalf("notesWatcher admin-only member error = %v, want nil", err)
 	}
 
 	adminNoFormatCtx := newModuleMessageContext(bot, chat, admin, "#admin noformat")
-	if err := notesModule.notesWatcher(bot, adminNoFormatCtx); err != ext.EndGroups {
-		t.Fatalf("notesWatcher admin noformat error = %v, want EndGroups", err)
+	if err := notesModule.notesWatcher(bot, adminNoFormatCtx); err != nil {
+		t.Fatalf("notesWatcher admin noformat error = %v, want nil", err)
 	}
 	calls := client.callsFor("sendMessage")
 	if len(calls) != 3 {
@@ -649,8 +649,8 @@ func TestNotesWatcherNoFormatDenialDoesNotLogNormalDispatcherStopAsError(t *test
 	}
 
 	ctx := newModuleMessageContext(bot, chat, member, "#raw noformat")
-	if err := notesModule.notesWatcher(bot, ctx); err != ext.EndGroups {
-		t.Fatalf("notesWatcher() error = %v, want EndGroups", err)
+	if err := notesModule.notesWatcher(bot, ctx); err != nil {
+		t.Fatalf("notesWatcher() error = %v, want nil", err)
 	}
 	for _, entry := range hook.Entries {
 		if entry.Message == ext.EndGroups.Error() {
@@ -724,18 +724,18 @@ func TestNotesWatcherAdminOnlyAndMalformedNotes(t *testing.T) {
 	}
 
 	memberCtx := newModuleMessageContext(bot, chat, member, "#admin")
-	if err := notesModule.notesWatcher(bot, memberCtx); err != ext.EndGroups {
-		t.Fatalf("notesWatcher(admin-only/member) error = %v, want EndGroups", err)
+	if err := notesModule.notesWatcher(bot, memberCtx); err != nil {
+		t.Fatalf("notesWatcher(admin-only/member) error = %v, want nil", err)
 	}
 
 	adminCtx := newModuleMessageContext(bot, chat, admin, "#admin")
-	if err := notesModule.notesWatcher(bot, adminCtx); err != ext.EndGroups {
-		t.Fatalf("notesWatcher(admin-only/admin) error = %v, want EndGroups", err)
+	if err := notesModule.notesWatcher(bot, adminCtx); err != nil {
+		t.Fatalf("notesWatcher(admin-only/admin) error = %v, want nil", err)
 	}
 
 	brokenCtx := newModuleMessageContext(bot, chat, member, "#broken")
-	if err := notesModule.notesWatcher(bot, brokenCtx); err != ext.EndGroups {
-		t.Fatalf("notesWatcher(broken) error = %v, want EndGroups", err)
+	if err := notesModule.notesWatcher(bot, brokenCtx); err != nil {
+		t.Fatalf("notesWatcher(broken) error = %v, want nil", err)
 	}
 
 	if calls := client.callsFor("sendMessage"); len(calls) != 3 {
@@ -753,8 +753,8 @@ func TestNotesWatcherPrivateOnlyNoteSendsDeepLinkInGroup(t *testing.T) {
 	}
 
 	ctx := newModuleMessageContext(bot, chat, member, "#secret")
-	if err := notesModule.notesWatcher(bot, ctx); err != ext.EndGroups {
-		t.Fatalf("notesWatcher() error = %v, want EndGroups", err)
+	if err := notesModule.notesWatcher(bot, ctx); err != nil {
+		t.Fatalf("notesWatcher() error = %v, want nil", err)
 	}
 	calls := client.callsFor("sendMessage")
 	if len(calls) != 1 {

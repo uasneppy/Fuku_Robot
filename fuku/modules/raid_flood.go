@@ -123,8 +123,8 @@ return {redis.call('ZCARD', KEYS[1]), redis.call('ZCARD', KEYS[2]), redis.call('
 // content; it reports false for everything that never counts: service messages and
 // messages with nothing to count. User content is text, and a photo, GIF (an animation is
 // checked before the document Telegram also sets on it), sticker, video, video note,
-// voice, audio, document, poll, contact, location, venue, dice or story, forwards and
-// replies included. An album counts once: its parts share the key g:<media_group_id>,
+// voice, audio, document, poll, contact, location, venue, dice, story, checklist or game,
+// and a rich message, forwards and replies included. An album counts once: its parts share the key g:<media_group_id>,
 // every other item is m:<message_id>.
 //
 // A slash-prefixed text (raidFloodIsSlashText) is a command only when some handler takes
@@ -144,12 +144,12 @@ func raidFloodItemKey(msg *gotgbot.Message) (key string, slash bool, ok bool) {
 	media := msg.Animation != nil || msg.Sticker != nil || msg.Photo != nil || msg.Video != nil ||
 		msg.VideoNote != nil || msg.Voice != nil || msg.Audio != nil || msg.Document != nil ||
 		msg.Poll != nil || msg.Contact != nil || msg.Location != nil || msg.Venue != nil ||
-		msg.Dice != nil || msg.Story != nil
-	text := msg.Text != ""
+		msg.Dice != nil || msg.Story != nil || msg.Checklist != nil || msg.Game != nil
+	text := msg.Text != "" || msg.RichMessage != nil
 	if !media && !text {
 		return "", false, false
 	}
-	slash = !media && raidFloodIsSlashText(msg)
+	slash = raidFloodIsSlashText(msg)
 
 	if msg.MediaGroupId != "" {
 		return "g:" + msg.MediaGroupId, slash, true
@@ -157,18 +157,42 @@ func raidFloodItemKey(msg *gotgbot.Message) (key string, slash bool, ok bool) {
 	return "m:" + strconv.FormatInt(msg.MessageId, 10), slash, true
 }
 
-// raidFloodIsSlashText reports whether the text message looks like a bot command the way
-// the dispatcher sees one: its first entity is a bot_command at offset 0, or it begins
-// with "/" and a non-space character. gotgbot's command handler accepts the second form
-// too (a text with no entity at offset 0). Looking like a command is not being one the
-// bot handles: that is only known once the dispatcher has run the handlers.
+// raidFloodIsSlashText reports whether the message looks like a bot command the way the
+// dispatcher sees one. gotgbot's command handler reads the caption of a media message as
+// its text (GetText, GetEntities) and the first paragraph of a rich message, so all three
+// are judged: the first entity is a bot_command at offset 0, or the text begins with "/"
+// and a non-space character (gotgbot accepts a text with no entity at offset 0 too).
+// Looking like a command is not being one the bot handles: that is only known once the
+// dispatcher has run the handlers.
 func raidFloodIsSlashText(msg *gotgbot.Message) bool {
-	for _, entity := range msg.Entities {
+	if msg.RichMessage != nil {
+		return raidFloodRichIsSlash(msg.RichMessage)
+	}
+	for _, entity := range msg.GetEntities() {
 		if entity.Offset == 0 && entity.Type == "bot_command" {
 			return true
 		}
 	}
-	rest, found := strings.CutPrefix(msg.Text, "/")
+	return raidFloodStartsWithSlash(msg.GetText())
+}
+
+// raidFloodRichIsSlash mirrors the command handler's reading of a rich message: only a
+// first block that is a paragraph can carry a command, judged on its content with the
+// leading white space trimmed.
+func raidFloodRichIsSlash(rich *gotgbot.RichMessage) bool {
+	if len(rich.Blocks) == 0 {
+		return false
+	}
+	paragraph, ok := rich.Blocks[0].(gotgbot.RichBlockParagraph)
+	if !ok {
+		return false
+	}
+	return raidFloodStartsWithSlash(strings.TrimLeft(gotgbot.RichBlockContent(paragraph), " \n\t"))
+}
+
+// raidFloodStartsWithSlash is "/" followed by a non-space character.
+func raidFloodStartsWithSlash(text string) bool {
+	rest, found := strings.CutPrefix(text, "/")
 	if !found || rest == "" {
 		return false
 	}

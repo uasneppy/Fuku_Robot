@@ -28,7 +28,8 @@ import (
 // equals newChatID, when either is 0, or when no row matched (for example the
 // second of two migrate service messages, or a chat that is not a Staff Group
 // at all). Both IDs are removed from the cache after the commit, the forward block
-// rules key included.
+// rules key included, and so is the cached link (staff_link_of) of every group
+// linked to the re-keyed Staff Group, because it names the Staff Group's chat ID.
 //
 // A UNIQUE violation means newChatID is already registered; the error is
 // logged and returned and nothing is changed.
@@ -38,7 +39,15 @@ func RekeyChat(oldChatID, newChatID int64) (changed bool, err error) {
 	}
 
 	var affected int64
+	// linked collects the groups linked to the re-keyed Staff Group: their cached
+	// link names the Staff Group's chat ID, so it goes stale with the re-key.
+	var linked []int64
 	err = db.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&models.StaffGroupLink{}).
+			Where("staff_chat_id = ?", oldChatID).
+			Pluck("group_chat_id", &linked).Error; err != nil {
+			return err
+		}
 		now := time.Now()
 		updates := []struct {
 			model  any
@@ -70,6 +79,7 @@ func RekeyChat(oldChatID, newChatID int64) (changed bool, err error) {
 	changed = affected > 0
 	if changed {
 		invalidateStaffKeys(oldChatID, newChatID)
+		invalidateStaffKeys(linked...)
 		invalidateForwardBlockKeys(oldChatID, newChatID)
 		log.Infof("[Staff] RekeyChat: %d -> %d", oldChatID, newChatID)
 	}

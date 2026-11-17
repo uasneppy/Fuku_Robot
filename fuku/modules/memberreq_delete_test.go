@@ -355,6 +355,24 @@ func TestMemberReqDeleteDuringPause(t *testing.T) {
 		quiet(t, env, member, notices)
 	})
 
+	t.Run("a lookup miss with clean names is not deleted (Q1)", func(t *testing.T) {
+		env := newMemberReqEnv(t)
+		env.mreqRules(map[memberreq.Rule]int{memberreq.RulePhoto: models.RequirementActionMute})
+		env.mreqDeleteMessages(true)
+		env.mreqAdminList()
+		env.mreqPause()
+		member := env.mreqMember("Alex", "Smith", "alex")
+		notices := len(env.mreqNotices())
+
+		if got := env.mreqEnforce(env.mreqCase(member)); got.Outcome != memberReqNone {
+			t.Fatalf("enforcement = %+v, want None", got)
+		}
+		if deleted := env.mreqDeleted(); len(deleted) != 0 {
+			t.Errorf("deleted = %v, want none: nothing established that the member breaks a rule", deleted)
+		}
+		quiet(t, env, member, notices)
+	})
+
 	t.Run("a held member the cached list knows as a non-admin keeps being deleted", func(t *testing.T) {
 		env := newPaused(t, true)
 		env.mreqAdminList()

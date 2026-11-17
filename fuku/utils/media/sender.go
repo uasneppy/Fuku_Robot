@@ -262,13 +262,20 @@ func SendNote(b *gotgbot.Bot, ctx *ext.Context, chat *gotgbot.Chat, note *db.Not
 	keyb := keyboard.BuildKeyboard(buttons)
 	keyboardMarkup := gotgbot.InlineKeyboardMarkup{InlineKeyboard: keyb}
 
+	// The note goes where the request came from: a /get sent in the private chat connected to a group
+	// answers in that private chat, never in the group (ctx.EffectiveChat is then the group).
+	destination := ctx.EffectiveChat.Id
+	if ctx.EffectiveMessage != nil {
+		destination = ctx.EffectiveMessage.Chat.Id
+	}
+
 	return Send(b, Content{
 		Text:    noteCopy.NoteContent,
 		FileID:  noteCopy.FileID,
 		MsgType: noteCopy.MsgType,
 		Name:    noteCopy.NoteName,
 	}, Options{
-		ChatID:            ctx.EffectiveChat.Id,
+		ChatID:            destination,
 		ReplyMsgID:        replyMsgID,
 		ThreadID:          threadID,
 		Keyboard:          &keyboardMarkup,
@@ -345,9 +352,12 @@ type GreetingMessage struct {
 	CaptionAbove bool
 	Keyboard     *gotgbot.InlineKeyboardMarkup
 	ThreadID     int64
+	// ReplyMsgID makes the greeting a reply to that message (the /welcome or /goodbye command
+	// that shows it). Zero, the join and the leave, sends a plain message.
+	ReplyMsgID int64
 }
 
-// SendGreetingMessage sends a greeting to a chat, never as a reply and with link previews off. CaptionAbove only
+// SendGreetingMessage sends a greeting to a chat with link previews off, as a reply only when ReplyMsgID is set. CaptionAbove only
 // takes effect for a type CaptionAboveEligible accepts, so a stored "on" with any other media sends the request it
 // always sent.
 func SendGreetingMessage(b *gotgbot.Bot, chatID int64, msg GreetingMessage) (*gotgbot.Message, error) {
@@ -359,7 +369,7 @@ func SendGreetingMessage(b *gotgbot.Bot, chatID int64, msg GreetingMessage) (*go
 		CaptionAbove: msg.CaptionAbove && CaptionAboveEligible(msg.MsgType),
 	}, Options{
 		ChatID:            chatID,
-		ReplyMsgID:        0,
+		ReplyMsgID:        msg.ReplyMsgID,
 		ThreadID:          msg.ThreadID,
 		Keyboard:          msg.Keyboard,
 		NoFormat:          false,

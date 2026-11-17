@@ -72,7 +72,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`lockdownWorkerStopWait` plus grace). It cancels the lockdown worker and waits at most
   5 s (`lockdownWorkerStopWait`), because every lockdown row resumes from the database: a cycle cut off at shutdown
   loses nothing, and a restart or a second replica picks the rows up again. A claim (an acting or unbanning joiner row
-  with `claimed_at`) older than 2 minutes (`lockdownStaleClaim`) belongs to a worker that stopped: the first cycle of any
+  with `claimed_at`) older than 5 minutes (`lockdownStaleClaim`, above the 4 min 40 s one paced call can take with
+  `lockdownPacerOptions`, `TestLockdownStaleClaimOutlastsAPacedCall`) belongs to a worker that stopped: the first cycle of any
   replica releases it through `lockdown.ReleaseStaleClaims`, before any other step and without counting an attempt.
   Acting goes back to pending in an active lockdown, to banned (a ban) or cancelled (a join request) in a lifting one,
   and unbanning goes back to banned, so a restart resumes every ban, decline and unban and the live check at the lift
@@ -82,6 +83,15 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`raidPosts`, a counter and not a `sync.WaitGroup`, because the drain gives up after its wait while a new post can still
   start). A post is best effort: the lockdown it announces is already in place and its alert is driven by the database,
   so a post still running when the 2 s are up is cut off with the process and only that notice is lost.
+- `DrainAISpamChecks` is the `/aispam` pool's drain, a plain shutdown handler (`RegisterHandler`, the 10 s default) that
+  `main.go` registers right after `RegisterRaidAIDrain`, so LIFO runs it before `StopRaidAI`. It sets `aispamDraining`
+  for good (a late update is shed, never started; nothing resets it), cancels the pool's root context first
+  (`aispamContext`: every TypeSafe call of a check derives from it, so all of them abort at once, and a check cut off or
+  dropped from the queue counts as shed, never as a provider failure or a breaker count), then waits at most
+  `aispamDrainTimeout` (9 s, under the handler's 10 s) for the workers. A lockdown start an AI verdict asks for is
+  refused once `raidAIDraining` is set (`raidAIFireAsync` counts the start in `raidAIFires` before it reads the flag), so
+  no start begins behind `StopRaidAI`'s back. Tests wait for checks with `waitAISpamChecks`, which closes and cancels
+  nothing, and a test that runs the drain restores the pool with `restoreAISpamPool` (`TestShutdownDrainsAISpamChecks`).
 - `StopRaidAI` is a drain registered after DB-close as well, through `RegisterRaidAIDrain` (`raidAIStopWait`, 1 s, plus
   grace), in `main.go` right after `RegisterRaidPostsDrain`. Shutdown is LIFO, so it runs after `DrainAISpamChecks`
   (whose verdicts can start lockdowns) and before `StopRaidPosts` (a start can post a notice) and the database close. It
@@ -121,7 +131,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   holds: all four of `CAPTCHA_WEB_BASE_URL`, `TELEGRAM_MINI_APP_SHORT_NAME`, `TURNSTILE_SITE_KEY` and
   `TURNSTILE_SECRET_KEY` (some but not all stops startup, and the secret is registered with `logredact`). `main` builds
   the page's string tables from `i18n.StringTable(captchaweb.PageLanguages, captchaweb.PageKeys)` (a missing or empty
-  key is fatal), installs the runtime with `modules.ConfigureCaptchaWeb` (`StartNotReady` true, `TrustedProxies` from
+  key in any of the languages, with no fallback to English, is fatal), installs the runtime with `modules.ConfigureCaptchaWeb` (`StartNotReady` true, `TrustedProxies` from
   `CAPTCHA_WEB_TRUSTED_PROXIES`, a bad entry stops startup) and mounts `modules.CaptchaWebRoutes()` (`/captcha`,
   `/captcha/verify`, `/captcha/health`) through `Server.Handle` before `Start`. The patterns carry no method on purpose: a
   Go 1.22 method pattern makes the mux answer a wrong method itself with a bare text 405 that has none of the headers
@@ -135,17 +145,19 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   own `Stop` runs first and a web pass's finish joins `StopCaptchaLifecycle`. The captcha routes share the port with
   `/metrics`, `/db_metrics`, `/health`, pprof and the webhook, so `modules.CaptchaWebStartupWarnings` makes `main` warn
   when `METRICS_AUTH_TOKEN` or `CAPTCHA_WEB_TRUSTED_PROXIES` is empty, and the owner's public proxy must forward only
-  `/captcha` and `/captcha/*` (D-31; the bot enforces no path allow-list).
+  `/captcha` and `/captcha/*` (D-31; the bot enforces no path allow-list). With `METRICS_AUTH_TOKEN` set, `/metrics`,
+  `/db_metrics` and `/debug/pprof/` all need it as a bearer token (`requireMetricsAuth`). `/health` asks Redis with `PING`
+  (it writes no key) and, with `DISABLE_CACHE=true`, is not unhealthy when there is no Redis.
 
 ## Handlers
 
 - Group numbers are execution order: `-10` captcha sweeper · `-9` forward blocklist watcher (the only handler of the group, never ends an update; see the `StaffForwardBlock` bullet) · `-8` member deletion (two handlers: the edit handler and the self-destruct watcher, a `handlers.NewMessage(message.All, ...)` with no setter; neither ends an update, see the `MemberDeletion` bullet) · `-7` lockdown join guard (it also counts the join surge
   before it reads the lockdown) · `-6` fed-ban · `-5` service message deletion watcher (the only handler of the group, never ends an update, `SetAllowBot`; a deletable service type is deleted now or queued by the group's stored rule) · `-4` raid flood counter (counts everything but slash-prefixed texts, never ends an update; there is no
   antiraid handler any more) · `-3` staff watchers (chat-migration re-key; later ownership and bot health) · `-2` admin-cache (`my_chat_member` only) and the member requirements watcher (supergroup messages only, the only message handler of the group, `ext.ContinueGroups` on every path; never add another message handler to group -2) ·
-  `-1` users tracker · `0` commands/help/greetings · `1` settings typed-reply door (private messages only;
+  `-1` users tracker (records real users only: no `sender_chat`, no non-positive ID, no Telegram service account, `trackableUser`) · `0` commands/help/greetings · `1` settings typed-reply door (private messages only;
   `ext.ContinueGroups` for anyone with no wait and no marker, consumes and ends the update otherwise) · `2` raid AI candidate watcher (hands a new member's suspicious
   item to the raid AI pool, never ends an update) · `3` aispam · `4` antiflood · `5`/`6` locks · `7` blacklists ·
-  `8` reports+reactions · `9` filters · `10` pins · `11` log-channel · `12` late raid flood counter (slash-prefixed texts only; keep it
+  `8` reports+reactions (the `@admin` watcher, `reportWatch`, returns `nil` after reporting so groups 9 to 12 still run) · `9` filters · `10` pins · `11` log-channel · `12` late raid flood counter (slash-prefixed texts only; keep it
   after every other group).
 - gotgbot stops a group at the first matching handler. Watchers return `ext.ContinueGroups`; commands return
   `ext.EndGroups`. A group-0 watcher returning `nil` silently kills every later group-0 handler.
@@ -157,7 +169,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   accepts every name in the list, so an unchecked name is a silent no-op (`TestDisableRefusesNamesThatHaveNoCheck`).
   `/blocklists` checks its own name and then `blacklists`, so disabling either silences the alias. Do not add replies for failed checks; the pipeline sends them. Every command handler,
   wrapped or raw, is built by `helpers.NewBotCommand` (`fuku/utils/helpers/command_registry.go`), which records the
-  lower-cased name and returns the library's own command handler unchanged (so routing is the library's). Command
+  lower-cased name and returns the library's own command handler (so routing is the library's) with one change to its
+  response: an automatic forward (`helpers.IsAutomaticForward`: `is_automatic_forward`, or the Telegram service account
+  777000 posting on behalf of a chat) returns `ext.ContinueGroups` at once, with no reply and no I/O, so a linked
+  channel's post never runs a command, whatever it says (777000 is in `tgAdminList`, which every admin predicate counts as
+  an administrator of every chat; `TestAutomaticForwardRunsNoCommand`, `TestIsAutomaticForward`). A watcher that judges a
+  sender's authority checks `helpers.IsAutomaticForward` itself (`bindSetLogForward` does). Command
   deletion reads the registry through `helpers.IsBotCommand`, so only a command this bot registers is ever deleted.
   `WrapCommand`'s `register` and `MultiCommand` go through it, and `TestNoRawNewCommand` (a `go/parser` walk of `fuku/`
   and `main.go`, tests excluded) fails on any other construction of the library's command handler. Never call
@@ -369,9 +386,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   unconfigured stored value counts as Off there, or every message of every member would start a job for ever) the same
   round also reads `fuku:memberreq:nv:<verdict key hash>`, `fuku:memberreq:nm:<user>` and `fuku:memberreq:nu:<chat>:<user>`
   (`memberReqAIWatchQueue`: the canonical names and the verdict key come from pure Go, with `config.AppConfig.AnthropicModel`),
-  and the AI part is satisfied when the verdict parses and is below the bar, or when the marker is absent and the baseline
-  equals the current names hash (`memberReqAIWatchSatisfied`, pure: a miss, an unparsable value, NaN, an infinity and any
-  Redis error are not satisfied); names that are not judgeable are satisfied with no key read, and everything else is one job
+  and the AI part is satisfied only when the marker is absent and either the verdict parses and is below the bar or the
+  baseline equals the current names hash (`memberReqAIWatchSatisfied`, pure: a miss, an unparsable value, NaN, an infinity
+  and any Redis error are not satisfied; a marker holder is never satisfied, so a joiner whose names have a cached pass gets
+  one job that records the baseline and deletes the marker from the cache with no provider call, Q3); names that are not judgeable are satisfied with no key read, and everything else is one job
   after `memberReqMissExempt`. `memberReqLookupCached` takes the names for this and its complexity is held at 18 or less by
   keeping the AI part in those two small functions. The watcher writes no verdict, baseline or marker and calls nobody.
   While the AI breaker is paused for the chat (`memberReqAIPaused`: in memory and pure, the provider-wide pause or the group's
@@ -491,7 +509,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   on the wait), so the next message is read as the keyword again, and an error is `settings_check_failed` with the wait kept. An accepted step 1 is one
   `settingsInputAdvance` (the normalised entry in `w`, this message's ID in `q`, a new nonce, ten fresh minutes: a lost advance, from a second
   delivery, a Cancel or a newer Add, sends nothing), then the step-2 prompt is sent as a reply to the step-1 message and recorded as `m`
-  (`settingsInputSetPrompt`) and the step-1 prompt is edited to `settings_entries_step_done` with no keyboard. Step 2 ignores with no reply a message
+  (`settingsInputSetPrompt`; the send has its own 10 s bound and the record its own detached context, so a slow send never leaves `m` unrecorded) and the step-1 prompt is edited to `settings_entries_step_done` with no keyboard. Step 2 ignores with no reply a message
   whose ID is not greater than `q` (U-11: a redelivered keyword message is never stored as the content), extracts the content with
   `content.ExtractTypedNoteOrFilter(msg, w, IsFilter, the sender's language)` (a refusal is `DataType == -1`, which the commands read the same way,
   because the result is created holding the "needs content" text and never cleared; the wait stays with `w`), runs `Check` again (a refusal now ends
@@ -558,8 +576,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   Telegram service identity (`staffServiceUserIDs`) is answered "post as yourself" (`lockdown_alert_post_as_yourself`)
   before any read; `r` must parse (`lockdownParseCopyID`, 1 up to the largest 63-bit value) and name an existing copy,
   else "no longer valid"; the copy row is honoured only on the chat it was posted in (`dest_chat_id` equals the pressed
-  message's chat), else "no longer valid" with no lockdown read and no presser lookup; the lockdown must exist; a
-  lockdown that is not active makes the press stale (below); only then does the action run. Every path answers the
+  message's chat), else "no longer valid" with no lockdown read and no presser lookup; a card's Confirm (`lc`, `bc`,
+  `rc`) or Cancel (`x`) is honoured only on a card of that copy (`lockdownIsCardOf`: a message that replies to the copy's
+  message and is not the copy itself), else "no longer valid" with no lockdown read, no presser lookup and no edit, so
+  forged card data sent on the alert copy or another message edits nothing (`TestLockdownAlertForgedCardPress`); the
+  lockdown must exist; a lockdown that is not active makes the press stale (below); only then does the action run. Every path answers the
   callback query exactly once.
 - Actions: Lift is `a=lk&r=..` (first row of the alert), Ban recent joiners is `a=bn&r=..` (second row; the label
   carries N, or a generic label when N is 0 or unreadable) and Revoke link is `a=rk&r=..` (third row). Each ask posts a
@@ -579,7 +600,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`lockdownInviteAuthority`); the restrict right is not enough.
 - A press on a button of a lockdown that is not active (lifting or lifted) is judged before any action
   (`lockdownStalePress`): it answers "Already lifted by X at T", changes nothing, posts no card, and closes that copy at
-  once (`lockdownCloseSlotNow`, or edits a confirm card to the same text). The copy row names its own lockdown, so the
+  once (`lockdownCloseSlotNow`, or edits a confirm card of that copy to the same text; any other message is left as it
+  is). The copy row names its own lockdown, so the
   handler never looks at the chat's current lockdown and an old alert's button cannot reach a newer lockdown of the
   same group.
 - Revoke link is shown only while the copy's stored link is one the bot can revoke (`lockdownLinkRevocable`: a link in
@@ -967,8 +989,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - The Deletion page (`settings_deletion.go`, page `d`, `Order` 85, icon 🧹, `settings_page_del`, between Member requirements and
   Access, Phase 16) registers from its own file. Its one framework hook is the optional `settingsPage.Hidden func(group
   *gotgbot.Chat) bool` (D-28, the only edit to `settings_pages.go` and its matching guard in `openPage`): `settingsMainEntries`
-  skips a hidden page without calling its `MainState`, and `openPage` refuses it with `common_callback_invalid_request`, so
-  the page is not drawn or opened in a Staff Group (D-18). `Hidden` is a fresh Staff Group read (`deletionStaffLookup`,
+  skips a hidden page without calling its `MainState`, `openPage` refuses it with `common_callback_invalid_request`, and
+  `runControl` and `runPageAction` refuse every control and action of a hidden page with the same alert before its right is
+  judged (`settingsPress.pageHidden`), so the page is not drawn, opened or written in a Staff Group (D-18) and a forged press
+  is answered alike whoever presses it. `Hidden` is a fresh Staff Group read (`deletionStaffLookup`,
   true only for a definite row; an error hides nothing), `MainState` makes the same read and answers the unknown mark on an
   error, and `Open` is the cannot-open edit for an unreadable row. Three levels, all built from two tables (the sections
   `settingsDelSections`, `s` Service messages, `b` Bot messages and, since Phase 17, `m` Member messages, icon 💬, and the
@@ -998,7 +1022,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   settings_del_right_unknown` for anything that could not be established, never an error text, a refusal or the
   cannot-open edit, and no button is ever disabled (a rule can be set with the line showing). Main makes no Telegram call.
   `dl`, `dr` and every control run `settingsDelStaffGate` first, after the press pipeline and before any read or write
-  (a Staff Group answers the generic invalid-request alert and writes nothing, an unreadable row is the cannot-open edit).
+  (a Staff Group answers the generic invalid-request alert and writes nothing, an unreadable row is the cannot-open edit);
+  in a Staff Group the framework's `Hidden` check already refuses them before the right, so an administrator without
+  `can_change_info` gets the same invalid-request alert.
   The Member messages section (`m`, Phase 17, 17-09) is table entries only (`settings_pages.go`, `settings_menu.go` and
   `settings_card.go` are not edited). Its hub cell is the odd last one alone on its row, so the hub is three state lines and
   rows of widths `[2 1 2]` (the grid, then Back and Close, which opens Main), and its list (`a=dl&t=m`, no list hint) is
@@ -1390,9 +1416,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `PrivateOnly` (a group menu, the Staff Group's own included, shows the framework's note and reads nothing) and gives the list table's new
   optional `Hidden func(*gotgbot.Chat) bool` (`settingsFwdBlockHidden`: true unless the cached gate `staff.GetStaffGroup` answers a Staff
   Group, an error or a missing row hides the page, and the gate is the variable `settingsFwdBlockStaffGate`). `settingsListPage` passes `Hidden`
-  to the page, so Main leaves the page out and `openPage` refuses a forged `op` with `common_callback_invalid_request`, and
-  `settingsListGuardHidden` wraps the `Run` of every action of a table that has the hook, so a forged press of any of the page's seven codes in
-  a chat that is not a Staff Group (or whose gate says no) is the same invalid-request alert, writes nothing and reads nothing. The
+  to the page, so Main leaves the page out and `openPage` refuses a forged `op` with `common_callback_invalid_request`, and the
+  framework's `Hidden` check in `runPageAction` (`settingsPress.pageHidden`, before the right) refuses every action of the page, so a forged
+  press of any of the page's seven codes in a chat that is not a Staff Group (or whose gate says no) is the same invalid-request alert,
+  whoever presses it (never the owner-only alert of the write right), writes nothing and reads nothing. The
   codes are `vg` (pager), `vx` (delete ask), `vy` (delete Yes), `va` (Add), `vc` (Cancel, `t` = `s`), `ve` (the action screen, view only) and
   `vs` (the action set, `v` one of `blacklistActionValues`), each with the owner field `c`, and the static part table gains `(v,s)`. Writes
   (the delete ask and Yes, Add and `vs`, and so the typed reply) declare the tenth right `settingsRightStaffOwner`, the live creator of the
@@ -1671,7 +1698,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   evicts it on this replica only; list freshness-critical keys in `skipLocal` (`fuku/db/cache/local.go`). Tests that
   write rows directly must call `cache.ResetLocalForTest()` or `DeleteCache` before reading through the cache.
 - Two packages are named `cache`; the loader and generation guards are in `fuku/db/cache`, not `fuku/utils/cache`.
-- Operational Redis keys (`fuku:anonAdmin:*`, `fuku:staff:*`, `fuku:lockdown:*`, `fuku:raid:*`, `fuku:memberreq:*`) sit outside the
+- Accepted limit (review item I9, owner decision): the generation guard is per process. A load on replica A that read
+  the database before replica B's write and `DeleteCache` can still `SET` the old value into Redis after B's `DEL`,
+  and every replica then serves it until the key's TTL ends or the next write drops it. A Redis-side generation with a
+  Lua compare-and-set was not added: the write goes through gocache's marshaler and store (a memory store in tests), so
+  it would bypass that layer, duplicate its encoding and add a round trip to every load and every delete. Keys whose
+  staleness matters are read fresh (`*Fresh`, never cached) or kept short; a new cached setting that must change at once
+  on every replica needs that too, not only `skipLocal`.
+- Operational Redis keys (`fuku:anonAdmin:*`, `fuku:staff:*`, `fuku:lockdown:*`, `fuku:raid:*`, `fuku:memberreq:*`, `fuku:fed:*`) sit outside the
   `fuku:cache:` prefix; `CLEAR_CACHE_ON_STARTUP` does not clear them. `fuku:antiraid:*` is retired: nothing reads or
   writes it, and `sweepRetiredAntiRaidKeys` removes what the old raid mode left, once per process at startup.
 - `fuku:settings:sweep:lock` (new family `fuku:settings:*`, also outside the `fuku:cache:` prefix, so
@@ -1695,7 +1729,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `settings_input.go`: Set (writes both keys and returns the replaced wait's fields; it deletes the hash first, so the
   refusal fields below never survive a new Set), note-refusal (adds the field `r<message id>` for a refusal reply, only for the
   holder of the nonce and at most 40 fields in all), claim (only the holder of the
-  current nonce, once), finish and release (only the claim holder; finish and release run on `context.WithoutCancel` with
+  current nonce, once; a wait with less than `settingsInputClaimMinTTL` (60 s) left is extended to it, its `x` with it, and
+  the marker is rewritten to outlive it by the usual 5 minutes, so the write after a claim can still finish or release it), finish and release (only the claim holder; finish and release run on `context.WithoutCancel` with
   their own bound, so a cancelled update never strands a claim; release removes only `k`, so the wait keeps its remaining
   TTL), and the Cancel button's and `/cancel`'s scripts (a held claim answers busy and deletes nothing; the button also
   compares `c`, `p`, `t` and the pressed message's ID with `m` or a noted refusal `r<id>`, so a stale prompt never ends a
@@ -1882,12 +1917,15 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   except the limit action the warn module takes when a warn reaches the limit (`applyWarn`'s kick or ban): that one call is
   neither paced here nor bounded by the job context, and is bounded instead by the HTTP client's 30 s timeout and the
   per-chat cap.
-- `fuku:memberreq:{<chat>}:cap:<unix minute>` and `fuku:memberreq:{<chat>}:paused` are the member requirements' per-chat
-  brake (`memberreq_limits.go`, the chat ID a hash tag, outside the cache prefix so `CLEAR_CACHE_ON_STARTUP` keeps them).
-  The counter is a fixed 60 s window (`raidNow().Unix()/60`, so a test can stop the clock) of punishment attempts,
-  `INCR` plus `EXPIRE 120` in one pipeline under 250 ms, counted before the claim (`memberReqCapAllow`, between the live
-  lookup and `memberreq.ClaimHold`), so an attempt that is refused, lost or never confirmed still counts and a bot that keeps
-  being refused reaches the pause. More than `memberReqCapPerMinute` (10) refuses the punishment and sets the latch with
+- `fuku:memberreq:{<chat>}:cap:<unix minute>`, `fuku:memberreq:{<chat>}:capm:<unix minute>` and
+  `fuku:memberreq:{<chat>}:paused` are the member requirements' per-chat brake (`memberreq_limits.go`, the chat ID a hash
+  tag, outside the cache prefix so `CLEAR_CACHE_ON_STARTUP` keeps them). The counter is a fixed 60 s window
+  (`raidNow().Unix()/60`, so a test can stop the clock) of the members whose punishment was attempted (Q2): one Lua script
+  (`memberReqCapScript`, under 250 ms) `SADD`s the user ID to the minute's `capm` set, `INCR`s the `cap` counter only when
+  the `SADD` added the member, renews `EXPIRE 120` on both and returns the counter, counted before the claim
+  (`memberReqCapAllow`, between the live lookup and `memberreq.ClaimHold`), so an attempt that is refused, lost or never
+  confirmed still counts its member, several jobs of one member (on one replica or several) count once, and a member
+  already counted within the cap stays allowed in that minute. More than `memberReqCapPerMinute` (10) refuses the punishment and sets the latch with
   `SET NX EX` for `memberReqPause` (10 minutes); only the caller whose `SET NX` succeeded posts the one `mreq_notice_paused`
   (`{n}` the cap, `{minutes}` the pause) in the group's language through `memberReqPostNotice`, best effort, so one notice
   is posted however many replicas tip the cap at once. While the latch stands (`memberReqPaused`, read after the held path
@@ -2261,7 +2299,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   unlike the lookups above, it ignores `mode.Fresh` and `mode.Classify` (the AI row answers from the cache whatever the mode).
 - `fuku:memberreq:warned:<chat>:<user>` is the recorded-warn note of the member requirements executor
   (`memberreq_warned.go`, WR-01): the value is the decimal ID of the hold whose warn was just stored, `SET EX` for
-  `memberreq.StaleClaim` plus 10 minutes (`memberReqWarnedGrace`), written inside the warn lock before the hold is marked
+  `memberreq.StaleClaim` plus 7 days (`memberReqWarnedGrace`, because the reclaim comes at the member's next violating
+  message, which can be days later, Q6), written inside the warn lock before the hold is marked
   punished and deleted once the mark landed, so it survives only when the mark failed three times (or the process stopped
   between the two). `memberReqAdoptRecordedWarn` reads it when a stale pending Warn hold is reclaimed for another Warn and
   compares the value with the hold's ID, so a note an earlier episode left never matches a later hold. Redis only and best
@@ -2339,7 +2378,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   with one fresh read per distinct chat (a Staff Group chat's entries are dropped, a failed read drops that chat's entries
   and is returned while other chats are written). `deletion.CountPending` is the exact count of a chat's queued rows of one
   kind bounded by a limit (`SELECT count(*) FROM (SELECT 1 ... LIMIT n)`, served by `uk_scheduled_deletions_message`) and
-  `deletion.DropPendingMessage` deletes the one pending row of a `(chat, message, kind)`; no migration was added for them.
+  `deletion.DropPendingMessage` deletes the one pending row of a `(chat, message, kind)` and
+  `deletion.DropPendingMessageAnyKind` every pending row of a `(chat, message)`, whatever its kind (the pin drop); no
+  migration was added for them.
   The queue is read and written only through fresh queries, so no `DeleteCache` applies, and it is
   never part of backup, export, import or reset. The worker (`deletion_worker.go`) claims at most 1000 due rows per cycle
   (`deletionBatch`) and screens the claimed member:selfdestruct rows against the chat's current rule, releases claims older than 2 minutes (`deletionStaleClaim`) without counting an attempt, ends a cycle
@@ -2352,6 +2393,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - `fuku:delete:pace:next` and `fuku:delete:pace:block` are the fleet-wide Telegram pacing of the deletion code
   (`deletionPaced`, `deletionPacer`: 100 ms, 3 retries, 60 s): the staff pacer's slot-plus-block design with its own keys, so
   deletions, member requirements, lockdown and staff fan-outs each keep their own budget (`TestDeletionPacerIsIndependent`).
+- `fuku:fed:pace:next` and `fuku:fed:pace:block` are the fleet-wide Telegram pacing of the federation fan-out
+  (`fedPaced`, `fedPacer`: 100 ms, 3 retries, 60 s, each call bounded by `fedCallTimeout`, 10 s): every ban of
+  `applyActiveFban` and every unban of `applyActiveUnfban` goes through it, with its own keys so an `/fban` across many
+  groups spends no other budget. A failed group is logged at Warn by chat and user ID, and `runFedFanout` follows the
+  federation notice (owner and log chat, as `notifyFedAction` sends it) with `<FBAN|UNFBAN> <id>: N of M groups failed`
+  whenever any group failed. A database error removing an fban answers `common_settings_save_failed`, and only a missing
+  ban answers `feds_unfban_not_banned`. The fan-out is a recover-protected goroutine with no shutdown drain (a restart cuts
+  it off, accepted). They sit outside the `fuku:cache:` prefix, so `CLEAR_CACHE_ON_STARTUP` keeps them.
 - `fuku:delete:norights:<chat>` is the 10 minute negative latch of a chat the bot cannot act in (`deletionLatchKey`,
   `deletionLatched`, `deletionSetLatch`, `deletionLatchTTL`), outside the `fuku:cache:` prefix so `CLEAR_CACHE_ON_STARTUP`
   keeps it. Its value is the scope: `gone` (the bot is not in the chat, was kicked, or the chat is gone or was upgraded: stops
@@ -2378,6 +2427,18 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`media_below`, `once`, `file_id`, `media_type`, `btns`); an export made before the migration has none of those keys and
   imports as zeros, the old behaviour (`TestOldGreetingsExportDecodesToZeros`). `RulesSettings.HasContent` (a non-blank
   text, a file ID or at least one button) is the one test of "Rules is set".
+- A backup never carries what belongs to the source group alone (`fuku/db/backup`, quick task 261117-w4n). The IDs of
+  the last welcome and goodbye (`welcome_last_msg_id`, `goodbye_last_msg_id`) are left out of an export and stored as 0 by
+  an import (`dropGreetingMessageIDs`), so "Delete last" in the target never deletes one of its own messages. An import
+  never links a log channel: `importLogChannels` applies the six category flags to the target's own log channel when it
+  has one and otherwise writes nothing and sets `ImportReport.LogChannelSkipped`; a backup with no log channel leaves the
+  target's link alone (`/reset` still clears it). Imported filters, blacklist words and notes get the commands' checks
+  (`content.KeywordTooBroad`, at most `content.ListKeywordMaxRunes` code points, `content.NoteNameInvalid`, every button
+  link `content.ValidButtonURL`), are stored lower-cased, a repeat after lower-casing keeps the first, and every entry left
+  out is counted in `ImportReport.Skipped`. `ImportChatDataReport` returns the report and the `/import` confirmation
+  adds `backup_import_skipped_entries` and `backup_import_log_skipped` to its success message
+  (`TestGreetingsBackupDropsLastMessageIDs`, `TestImportNeverTakesTheLogChannel`, `TestImportSkipsInvalidListEntries`,
+  `TestBackupConfirmImportReportsWhatItLeftOut`).
 - `UpdateRecord` skips zero values. Use `UpdateRecordWithZeroValues` to write `false`/`0`/`""`. Both return
   `gorm.ErrRecordNotFound` when no row matched.
 - Check `TableName()` before raw SQL: `ConnectionSettings→connection` (per user), `ConnectionChatSettings→
@@ -2386,6 +2447,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 ## Migrations
 
 - `migrations/*.sql` is the schema source of truth. Never edit an applied file; the SHA-256 checksum aborts startup.
+  Both appliers check every applied file's checksum on every run, also when nothing is pending, and warn about a
+  recorded version that has no file (it changes nothing).
 - Name new files with a timestamp greater than every existing one; order is plain filename sort.
 - Each file runs in one transaction: no top-level `BEGIN`/`COMMIT`/`ROLLBACK`, no `CREATE INDEX CONCURRENTLY`.
 - Change `fuku/db/migrations/runner.go` and `scripts/migrate_psql.sh` together; both appliers must agree.
@@ -2669,7 +2732,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   Marking a hold punished (`memberReqMarkPunished`) is tried 3 times (`memberReqMarkAttempts`, `memberReqMarkRetryWait`
   apart, one detached 5 s record context, the write behind the `memberReqMarkHold` seam). A warn whose mark still fails
   must never be punished twice (WR-01): `afterRecord` first writes `fuku:memberreq:warned:<chat>:<user>` (value the hold's ID,
-  `StaleClaim` plus 10 minutes, best effort and Redis only: no Redis or a Redis error writes and finds nothing and the
+  `StaleClaim` plus 7 days, best effort and Redis only: no Redis or a Redis error writes and finds nothing and the
   reclaim then warns again, accepted) and drops it once the mark landed; the reclaim of a stale pending hold that was a Warn
   with a Warn action now (`memberReqAdoptRecordedWarn`, after the claim was won) finds the note naming that hold, marks the
   hold punished (a failure leaves it pending and the next reclaim adopts it again), warns and announces nothing and returns
@@ -2727,7 +2790,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   paced `deleteMessage`, only for a message case with a message ID, never for a join or a clean member) deletes the
   violating message after the punishment whatever became of it (it took effect, was refused or unknown, or another
   replica won the claim), every further message of a held member, and during a pause the message of a violator the
-  cached admin list knows as a non-admin. It is not a punishment and posts no notice; a failed delete is only logged
+  cached admin list knows as a non-admin, only when the sender's names break a name rule of the case's settings
+  (`memberReqNameBreach`, the watcher's own check): a member handed to a job only for a lookup miss has established no
+  breach, so a pause never deletes their message (Q1). It is not a punishment and posts no notice; a failed delete is only logged
   (chat, user and message IDs and the error code, never the content) and never changes a punishment, hold or notice. A
   message is deleted only when its sender is established as a non-admin (MREQ-09), by `memberReqSenderNonAdmin`: on the
   punishing path the job's own live `getChatMember`; on the held and paused paths the cached admin list read at the
@@ -2761,7 +2826,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `memberReqLookupJoinBudget` (a joiner whose lookup does not finish in 4 s is welcomed, leaves no hold, and is caught at their first
   message, so a raid of joins never parks a dispatcher goroutine for the entry's 15 s; `memberReqJoinThenWelcome` itself is unchanged,
   because `memberreq.AnyRuleOn` reads the eight-rule table, so a group with only the photo rule on is screened at join): a kick or ban sends no welcome, a mute sends none and has stored `welcome_held` on its hold
-  at the claim, a warn posts its notice and the usual welcome follows (a warn whose limit action kicked or banned is a
+  at the claim (unless its notice could not be delivered and `memberReqUndeliveredMute` lifted the mute again: the
+  executor then answers `memberReqNotApplied` and the joiner is welcomed, Q4), a warn posts its notice and the usual welcome follows (a warn whose limit action kicked or banned is a
   removal and gets none), and a clean member, an exempt one (approved, a live administrator, a bot), a check that could
   not be answered, and a joiner whose Mute is refused because an administrator's restriction is on them (CR-01: a rejoiner
   restricted for good, say; `memberReqNone`, no hold) are welcomed. The settings the entry read are only the pre-filter:
@@ -2770,7 +2836,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   every captcha unmute (the pass, `restoreCaptchaPermissions`, restart recovery and the `captcha_muted_users` retry
   worker). While `memberReqLive()` is false it reads nothing and changes no captcha unmute: no hold read, no Telegram call,
   no error (`TestMemberReqCaptchaGuardOffUntilLive`, with a counting always-failing `memberReqHoldRead`). The switch is
-  true in production, so the guard reads a hold on every captcha unmute. Once the switch is on it reads the member's hold, and a punished requirement mute makes it re-apply `MutedPermissions` with `until_date`
+  true in production, so the guard reads a hold on every captcha unmute. Once the switch is on it reads the member's hold, and a punished requirement mute, or a pending one whose marker the
+  member's live record still carries (`memberReqPendingMuteLive`, one paced `getChatMember`, only for a pending mute hold; a
+  read that fails fails closed like an unreadable hold, Q5), makes it re-apply `MutedPermissions` with `until_date`
   the hold's own marker through `memberReqPaced` instead of unmuting, so a captcha pass never frees a held member and the
   marker stays valid for "I fixed it" (D-08). A hold-read error fails closed: the guard returns an error wrapped with the
   chat and user IDs only (`errMemberReqHoldUnreadable`, none of the database's text), `isPermanentUnmuteError` answers
@@ -2960,18 +3028,20 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   automatic forward), bots and the bot's own messages, Telegram service IDs, every service message (the service rules own
   them), a private chat, a Staff Group (`deletion.ScheduleBatch` refuses it and fails closed on a read error, DEL-07) and a
   member whose captcha is pending (group `-10` holds and ends that update). Pinned messages stay (D-11): a `pinned_message`
-  service message drops the pending row of the message it names (exactly its chat, message, kind and the pending state: an
-  acting row is left to the worker), and the bot's own `/pin` does the same through the hook in `pins.go` after its successful
+  service message drops every pending row of the message it names, whatever its kind (`deletion.DropPendingMessageAnyKind`:
+  exactly its chat, message and the pending state, so a member's self-destruct row and the row of a bot message an admin
+  pinned, a welcome, the rules or a punishment reply, both go; an acting row is left to the worker; I2), and the bot's own `/pin` does the same through the hook in `pins.go` after its successful
   `pinChatMessage`, because the pin service message the bot causes has a bot sender that a watcher without `SetAllowBot` never
   sees. `memberDeletePinned` first notes the pin in a small bounded in-process set (`memberPinnedNotes`: `memberPinnedTTL` 10 s,
   `memberPinnedMax` 4096, expired notes pruned on every write, the oldest evicted when full, on the replica that handled the
   pin) which the flush consults right before its write (`memberDeleteDropPinnedEntries`, counted in `memberDeletePinnedDropped`,
   correct and not a shed), so a message pinned while it sat in the buffer or in the flush's screening is dropped instead of
-  written; it then drops the pending row through the `memberDeleteDropPinned` seam, retried once on a fresh context because the
+  written; it then drops the pending rows through the `memberDeleteDropPinned` seam, retried once on a fresh context because the
   pin event is never delivered again (`TestMemberSelfDestructPinRace`). A pin in a chat whose cached rules hold no
-  `member:selfdestruct` entry (`memberSelfDestructRuleStored`, one cached read; an unreadable rule counts as stored, the old
-  behaviour) notes nothing and makes no database call, so a Staff Group or a chat that never used the rule pays no synchronous
-  write in group `-8` (`TestMemberDeletePinnedNeedsRule`); unpinning queues nothing, and `/permapin` pins a message the bot sent, which is never queued. Switching Self-destruct
+  delete rule at all (`memberDeleteRuleStored`, one cached read; any stored rule, a member or a bot kind, counts, and an
+  unreadable rule counts as stored, the old behaviour) notes nothing and makes no database call, so a Staff Group or a chat
+  that never used a rule pays no synchronous write in group `-8` (`TestMemberDeletePinnedNeedsRule`,
+  `TestMemberDeletePinnedAnyKind`); unpinning queues nothing, and `/permapin` pins a message the bot sent, which is never queued. Switching Self-destruct
   Off drops the chat's pending self-destruct rows in the same write (`RemoveRule`), and turning it on or changing the delay
   drops nothing: rows queued under the old delay keep their time (D-12). Accepted limits, stated and not tested as wanted
   behaviour: a pin that lands after the worker claimed its row still deletes it, and a pin handled by another replica while the
@@ -3061,7 +3131,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   shares `sendDeepLinkNote` (the admin-only check and the send) with the old `note_` handler, which stays for buttons
   already posted. An entry cached by an earlier build has no ID and falls back to the name form until `notes_list` is
   dropped. Note names in the two HTML lists are escaped.
-- Captcha allows one attempt per `(user, chat)`; group `-10` stores the pending user's messages for replay. Service messages
+- Captcha allows one attempt per `(user, chat)`; group `-10` records each content message of the pending user
+  (`stored_messages`), deletes it and ends the update. Nothing is replayed: a pass posts one summary of how many
+  messages of which types were removed (`captcha_stored_messages_summary`), a failure counts them in its notice, and the
+  rows go with the attempt. Service messages
   (join, leave, pin and the other deletion-table kinds, `memberContentMessage` false) are never held: group `-10` returns
   `ext.ContinueGroups` for them first, so the lockdown guard, fed-ban, the service deletion watcher and `cleanService` still
   see the joiner's own join message (`TestCaptchaPendingLetsJoinServiceMessageThrough`).
@@ -3089,8 +3162,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   math captcha with no extra message (D-09, `captchaWebAvailable`); `cache.IsRedisAvailable` is not used for this,
   because it only says a client object exists. An issue or send failure rolls the attempt back and unmutes (the existing
   `rollbackCaptchaAttempt`), with no fallback to math from inside a failed join. A re-join replaces the attempt, so the
-  old token answers `expired` and never touches the new attempt: the backend matches the challenge record's attempt ID,
-  never the member's current attempt.
+  old token never touches the new attempt: the backend matches the challenge record's attempt ID, never the member's
+  current attempt, and the old token is answered from the live member like any decided attempt (the neutral `invalid`
+  while they are still in the group).
   Outcomes (D-28): only `invalid-input-response` and `timeout-or-duplicate` as the only error codes, and a confirmed token
   whose `cdata` belongs to another challenge, are a failed solve (`captchaweb.OutcomeFailed`); it runs
   `settleCaptchaAttempt` once through `captchaWebBackend.Fail`, the decision the timer, the cleanup tick and the late check
@@ -3108,10 +3182,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   Cloudflare call, and a bot without it, or an unknown answer, is a retry. A `Backend` method returns an error only when
   it changed nothing, which is what makes the re-arm after one safe. `Fail` and `Expire` return a
   `captchaweb.ActionResult`: `ActionLost` (someone else decided), `ActionApplied` or `ActionNotApplied` (this call won the
-  claim but the action did not take effect: Telegram refused the kick or ban, so the member was unmuted and is still in
-  the group). A not-applied outcome is answered with the neutral `invalid` and no action, never `failed` or `expired`
-  with a removal text, the replay marker stores the same `invalid`, and the handler logs `outcome=<result> applied=false`
-  at Warn and counts an error (WR-07).
+  claim but the action did not take effect). A failure action Telegram answered with an error is judged by
+  `settleFailedCaptchaAction` from one live `getChatMember` (C2): a kick or ban whose member is now left or kicked, and a
+  mute whose member is restricted without the right to send (its 24 hour unmute stored again), took effect after all
+  (`ActionApplied`, the notice is posted); with the member still there, a definite refusal (a Telegram 4xx other than
+  429, or a mute whose unmute could not be stored) releases and unmutes them; any other answer (a 429, a 5xx, a timeout)
+  or an unreadable record leaves the member muted, schedules the 24 hour fallback unmute in `captcha_muted_users` (the
+  unmute worker reads the live member before it restricts) and logs one Warn by IDs. A failed kick is never retried and
+  a failed ban is never followed by a member-removing unban. A not-applied outcome is answered with the neutral
+  `invalid` and no action, never `failed` or `expired` with a removal text, the replay marker stores the same `invalid`,
+  and the handler logs `outcome=<result> applied=false` at Warn and counts an error (WR-07).
   Exactly once on any replica: a pass, a failed solve and a timeout are decided only by the conditional delete of the
   attempt row (`CompleteCaptchaAttemptAtomic` or `ReleaseCaptchaAttemptAtomic`), never by a Redis flag, so a challenge
   issued on one replica passes on another and a timer, a cleanup tick and a check on three replicas cannot all act. A
@@ -3121,7 +3201,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   gone, because the pass claim also matches the message ID and refresh count read a moment before and `SendCaptcha`
   stores the message ID after its send: `challengeRun.lostClaim` reads the attempt again, and a still live attempt gives
   the challenge back and answers `retry`, an unreadable one is a `retry` too, and only a row confirmed gone or expired
-  answers `expired`. For the same reason `captchaWebBackend.Fail` reads the row again after an unclaimed
+  answers `expired`. When the row is gone, or another caller won the expiry claim, someone else decided the attempt and
+  `captchaWebBackend.decidedElsewhere` reads the member live (3 s): `expired` with the action only while the record shows
+  that action (left or kicked for a kick or ban, restricted without the right to send for a mute); a member still in the
+  group gets `captchaweb.ActionSpared`, the neutral `invalid` with no action and no error counted, and the replay marker
+  stores the same; an unreadable record or setting keeps `expired` with the action (C5). For the same reason `captchaWebBackend.Fail` reads the row again after an unclaimed
   `settleCaptchaAttempt` (the timeout path reports a database error as "not claimed") and returns an error when the
   attempt is still pending, so a blip re-arms the challenge instead of burning it (WR-01). A claim whose unmute failed answers `retry`,
   not `passed` (the member is not unmuted yet): the claim already wrote the `captcha_muted_users` row due now, the
@@ -3161,10 +3245,17 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   never summary_chat_id or `staff_action_groups.group_chat_id`, and `summary_msg_id` is only valid together with
   `summary_chat_id`. It re-keys the forward blocklist too (`staff_forward_blocks.staff_chat_id` and
   `staff_forward_block_settings.staff_chat_id`, in the same transaction) and drops the `staff_forward_block` key of the
-  old and the new ID after the commit.
+  old and the new ID after the commit. It also drops the cached link (`staff_link_of:<group>`) of every group linked to
+  the re-keyed Staff Group, because that row names the Staff Group's chat ID (`TestRekeyChatInvalidatesLinkedGroups`).
 - Staff links: authority reads use uncached `staff.*Fresh` plus live `chat_status.CheckOwner`; only `OwnerMismatch`
   removes a link (errors are unknown); each automatic removal or health change is one conditional statement, and only
-  the caller with RowsAffected == 1 posts the Staff Group notice. Unsetting a Staff Group (`DeleteStaffGroupWithLinks`)
+  the caller with RowsAffected == 1 posts the Staff Group notice. In a staff fan-out (an action or an undo) the
+  owner pass collects those notices (`staffOwnerPass.notices`, a `staffNoticeBatch`) and the run posts them after its
+  workers through `staffPaced`: one combined notice per Staff Group whose owner changed and one per group whose owner
+  changed, under `staffNoticeFlushTimeout` (10 s, one second once the run was cancelled by a shutdown)
+  (`TestStaffActionOwnerChangeOneNotice`). Both buttons of the `/unsetstaff` prompt, Confirm and
+  Cancel, need the live creator of the Staff Group (`staffUnsetPresserIsOwner`; anyone else gets the owner-only alert and
+  the prompt stays). Unsetting a Staff Group (`DeleteStaffGroupWithLinks`)
   deletes the Staff Group row, its links and its forward blocklist (sources and action) in one transaction; unlinking one
   group deletes no list, because the list belongs to the Staff Group and the link gate stops it acting in that group.
 - The `/staff` panel marks a linked group whose lockdown is confirmed with one `staff_panel_row_lockdown` line (the
@@ -3208,8 +3299,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   attempt follows. It acts only on a confirmed lockdown (`locked_at` set); an unconfirmed row is not a lockdown yet and
   every join path lets the joiner through. Its write to the `fuku:lockdown:recent:<chat>` tracker comes first, is best
   effort and its result is ignored. It never gates a ban on Redis, never uses the cached admin predicates (a
-  performer is judged by a live `getChatMember`, and `decideLockdownJoin` bans everything but a user a live creator or
-  administrator, or an anonymous admin, added), and never makes a Telegram write: the worker (`StartLockdownWorker`, a
+  performer is judged by a live `getChatMember`, and `decideLockdownJoin` bans everything but a user a live human creator
+  or administrator, or an anonymous admin, added), and never makes a Telegram write: the worker (`StartLockdownWorker`, a
   DB-driven loop on every replica that claims rows with conditional updates) makes every write and bans with
   `until_date` = the row's `ban_until`, 330 days after the join, the marker that tells the lockdown's own ban from a
   deliberate one. Before every ban `lockdownBanOne` reads the joiner's live `getChatMember` in the same paced unit: a
@@ -3225,8 +3316,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   Deduplication is the `(lockdown_id, user_id)` row alone and never Redis (it does not use `claimRecentJoinProcessing`):
   the first path to insert decides, a second delivery within 20 s (`lockdownJoinDedupeWindow`) of the row's last change
   is the same join, and an older finished row (`lockdownReclaimStates`) is a re-join, reclaimed by one conditional
-  update with a new `ban_until`. Only a user added by a live creator or administrator, or by an anonymous admin, is
-  exempt, and bots never are (D-07, D-08); a failed performer lookup bans. The chat_member path may turn a still
+  update with a new `ban_until`. Only a user added by a live creator or administrator who is not a bot account
+  (`PerformerIsBot`, from the update's or the message's `from`; another bot administrator is no gate past a lockdown and
+  costs no performer lookup), or by an anonymous admin, is exempt, and bots never are (D-07, D-08); a failed performer
+  lookup bans. The raid join counter (`raidJoinCounts`) keeps its own rule and does not read `PerformerIsBot`. The chat_member path may turn a still
   pending row exempt, because that update shows an admin added or approved the user; once the worker claimed the row
   the ban stands until the lift (D-24). The service message's `NewChatMembers` is filtered in place to the users let in
   and the bot itself, so greetings welcome only them, and the update ends when nobody is left. The join message ID is
@@ -3247,12 +3340,22 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   trigger's lockdown is exactly a `/lockdown`: the live bot-rights check, the raw permissions snapshot, the insert behind
   `uk_chat_lockdowns_active`, the lock call, the confirmation and the worker wake. Of two simultaneous callers for one
   chat exactly one gets `lockdownStartStarted` and the other `lockdownStartAlreadyActive` with the running row. It judges
-  no person's authority (the caller has) and `/lockdown` maps each outcome to the reply it always sent.
+  no person's authority (the caller has) and `/lockdown` maps each outcome to the reply it always sent. When the
+  confirmation matches no row because an `/unlockdown` of the unconfirmed row lifted it while the lock call was on its
+  way, the row is read again and, lifting or lifted, the stored permissions are put back once more and the outcome is
+  `lockdownStartLiftedMeanwhile` (`/lockdown` answers `lockdown_already_lifted`, a trigger posts nothing), so a lock that
+  landed after the lift's restore never leaves the group locked with no lockdown (`TestLockdownStartLiftedDuringLock`).
 - The join surge trigger is counted by both group `-7` join guards, `lockdownOnJoinMember` through
   `raidCountMemberJoin` and `lockdownOnJoinMessage` (the `new_chat_members` service message) through
   `raidCountMessageJoins`, right after the lockdown join tracker write and before the lockdown is read, so the join
   that tips the threshold is handled by the lockdown it starts. The service message's accounts go to Redis in one
-  script call, and the account is the set member, so the two deliveries of one join count once. Both counters and both
+  script call, and the account is the set member, so the two deliveries of one join count once. A self-performed join
+  (the sender is the one new member) is counted from the `chat_member` update only: the Bot API sends the service
+  message of a join request an administrator approved with the joiner as its sender and only member, exactly like a
+  join by link, while the `chat_member` update names the approver (`via_join_request`), so an approved request never
+  counts toward the surge and is not recorded as a new member for the flood and AI paths
+  (`TestRaidJoinApprovedRequestServiceMessage`). Accepted cost: in a group where the bot is not an administrator (no
+  `chat_member` updates) self-joins are not counted at all, and there a lockdown could not be started anyway. Both counters and both
   guard handlers build their `lockdownJoinInput` with `lockdownMemberJoinInput` and `lockdownMessageJoinInputs`, so
   the performer rule cannot drift. It is best effort and Redis only, and a count never bans,
   restricts or deletes anything: when `raidJoinCounts` holds (not the bot, not a request, not an approved user, not
@@ -3270,11 +3373,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `raidFloodLateGroup`). Both return `ext.ContinueGroups` on every path, so aispam, antiflood, locks and blacklists still
   see every message, and delete nothing: the lockdown's muting stops the flood. What counts (`raidFloodItemKey`) is any
   user content in a supergroup: text, photo, GIF (animation, checked before the document Telegram also sets), sticker,
-  video, video note, voice, audio, document, poll, contact, location, venue, dice and story, forwards and replies
-  included; an album counts once. A command the bot handles does not count (D-07), and the dispatcher is what says
+  video, video note, voice, audio, document, poll, contact, location, venue, dice, story, checklist and game,
+  and a rich message, forwards and replies included; an album counts once. A command the bot handles does not count (D-07), and the dispatcher is what says
   which: a handled command returns `ext.EndGroups`, which ends every later group. So the `-4` watcher counts every item
   except a slash-prefixed text (`raidFloodIsSlashText`: a `bot_command` entity at offset 0, or a text starting with `/`
-  and a non-space character, which gotgbot's command handler also runs), and the group `12` watcher counts only the
+  and a non-space character, which gotgbot's command handler also runs; a media message's caption and a rich message's
+  first paragraph are judged the same way, because the handler reads them as the command text), and the group `12` watcher counts only the
   slash-prefixed texts that reach it, the ones no command took: `/word` with no handler, `/////`, and a command addressed
   to another bot (`/start@otherbot`). Never keep a second list of command names for this. Group `12` must stay after every
   other group, so every new handler group needs a number below it. A slash text that a handler ends is not counted, and
@@ -3379,8 +3483,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   network error or unusable answer counts toward the chat's five). Each pause logs one warning naming its reason (status
   and error type only) and its end, and none posts anything: a paused check is `Shed`. Only provider answers count; a
   `getFile` or download failure never does, and a refusal stop counts as an answer, not a failure. The breaker clock is
-  `raidNow`. The breaker map holds at most 10000 chats (`raidAIImageBreakerMaxChats`); when it is full the idle breakers (no failures,
-  not paused) are evicted, and if every tracked chat is failing or paused a new chat stays untracked, so it cannot be
+  `raidNow`. The breaker map holds at most 10000 chats (`raidAIImageBreakerMaxChats`); when it is full the idle breakers (not paused, and
+  no failures or a last failure older than `raidAIImageCooldown`) are evicted; `/aispam`'s own per-chat breaker map
+  (`aispamBreakerMaxChats`, 10000) prunes its stale entries (not paused, last failure older than `aispamBreakerCooldown`)
+  the same way when it is full, and if every tracked chat is failing or paused a new chat stays untracked, so it cannot be
   paused, with one warning per process. The
   raid-only TypeSafe text checks keep sharing `/aispam`'s per-chat breaker silently and never touch these.
 - An automatic lockdown (`lockdownStartedAutomatically`: `trigger_kind` `join_surge`, `flood` or `ai_burst`) is
@@ -3410,12 +3516,21 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `fuku/db/antiraid` repository is gone, since nothing but tests called it, and no command reads the timing columns
   any more.
 - The lockdown lift runs in the same worker after `/unlockdown` restored the permissions. It unbans (`only_if_banned=true`)
-  only a joiner whose live `getChatMember` shows kicked with that row's `ban_until` (`isLockdownBan`, 2 s tolerance); anyone
+  only a joiner whose live `getChatMember`, read in the same paced unit as the unban (so a slot wait or a 429 retry reads
+  again, `TestLockdownUnbanRereadsAfterWait`), shows kicked with that row's `ban_until` (`isLockdownBan`, 2 s tolerance); anyone
   else, a deliberate `/ban` or `/tban` included, is kept and never touched (a staff `/ban` or `/tban` over a lockdown's
-  ban replaces it with its own end date, so it falls here too; see the StaffActions bullet). Joiners still pending when
-  the lift starts are
-  cancelled and never banned. Rows are handled in the order they were recorded, and the tally is posted once, by the
-  replica whose `FinishLift` conditional update won; a lockdown with nothing to report posts none.
+  ban replaces it with its own end date, so it falls here too; see the StaffActions bullet). A ban call that failed
+  without a refusal (a 5xx, a timeout) may still have taken effect, so before anything else the lift (inline in
+  `liftLockdownRow` before `FinishLift`, and in every worker cycle before `CancelPending`) moves every `ban_failed` row
+  and every pending row with an attempt counted (join requests excepted) to `banned` with detail
+  `models.JoinerDetailLiftCheck` and the attempts at zero (`lockdown.RouteUncertainBans`): the live check then unbans a
+  marker ban, keeps a ban of another date, and cancels the row when the member carries no ban at all, so a ban that
+  never landed is not counted as kept (`TestLockdownLiftChecksBansWhoseAnswerFailed`). The other joiners still pending
+  when the lift starts are cancelled and never banned. Rows are handled in the order they were recorded, and the tally is posted once, by the
+  replica whose `FinishLift` conditional update won; a lockdown with nothing to report posts none. When the lift itself
+  wins `FinishLift` (nothing was left for the worker, e.g. only kept bans), the caller (`/unlockdown`, the alert's Lift
+  Confirm, the settings menu's Lift Yes) posts that same tally after its own announcement through
+  `lockdownPostInlineTally` (`TestLockdownInlineLiftPostsTally`).
 - A lockdown has no end date but its bans do: each joiner's ban lasts `lockdownBanSpan` (330 days) from the join, so a
   lockdown that outlasts that stops banning the raiders it removed (Telegram bans of 30 s to 366 days are the only
   finite ones, and a longer one would be permanent and look like a deliberate ban). This is an accepted limit; the
@@ -3440,7 +3555,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   lockdown's copy is never sent. The alert shows the trigger, the counts, a sample of up to 10 accounts and the invite
   link (see `chat_lockdown_burst`), and every name, username and link is escaped and spliced in after the translator.
 - The alert copies resume like joiner rows. A copy claimed (`posting`) or close-claimed (`posted` with `claimed_at`) for
-  over 2 minutes (`lockdownStaleClaim`) is released by the first cycle of any replica, in `lockdownReleaseStale` through
+  over 5 minutes (`lockdownStaleClaim`) is released by the first cycle of any replica, in `lockdownReleaseStale` through
   `lockdown.ReleaseStaleAlertClaims`, without counting an attempt, so a crash between the send and the record can post a
   second copy (accepted over a lost one). A send is tried three times (`lockdownMaxAttempts`, then `FailAlertSlot` with
   Telegram's reason), a rate limit or a shutdown costs no attempt, each copy has its own claim and attempts so one
@@ -3461,13 +3576,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`lockdownPlanReminders`, right before the poster in `runLockdownCycle`) plans one reminder copy per alert destination:
   kind `reminder`, `seq = floor((now - alert_started_at) / lockdownReminderEvery)`, inserted by
   `lockdown.PlanReminderSlots` with `ON CONFLICT DO NOTHING` on the slot key, so exactly one row exists per reminder and
-  destination whichever replica plans it. Only the current seq is ever planned (no backlog after downtime, and an
+  destination whichever replica plans it. A cycle reads `lockdownReminderBatch` (50) remindable lockdowns after the
+  in-memory cursor `lockdownReminderCursor` (`lockdown.ListRemindableFresh(afterID, limit)`) and a short batch starts
+  over from the lowest ID, so more due lockdowns than one batch are all reached within a few cycles
+  (`TestLockdownRemindersReachEveryLockdown`). Only the current seq is ever planned (no backlog after downtime, and an
   alert older than this feature does not fire a burst), and a pending reminder behind the current seq is marked failed
   with detail `superseded` instead of posted. The destinations are the alert's destination kinds
   (`lockdown.AlertDestKinds`) resolved again by `lockdownAlertDestinations`, so a Staff Group unlinked since, a kind the
   alert never went to and a log channel whose `admin` category is now off get none. Reminders use the alert's claims,
   retries and stale-claim release, so the duplicate-over-lost rule above holds: a reminder claimed in `posting` for over
-  2 minutes is released and its send repeated, which can post it twice after a crash, unless a newer reminder is due by
+  5 minutes (`lockdownStaleClaim`) is released and its send repeated, which can post it twice after a crash, unless a newer reminder is due by
   then, in which case it is superseded and lost on purpose. Posting a reminder calls `lockdown.SupersedeReminders`: the
   older reminders of that destination get `buttons_live` false and `edit_pending` true and lose their buttons through the
   sync step; the original alert copy keeps its buttons until the lift. Planning stops with the lockdown being active
@@ -3600,8 +3718,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `fwdWatchClient` to take the bot's delete right away).
 - StaffActions (staff `/ban` across linked groups): per-group authority is only the live `getChatMember(group, issuer)`
   answer, creator or administrator with `can_restrict_members`, never the cached admin predicates. The link owner is
-  rechecked through `recheckLink`. No write ever targets the Staff Group and nothing is posted into a linked group's own
-  chat. Each group where an action was applied gets one post in its log channel under the admin category
+  rechecked through `recheckLink`, which also reads the group's link fresh once both owners match and answers
+  `staffRecheckGone` when the row is gone or is another row (an unlink, or a link made again); the fan-out reads that
+  as "no longer linked" (`staffReasonSkipNoLongerLinked`), while a removal for an owner change stays "link removed".
+  Right before each write, of an action and of an undo alike, the link is read fresh once more
+  (`staffLinkStillCurrent`, seam `staffLinkCurrentLookup`) and must still be the same link row of the same Staff Group,
+  else the group gets no write and reads "no longer linked" (a failed read fails the group) (`TestRecheckLinkGoneRow`,
+  `TestStaffActionSkipsUnlinkedGroup`, `TestStaffUndoSkipsUnlinkedGroup`). No write ever targets the Staff Group and
+  nothing is posted into a linked group's own chat. Each group where an action was applied gets one post in its log channel under the admin category
   (`staff_log.go`), sent through `staffPaced` after the group's result is set, naming the issuer and target and saying
   "via Staff Group" but never the Staff Group's title or ID. A failed post never changes that result. Undos are
   logged the same way, as `#STAFF_UNDO` through the shared `sendStaffLogPost`: one post per group where the undo
@@ -3615,11 +3739,29 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   member-removing unban (`only_if_banned=false`) is only `/kick` on a current member, and every `/unban` sends
   `only_if_banned=true`. A kicked target skips mute, kick and unmute as "not in group". The decision lives in
   `decideStaffAction` alone; `executeStaffCall` switches only on its verdict. Keep new actions inside that table.
+  Because a mute and a kick replace the target's status, `executeStaffCall` reads the target live once more inside
+  their paced unit, right before the write (so a retry after a 429 wait reads again), and decides again with
+  `decideStaffAction` (`staffRedecide`): when the fresh verdict is no longer that call (the target was banned or left
+  meanwhile) nothing is sent and the group gets the fresh verdict's reason (`staffStateChangedError`,
+  `TestStaffActionRereadsBeforeWrite`).
   Its one exception to "a ban never shortens a ban" is a lockdown's own ban: for a staff ban (`/ban`, `/tban`) on a
   kicked target with an end date, `runStaffActionInGroup` asks `staffLockdownBanLookup` (`lockdown.HasJoinerBanFresh`
   on the live `until_date`) and sets `staffTargetState.LockdownBan`, and `decideStaffBan` then sends the ban even when
   it ends sooner, so the staff ban gets its own end date and the lockdown's lift keeps it (D-05). A failed lookup
-  fails that group as an internal error with no write. Undo decisions live in `decideStaffUndo` alone, beside `decideStaffAction`, and `executeStaffUndoCall` switches only
+  fails that group as an internal error with no write. The undo of such a ban, or of a staff `/unban` that lifted a
+  lockdown's ban, asks `staffEndedLockdownBanLookup` (`lockdown.HasEndedJoinerBanFresh`: a joiner row matches the
+  recorded end date and none of them is of an active lockdown) and sets `staffPriorState.LockdownBanEnded`: the lockdown
+  is over, so the marker ban is never put back (no lift would ever end it); the ban undo unbans with
+  `only_if_banned=true` instead and the unban undo is skipped as ended. While the lockdown is still active the marker
+  ban is put back for its lift to end (`TestStaffUndoLiftedLockdownBan`); a failed read fails the group. A staff mute never shortens a restriction either: a member
+  restricted (not muted) until a later date than the mute's, or for good while the mute is timed, is skipped "already
+  restricted for longer" (`staffReasonSkipRestrictedLonger`), because `restrictChatMember` would replace that
+  restriction (`TestStaffActionMuteNeverShortensRestriction`). A timed staff ban (`/tban`, `/ban <duration>`) on a
+  target restricted (muted or not, member or not) until later than the ban's end, or for good, is still sent, because
+  the ban is what staff asked for, but its verdict is `staffReasonBannedRestrictionLost` (outcome done), and the group's
+  summary line says `staff_act_banned_restriction_lost`: the ban replaces the restriction and it will not come back when
+  the ban ends (owner decision S3-ban, `TestStaffActionTimedBanOverLongerRestriction`). Nothing re-applies it; staff
+  who want it back restrict the member again after the ban, or ban for good. Undo decisions live in `decideStaffUndo` alone, beside `decideStaffAction`, and `executeStaffUndoCall` switches only
   on its verdict. Its one exception to the never-lift rule, a restrict or ban sent to a kicked or left target, is
   allowed only when the live state equals what the staff action left behind. An undo touches only groups where the
   action was applied, rechecks each one live for the presser (creator, or administrator with `can_restrict_members`,
@@ -3647,10 +3789,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   service message on every topic message that is not an explicit reply, so `ReplyTarget` answers nil for that message
   and for a topic message's own thread root (`IsTopicMessage` with `MessageThreadId` equal to the reply's ID; outside a
   forum replying to a thread's root is a real reply). `ExtractUserAndText`, `IdFromReply`, `extractFromReply`, `/dkick`,
-  `/dban`, `/dmute`, `/purge`, `/del`, `/purgefrom`, `/purgeto` and `/id` use it. In `ExtractUserAndText` an explicit
+  `/dban`, `/dmute`, `/dwarn`, `/report`, the `@admin` watcher, `/reports block|unblock`, `/pin`, `/unpin`, `/permapin`, `/pinned`, `/tr`, `/purge`, `/del`, `/purgefrom`, `/purgeto` and `/id` use it. In `ExtractUserAndText` an explicit
   target (a `text_mention` at the argument, an `@username` or a numeric ID) always beats the reply: the reply is the
   fallback only when the first argument named nobody, and `/id` shows a reply's details only when the resolved user is
-  the reply's sender.
+  the reply's sender. `/dban`, `/dmute` and `/dwarn` delete the replied message, so an explicit target that did not send
+  it is refused with `common_reply_target_mismatch` (`replyTargetMismatch`) and nothing is deleted or punished.
 - A staff action card has one writer once its run starts: the run's coordinator goroutine, which edits at most every
   2.5 s (`staffActionEditEvery`), only when a result changed, and never before a progress edit's 429 `retry_after` has
   passed. The summary never drops a group: over 3800 UTF-16 units (counted on the escaped HTML) only done lines
@@ -3666,8 +3809,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `until_date` less than 30 s away as permanent, so right before every ban or restrict write, inside the paced closure
   of `executeStaffCall` (so a retry after a 429 wait is checked again), an end date under `staffUntilMinLead` (35 s)
   away or past is not sent (`staffUntilTooClose`, `errStaffTimeRanOut`): that group fails with `fail_time_ran_out`
-  (`staff_act_fail_time_ran_out`) and nobody is restricted for good. The one `until_date` for every group is unchanged,
-  and the undo path has no such guard.
+  (`staff_act_fail_time_ran_out`) and nobody is restricted for good. The one `until_date` for every group is unchanged.
+  The undo path has the same guard: a re-ban goes through `executeStaffCall`, and a restore of a recorded restriction
+  checks `staffUntilTooClose` inside its own paced unit in `executeStaffUndoCall` (`TestStaffUndoRestoreTimeRanOut`);
+  `decideStaffUndo` already skips an end date within `staffUndoMinRemaining` (120 s), so the guard only catches a
+  pacer wait or 429 retry that ran it down.
 - Greeting media types (Phase 12): `db.ANIMATION` (9) is a GIF saved by `/setwelcome`, `/setgoodbye` or the message
   editor's media part, stored with the animation's file ID and sent with `sendAnimation`. Only the greeting extraction
   returns it: `extractGreetingMedia` (animation first, then `extractMediaFromReply`) sits behind `ExtractWelcome` and
@@ -3677,7 +3823,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `show_caption_above_media` only in `sendPhoto`, `sendVideo` and `sendAnimation` (now one `sendCaptioned`; no other
   sender reads it) and a false flag adds no parameter, so every request of a message saved before is unchanged.
   `media.CaptionAboveEligible` (photo, video, animation) is the one predicate of "Media under text works for this
-  media". `media.SendGreetingMessage` ANDs the flag with it, and `media.SendGreeting` is its flag-off wrapper. Rolling
+  media". `media.SendGreetingMessage` ANDs the flag with it, and `media.SendGreeting` is its flag-off wrapper. `GreetingMessage.ReplyMsgID`
+  is set only by `displayGreeting` (the greeting `/welcome` and `/goodbye` show replies to the command); a join, a leave
+  and a preview send it zero, a plain message. Rolling
   deploy caveat (accepted, like the others here): a replica on the previous code sends a type 9 welcome as its text
   only (`Unknown message type 9, falling back to text`) until it is replaced.
 - One setting, one code path (the settings menu): every setting the menu changes has one apply function beside its
@@ -3794,7 +3942,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   person's rights. `/anonadmin` (`anonAdmin`) keeps its own read through `admin.GetAdminSettings`, which creates the `admin`
   row even for a non-owner it then refuses (Pitfall 3: the row exists after a refused `/anonadmin on`), its live owner check
   and its replies, and maps its two write branches onto the function (`TestLegacyAnonAdminRequests` pins every request and
-  stored row, never to be re-recorded). The `admin` table is not cached, so no write drops a key and no replica can lag. The
+  stored row, never to be re-recorded; its seven on and off cases changed once on purpose when the `_enabled_now` and
+  `_disabled_now` texts, which described the mode backwards in all 8 languages, were corrected, owner decision T4 of the
+  2026-11-17 review: mode on lets anonymous admins act with no proof, mode off makes them press the button). The `admin` table is not cached, so no write drops a key and no replica can lag. The
   reader `admin.LoadAnonAdminContext` is one plain `SELECT`, returns its error, creates no row and reads a missing row as off.
   Locks (Phase 18) are written by `applyLock(ctx, chatID, kind, on)` in `locks.go`, through the `lockWrites` seam (default
   `locks.UpdateLock`, one upsert that drops `locks_map:<chat>`). It handles exactly one kind: a name outside `/locktypes`
@@ -4011,9 +4161,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   one-hour marker `fuku:setlog:<channel>:<message>` (outside the `fuku:cache:` prefix, `storePendingMarker`) and asks for
   the forward; the post needs no sender, because only a channel administrator can post there. Step 2: that post forwarded
   to a group by a live administrator of the group binds the channel as the group's log channel (`bindSetLogForward`: group
-  or supergroup, a channel origin with a message ID, the sender, `chat_status.RequireUserAdmin` of that group, and only then
-  the single-use consume, `consumePendingMarker`, GETDEL with Redis, so a member's forward never burns the marker, then
-  `logchannels.Set`, `logs_set_ok` and the `#SETTINGS` audit post). `setlog` is a documented raw `helpers.NewBotCommand`
+  or supergroup, not an automatic forward (`helpers.IsAutomaticForward`: a linked channel's own post binds nothing), a
+  channel origin with a message ID, the sender, `chat_status.RequireUserAdmin` of that group, and only then
+  the single-use consume, `consumePendingMarker`, GETDEL with Redis and a get then delete under one process-wide mutex
+  without it, so a member's forward never burns the marker, then `logchannels.Set`, `logs_set_ok` and the `#SETTINGS`
+  audit post; a failed save puts the marker back with `storePendingMarker` and answers `common_settings_save_failed`,
+  so the next forward can still bind, `TestSetLogMarkerSurvivesFailedSave`, `TestConsumePendingMarkerOnce`). `setlog` is a documented raw `helpers.NewBotCommand`
   with `SetAllowChannel(true)` (like the other log channel commands it is not wrapped), because a channel post has no
   sender and `WrapCommand` would reply to it. The forward still
   carries the command text and entity, so the group-0 command binds it itself; the group-11 watcher
@@ -4082,7 +4235,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - A string filled with `i18n.TranslationParams` uses `{name}` placeholders equal to the param names. A `%s` or `%d`
   verb is filled only from the keys `0` to `9` or the fixed common names of `extractOrderedValues`, and prints raw
   for any other name (`modules`, `list`, `chat`, `time`, `types`, `attempts` did). `TestRawPlaceholderKeysRender`
-  (`fuku/i18n`) renders the backup and captcha keys that once printed raw verbs through the real locale files.
+  (`fuku/i18n`) renders the backup and captcha keys that once printed raw verbs through the real locale files. Both kinds
+  are filled in one pass over the raw template, the verbs counted on the template alone, so a value a user typed that
+  holds a verb or a `{name}` is printed as typed (`TestInterpolateParamsIgnoresVerbsInValues`).
 - The docs generator finds raw commands in the module source by the shim's call, `helpers.NewBotCommand("name", ...)`
   (`scripts/generate_docs/parsers.go`); a command registered another way is not listed, and the guard test rejects it.
 - The docs generator reads only `locales/en.yml`. Pages marked `<!-- MANUALLY MAINTAINED: do not regenerate -->` in
@@ -4171,7 +4326,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   and `fuku/db/backup/testmain_test.go`. The Phase 12 characterization tests record what the code did before the phase and
   must never be re-recorded to make a change pass: `TestRulesLegacyRowSendsTodaysRequest` (a Rules row with no media sends
   today's request) and `TestLegacyGreetingsRequestsUnchanged` (an old greetings row sends today's request), both in
-  `rules_legacy_request_test.go`. Phase 18's goldens follow the same rule: `TestLegacyWarnSettingsRequests`
+  `rules_legacy_request_test.go`. One case of the latter changed once on purpose: `welcome_display_photo` gained
+  `reply_parameters` when the greeting `/welcome` and `/goodbye` show became a reply to the command (owner decision N2 of
+  the 2026-11-17 review, `TestGreetingDisplayRepliesToCommand`); the join and leave cases are unchanged. Phase 18's goldens follow the same rule: `TestLegacyWarnSettingsRequests`
   (`warns_legacy_request_test.go`, every request and stored row of `/setwarnlimit` and `/setwarnmode`, committed before the
   extraction into `applyWarnLimit` and `applyWarnMode`) is never re-recorded, and every `TestLegacy*Requests` golden of Phase 18
   joins that rule as its plan records it. The other Phase 12 families are `TestGreetOnce*` (`greet_once_test.go`),

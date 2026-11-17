@@ -143,6 +143,8 @@ func staffReasonText(tr *i18n.Translator, r staffReason, detail string) string {
 		return ""
 	case staffReasonBannedNotInGroup:
 		text, _ = tr.GetString("staff_act_banned_not_in_group")
+	case staffReasonBannedRestrictionLost:
+		text, _ = tr.GetString("staff_act_banned_restriction_lost")
 	case staffReasonSkipIssuerNotAdmin:
 		text, _ = tr.GetString("staff_act_skip_issuer_not_admin")
 	case staffReasonSkipIssuerNoRight:
@@ -163,8 +165,12 @@ func staffReasonText(tr *i18n.Translator, r staffReason, detail string) string {
 		text, _ = tr.GetString("staff_act_skip_not_banned")
 	case staffReasonSkipNotMuted:
 		text, _ = tr.GetString("staff_act_skip_not_muted")
+	case staffReasonSkipRestrictedLonger:
+		text, _ = tr.GetString("staff_act_skip_restricted_longer")
 	case staffReasonSkipLinkRemoved:
 		text, _ = tr.GetString("staff_act_skip_link_removed")
+	case staffReasonSkipNoLongerLinked:
+		text, _ = tr.GetString("staff_act_skip_no_longer_linked")
 	case staffReasonSkipStaffGroup:
 		text, _ = tr.GetString("staff_act_skip_staff_group")
 	case staffReasonFailOwnerUnknown:

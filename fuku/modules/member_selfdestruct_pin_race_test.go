@@ -84,7 +84,7 @@ func TestMemberSelfDestructPinRace(t *testing.T) {
 		env := newSelfDestructEnv(t, memberSelfDestructRuleDelay)
 		calls := 0
 		mreqSwap(t, &memberDeleteDropPinned,
-			func(_ context.Context, _, _ int64, _ string) (int64, error) {
+			func(_ context.Context, _, _ int64) (int64, error) {
 				calls++
 				if calls == 1 {
 					return 0, errors.New("database is locked")
@@ -97,7 +97,7 @@ func TestMemberSelfDestructPinRace(t *testing.T) {
 		}
 		calls = 0
 		mreqSwap(t, &memberDeleteDropPinned,
-			func(context.Context, int64, int64, string) (int64, error) {
+			func(context.Context, int64, int64) (int64, error) {
 				calls++
 				return 0, errors.New("database is locked")
 			})

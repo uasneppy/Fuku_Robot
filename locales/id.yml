@@ -9,13 +9,13 @@ admin_anon_admin_disabled: "Mode AnonAdmin saat ini <b>dinonaktifkan</b> untuk %
   Ini memerlukan admin anonim untuk menekan tombol untuk mengonfirmasi izin mereka."
 admin_anon_admin_disabled_now: "Mode AnonAdmin sekarang <b>dinonaktifkan</b> untuk %s.
 
-  Mulai sekarang, saya tidak akan meminta admin untuk memverifikasi izin dari admin anonim lagi."
+  Mulai sekarang, admin anonim harus menekan tombol untuk mengonfirmasi izin mereka."
 admin_anon_admin_enabled: "Mode AnonAdmin saat ini <b>diaktifkan</b> untuk %s.
 
   Ini memungkinkan semua admin anonim untuk melakukan tindakan admin tanpa batasan."
 admin_anon_admin_enabled_now: "Mode AnonAdmin sekarang <b>diaktifkan</b> untuk %s.
 
-  Mulai sekarang, saya akan meminta admin untuk memverifikasi izin dari admin anonim."
+  Mulai sekarang, admin anonim dapat bertindak tanpa mengonfirmasi izin mereka."
 admin_anon_admin_invalid_arg: |
   Argumen tidak valid, saya hanya mengerti <code>on</code>,
   <code>off</code>, <code>yes</code>, <code>no</code>
@@ -885,6 +885,7 @@ mute_reply_to_dmute: Anda perlu membalas pesan untuk menghapusnya dan membisukan
 bot_updates_need_admin: Anda perlu menjadi admin untuk melakukan ini!
 
 # Rules module strings
+rules_reply_needs_text: "Pesan itu tidak punya teks atau keterangan untuk dijadikan aturan. Balas pesan yang berisi teks, atau tulis aturannya setelah perintah."
 rules_need_text: "Anda perlu memberikan aturan untuk diatur!\nBalas ke pesan untuk memberikannya dengan perintah."
 
 # Notes module strings
@@ -903,9 +904,11 @@ common_anonymous_ban_error: Perintah ini tidak dapat digunakan pada pengguna ano
 common_cannot_identify_user: Tidak dapat mengidentifikasi pengguna. Perintah ini tidak dapat digunakan oleh kanal.
 common_no_user_specified: Saya tidak tahu siapa yang Anda maksud, Anda perlu menentukan pengguna...!
 common_user_not_in_chat: Pengguna ini tidak ada di obrolan ini, bagaimana saya bisa membatasi mereka?
+common_member_check_failed: "Tidak dapat memeriksa status pengguna ini. Tidak ada yang diubah. Coba lagi."
 common_cannot_target_admin: "Saya tidak dapat melakukan tindakan ini pada admin grup."
 common_cannot_target_self: "Saya tidak dapat melakukan tindakan ini pada diri saya sendiri."
 common_no_reply_to_message: "Anda perlu membalas pesan pengguna untuk melakukan tindakan ini."
+common_reply_target_mismatch: "Pengguna yang Anda sebut tidak menulis pesan yang Anda balas. Balas pesannya, atau jangan sebut nama."
 
 # Common action verbs (for dynamic error messages)
 common_action_ban: "blokir"
@@ -2143,6 +2146,7 @@ backup_export_success: |
 backup_export_success_text: "✅ Berhasil mengekspor {modules} modul. Unduh file cadangan di atas."
 backup_export_rate_limited: "⏳ Silakan tunggu <b>{time}</b> sebelum mengekspor lagi."
 backup_export_no_modules: "❌ Tidak ada modul yang dapat diekspor untuk obrolan ini."
+backup_export_start_bot: "📬 Cadangan dikirim kepada Anda lewat obrolan pribadi. Mulai obrolan pribadi dengan saya dulu, lalu kirim /export lagi."
 backup_export_failed: "❌ Gagal mengekspor pengaturan. Silakan coba lagi nanti."
 
 backup_import_success: |
@@ -2153,6 +2157,8 @@ backup_import_success: |
   <b>Modul:</b>
   {list}
 
+backup_import_skipped_entries: "⚠️ <b>{count}</b> filter, kata daftar hitam, atau catatan dilewati karena tidak valid di sini."
+backup_import_log_skipped: "⚠️ Pengaturan kanal log tidak diimpor: grup ini tidak punya kanal log. Tautkan satu dengan /setlog, lalu impor lagi."
 backup_import_rate_limited: "⏳ Silakan tunggu <b>{time}</b> sebelum mengimpor lagi."
 backup_import_no_reply: "❌ Silakan balas ke file cadangan dengan <code>/import</code>."
 backup_import_invalid_file: "❌ Format file cadangan tidak valid. Silakan kirim file cadangan JSON yang valid."
@@ -2599,6 +2605,7 @@ staff_act_abort_check_failed: "Saya tidak bisa memeriksanya sekarang. Tidak ada 
 staff_act_line_skipped: "dilewati: {reason}"
 staff_act_line_failed: "gagal: {reason}"
 staff_act_banned_not_in_group: "diblokir (tidak ada di grup)"
+staff_act_banned_restriction_lost: "diblokir; pembatasan yang lebih lama tidak akan kembali saat blokir berakhir"
 staff_act_skip_issuer_not_admin: "Anda bukan admin di sana"
 staff_act_skip_issuer_no_right: "Anda tidak bisa membatasi anggota di sana"
 staff_act_skip_target_admin: "dia admin di sana"
@@ -2607,9 +2614,11 @@ staff_act_skip_target_service: "itu akun layanan Telegram"
 staff_act_skip_already_banned: "sudah diblokir"
 staff_act_skip_not_in_group: "tidak ada di grup"
 staff_act_skip_already_muted: "sudah dibisukan"
+staff_act_skip_restricted_longer: "sudah dibatasi lebih lama"
 staff_act_skip_not_banned: "tidak diblokir"
 staff_act_skip_not_muted: "tidak dibisukan"
 staff_act_skip_link_removed: "tautan dihapus, pemilik berubah"
+staff_act_skip_no_longer_linked: "tidak lagi terhubung"
 staff_act_skip_staff_group: "ini adalah Grup Staf"
 staff_act_fail_owner_unknown: "tidak bisa memverifikasi pemilik grup"
 staff_act_fail_lookup: "tidak bisa memeriksa anggota"
@@ -2683,9 +2692,9 @@ lockdown_help_msg: |
 
   Saat grup ini terkunci, saya mengirim peringatan ke Grup Staf-nya (jika terhubung) dan ke kanal lognya (jika kategori log admin aktif): pemicunya, berapa orang yang bergabung sesaat sebelum dan sejak itu, hingga 10 akun di antaranya, serta tautan undangan yang dipakai sebagian besar dari mereka.
 
-  Saya juga mengunci grup ini sendiri saat raid dimulai: ketika 15 orang bergabung dalam 60 detik (lonjakan bergabung), atau ketika 30 pesan, foto, GIF, atau stiker masuk dalam 30 detik, sedikitnya 60% di antaranya dari sedikitnya 3 anggota yang bergabung dalam 24 jam terakhir (banjir pesan). Itu nilai bawaan, keduanya aktif; <code>/autolockdown</code> menampilkan angka grup ini. Admin, pengguna yang disetujui, dan perintah yang saya tangani tidak pernah dihitung, jadi menyetujui anggota baru yang tepercaya mengecualikan mereka. Saya mengirim pemberitahuan singkat saat mengunci grup, dan peringatan menyebutkan pemicu mana yang aktif. Selama 10 menit setelah lockdown dicabut, saya tidak mengunci lagi sendiri. Jika saya melihat raid tetapi tidak bisa mengunci (saya harus menjadi admin dengan hak itu, di supergrup), saya memperingatkan Grup Staf dan kanal log, paling banyak sekali sehari. Pengaturan ini tidak disimpan dalam cadangan.
+  Saya juga mengunci grup ini sendiri saat raid dimulai: ketika 15 orang bergabung dalam 60 detik (lonjakan bergabung), atau ketika 30 pesan, foto, GIF, atau stiker masuk dalam 30 detik, sedikitnya 60% di antaranya dari sedikitnya 3 anggota yang bergabung dalam 24 jam terakhir (banjir pesan). Itu nilai bawaan, keduanya aktif; <code>/autolockdown</code> menampilkan angka grup ini. Admin, pengguna yang disetujui, dan perintah yang saya tangani tidak pernah dihitung, jadi menyetujui anggota baru yang tepercaya mengecualikan mereka. Saya mengirim pemberitahuan singkat saat mengunci grup, dan peringatan menyebutkan pemicu mana yang aktif. Selama 10 menit setelah lockdown dicabut, saya tidak mengunci lagi sendiri. Jika saya melihat raid tetapi tidak bisa mengunci (saya harus menjadi admin dengan hak itu, di supergrup), saya memperingatkan Grup Staf dan kanal log, paling banyak sekali sehari.
 
-  Pemicu AI: teks mencurigakan dari anggota yang bergabung kurang dari 24 jam lalu diperiksa TypeSafe, dan foto, GIF, serta stikernya oleh Anthropic Claude (jika sudah disiapkan). 5 vonis spam dari 3 akun dalam 120 detik mengunci grup; satu vonis tidak pernah, dan AI tidak pernah menghapus atau memblokir.
+  Pemicu AI: teks mencurigakan dari anggota yang bergabung kurang dari 24 jam lalu diperiksa TypeSafe, dan foto, GIF, stiker, serta thumbnail videonya oleh Anthropic Claude (jika sudah disiapkan). Saat /aispam aktif, tiap pesan yang dihapusnya juga dihitung, dari anggota mana pun. 5 vonis spam dari 3 akun dalam 120 detik mengunci grup; satu vonis tidak pernah.
 
   🔓 Cabut lockdown: mencabut lockdown seperti <code>/unlockdown</code>. Hak yang sama dengan /unlockdown, diperiksa secara langsung; berada di Grup Staf saja tidak cukup.
 

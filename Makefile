@@ -53,7 +53,10 @@ test-shard: SHELL := /bin/bash
 test-shard: .SHELLFLAGS := -o pipefail -c
 test-shard:
 	@if [ -z "$(SHARD)" ]; then echo "SHARD is required, e.g. make test-shard SHARD=1"; exit 1; fi
-	$(GO_CMD) test $(TEST_FLAGS) -coverprofile=coverage-shard-$(SHARD).out -run "$$(scripts/test_shard.sh $(SHARDED_PKG) $(SHARD) $(SHARDS))" $(SHARDED_PKG) | $(GO_CMD) run ./scripts/check_test_results
+	@pattern=$$(scripts/test_shard.sh $(SHARDED_PKG) $(SHARD) $(SHARDS)) || { echo "test_shard.sh failed for shard $(SHARD)"; exit 1; }; \
+	if [ -z "$$pattern" ]; then echo "test_shard.sh printed no pattern for shard $(SHARD)"; exit 1; fi; \
+	echo "$(GO_CMD) test $(TEST_FLAGS) -coverprofile=coverage-shard-$(SHARD).out -run <shard $(SHARD) of $(SHARDS)> $(SHARDED_PKG)"; \
+	$(GO_CMD) test $(TEST_FLAGS) -coverprofile=coverage-shard-$(SHARD).out -run "$$pattern" $(SHARDED_PKG) | $(GO_CMD) run ./scripts/check_test_results
 
 # Fails when the shard script's test list differs from what `go test -list` reports, so a test
 # the script cannot see is never left out of every shard.

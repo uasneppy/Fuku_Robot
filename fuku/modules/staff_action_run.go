@@ -44,6 +44,43 @@ const staffUntilMinLead = 35 * time.Second
 // under staffUntilMinLead away (or past), so nobody is restricted for good.
 var errStaffTimeRanOut = errors.New("the staff action's end date is too close to send")
 
+// staffStateChangedError is returned instead of a mute or kick when the target's
+// live state, read again inside the write's paced unit, no longer gets that call
+// from decideStaffAction. Reason is the verdict the new state gets.
+type staffStateChangedError struct {
+	Reason staffReason
+}
+
+func (e *staffStateChangedError) Error() string {
+	return "the target's state changed before the write: " + string(e.Reason)
+}
+
+// staffRedecide reads the target live and decides again, inside the paced unit of a
+// mute or kick, right before the write. Both calls replace the target's status, so a
+// target banned since the first read would be unbanned by them (S1). It returns nil
+// only when the fresh verdict is still the call about to be made.
+func staffRedecide(
+	callCtx context.Context,
+	b *gotgbot.Bot,
+	groupID, targetID int64,
+	kind staffActionKind,
+	want staffAPICall,
+	newUntil int64,
+) error {
+	member, err := b.GetChatMemberWithContext(callCtx, groupID, targetID, nil)
+	if err != nil {
+		return err
+	}
+	if member == nil {
+		return errors.New("getChatMember returned no member")
+	}
+	verdict := decideStaffAction(kind, staffTargetStateFrom(member.MergeChatMember()), newUntil)
+	if verdict.Call != want {
+		return &staffStateChangedError{Reason: verdict.Reason}
+	}
+	return nil
+}
+
 // staffUntilNow is the clock of the end-date guard only. It is a variable so a test
 // can move it.
 var staffUntilNow = time.Now
@@ -60,6 +97,9 @@ func staffUntilTooClose(until int64) bool {
 var (
 	// staffActionCallTimeout bounds each Telegram call made for a staff action.
 	staffActionCallTimeout = 8 * time.Second
+	// staffNoticeFlushTimeout bounds the owner-change notices a staff run posts after
+	// its workers, all of them together.
+	staffNoticeFlushTimeout = 10 * time.Second
 	// staffActionRunsWG joins every running fan-out, so a shutdown can wait for them.
 	staffActionRunsWG sync.WaitGroup
 	// staffActionsMu guards staffActionsCtx and staffActionsCancel.
@@ -449,6 +489,23 @@ func runStaffFanOut(
 	pass := newPacedStaffOwnerPass(func(run func() error) error {
 		return staffPaced(ctx, func(context.Context) error { return run() })
 	})
+	// The owner-change notices of every link this run removes are posted once, after
+	// the workers, combined and paced (S7). A removal already happened, so the posts
+	// do not stop with a shutdown: they get a short budget of their own, cut to one
+	// second when the run was cancelled, so the staff drain keeps its time for the
+	// summaries.
+	pass.notices = &staffNoticeBatch{}
+	defer func() {
+		budget := staffNoticeFlushTimeout
+		if ctx.Err() != nil {
+			budget = time.Second
+		}
+		noticeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), budget)
+		defer cancel()
+		pass.notices.flush(b, func(run func() error) error {
+			return staffPaced(noticeCtx, func(context.Context) error { return run() })
+		})
+	}()
 
 	var workers errgroup.Group
 	workers.SetLimit(staffActionWorkers)
@@ -500,8 +557,10 @@ func staffGroupPrechecks(
 	}
 
 	switch recheckLink(b, link, pass) {
-	case staffRecheckRemoved, staffRecheckGone:
+	case staffRecheckRemoved:
 		return early(staffReasonSkipLinkRemoved, "")
+	case staffRecheckGone:
+		return early(staffReasonSkipNoLongerLinked, "")
 	case staffRecheckUnknown:
 		if interrupted() {
 			return early(staffReasonFailInterrupted, "")
@@ -538,6 +597,27 @@ func staffGroupPrechecks(
 		return early(classifyStaffLookupFailure(ctx, b, link.GroupChatID, err))
 	}
 	return target, staffGroupResult{}, true
+}
+
+// staffLinkCurrentLookup reads a group's link fresh right before a staff write. It is
+// a test seam over staff.GetLinkOfGroupFresh.
+var staffLinkCurrentLookup = staff.GetLinkOfGroupFresh
+
+// staffLinkStillCurrent is the last check before a staff action's or an undo's write
+// in a group (S2): the group's link, read fresh, must still be the link the run was
+// started with, of the same Staff Group. A group unlinked, or linked again, since the
+// recheck gets no write and reads "no longer linked"; a failed read fails the group.
+// It returns the empty reason when the write may go ahead.
+func staffLinkStillCurrent(link models.StaffGroupLink) staffReason {
+	current, err := staffLinkCurrentLookup(link.GroupChatID)
+	if err != nil {
+		log.Errorf("[StaffActions] link of group %d could not be read before the write: %v", link.GroupChatID, err)
+		return staffReasonFailInternal
+	}
+	if !staffSameLink(current, link) {
+		return staffReasonSkipNoLongerLinked
+	}
+	return ""
 }
 
 // staffLockdownBanLookup reports whether a live ban of the user in the chat that ends
@@ -599,7 +679,14 @@ func runStaffActionInGroup(
 	if interrupted() {
 		return result(staffReasonFailInterrupted, "")
 	}
+	if reason := staffLinkStillCurrent(link); reason != "" {
+		return result(reason, "")
+	}
 	if err := executeStaffCall(ctx, b, link.GroupChatID, card.Target, verdict, newUntil); err != nil {
+		var changed *staffStateChangedError
+		if errors.As(err, &changed) {
+			return result(changed.Reason, "")
+		}
 		log.Warnf("[StaffActions] %s in group %d: %v", card.Kind, link.GroupChatID, err)
 		return result(classifyStaffFailure(ctx, b, link.GroupChatID, err))
 	}
@@ -684,6 +771,9 @@ func executeStaffCall(
 			if staffUntilTooClose(newUntil) {
 				return errStaffTimeRanOut
 			}
+			if err := staffRedecide(callCtx, b, groupID, targetID, staffKindMute, staffCallMute, newUntil); err != nil {
+				return err
+			}
 			_, err := b.RestrictChatMemberWithContext(callCtx, groupID, targetID, MutedPermissions,
 				&gotgbot.RestrictChatMemberOpts{UntilDate: newUntil})
 			return err
@@ -692,6 +782,9 @@ func executeStaffCall(
 		// The same call per-group /kick makes: it removes a current member without
 		// leaving a ban, so they can rejoin.
 		return paced(func(callCtx context.Context) error {
+			if err := staffRedecide(callCtx, b, groupID, targetID, staffKindKick, staffCallKick, 0); err != nil {
+				return err
+			}
 			_, err := b.UnbanChatMemberWithContext(callCtx, groupID, targetID, &gotgbot.UnbanChatMemberOpts{OnlyIfBanned: false})
 			return err
 		})

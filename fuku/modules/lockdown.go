@@ -379,6 +379,8 @@ func (m moduleStruct) lockdown(b *gotgbot.Bot, ctx *ext.Context) error {
 		return refuse("lockdown_lock_unknown")
 	case lockdownStartLockFailed:
 		return refuse("lockdown_lock_failed")
+	case lockdownStartLiftedMeanwhile:
+		return refuse("lockdown_already_lifted")
 	}
 	row, botMember := res.Row, res.BotMember
 
@@ -426,7 +428,22 @@ func (m moduleStruct) unlockdown(b *gotgbot.Bot, ctx *ext.Context) error {
 	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 	res := applyLockdownLift(context.Background(), b, chat.Id, actor)
 	replyLockdown(b, msg, lockdownLiftApplyText(tr, res, actor.Id))
+	if res.Outcome == liftApplyDone {
+		lockdownPostInlineTally(b, res.Row, res.Lift)
+	}
 	return ext.EndGroups
+}
+
+// lockdownPostInlineTally posts the lift's tally when the caller's own liftLockdownRow
+// won FinishLift: the worker then has no lift left to finish, so it would post none.
+// Every lift caller calls it after its own announcement, so the tally follows the lifted
+// notice exactly as it does when the worker finishes a lift, and a lift with nothing to
+// report posts nothing (lockdownPostTally).
+func lockdownPostInlineTally(b *gotgbot.Bot, row *models.ChatLockdown, res lockdownLiftResult) {
+	if row == nil || res.Outcome != lockdownLiftDone || !res.Finished {
+		return
+	}
+	lockdownPostTally(context.Background(), b, *row)
 }
 
 // lockdownLiftApplyOutcome is how one applyLockdownLift call ended.
@@ -610,6 +627,14 @@ func liftLockdownRow(ctx context.Context, b *gotgbot.Bot, row *models.ChatLockdo
 		return lockdownLiftResult{Outcome: lockdownLiftLost, ManualChange: manualChange}
 	}
 	res := lockdownLiftResult{Outcome: lockdownLiftDone, ManualChange: manualChange}
+	// A ban whose answer was a failure may have landed, so it goes to the worker's
+	// live-checked unban instead of letting FinishLift pass it by. A failed write
+	// leaves the lift unfinished; the worker routes them on its next cycle.
+	if _, routeErr := lockdown.RouteUncertainBans(row.ID); routeErr != nil {
+		log.Errorf("[Lockdown] uncertain bans of lockdown %d were not routed to the unban: %v", row.ID, routeErr)
+		wakeLockdownWorker()
+		return res
+	}
 	res.Finished, err = lockdown.FinishLift(row.ID)
 	if err != nil {
 		log.Errorf("[Lockdown] lockdown %d lift was not finished: %v", row.ID, err)

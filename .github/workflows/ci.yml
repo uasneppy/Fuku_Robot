@@ -415,7 +415,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: [test-rest, test-shard]
+    # Runs even when a needed job failed or was cancelled, so a branch protection rule on
+    # "Test Suite" sees a failure instead of a skipped job (which counts as passing).
+    if: always()
     steps:
+      - name: Require test-rest and every shard to have passed
+        env:
+          REST_RESULT: ${{ needs.test-rest.result }}
+          SHARD_RESULT: ${{ needs.test-shard.result }}
+        run: |
+          echo "test-rest: $REST_RESULT, test-shard: $SHARD_RESULT"
+          if [ "$REST_RESULT" != "success" ] || [ "$SHARD_RESULT" != "success" ]; then
+            echo "::error::test-rest or a test-shard job did not succeed"
+            exit 1
+          fi
+
       - name: Checkout code
         uses: actions/checkout@v7
         with:

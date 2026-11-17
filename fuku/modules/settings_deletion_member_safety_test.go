@@ -223,6 +223,21 @@ func TestSettingsDeletionMemberStaffGroup(t *testing.T) {
 		})
 	})
 
+	t.Run("a forged press in a Staff Group by an administrator without the right is still the invalid request", func(t *testing.T) {
+		env := newSettingsDelEnv(t)
+		listEditAdmin(env.settingsEnv, env.chat, env.admin, false)
+		m := env.groupMenuOf(env.admin)
+		env.makeStaff()
+		var counter settingsDelCounter
+		counter.install(t)
+		for _, tc := range m.memberChanges() {
+			m.wantAlert(t, tc.name, tc.fields, "common_callback_invalid_request")
+		}
+		if counter.sets != 0 || counter.removes != 0 {
+			t.Errorf("a Staff Group press wrote: %d sets, %d removes", counter.sets, counter.removes)
+		}
+	})
+
 	t.Run("an unreadable Staff Group row is the cannot-open edit with no write", func(t *testing.T) {
 		settingsDelMenus(t, func(t *testing.T, m *settingsDelMenu) {
 			env := m.env

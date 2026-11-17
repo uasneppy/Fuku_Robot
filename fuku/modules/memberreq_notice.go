@@ -256,14 +256,18 @@ func memberReqSleep(ctx context.Context, d time.Duration) bool {
 // rejoin reset and an admin's /unmute still end it (an accepted limit: it takes two refusals
 // in a row). A failed revert is logged at Error and leaves the hold punished with the mute
 // lifted, which the member's next message treats as a held member.
-func memberReqUndeliveredMute(ctx context.Context, b *gotgbot.Bot, c memberReqCase, hold *models.ChatRequirementHold) {
+//
+// It reports whether the mute was lifted, so the join entry can welcome a joiner whose mute did
+// not stay (Q4); a member who no longer carries the marker, or whose lift Telegram refused, is not
+// reported lifted.
+func memberReqUndeliveredMute(ctx context.Context, b *gotgbot.Bot, c memberReqCase, hold *models.ChatRequirementHold) bool {
 	liftCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), memberReqUndeliveredTimeout)
 	defer cancel()
 	if live, readErr := memberReqLiveMember(liftCtx, b, c.Chat.Id, c.User.Id); readErr == nil && !isMemberReqMute(live, hold.MuteUntil) {
 		log.Warnf("[MemberReq] the mute notice for user %d in chat %d was not delivered, but the member no longer carries the requirement mute, so nothing was lifted",
 			c.User.Id, c.Chat.Id)
 		memberReqRevertUndelivered(ctx, c, hold)
-		return
+		return false
 	}
 	perms, _, err := memberReqUnmutePermissions(liftCtx, b, c.Chat.Id)
 	if err == nil {
@@ -272,10 +276,11 @@ func memberReqUndeliveredMute(ctx context.Context, b *gotgbot.Bot, c memberReqCa
 	if err != nil {
 		log.Warnf("[MemberReq] the mute notice for user %d in chat %d was not delivered and the mute could not be lifted, so it stays: %s",
 			c.User.Id, c.Chat.Id, memberReqErrText(err))
-		return
+		return false
 	}
 	log.Warnf("[MemberReq] the mute notice for user %d in chat %d was not delivered, so the mute was lifted", c.User.Id, c.Chat.Id)
 	memberReqRevertUndelivered(ctx, c, hold)
+	return true
 }
 
 // memberReqRevertUndelivered turns the hold of an undelivered mute notice back into a pending

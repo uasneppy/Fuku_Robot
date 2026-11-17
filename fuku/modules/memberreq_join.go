@@ -29,7 +29,7 @@ const memberReqJoinTimeout = 15 * time.Second
 const memberReqGuardTimeout = 10 * time.Second
 
 // errMemberReqHoldUnreadable is what the captcha guard returns when the member's hold could not
-// be read. It carries IDs only and none of the database's own text, so nothing in it can read as
+// be read, or when a pending mute hold's marker could not be checked on the live record (Q5). It carries IDs only and none of the database's own text, so nothing in it can read as
 // a permanent unmute failure (isPermanentUnmuteError answers false for it explicitly).
 var errMemberReqHoldUnreadable = errors.New("requirement hold unreadable")
 
@@ -131,7 +131,8 @@ func memberReqJoinThenWelcome(bot *gotgbot.Bot, ctx *ext.Context, user gotgbot.U
 // memberReqCaptchaGuard runs first in unmuteCaptchaUser, the one choke point of every captcha
 // unmute (the pass, restoreCaptchaPermissions, restart recovery and the captcha_muted_users retry
 // worker), so a captcha never frees a member the requirements muted (D-08, D-22). It reports
-// handled true when the member is under a punished requirement mute: it re-applies
+// handled true when the member is under a punished requirement mute, or under a pending one whose
+// marker the live record still carries (Q5, memberReqPendingMuteLive): it re-applies
 // MutedPermissions with until_date the hold's own marker through memberReqPaced instead of
 // unmuting, which keeps the same absolute marker valid for "I fixed it", and the caller treats
 // the unmute as done (a nil error) or as failed (the re-mute's error, retried like any failed
@@ -155,7 +156,15 @@ func memberReqCaptchaGuard(bot *gotgbot.Bot, chatID, userID int64) (handled bool
 		return false, fmt.Errorf("%w: user %d in chat %d", errMemberReqHoldUnreadable, userID, chatID)
 	}
 	if !memberReqPunishedMute(hold) {
-		return false, nil
+		keep, liveErr := memberReqPendingMuteLive(ctx, bot, chatID, userID, hold)
+		if liveErr != nil {
+			log.Warnf("[MemberReq] the live record of user %d in chat %d could not be read for a pending requirement mute, so their captcha unmute waits: %s",
+				userID, chatID, memberReqErrText(liveErr))
+			return false, fmt.Errorf("%w: marker of user %d in chat %d unknown", errMemberReqHoldUnreadable, userID, chatID)
+		}
+		if !keep {
+			return false, nil
+		}
 	}
 	err = memberReqPaced(ctx, func(callCtx context.Context) error {
 		_, restrictErr := bot.RestrictChatMemberWithContext(callCtx, chatID, userID, MutedPermissions,
@@ -163,6 +172,22 @@ func memberReqCaptchaGuard(bot *gotgbot.Bot, chatID, userID int64) (handled bool
 		return restrictErr
 	})
 	return true, err
+}
+
+// memberReqPendingMuteLive reports whether a pending (not yet marked punished) requirement mute
+// hold has its marker live on the member (Q5): the restrict may have taken effect before the hold
+// was marked, and a captcha unmute would then free a member the requirements muted. Any other hold
+// answers false with no call; for a pending mute hold one live getChatMember through the pacer
+// decides (isMemberReqMute), and a read that fails is returned so the caller fails closed.
+func memberReqPendingMuteLive(ctx context.Context, bot *gotgbot.Bot, chatID, userID int64, hold *models.ChatRequirementHold) (bool, error) {
+	if hold == nil || hold.Action != models.RequirementActionMute || hold.PunishedAt != nil || hold.MuteUntil == 0 {
+		return false, nil
+	}
+	member, err := memberReqLiveMember(ctx, bot, chatID, userID)
+	if err != nil {
+		return false, err
+	}
+	return isMemberReqMute(member, hold.MuteUntil), nil
 }
 
 // memberReqResetTimeout bounds the whole rejoin reset of one member: the hold statement, the

@@ -196,6 +196,7 @@ func startCaptchaLifecycleTask(task func(context.Context)) bool {
 
 	go func() {
 		defer captchaLifecycleWG.Done()
+		defer error_handling.RecoverFromPanic("captchaLifecycleTask", "captcha")
 		task(ctx)
 	}()
 	return true
@@ -245,6 +246,10 @@ func isPermanentUnmuteError(err error) bool {
 	return false
 }
 
+// captchaUnsentAttemptGrace is how old an attempt with no challenge message must be before
+// startup recovery treats it as abandoned.
+const captchaUnsentAttemptGrace = 2 * time.Minute
+
 func runOrphanedCaptchaRecovery(bot *gotgbot.Bot) error {
 	log.Info("[CaptchaRecovery] Starting orphaned captcha recovery...")
 
@@ -268,6 +273,11 @@ func runOrphanedCaptchaRecovery(bot *gotgbot.Bot) error {
 
 	for _, attempt := range attempts {
 		if attempt.MessageID <= 0 {
+			// A young attempt with no challenge yet may be a join another replica is still
+			// sending (C4). It is left to its sender, or to the cleanup tick once it expires.
+			if time.Since(attempt.CreatedAt) < captchaUnsentAttemptGrace && time.Now().Before(attempt.ExpiresAt) {
+				continue
+			}
 			released, err := releaseIncompleteCaptchaAttempt(bot, attempt)
 			if err != nil {
 				log.Warnf("[CaptchaRecovery] Failed to release incomplete attempt %d: %v", attempt.ID, err)
@@ -1419,7 +1429,9 @@ func scheduleCaptchaTimeout(bot *gotgbot.Bot, attempt *db.CaptchaAttempts) {
 		case <-timer.C:
 			defer error_handling.RecoverFromPanic("captchaTimeout", "captcha")
 			if fresh, err := captcha.GetCaptchaAttemptByID(capturedID); err == nil && fresh != nil {
-				if fresh.RefreshCount != capturedRefreshCount || !fresh.ExpiresAt.Equal(capturedExpiresAt) {
+				// Compared to the microsecond, the precision PostgreSQL stores (C1).
+				if fresh.RefreshCount != capturedRefreshCount ||
+					!fresh.ExpiresAt.Truncate(time.Microsecond).Equal(capturedExpiresAt.Truncate(time.Microsecond)) {
 					log.Debugf("[Captcha] Stale timer for attempt %d ignored (refreshCount %d->%d, expires %v->%v)", capturedID, capturedRefreshCount, fresh.RefreshCount, capturedExpiresAt, fresh.ExpiresAt)
 					return
 				}
@@ -1544,14 +1556,9 @@ func handleCaptchaTimeout(bot *gotgbot.Bot, chatID, userID int64, attemptID uint
 	}
 
 	if err := executeCaptchaFailureAction(bot, chatID, userID, action); err != nil {
-		log.Errorf("[Captcha] Failed to apply %s to user %d in chat %d: %v", action, userID, chatID, err)
-		if action == "kick" {
-			_, _ = bot.UnbanChatMember(chatID, userID, &gotgbot.UnbanChatMemberOpts{OnlyIfBanned: false})
+		if !settleFailedCaptchaAction(bot, chatID, userID, action, err) {
+			return true, false
 		}
-		if restoreErr := restoreCaptchaPermissions(bot, chatID, userID); restoreErr != nil {
-			log.Errorf("[Captcha] Failed to restore permissions after action failure: %v", restoreErr)
-		}
-		return true, false
 	}
 	if action != "mute" {
 		if err := captcha.DeleteMutedUser(userID, chatID); err != nil {
@@ -1606,6 +1613,60 @@ func buildCaptchaFailureMessage(tr *i18n.Translator, action string, userID int64
 	return fmt.Sprintf(template, formatting.MentionHtml(userID, userName))
 }
 
+// captchaFailureMuteSpan is how long the captcha's mute action lasts, and how long a member
+// whose failure action had an unknown outcome stays muted before the fallback unmute.
+const captchaFailureMuteSpan = 24 * time.Hour
+
+// errCaptchaMuteNotStored is a mute action that stopped before any Telegram call, because its
+// automatic unmute could not be stored: nothing was applied.
+var errCaptchaMuteNotStored = errors.New("store automatic unmute")
+
+// settleFailedCaptchaAction decides what a failure action Telegram answered with an error did,
+// from the member's live record (C2), and reports whether it took effect after all:
+//   - a kick or ban whose member is now left or kicked, and a mute whose member is restricted
+//     without the right to send, took effect (a mute gets its 24 hour unmute back);
+//   - a mute whose member is gone has nothing left to do;
+//   - with the member still there, a definite refusal (a Telegram 4xx other than 429, or a mute
+//     whose unmute could not be stored) releases and unmutes them (WR-07);
+//   - anything else (a 429, a 5xx, a timeout, an unreadable record) may have taken effect, so the
+//     member stays muted, the 24 hour fallback unmute is scheduled (the unmute worker reads the
+//     live member before it restricts) and one warning names the IDs.
+//
+// It never sends a member-removing unban: a failed kick is not retried blindly.
+func settleFailedCaptchaAction(bot *gotgbot.Bot, chatID, userID int64, action string, actionErr error) bool {
+	member, readErr := bot.GetChatMember(chatID, userID, nil)
+	if readErr == nil {
+		status := member.GetStatus()
+		removed := status == "left" || status == "kicked"
+		switch {
+		case action == "mute" && status == "restricted" && !member.MergeChatMember().CanSendMessages:
+			if err := captcha.CreateMutedUser(userID, chatID, time.Now().Add(captchaFailureMuteSpan)); err != nil {
+				log.Errorf("[Captcha] Failed to schedule the unmute of user %d in chat %d: %v", userID, chatID, err)
+			}
+			return true
+		case action != "mute" && removed:
+			return true
+		case removed:
+			if err := captcha.DeleteMutedUser(userID, chatID); err != nil {
+				log.Errorf("[Captcha] Failed to clear fallback unmute for user %d: %v", userID, err)
+			}
+			return false
+		case isTelegramClientError(actionErr) || errors.Is(actionErr, errCaptchaMuteNotStored):
+			log.Errorf("[Captcha] Failed to apply %s to user %d in chat %d: %v", action, userID, chatID, actionErr)
+			if restoreErr := restoreCaptchaPermissions(bot, chatID, userID); restoreErr != nil {
+				log.Errorf("[Captcha] Failed to restore permissions after action failure: %v", restoreErr)
+			}
+			return false
+		}
+	}
+	log.Warnf("[Captcha] The %s of user %d in chat %d has an unknown outcome; the member stays muted until the fallback unmute",
+		action, userID, chatID)
+	if err := captcha.CreateMutedUser(userID, chatID, time.Now().Add(captchaFailureMuteSpan)); err != nil {
+		log.Errorf("[Captcha] Failed to schedule the fallback unmute of user %d in chat %d: %v", userID, chatID, err)
+	}
+	return false
+}
+
 func executeCaptchaFailureAction(bot *gotgbot.Bot, chatID, userID int64, action string) error {
 	switch action {
 	case "kick":
@@ -1617,9 +1678,9 @@ func executeCaptchaFailureAction(bot *gotgbot.Bot, chatID, userID int64, action 
 			return fmt.Errorf("ban: %w", err)
 		}
 	case "mute":
-		unmuteAt := time.Now().Add(24 * time.Hour)
+		unmuteAt := time.Now().Add(captchaFailureMuteSpan)
 		if err := captcha.CreateMutedUser(userID, chatID, unmuteAt); err != nil {
-			return fmt.Errorf("store automatic unmute: %w", err)
+			return fmt.Errorf("%w: %w", errCaptchaMuteNotStored, err)
 		}
 		if _, muteErr := bot.RestrictChatMember(chatID, userID, MutedPermissions, nil); muteErr != nil {
 			return errors.Join(fmt.Errorf("mute: %w", muteErr), captcha.DeleteMutedUser(userID, chatID))
@@ -1651,7 +1712,12 @@ func restoreCaptchaPermissions(bot *gotgbot.Bot, chatID, userID int64) error {
 		scheduleErr := captcha.CreateMutedUser(userID, chatID, time.Now())
 		return errors.Join(err, scheduleErr)
 	}
-	return captcha.DeleteMutedUser(userID, chatID)
+	// The member is unmuted. A schedule that could not be deleted is not a failed unmute (C6):
+	// it is logged, and the worker finds the member already unmuted when it runs.
+	if err := captcha.DeleteMutedUser(userID, chatID); err != nil {
+		log.Errorf("[Captcha] Unmuted user %d in chat %d but could not clear the fallback unmute: %v", userID, chatID, err)
+	}
+	return nil
 }
 
 // captchaPassInput is everything a captcha pass needs and nothing about how it was
@@ -2315,6 +2381,21 @@ func unmuteExpiredCaptchaUsers(bot *gotgbot.Bot) {
 	log.Infof("[CaptchaUnmute] Processing %d users to unmute", len(users))
 
 	for _, user := range users {
+		// The schedule is a snapshot: the member may have been banned or left since. A restrict
+		// on a banned member would replace the ban, so only a member or a restricted member is
+		// unmuted, and a schedule for anyone else is dropped (C3).
+		member, liveErr := bot.GetChatMember(user.ChatID, user.UserID, nil)
+		if liveErr != nil {
+			log.Warnf("[CaptchaUnmute] Could not read user %d in chat %d (will retry): %v", user.UserID, user.ChatID, liveErr)
+			continue
+		}
+		if status := member.GetStatus(); status != "member" && status != "restricted" {
+			log.Infof("[CaptchaUnmute] User %d in chat %d is %s, removing from muted list", user.UserID, user.ChatID, status)
+			if _, deleteErr := captcha.DeleteMutedUserIfUnchanged(user.ID, user.UnmuteAt); deleteErr != nil {
+				log.Errorf("[CaptchaUnmute] Failed to delete schedule %d: %v", user.ID, deleteErr)
+			}
+			continue
+		}
 		err := unmuteCaptchaUser(bot, user.ChatID, user.UserID)
 		if err != nil {
 			if isPermanentUnmuteError(err) {

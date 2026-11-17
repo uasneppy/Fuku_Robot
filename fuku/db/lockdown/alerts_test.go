@@ -881,7 +881,7 @@ func TestReminderSlots(t *testing.T) {
 			t.Fatalf("AlertDestKinds before the alert = %v, %v, want none", kinds, err)
 		}
 		listed := func(want *models.ChatLockdown) bool {
-			all, err := ListRemindableFresh(1000)
+			all, err := ListRemindableFresh(0, 1000)
 			if err != nil {
 				t.Fatalf("ListRemindableFresh: %v", err)
 			}

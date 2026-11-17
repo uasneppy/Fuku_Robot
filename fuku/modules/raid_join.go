@@ -96,6 +96,13 @@ func raidCountMemberJoin(b *gotgbot.Bot, chat *gotgbot.Chat, update *gotgbot.Cha
 // enough different accounts joined within a minute. A user who also arrived as a
 // chat_member update is the same account and counts once.
 //
+// A self-performed join (the sender is the one new member) is left to the chat_member
+// update: the Bot API sends the service message of a join request an administrator
+// approved with the joiner as its sender and only member, exactly like a join by link, so
+// the message cannot tell an approved request from a raider. The chat_member update names
+// the approver as its performer, and raidJoinCounts judges it there. The bot gets
+// chat_member updates wherever it is an administrator, and a lockdown needs that anyway.
+//
 // It returns the performer status it read and looked true whenever it made the live
 // lookup of the message's performer, whether it worked (status set) or failed (status
 // empty), so the join guard never asks Telegram a second time about the same message.
@@ -125,6 +132,9 @@ func raidCountMessageJoins(b *gotgbot.Bot, chat *gotgbot.Chat, msg *gotgbot.Mess
 
 	counted := make([]int64, 0, len(inputs))
 	for _, in := range inputs {
+		if in.PerformerID == in.MemberID {
+			continue
+		}
 		in.PerformerStatus = performerStatus
 		if raidJoinsCountedFor(chat.Id, in) {
 			counted = append(counted, in.MemberID)
