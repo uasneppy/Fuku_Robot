@@ -39,6 +39,10 @@ type staffReason string
 const (
 	staffReasonBanned             staffReason = "banned"
 	staffReasonBannedNotInGroup   staffReason = "banned_not_in_group"
+	// staffReasonBannedRestrictionLost: a timed ban was sent to a target restricted until
+	// later or for good; the ban replaces that restriction, so it will not come back when
+	// the ban ends (owner decision S3-ban). The summary says so.
+	staffReasonBannedRestrictionLost staffReason = "banned_restriction_lost"
 	staffReasonMuted              staffReason = "muted"
 	staffReasonKicked             staffReason = "kicked"
 	staffReasonUnbanned           staffReason = "unbanned"
@@ -89,7 +93,7 @@ const (
 // staffReasonOutcome maps a reason to the outcome it stands for.
 func staffReasonOutcome(r staffReason) staffOutcome {
 	switch r {
-	case staffReasonBanned, staffReasonBannedNotInGroup, staffReasonMuted, staffReasonKicked,
+	case staffReasonBanned, staffReasonBannedNotInGroup, staffReasonBannedRestrictionLost, staffReasonMuted, staffReasonKicked,
 		staffReasonUnbanned, staffReasonUnmuted, staffReasonUndoneUnbanned, staffReasonUndoneUnmuted,
 		staffReasonUndoneBanRestored, staffReasonUndoneRestrictionRestored:
 		return staffOutcomeDone
@@ -235,6 +239,12 @@ func decideStaffBan(st staffTargetState, newUntil int64) staffVerdict {
 	case gotgbot.ChatMemberStatusLeft:
 		return staffVerdict{Call: staffCallBan, Reason: staffReasonBannedNotInGroup}
 	case gotgbot.ChatMemberStatusRestricted:
+		if newUntil != 0 && staffEndsLater(st.Until, newUntil) {
+			// banChatMember replaces the restriction, and it does not come back when the
+			// ban ends. The ban is still what staff asked for, so it is sent and the
+			// summary says the restriction is lost (owner decision S3-ban).
+			return staffVerdict{Call: staffCallBan, Reason: staffReasonBannedRestrictionLost}
+		}
 		if !st.IsMember {
 			return staffVerdict{Call: staffCallBan, Reason: staffReasonBannedNotInGroup}
 		}

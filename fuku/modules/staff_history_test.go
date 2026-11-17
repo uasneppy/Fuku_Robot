@@ -725,7 +725,7 @@ func TestStaffReasonText(t *testing.T) {
 		staffReasonBanned, staffReasonMuted, staffReasonKicked, staffReasonUnbanned, staffReasonUnmuted,
 	}
 	worded := []staffReason{
-		staffReasonBannedNotInGroup,
+		staffReasonBannedNotInGroup, staffReasonBannedRestrictionLost,
 		staffReasonSkipIssuerNotAdmin, staffReasonSkipIssuerNoRight, staffReasonSkipTargetAdmin,
 		staffReasonSkipTargetBot, staffReasonSkipTargetService, staffReasonSkipAlreadyBanned,
 		staffReasonSkipNotInGroup, staffReasonSkipAlreadyMuted, staffReasonSkipNotBanned,

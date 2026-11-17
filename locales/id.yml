@@ -2605,6 +2605,7 @@ staff_act_abort_check_failed: "Saya tidak bisa memeriksanya sekarang. Tidak ada 
 staff_act_line_skipped: "dilewati: {reason}"
 staff_act_line_failed: "gagal: {reason}"
 staff_act_banned_not_in_group: "diblokir (tidak ada di grup)"
+staff_act_banned_restriction_lost: "diblokir; pembatasan yang lebih lama tidak akan kembali saat blokir berakhir"
 staff_act_skip_issuer_not_admin: "Anda bukan admin di sana"
 staff_act_skip_issuer_no_right: "Anda tidak bisa membatasi anggota di sana"
 staff_act_skip_target_admin: "dia admin di sana"

@@ -143,6 +143,8 @@ func staffReasonText(tr *i18n.Translator, r staffReason, detail string) string {
 		return ""
 	case staffReasonBannedNotInGroup:
 		text, _ = tr.GetString("staff_act_banned_not_in_group")
+	case staffReasonBannedRestrictionLost:
+		text, _ = tr.GetString("staff_act_banned_restriction_lost")
 	case staffReasonSkipIssuerNotAdmin:
 		text, _ = tr.GetString("staff_act_skip_issuer_not_admin")
 	case staffReasonSkipIssuerNoRight:

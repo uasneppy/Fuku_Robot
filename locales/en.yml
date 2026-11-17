@@ -1497,6 +1497,7 @@ staff_act_abort_check_failed: "I could not check this right now. Nothing was don
 staff_act_line_skipped: "skipped: {reason}"
 staff_act_line_failed: "failed: {reason}"
 staff_act_banned_not_in_group: "banned (not in group)"
+staff_act_banned_restriction_lost: "banned; their longer restriction will not come back when the ban ends"
 staff_act_skip_issuer_not_admin: "you are not an admin there"
 staff_act_skip_issuer_no_right: "you cannot restrict members there"
 staff_act_skip_target_admin: "they are an admin there"

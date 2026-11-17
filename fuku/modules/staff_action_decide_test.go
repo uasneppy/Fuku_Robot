@@ -59,6 +59,15 @@ func TestStaffActionDecisionTable(t *testing.T) {
 		{"ban restricted non-member", staffKindBan, mutedOut, 0, staffVerdict{staffCallBan, staffReasonBannedNotInGroup}},
 		{"ban member", staffKindBan, member, 0, staffVerdict{staffCallBan, staffReasonBanned}},
 		{"ban muted member is stricter", staffKindBan, mutedIn, 0, staffVerdict{staffCallBan, staffReasonBanned}},
+		// A timed ban on a target restricted for longer is sent, and the summary says the
+		// restriction will not come back when the ban ends (owner decision S3-ban).
+		{"timed ban on a member restricted for good", staffKindBan, freeIn, until, staffVerdict{staffCallBan, staffReasonBannedRestrictionLost}},
+		{"timed ban on a member muted for good", staffKindBan, mutedIn, until, staffVerdict{staffCallBan, staffReasonBannedRestrictionLost}},
+		{"timed ban on a member muted until later", staffKindBan, mutedInT, until - 1, staffVerdict{staffCallBan, staffReasonBannedRestrictionLost}},
+		{"timed ban on a non-member restricted for good", staffKindBan, freeOut, until, staffVerdict{staffCallBan, staffReasonBannedRestrictionLost}},
+		{"timed ban ending with the restriction", staffKindBan, freeInT, until, staffVerdict{staffCallBan, staffReasonBanned}},
+		{"timed ban ending after the restriction", staffKindBan, freeInT, until + 1, staffVerdict{staffCallBan, staffReasonBanned}},
+		{"permanent ban on a restricted member", staffKindBan, freeInT, 0, staffVerdict{staffCallBan, staffReasonBanned}},
 
 		// mute.
 		{"mute member", staffKindMute, member, 0, staffVerdict{staffCallMute, staffReasonMuted}},

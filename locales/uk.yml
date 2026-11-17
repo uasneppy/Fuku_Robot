@@ -1354,6 +1354,7 @@ staff_act_abort_check_failed: "Зараз я не можу це перевіри
 staff_act_line_skipped: "пропущено: {reason}"
 staff_act_line_failed: "помилка: {reason}"
 staff_act_banned_not_in_group: "забанено (не в групі)"
+staff_act_banned_restriction_lost: "забанено; довше обмеження не повернеться, коли бан закінчиться"
 staff_act_skip_issuer_not_admin: "ви там не адмін"
 staff_act_skip_issuer_no_right: "ви не можете там обмежувати учасників"
 staff_act_skip_target_admin: "там це адмін"

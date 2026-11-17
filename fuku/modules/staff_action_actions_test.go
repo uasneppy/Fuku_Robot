@@ -314,6 +314,36 @@ func TestStaffActionMuteNeverShortensRestriction(t *testing.T) {
 	wantSkippedLine(t, summary, "Group B", "staff_act_skip_restricted_longer")
 }
 
+// TestStaffActionTimedBanOverLongerRestriction: a timed staff ban on a member restricted
+// for longer than the ban is still sent, because banning is what staff asked for, but the
+// summary says the restriction will not come back when the ban ends (owner decision S3-ban).
+func TestStaffActionTimedBanOverLongerRestriction(t *testing.T) {
+	env := newStaffActionEnv(t, 2)
+	g1, g2 := env.groups[0], env.groups[1]
+	media := gotgbot.ChatPermissions{CanSendMessages: true}
+	env.fake.setMember(g1, staffTestTarget, staffFakeMember{
+		Status: gotgbot.ChatMemberStatusRestricted, IsMember: true, CanSendMessages: true, Perms: &media,
+	})
+	env.fake.setMember(g2, staffTestTarget, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+
+	summary, _ := env.runStaffCommand("/tban 4242 1h")
+
+	for _, group := range []int64{g1, g2} {
+		if calls := env.callsTo("banChatMember", group); len(calls) != 1 {
+			t.Fatalf("banChatMember calls in group %d = %+v, want the ban sent", group, calls)
+		}
+	}
+	wantDoneLine(t, summary, "Group A")
+	wantDoneLine(t, summary, "Group B")
+	note := staffMarker("staff_act_banned_restriction_lost")
+	if line := summaryLine(t, summary, "Group A"); !strings.Contains(line, note) {
+		t.Fatalf("line for Group A = %q, want it to say the restriction will not come back", line)
+	}
+	if line := summaryLine(t, summary, "Group B"); strings.Contains(line, note) {
+		t.Fatalf("line for Group B = %q, want no restriction note for a plain member", line)
+	}
+}
+
 // TestStaffActionRereadsBeforeWrite: a target banned between the read the verdict was
 // made on and the write is not muted or kicked, because both calls would lift the ban
 // (S1). The ban lands right after the prior state is stored, the last step before the

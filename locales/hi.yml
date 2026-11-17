@@ -2322,6 +2322,7 @@ staff_act_abort_check_failed: "मैं अभी इसकी जांच न
 staff_act_line_skipped: "छोड़ा गया: {reason}"
 staff_act_line_failed: "विफल: {reason}"
 staff_act_banned_not_in_group: "बैन किया गया (ग्रुप में नहीं है)"
+staff_act_banned_restriction_lost: "बैन किया गया; बैन खत्म होने पर उसका लंबा प्रतिबंध वापस नहीं आएगा"
 staff_act_skip_issuer_not_admin: "आप वहां एडमिन नहीं हैं"
 staff_act_skip_issuer_no_right: "आप वहां सदस्यों को प्रतिबंधित नहीं कर सकते"
 staff_act_skip_target_admin: "वह वहां एडमिन है"

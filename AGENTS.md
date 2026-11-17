@@ -3756,9 +3756,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   ban is put back for its lift to end (`TestStaffUndoLiftedLockdownBan`); a failed read fails the group. A staff mute never shortens a restriction either: a member
   restricted (not muted) until a later date than the mute's, or for good while the mute is timed, is skipped "already
   restricted for longer" (`staffReasonSkipRestrictedLonger`), because `restrictChatMember` would replace that
-  restriction (`TestStaffActionMuteNeverShortensRestriction`). Accepted limit (owner decision S3-ban): a timed staff ban
-  (`/tban`, `/ban <duration>`) on a member restricted until later than the ban's end, or for good, is still sent, so
-  when the ban ends the member comes back without that restriction. Undo decisions live in `decideStaffUndo` alone, beside `decideStaffAction`, and `executeStaffUndoCall` switches only
+  restriction (`TestStaffActionMuteNeverShortensRestriction`). A timed staff ban (`/tban`, `/ban <duration>`) on a
+  target restricted (muted or not, member or not) until later than the ban's end, or for good, is still sent, because
+  the ban is what staff asked for, but its verdict is `staffReasonBannedRestrictionLost` (outcome done), and the group's
+  summary line says `staff_act_banned_restriction_lost`: the ban replaces the restriction and it will not come back when
+  the ban ends (owner decision S3-ban, `TestStaffActionTimedBanOverLongerRestriction`). Nothing re-applies it; staff
+  who want it back restrict the member again after the ban, or ban for good. Undo decisions live in `decideStaffUndo` alone, beside `decideStaffAction`, and `executeStaffUndoCall` switches only
   on its verdict. Its one exception to the never-lift rule, a restrict or ban sent to a kicked or left target, is
   allowed only when the live state equals what the staff action left behind. An undo touches only groups where the
   action was applied, rechecks each one live for the presser (creator, or administrator with `can_restrict_members`,

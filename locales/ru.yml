@@ -2417,6 +2417,7 @@ staff_act_abort_check_failed: "Сейчас не удалось это пров�
 staff_act_line_skipped: "пропущено: {reason}"
 staff_act_line_failed: "ошибка: {reason}"
 staff_act_banned_not_in_group: "забанен (нет в группе)"
+staff_act_banned_restriction_lost: "забанен; более долгое ограничение не вернётся после окончания бана"
 staff_act_skip_issuer_not_admin: "вы там не админ"
 staff_act_skip_issuer_no_right: "вы не можете там ограничивать участников"
 staff_act_skip_target_admin: "он там админ"

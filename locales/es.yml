@@ -2613,6 +2613,7 @@ staff_act_abort_check_failed: "No pude comprobarlo ahora mismo. No se hizo nada;
 staff_act_line_skipped: "omitido: {reason}"
 staff_act_line_failed: "falló: {reason}"
 staff_act_banned_not_in_group: "baneado (no está en el grupo)"
+staff_act_banned_restriction_lost: "baneado; su restricción más larga no volverá cuando termine el baneo"
 staff_act_skip_issuer_not_admin: "no eres admin allí"
 staff_act_skip_issuer_no_right: "no puedes restringir miembros allí"
 staff_act_skip_target_admin: "es admin allí"
