@@ -40,6 +40,10 @@ var (
 	aispamJevEndpoint = "https://api.typesafe.ai/v1/systemone"
 	aispamHTTPClient  = &http.Client{
 		Timeout: aispamJevTimeout,
+		// A redirect is never followed: it would carry the bearer key to whatever host
+		// the answer names. The 3xx comes back as a non-2xx status, so the check fails
+		// open with no verdict.
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		Transport: &http.Transport{
 			MaxIdleConns:    10,
 			IdleConnTimeout: 90 * time.Second,
