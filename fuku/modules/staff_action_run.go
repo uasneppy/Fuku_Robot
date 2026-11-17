@@ -35,6 +35,28 @@ type staffGroupResult struct {
 	Reached bool
 }
 
+// staffUntilMinLead is how far in the future a timed ban's or mute's end date must
+// still be when its write is sent: Telegram treats an until_date less than 30 s away
+// as permanent, plus 5 s for the call's flight time.
+const staffUntilMinLead = 35 * time.Second
+
+// errStaffTimeRanOut is returned instead of a ban or restrict whose fixed end date is
+// under staffUntilMinLead away (or past), so nobody is restricted for good.
+var errStaffTimeRanOut = errors.New("the staff action's end date is too close to send")
+
+// staffUntilNow is the clock of the end-date guard only. It is a variable so a test
+// can move it.
+var staffUntilNow = time.Now
+
+// staffUntilTooClose reports whether a timed end date is too close to send. Zero is a
+// permanent action and is never too close.
+func staffUntilTooClose(until int64) bool {
+	if until == 0 {
+		return false
+	}
+	return until-staffUntilNow().Unix() < int64(staffUntilMinLead/time.Second)
+}
+
 var (
 	// staffActionCallTimeout bounds each Telegram call made for a staff action.
 	staffActionCallTimeout = 8 * time.Second
@@ -649,11 +671,19 @@ func executeStaffCall(
 	switch verdict.Call {
 	case staffCallBan:
 		return paced(func(callCtx context.Context) error {
+			// Checked inside the paced unit, so after the slot wait and again on every
+			// retry after a 429: an end date that is now under 35 s away is not sent.
+			if staffUntilTooClose(newUntil) {
+				return errStaffTimeRanOut
+			}
 			_, err := b.BanChatMemberWithContext(callCtx, groupID, targetID, &gotgbot.BanChatMemberOpts{UntilDate: newUntil})
 			return err
 		})
 	case staffCallMute:
 		return paced(func(callCtx context.Context) error {
+			if staffUntilTooClose(newUntil) {
+				return errStaffTimeRanOut
+			}
 			_, err := b.RestrictChatMemberWithContext(callCtx, groupID, targetID, MutedPermissions,
 				&gotgbot.RestrictChatMemberOpts{UntilDate: newUntil})
 			return err
@@ -750,6 +780,9 @@ func classifyStaffFailure(ctx context.Context, b *gotgbot.Bot, groupID int64, er
 	}
 	if errors.Is(err, ratelimit.ErrRateLimited) {
 		return staffReasonFailRateLimited, ""
+	}
+	if errors.Is(err, errStaffTimeRanOut) {
+		return staffReasonFailTimeRanOut, ""
 	}
 	if isStaffClientError(err) {
 		member, result := probeStaffBot(ctx, b, groupID)

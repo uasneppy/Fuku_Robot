@@ -3618,7 +3618,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Staff durations: `/ban` and `/mute` take an optional `<digits><m|h|d|w>` token right after the target, `/tban` and
   `/tmute` require it, and the grammar is `extraction.ParseDurationToken`, shared with the per-group commands. Longer
   than 366 days means permanent on the card and in the call, never a clamped value. The card stores the duration, not
-  an end date: `until_date` is computed once at Confirm and that one value goes to every group.
+  an end date: `until_date` is computed once at Confirm and that one value goes to every group. Telegram treats an
+  `until_date` less than 30 s away as permanent, so right before every ban or restrict write, inside the paced closure
+  of `executeStaffCall` (so a retry after a 429 wait is checked again), an end date under `staffUntilMinLead` (35 s)
+  away or past is not sent (`staffUntilTooClose`, `errStaffTimeRanOut`): that group fails with `fail_time_ran_out`
+  (`staff_act_fail_time_ran_out`) and nobody is restricted for good. The one `until_date` for every group is unchanged,
+  and the undo path has no such guard.
 - Greeting media types (Phase 12): `db.ANIMATION` (9) is a GIF saved by `/setwelcome`, `/setgoodbye` or the message
   editor's media part, stored with the animation's file ID and sent with `sendAnimation`. Only the greeting extraction
   returns it: `extractGreetingMedia` (animation first, then `extractMediaFromReply`) sits behind `ExtractWelcome` and

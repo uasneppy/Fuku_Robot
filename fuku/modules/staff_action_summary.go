@@ -186,6 +186,8 @@ func staffReasonText(tr *i18n.Translator, r staffReason, detail string) string {
 		text, _ = tr.GetString("staff_act_fail_internal")
 	case staffReasonFailInterrupted:
 		text, _ = tr.GetString("staff_act_fail_interrupted")
+	case staffReasonFailTimeRanOut:
+		text, _ = tr.GetString("staff_act_fail_time_ran_out")
 	case staffReasonUndoneUnbanned:
 		text, _ = tr.GetString("staff_undo_unbanned")
 	case staffReasonUndoneUnmuted:

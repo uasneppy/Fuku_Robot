@@ -4,6 +4,7 @@ package modules
 
 import (
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -367,4 +368,73 @@ func TestStaffActionKickIgnoresDuration(t *testing.T) {
 	if !strings.Contains(card, "2d spam") {
 		t.Fatalf("card = %q, want the whole text after the target as the reason", card)
 	}
+}
+
+// TestStaffActionTimeRanOutSkipsWrite: a fixed end date that is under 35 s away at
+// write time would make Telegram restrict the target for good, so the group fails
+// with its own reason and no write is sent.
+func TestStaffActionTimeRanOutSkipsWrite(t *testing.T) {
+	cases := []struct {
+		command string
+		method  string
+		// applied is true when the end date is far enough for the write to go out.
+		applied bool
+	}{
+		{command: "/tmute 4242 1m", method: "restrictChatMember"},
+		{command: "/tban 4242 1m", method: "banChatMember"},
+		{command: "/tmute 4242 30m", method: "restrictChatMember", applied: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.command, func(t *testing.T) {
+			env := newStaffActionEnv(t, 2)
+			mreqSwap(t, &staffUntilNow, func() time.Time { return time.Now().Add(40 * time.Second) })
+			for _, group := range env.groups {
+				env.fake.setMember(group, staffTestTarget, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+			}
+
+			summary, _, _ := env.confirmWindow(tc.command)
+
+			for i, group := range env.groups {
+				title := []string{"Group A", "Group B"}[i]
+				calls := env.callsTo(tc.method, group)
+				if tc.applied {
+					if len(calls) != 1 {
+						t.Fatalf("%s calls in group %d = %d, want the far end date applied", tc.method, group, len(calls))
+					}
+					wantMember(t, env.fake, group, staffTestTarget, gotgbot.ChatMemberStatusRestricted)
+					continue
+				}
+				if writes := env.writes(group); len(writes) != 0 {
+					t.Fatalf("write calls in group %d = %+v, want none for an end date under 35 s away", group, writes)
+				}
+				wantFailedLine(t, summary, title, "staff_act_fail_time_ran_out")
+				wantMember(t, env.fake, group, staffTestTarget, gotgbot.ChatMemberStatusMember)
+			}
+		})
+	}
+}
+
+// TestStaffActionTimeRanOutAfter429: the guard runs on every attempt of the paced
+// call, so a retry after a 429 wait that would land too close to the end date
+// sends nothing.
+func TestStaffActionTimeRanOutAfter429(t *testing.T) {
+	env := newStaffActionEnv(t, 1)
+	g1 := env.groups[0]
+	env.fake.setMember(g1, staffTestTarget, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+	env.fake.script("restrictChatMember", g1, staffFake429(1))
+	var reads atomic.Int32
+	mreqSwap(t, &staffUntilNow, func() time.Time {
+		if reads.Add(1) == 1 {
+			return time.Now()
+		}
+		return time.Now().Add(40 * time.Second)
+	})
+
+	summary, _, _ := env.confirmWindow("/tmute 4242 1m")
+
+	if calls := env.callsTo("restrictChatMember", g1); len(calls) != 1 {
+		t.Fatalf("restrictChatMember calls = %d, want only the one that got the 429", len(calls))
+	}
+	wantFailedLine(t, summary, "Group A", "staff_act_fail_time_ran_out")
+	wantMember(t, env.fake, g1, staffTestTarget, gotgbot.ChatMemberStatusMember)
 }
