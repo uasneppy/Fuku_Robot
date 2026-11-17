@@ -221,7 +221,8 @@ func TestRunOrphanedCaptchaRecoveryPersistsFailedUnmuteWithoutFailingStartup(t *
 		ChatID:    chatID,
 		Answer:    "0",
 		MessageID: 0,
-		CreatedAt: now.Add(-time.Minute),
+		// Older than captchaUnsentAttemptGrace: a younger unsent attempt is left to its sender.
+		CreatedAt: now.Add(-3 * time.Minute),
 		ExpiresAt: now.Add(time.Minute),
 	}
 	if err := db.DB.Create(&attempt).Error; err != nil {

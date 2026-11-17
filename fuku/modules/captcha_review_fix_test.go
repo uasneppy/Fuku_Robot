@@ -159,6 +159,47 @@ func TestUnmuteExpiredCaptchaUsersReadsLiveMember(t *testing.T) {
 	}
 }
 
+// TestRunOrphanedCaptchaRecoverySparesYoungUnsentAttempt pins C4: an attempt with no challenge
+// message yet may belong to a join another replica is still sending, so startup recovery
+// releases it only once it is older than two minutes.
+func TestRunOrphanedCaptchaRecoverySparesYoungUnsentAttempt(t *testing.T) {
+	client := newModuleBotClient()
+	bot := newModuleTestBot(client)
+	chatID := uniqueModuleChatID()
+	young, old := uniqueLinkOwnerID(), uniqueLinkOwnerID()
+	selfDestructCaptchaCleanup(t, chatID)
+	memberReqCleanup(t, nil, []int64{young, old})
+	t.Cleanup(func() {
+		_ = captcha.DeleteMutedUser(young, chatID)
+		_ = captcha.DeleteMutedUser(old, chatID)
+	})
+
+	now := time.Now()
+	rows := []db.CaptchaAttempts{
+		{UserID: young, ChatID: chatID, Answer: "1", CreatedAt: now.Add(-10 * time.Second), ExpiresAt: now.Add(2 * time.Minute)},
+		{UserID: old, ChatID: chatID, Answer: "2", CreatedAt: now.Add(-3 * time.Minute), ExpiresAt: now.Add(2 * time.Minute)},
+	}
+	for i := range rows {
+		if err := db.DB.Create(&rows[i]).Error; err != nil {
+			t.Fatalf("create attempt: %v", err)
+		}
+	}
+
+	if err := runOrphanedCaptchaRecovery(bot); err != nil {
+		t.Fatalf("runOrphanedCaptchaRecovery() error = %v", err)
+	}
+
+	if row, err := captcha.GetCaptchaAttemptByID(rows[0].ID); err != nil || row == nil {
+		t.Fatalf("young unsent attempt = %v, %v; want it left to its sender", row, err)
+	}
+	if row, err := captcha.GetCaptchaAttemptByID(rows[1].ID); err != nil || row != nil {
+		t.Fatalf("old unsent attempt = %v, %v; want it released", row, err)
+	}
+	if got := len(callsForUser(client, "restrictChatMember", young)); got != 0 {
+		t.Fatalf("restrictChatMember calls for the young attempt = %d, want none", got)
+	}
+}
+
 // TestCaptchaTimeoutFailedActionReadsLiveMember pins C2: a failure action Telegram answered
 // with an error is judged from the member's live record. Removed is applied; a definite 4xx
 // other than 429 with the member still there releases and unmutes them (WR-07) with no

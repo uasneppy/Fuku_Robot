@@ -245,6 +245,10 @@ func isPermanentUnmuteError(err error) bool {
 	return false
 }
 
+// captchaUnsentAttemptGrace is how old an attempt with no challenge message must be before
+// startup recovery treats it as abandoned.
+const captchaUnsentAttemptGrace = 2 * time.Minute
+
 func runOrphanedCaptchaRecovery(bot *gotgbot.Bot) error {
 	log.Info("[CaptchaRecovery] Starting orphaned captcha recovery...")
 
@@ -268,6 +272,11 @@ func runOrphanedCaptchaRecovery(bot *gotgbot.Bot) error {
 
 	for _, attempt := range attempts {
 		if attempt.MessageID <= 0 {
+			// A young attempt with no challenge yet may be a join another replica is still
+			// sending (C4). It is left to its sender, or to the cleanup tick once it expires.
+			if time.Since(attempt.CreatedAt) < captchaUnsentAttemptGrace && time.Now().Before(attempt.ExpiresAt) {
+				continue
+			}
 			released, err := releaseIncompleteCaptchaAttempt(bot, attempt)
 			if err != nil {
 				log.Warnf("[CaptchaRecovery] Failed to release incomplete attempt %d: %v", attempt.ID, err)
