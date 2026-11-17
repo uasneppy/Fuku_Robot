@@ -766,9 +766,6 @@ func LoadBackup(dispatcher *ext.Dispatcher) {
 		backupModule.backupCallbackHandler,
 	))
 
-	helpers.AddCmdToDisableable("export")
-	helpers.AddCmdToDisableable("import")
-
 	log.Info("[Backup] Module loaded successfully")
 }
 

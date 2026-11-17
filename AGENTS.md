@@ -152,7 +152,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Modules register in `init()` via `RegisterLegacyModule(name, priority, load)`. Use a unique name; duplicates are
   dropped silently. Priority sets load order and group-0 precedence; `LoadHelp` loads last.
 - New commands use `helpers.WrapCommand(dispatcher, CommandDescriptor{...}, handler)`. Set `Disableable: true` for any
-  command chats may disable. Do not add replies for failed checks; the pipeline sends them. Every command handler,
+  command chats may disable, and make its handler check the name it was registered under (`helpers.CheckDisabled` or
+  `chat_status.CheckDisabledCmd` with that name; `Disableable` itself only adds the name to the list): `/disable`
+  accepts every name in the list, so an unchecked name is a silent no-op (`TestDisableRefusesNamesThatHaveNoCheck`).
+  `/blocklists` checks its own name and then `blacklists`, so disabling either silences the alias. Do not add replies for failed checks; the pipeline sends them. Every command handler,
   wrapped or raw, is built by `helpers.NewBotCommand` (`fuku/utils/helpers/command_registry.go`), which records the
   lower-cased name and returns the library's own command handler unchanged (so routing is the library's). Command
   deletion reads the registry through `helpers.IsBotCommand`, so only a command this bot registers is ever deleted.
@@ -3393,7 +3396,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - A lockdown never touches another group: every lockdown query is keyed by `chat_id` or `lockdown_id`, and the worker
   calls Telegram with the row's own chat, so two locked groups lift in either order without a call or post in the other.
 - The old raid mode is retired (`antiraid.go`, LOCK-15). `/antiraid`, `/raidtime` and `/raidactiontime` are one pointer
-  command (`antiraidRetiredDesc`, `Disableable`, no checks) that replies `lockdown_antiraid_retired` and changes
+  command (`antiraidRetiredDesc`, not `Disableable` because its handler checks no disabled name, no checks) that replies `lockdown_antiraid_retired` and changes
   nothing; a press on an old `antiraid|` button is answered once with the same text and changes nothing. `/autoantiraid`
   (`autoantiraidDesc`) is kept as an alias of the join-surge threshold: with words it runs `autolockdownApply` with
   `joins` in front, alone it shows the triggers, and it has exactly `/autolockdown`'s checks

@@ -39,11 +39,11 @@ const antiraidCallbackAnswerMax = 200
 var antiraidTagPattern = regexp.MustCompile(`<[^>]*>`)
 
 // antiraidRetiredDesc registers /antiraid and the two old timing commands as one
-// pointer. It has no checks: the reply is static text that names no group data.
+// pointer. It has no checks: the reply is static text that names no group data. It is not
+// Disableable: the handler checks no disabled name, so /disable on it would be a silent no-op.
 var antiraidRetiredDesc = helpers.CommandDescriptor{
-	Name:        "antiraid",
-	Aliases:     []string{"raidtime", "raidactiontime"},
-	Disableable: true,
+	Name:    "antiraid",
+	Aliases: []string{"raidtime", "raidactiontime"},
 }
 
 // autoantiraidDesc is /autoantiraid with exactly /autolockdown's checks: a live

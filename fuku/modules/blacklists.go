@@ -440,10 +440,23 @@ func (m moduleStruct) removeBlacklist(b *gotgbot.Bot, ctx *ext.Context) error {
 }
 
 func (m moduleStruct) listBlacklists(b *gotgbot.Bot, ctx *ext.Context) error {
+	return m.listBlacklistsNamed(b, ctx, "blacklists")
+}
+
+// listBlocklists is /blocklists: it honours its own disabled name and, as before, the shared
+// name blacklists, so a chat that disabled /blacklists does not show the words through the alias.
+func (m moduleStruct) listBlocklists(b *gotgbot.Bot, ctx *ext.Context) error {
+	return m.listBlacklistsNamed(b, ctx, "blocklists", "blacklists")
+}
+
+// listBlacklistsNamed lists the chat's words unless one of the disabled names covers the command.
+func (m moduleStruct) listBlacklistsNamed(b *gotgbot.Bot, ctx *ext.Context, names ...string) error {
 	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 	msg := ctx.EffectiveMessage
-	if chat_status.CheckDisabledCmd(b, msg, "blacklists") {
-		return ext.EndGroups
+	for _, name := range names {
+		if chat_status.CheckDisabledCmd(b, msg, name) {
+			return ext.EndGroups
+		}
 	}
 	connectedChat := chat_status.IsUserConnected(b, ctx, false, true)
 	if connectedChat == nil {
@@ -807,7 +820,7 @@ func LoadBlacklists(dispatcher *ext.Dispatcher) {
 
 	dispatcher.AddHandler(helpers.NewBotCommand("blacklists", blacklistsModule.listBlacklists))
 	helpers.AddCmdToDisableable("blacklists")
-	dispatcher.AddHandler(helpers.NewBotCommand("blocklists", blacklistsModule.listBlacklists))
+	dispatcher.AddHandler(helpers.NewBotCommand("blocklists", blacklistsModule.listBlocklists))
 	helpers.AddCmdToDisableable("blocklists")
 	dispatcher.AddHandler(helpers.NewBotCommand("addblacklist", blacklistsModule.addBlacklist))
 	dispatcher.AddHandler(helpers.NewBotCommand("blacklist", blacklistsModule.addBlacklist))
