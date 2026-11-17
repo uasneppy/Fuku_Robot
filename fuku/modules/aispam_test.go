@@ -769,3 +769,29 @@ func TestAISpamIsReachableFromHelp(t *testing.T) {
 		t.Fatalf("/help aispam resolves to %q, want %q", got, aispamModule.moduleName)
 	}
 }
+
+// TestAISpamBreakerPrunesStale holds that the /aispam breaker map forgets a chat whose last
+// failure is older than the cooldown when it is full, so a chat failing now can still be
+// paused instead of staying untracked for ever.
+func TestAISpamBreakerPrunesStale(t *testing.T) {
+	resetAISpamRuntime()
+	t.Cleanup(resetAISpamRuntime)
+	start := time.Date(2026, 11, 17, 12, 0, 0, 0, time.UTC)
+	now := start
+	raidSetClock(t, func() time.Time { return now })
+
+	for id := int64(1); id <= aispamBreakerMaxChats; id++ {
+		aispamBreakerRecordFailure(id)
+	}
+
+	now = start.Add(aispamBreakerCooldown + time.Second)
+	const newChat = int64(-1009997)
+	tripped := false
+	for range aispamBreakerFailures {
+		tripped = aispamBreakerRecordFailure(newChat) || tripped
+	}
+	if !tripped || !aispamBreakerPaused(newChat) {
+		t.Errorf("tripped %v, paused %v: a chat failing now was never paused, stale breakers should have been pruned",
+			tripped, aispamBreakerPaused(newChat))
+	}
+}

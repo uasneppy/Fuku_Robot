@@ -495,6 +495,23 @@ type aispamBreaker struct {
 	failures   int
 	pausedTill time.Time
 	notified   bool
+	// lastFailure is when the chat's last failure was counted; a breaker that is not paused
+	// and whose last failure is older than aispamBreakerCooldown is stale.
+	lastFailure time.Time
+}
+
+// aispamBreakerPruneLocked drops the stale breakers (not paused, last failure older than
+// aispamBreakerCooldown), so a full map makes room for a chat that is failing now. The
+// caller holds aispamBreakers.mu.
+func aispamBreakerPruneLocked(now time.Time) {
+	for chatID, breaker := range aispamBreakers.m {
+		if !breaker.pausedTill.IsZero() && now.Before(breaker.pausedTill) {
+			continue
+		}
+		if now.Sub(breaker.lastFailure) >= aispamBreakerCooldown {
+			delete(aispamBreakers.m, chatID)
+		}
+	}
 }
 
 var aispamBreakers = struct {
@@ -528,6 +545,9 @@ func aispamBreakerRecordFailure(chatID int64) bool {
 	breaker, ok := aispamBreakers.m[chatID]
 	if !ok {
 		if len(aispamBreakers.m) >= aispamBreakerMaxChats {
+			aispamBreakerPruneLocked(now)
+		}
+		if len(aispamBreakers.m) >= aispamBreakerMaxChats {
 			return false
 		}
 		breaker = &aispamBreaker{}
@@ -540,6 +560,7 @@ func aispamBreakerRecordFailure(chatID int64) bool {
 	}
 
 	breaker.failures++
+	breaker.lastFailure = now
 	if breaker.failures < aispamBreakerFailures || breaker.notified {
 		return false
 	}

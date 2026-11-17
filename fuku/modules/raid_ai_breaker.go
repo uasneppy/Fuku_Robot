@@ -44,17 +44,24 @@ var (
 type raidAIImageBreaker struct {
 	failures   int
 	pausedTill time.Time
+	// lastFailure is when the chat's last provider failure was counted; a breaker whose last
+	// failure is older than raidAIImageCooldown is stale and may be pruned.
+	lastFailure time.Time
 }
 
 // raidAIImageCapWarned makes the "breaker map is full" warning appear once per process.
 var raidAIImageCapWarned atomic.Bool
 
-// raidAIImagePruneLocked drops the breakers that are neither paused nor counting failures,
-// the ones a success or an expired pause left idle, so a full map makes room for a chat that
-// is failing now. The caller holds raidAIImageBreakers.mu.
+// raidAIImagePruneLocked drops the breakers that are not paused and either count no failure
+// (a success or an expired pause left them idle) or saw their last failure longer than
+// raidAIImageCooldown ago (stale), so a full map makes room for a chat that is failing now.
+// The caller holds raidAIImageBreakers.mu.
 func raidAIImagePruneLocked(now time.Time) {
 	for chatID, breaker := range raidAIImageBreakers.m {
-		if breaker.failures == 0 && (breaker.pausedTill.IsZero() || !now.Before(breaker.pausedTill)) {
+		if !breaker.pausedTill.IsZero() && now.Before(breaker.pausedTill) {
+			continue
+		}
+		if breaker.failures == 0 || now.Sub(breaker.lastFailure) >= raidAIImageCooldown {
 			delete(raidAIImageBreakers.m, chatID)
 		}
 	}
@@ -130,6 +137,7 @@ func raidAIImageRecordFailure(chatID int64, err error) {
 		breaker.pausedTill = time.Time{}
 	}
 	breaker.failures++
+	breaker.lastFailure = now
 	if breaker.failures < raidAIImageFailures {
 		raidAIImageBreakers.mu.Unlock()
 		return
