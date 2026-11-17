@@ -434,7 +434,7 @@ func (moduleStruct) translate(b *gotgbot.Bot, ctx *ext.Context) error {
 		return ext.EndGroups
 	}
 	textTemplate, _ := tr.GetString("misc_translate_result")
-	text := fmt.Sprintf(textTemplate, detectedLang, translatedText)
+	text := fmt.Sprintf(textTemplate, html.EscapeString(detectedLang), html.EscapeString(translatedText))
 	_, _ = msg.Reply(b, text, formatting.Shtml())
 	return ext.EndGroups
 }
