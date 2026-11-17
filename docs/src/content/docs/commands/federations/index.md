@@ -17,7 +17,11 @@ Federations share one ban list across the groups you own. One ban, every facilit
 - `/subfed /unsubfed /fedsubs`: Subscribe to another fed (max 5).
 - `/fbanlist [csv|json|minicsv]`: Export fbans.
 - `/importfbans`: Import from a replied CSV/JSON file.
-- `/setfedlog /unsetfedlog`: Federation log chat.
+- `/unsetfedlog`: Clear the federation log chat.
+
+### Federation log chat (owner):
+- `/setfedlog`: In a group, make that group the federation log (you must be an admin there).
+- For a channel: post /setfedlog <fed_id> in the channel (I must be an admin there), then forward that post to me in private or to a group, from the owner account, within 1 hour.
 
 ### Group owner:
 - `/joinfed <fed_id>`: Join this chat to a federation.
@@ -69,10 +73,10 @@ This module can be accessed using the following aliases:
 | `/newfed` | Create a federation (one per user). | ❌ |
 | `/quietfed` | Suppress passive fban notices. | ❌ |
 | `/renamefed` | Rename your federation. | ❌ |
-| `/setfedlog` | Federation log chat. | ❌ |
+| `/setfedlog` | In a group, make that group the federation log (you must be an admin there). | ❌ |
 | `/subfed` | Subscribe to another fed (max 5). | ❌ |
 | `/unfban` | Federation ban/unban. (Aliases: `unfban, funban`) | ❌ |
-| `/unsetfedlog` | Federation log chat. | ❌ |
+| `/unsetfedlog` | Clear the federation log chat. | ❌ |
 | `/unsubfed` | Subscribe to another fed (max 5). | ❌ |
 
 ## Usage Examples

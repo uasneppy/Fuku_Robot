@@ -3943,6 +3943,19 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `/setlog`, a member's forward and a forward with no live marker answer `logs_need_channel`. Stated limit of the design:
   an administrator of another group who forwards a public channel's marked post within the hour binds that channel to
   their own group (the marker is single use). `TestSetLogFlowThroughDispatcher` (memory store and miniredis) holds it.
+- The federation log chat (`/setfedlog`, `federations.go`) uses the same two-step proof for a channel. Step 1: `/setfedlog
+  <fed id>` posted in the channel stores a one-hour marker `fuku:setfedlog:<channel>:<message>` whose value is the fed ID
+  (outside the `fuku:cache:` prefix, single use) and answers `feds_setfedlog_forward_to_owner`; the post needs no sender
+  and neither checks nor reveals the federation (a missing or malformed ID answers `feds_setfedlog_need_id` and stores
+  nothing). Step 2 is part of the `setfedlog` command (a raw `helpers.NewBotCommand` with `SetAllowChannel(true)`; no
+  watcher, because every marked post is a command message and its forward keeps the text): a forward whose origin is a
+  channel, in the bot's private chat or in a group, never falls into the group branch (`setFedLogFromForward`): the marker
+  is read without consuming it (none: `feds_setfedlog_no_pending`), the federation it names must be owned by the
+  forwarder (else `feds_not_owner`, the marker left for the owner), then the marker is consumed once and the federation
+  log is set to the CHANNEL of the forward's origin, never the chat the forward was sent in. Typed `/setfedlog` in a group
+  makes that group the federation log only for a sender who is an administrator of that group
+  (`chat_status.RequireUserAdmin`, the usual refusal) and owns a federation; in a private chat it answers
+  `feds_group_only`. `TestSetFedLogFlowThroughDispatcher` (memory store and miniredis) holds it.
 
 ## Go rules
 

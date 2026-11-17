@@ -498,7 +498,8 @@ Federations share a ban list across groups. The roles below come from the shippe
 
 | Who | Commands |
 | --- | --- |
-| Federation owner (private chat) | `/newfed <name>`, `/renamefed <name>`, `/delfed`, `/fedpromote`, `/feddemote`, `/fedreason on/off`, `/fednotif on/off`, `/subfed`, `/unsubfed`, `/fedsubs`, `/fbanlist [csv/json/minicsv]`, `/importfbans`, `/setfedlog`, `/unsetfedlog` |
+| Federation owner (private chat) | `/newfed <name>`, `/renamefed <name>`, `/delfed`, `/fedpromote`, `/feddemote`, `/fedreason on/off`, `/fednotif on/off`, `/subfed`, `/unsubfed`, `/fedsubs`, `/fbanlist [csv/json/minicsv]`, `/importfbans`, `/unsetfedlog` |
+| Federation owner (federation log) | `/setfedlog` typed in a group you administer makes it the federation log; for a channel, post `/setfedlog <fed_id>` in the channel and forward that post to the bot in private or to a group within an hour |
 | Group owner | `/joinfed <fed_id>`, `/leavefed`, `/quietfed on/off` |
 | Federation admins | `/fban`, `/unfban` (`/funban`), `/fedstat` (`/fbanstat`), `/feddemoteme` |
 | Anyone | `/fedinfo`, `/fedadmins`, `/chatfed`, `/myfeds` |

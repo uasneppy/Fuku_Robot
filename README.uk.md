@@ -496,7 +496,8 @@ Staff-група — це одна група довірених адмінів,
 
 | Хто | Команди |
 | --- | --- |
-| Власник федерації (приватний чат) | `/newfed <name>`, `/renamefed <name>`, `/delfed`, `/fedpromote`, `/feddemote`, `/fedreason on/off`, `/fednotif on/off`, `/subfed`, `/unsubfed`, `/fedsubs`, `/fbanlist [csv/json/minicsv]`, `/importfbans`, `/setfedlog`, `/unsetfedlog` |
+| Власник федерації (приватний чат) | `/newfed <name>`, `/renamefed <name>`, `/delfed`, `/fedpromote`, `/feddemote`, `/fedreason on/off`, `/fednotif on/off`, `/subfed`, `/unsubfed`, `/fedsubs`, `/fbanlist [csv/json/minicsv]`, `/importfbans`, `/unsetfedlog` |
+| Власник федерації (журнал федерації) | `/setfedlog`, надіслана в групі, де ви адмін, робить її журналом федерації; для каналу опублікуйте в каналі `/setfedlog <fed_id>` і протягом години перешліть цей допис ботові в приватний чат або в групу |
 | Власник групи | `/joinfed <fed_id>`, `/leavefed`, `/quietfed on/off` |
 | Адміни федерації | `/fban`, `/unfban` (`/funban`), `/fedstat` (`/fbanstat`), `/feddemoteme` |
 | Будь-хто | `/fedinfo`, `/fedadmins`, `/chatfed`, `/myfeds` |
