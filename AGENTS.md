@@ -2383,6 +2383,18 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`media_below`, `once`, `file_id`, `media_type`, `btns`); an export made before the migration has none of those keys and
   imports as zeros, the old behaviour (`TestOldGreetingsExportDecodesToZeros`). `RulesSettings.HasContent` (a non-blank
   text, a file ID or at least one button) is the one test of "Rules is set".
+- A backup never carries what belongs to the source group alone (`fuku/db/backup`, quick task 261117-w4n). The IDs of
+  the last welcome and goodbye (`welcome_last_msg_id`, `goodbye_last_msg_id`) are left out of an export and stored as 0 by
+  an import (`dropGreetingMessageIDs`), so "Delete last" in the target never deletes one of its own messages. An import
+  never links a log channel: `importLogChannels` applies the six category flags to the target's own log channel when it
+  has one and otherwise writes nothing and sets `ImportReport.LogChannelSkipped`; a backup with no log channel leaves the
+  target's link alone (`/reset` still clears it). Imported filters, blacklist words and notes get the commands' checks
+  (`content.KeywordTooBroad`, at most `content.ListKeywordMaxRunes` code points, `content.NoteNameInvalid`, every button
+  link `content.ValidButtonURL`), are stored lower-cased, a repeat after lower-casing keeps the first, and every entry left
+  out is counted in `ImportReport.Skipped`. `ImportChatDataReport` returns the report and the `/import` confirmation
+  adds `backup_import_skipped_entries` and `backup_import_log_skipped` to its success message
+  (`TestGreetingsBackupDropsLastMessageIDs`, `TestImportNeverTakesTheLogChannel`, `TestImportSkipsInvalidListEntries`,
+  `TestBackupConfirmImportReportsWhatItLeftOut`).
 - `UpdateRecord` skips zero values. Use `UpdateRecordWithZeroValues` to write `false`/`0`/`""`. Both return
   `gorm.ErrRecordNotFound` when no row matched.
 - Check `TableName()` before raw SQL: `ConnectionSettings→connection` (per user), `ConnectionChatSettings→

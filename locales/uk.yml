@@ -1048,6 +1048,8 @@ backup_export_no_modules: "❌ Для цього чату немає модул�
 backup_export_failed: "❌ Збій: не вдалося експортувати налаштування. Спробуйте ще раз."
 
 backup_import_success: "<b>✅ Імпорт завершено.</b>\n\n<b>Імпортовано модулів:</b> {modules}\n\n<b>Модулі:</b>\n{list}\n"
+backup_import_skipped_entries: "⚠️ <b>{count}</b> фільтрів, слів чорного списку або нотаток пропущено, бо вони тут недійсні."
+backup_import_log_skipped: "⚠️ Налаштування каналу журналу не імпортовано: у цієї групи немає каналу журналу. Під'єднайте його через /setlog і імпортуйте знову."
 backup_import_rate_limited: "⏳ Зачекайте <b>{time}</b>, перш ніж імпортувати знову."
 backup_import_no_reply: "❌ Дайте відповідь на файл копії командою <code>/import</code>."
 backup_import_invalid_file: "❌ Некоректний формат файлу копії. Надішліть коректний JSON-файл."

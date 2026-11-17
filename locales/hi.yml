@@ -1868,6 +1868,8 @@ backup_import_success: |
   <b>मॉड्यूल:</b>
   {list}
 
+backup_import_skipped_entries: "⚠️ <b>{count}</b> फ़िल्टर, ब्लैकलिस्ट शब्द या नोट छोड़ दिए गए क्योंकि वे यहाँ मान्य नहीं हैं।"
+backup_import_log_skipped: "⚠️ लॉग चैनल सेटिंग्स इम्पोर्ट नहीं हुईं: इस ग्रुप का कोई लॉग चैनल नहीं है। /setlog से एक जोड़ें, फिर दोबारा इम्पोर्ट करें।"
 backup_import_rate_limited: "⏳ फिर से इम्पोर्ट करने से पहले <b>{time}</b> प्रतीक्षा करें।"
 backup_import_no_reply: "❌ कृपया बैकअप फाइल का जवाब <code>/import</code> के साथ दें।"
 backup_import_invalid_file: "❌ अमान्य बैकअप फाइल प्रारूप। कृपया एक मान्य JSON बैकअप फाइल भेजें।"

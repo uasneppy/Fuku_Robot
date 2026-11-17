@@ -149,6 +149,9 @@ func TestAllModulesRoundTripEveryMeaningfulField(t *testing.T) {
 	require.NoError(t, federations.SetQuietFed(srcChat, true))
 	require.NoError(t, logchannels.Set(srcChat, "backup_source", logChannelID))
 	require.NoError(t, logchannels.SetCategory(srcChat, "admin", false))
+	// An import never takes the source's log channel: the target keeps its own and takes the categories.
+	dstLogChannelID := srcChat + 6
+	require.NoError(t, logchannels.Set(dstChat, "backup_destination", dstLogChannelID))
 
 	exported, err := ExportChatData(srcChat, "source", 42, nil)
 	require.NoError(t, err)
@@ -324,7 +327,7 @@ func TestAllModulesRoundTripEveryMeaningfulField(t *testing.T) {
 	logsData, err := exportLogChannelsData(dstChat)
 	require.NoError(t, err)
 	require.NotNil(t, logsData.Settings)
-	assert.Equal(t, logChannelID, logsData.Settings.LogChannelID)
+	assert.Equal(t, dstLogChannelID, logsData.Settings.LogChannelID)
 	assert.False(t, logsData.Settings.CatAdmin)
 	assert.True(t, logsData.Settings.CatReports)
 }

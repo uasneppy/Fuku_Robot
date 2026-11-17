@@ -1149,6 +1149,8 @@ backup_export_failed: "❌ Malfunction: could not export settings. Try again."
 
 backup_import_success: "<b>✅ Import complete.</b>\n\n<b>Modules imported:</b> {modules}\n\n<b>Modules:</b>\n{list}\n"
 
+backup_import_skipped_entries: "⚠️ <b>{count}</b> filters, blacklist words or notes were left out because they are not valid here."
+backup_import_log_skipped: "⚠️ The log channel settings were not imported: this group has no log channel. Link one with /setlog, then import again."
 backup_import_rate_limited: "⏳ Wait <b>{time}</b> before importing again."
 backup_import_no_reply: "❌ Reply to a backup file with <code>/import</code>."
 backup_import_invalid_file: "❌ Invalid backup file format. Send a valid JSON backup file."

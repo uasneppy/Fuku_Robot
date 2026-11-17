@@ -6,10 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
 	dbcache "github.com/uasneppy/fuku_robot/fuku/db/cache"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
+	"github.com/uasneppy/fuku_robot/fuku/utils/content"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -78,8 +81,17 @@ func withBackupTx(fn func(tx *gorm.DB) ([]string, error)) error {
 
 func ImportModuleData(chatID int64, module string, data interface{}) error {
 	return withBackupTx(func(tx *gorm.DB) ([]string, error) {
-		return importModuleData(tx, chatID, module, data, false)
+		return importModuleData(tx, chatID, module, data, false, &ImportReport{})
 	})
+}
+
+// ImportReport is what an import left out on purpose: Skipped counts the filters, blacklist words and notes
+// that would not pass the checks the commands make (a keyword or word too broad or too long, a note name that
+// could never be fetched, a button link that is not http or https, a repeat after lower-casing), and
+// LogChannelSkipped says the log channel categories were not imported because the target has no log channel.
+type ImportReport struct {
+	Skipped           int
+	LogChannelSkipped bool
 }
 
 func ClearModuleData(chatID int64, module string) error {
@@ -106,6 +118,20 @@ func ExportChatData(chatID int64, chatName string, exportedBy int64, modules []s
 }
 
 func ImportChatData(chatID int64, backup *BackupFormat, modules []string) error {
+	_, err := ImportChatDataReport(chatID, backup, modules)
+	return err
+}
+
+// ImportChatDataReport imports like ImportChatData and also returns what the import left out on purpose.
+func ImportChatDataReport(chatID int64, backup *BackupFormat, modules []string) (ImportReport, error) {
+	var report ImportReport
+	if err := importChatData(chatID, backup, modules, &report); err != nil {
+		return ImportReport{}, err
+	}
+	return report, nil
+}
+
+func importChatData(chatID int64, backup *BackupFormat, modules []string, report *ImportReport) error {
 	if backup == nil {
 		return fmt.Errorf("invalid backup: backup cannot be nil")
 	}
@@ -131,7 +157,7 @@ func ImportChatData(chatID int64, backup *BackupFormat, modules []string) error 
 		var keys []string
 		for _, module := range modules {
 			data := backup.Data[module]
-			moduleKeys, err := importModuleData(tx, chatID, module, data, backup.Version == legacyFormatVersion)
+			moduleKeys, err := importModuleData(tx, chatID, module, data, backup.Version == legacyFormatVersion, report)
 			if err != nil {
 				return nil, fmt.Errorf("failed to import module %s: %w", module, err)
 			}
@@ -470,7 +496,7 @@ func exportLogChannelsData(chatID int64) (*LogChannelsBackup, error) {
 	return &LogChannelsBackup{Settings: settings}, nil
 }
 
-func importModuleData(tx *gorm.DB, chatID int64, module string, data interface{}, preserveLegacyOmissions bool) ([]string, error) {
+func importModuleData(tx *gorm.DB, chatID int64, module string, data interface{}, preserveLegacyOmissions bool, report *ImportReport) ([]string, error) {
 	if err := ensureBackupChat(tx, chatID); err != nil {
 		return nil, err
 	}
@@ -484,7 +510,7 @@ func importModuleData(tx *gorm.DB, chatID int64, module string, data interface{}
 	case BackupModuleApprovals:
 		return importApprovals(tx, chatID, data)
 	case BackupModuleBlacklists:
-		return importBlacklists(tx, chatID, data)
+		return importBlacklists(tx, chatID, data, report)
 	case BackupModuleCaptcha:
 		return importCaptcha(tx, chatID, data)
 	case BackupModuleConnections:
@@ -492,13 +518,13 @@ func importModuleData(tx *gorm.DB, chatID int64, module string, data interface{}
 	case BackupModuleDisabling:
 		return importDisabling(tx, chatID, data)
 	case BackupModuleFilters:
-		return importFilters(tx, chatID, data)
+		return importFilters(tx, chatID, data, report)
 	case BackupModuleGreetings:
 		return importGreetings(tx, chatID, data)
 	case BackupModuleLocks:
 		return importLocks(tx, chatID, data)
 	case BackupModuleNotes:
-		return importNotes(tx, chatID, data, preserveLegacyOmissions)
+		return importNotes(tx, chatID, data, preserveLegacyOmissions, report)
 	case BackupModulePins:
 		return importPins(tx, chatID, data)
 	case BackupModuleReactions:
@@ -512,7 +538,7 @@ func importModuleData(tx *gorm.DB, chatID int64, module string, data interface{}
 	case BackupModuleFederations:
 		return importFederations(tx, chatID, data)
 	case BackupModuleLogChannels:
-		return importLogChannels(tx, chatID, data)
+		return importLogChannels(tx, chatID, data, report)
 	default:
 		return nil, fmt.Errorf("unknown module: %s", module)
 	}
@@ -613,7 +639,7 @@ func importApprovals(tx *gorm.DB, chatID int64, payload interface{}) ([]string, 
 	return []string{cacheKey("approvals", chatID)}, nil
 }
 
-func importBlacklists(tx *gorm.DB, chatID int64, payload interface{}) ([]string, error) {
+func importBlacklists(tx *gorm.DB, chatID int64, payload interface{}, report *ImportReport) ([]string, error) {
 	var data BlacklistsBackup
 	if err := decodeModuleData(payload, BackupModuleBlacklists, &data); err != nil {
 		return nil, err
@@ -633,6 +659,10 @@ func importBlacklists(tx *gorm.DB, chatID int64, payload interface{}) ([]string,
 			data.Entries[i].Action = "warn"
 		}
 	}
+	data.Entries = keepValidEntries(data.Entries, report, func(e *models.BlacklistSettings) (string, bool) {
+		e.Word = strings.ToLower(e.Word)
+		return e.Word, validListKeyword(e.Word)
+	})
 	if err := replaceChatRows(tx, chatID, data.Entries); err != nil {
 		return nil, err
 	}
@@ -687,7 +717,7 @@ func importDisabling(tx *gorm.DB, chatID int64, payload interface{}) ([]string, 
 	return []string{cacheKey("disabled_cmds", chatID)}, nil
 }
 
-func importFilters(tx *gorm.DB, chatID int64, payload interface{}) ([]string, error) { //nolint:dupl // module-specific schema
+func importFilters(tx *gorm.DB, chatID int64, payload interface{}, report *ImportReport) ([]string, error) { //nolint:dupl // module-specific schema
 	var data FiltersBackup
 	if err := decodeModuleData(payload, BackupModuleFilters, &data); err != nil {
 		return nil, err
@@ -698,6 +728,10 @@ func importFilters(tx *gorm.DB, chatID int64, payload interface{}) ([]string, er
 		}
 		data.Filters[i].ChatId = chatID
 	}
+	data.Filters = keepValidEntries(data.Filters, report, func(f *models.ChatFilters) (string, bool) {
+		f.KeyWord = strings.ToLower(f.KeyWord)
+		return f.KeyWord, validListKeyword(f.KeyWord) && validButtonLinks(f.Buttons)
+	})
 	if err := replaceChatRows(tx, chatID, data.Filters); err != nil {
 		return nil, err
 	}
@@ -748,7 +782,7 @@ func importLocks(tx *gorm.DB, chatID int64, payload interface{}) ([]string, erro
 	return []string{cacheKey("lock", chatID), cacheKey("locks_map", chatID)}, nil
 }
 
-func importNotes(tx *gorm.DB, chatID int64, payload interface{}, preserveLegacyOmissions bool) ([]string, error) { //nolint:dupl // module-specific schema
+func importNotes(tx *gorm.DB, chatID int64, payload interface{}, preserveLegacyOmissions bool, report *ImportReport) ([]string, error) { //nolint:dupl // module-specific schema
 	restoreSettings := !preserveLegacyOmissions || moduleFieldPresent(payload, "settings")
 	var data NotesBackup
 	if err := decodeModuleData(payload, BackupModuleNotes, &data); err != nil {
@@ -763,6 +797,10 @@ func importNotes(tx *gorm.DB, chatID int64, payload interface{}, preserveLegacyO
 		}
 		data.Notes[i].ChatId = chatID
 	}
+	data.Notes = keepValidEntries(data.Notes, report, func(n *models.Notes) (string, bool) {
+		n.NoteName = strings.ToLower(n.NoteName)
+		return n.NoteName, !content.NoteNameInvalid(n.NoteName) && validButtonLinks(n.Buttons)
+	})
 	if restoreSettings {
 		if err := replaceChatSetting(tx, chatID, data.Settings); err != nil {
 			return nil, err
@@ -1125,18 +1163,71 @@ func importFederations(tx *gorm.DB, chatID int64, payload interface{}) ([]string
 	return []string{cacheKey("fed_chat", chatID)}, nil
 }
 
-func importLogChannels(tx *gorm.DB, chatID int64, payload interface{}) ([]string, error) {
+// importLogChannels never imports the log channel itself: a backup names the source group's channel, and a
+// link must be proved by an administrator of that channel (/setlog). The category flags are applied to the
+// target's own log channel when it has one; with none the import leaves them out and says so in the report.
+// A backup with no log channel leaves the target's link alone.
+func importLogChannels(tx *gorm.DB, chatID int64, payload interface{}, report *ImportReport) ([]string, error) {
 	var data LogChannelsBackup
 	if err := decodeModuleData(payload, BackupModuleLogChannels, &data); err != nil {
 		return nil, err
 	}
-	if data.Settings != nil {
-		data.Settings.ChatID = chatID
+	if data.Settings == nil {
+		return nil, nil
 	}
-	if err := replaceChatSetting(tx, chatID, data.Settings); err != nil {
+	var current models.LogChannel
+	err := tx.Where("chat_id = ?", chatID).First(&current).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) || (err == nil && current.LogChannelID == 0) {
+		report.LogChannelSkipped = true
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Model(&models.LogChannel{}).Where("chat_id = ?", chatID).Updates(map[string]interface{}{
+		"cat_settings":  data.Settings.CatSettings,
+		"cat_admin":     data.Settings.CatAdmin,
+		"cat_user":      data.Settings.CatUser,
+		"cat_automated": data.Settings.CatAutomated,
+		"cat_reports":   data.Settings.CatReports,
+		"cat_other":     data.Settings.CatOther,
+	}).Error; err != nil {
 		return nil, err
 	}
 	return []string{cacheKey("log_channel", chatID)}, nil
+}
+
+// validListKeyword is the check /filter and /addblacklist make of a keyword or word: not too broad and at
+// most content.ListKeywordMaxRunes code points.
+func validListKeyword(word string) bool {
+	return !content.KeywordTooBroad(word) && utf8.RuneCountInString(word) <= content.ListKeywordMaxRunes
+}
+
+// validButtonLinks reports whether every button link may be stored (content.ValidButtonURL).
+func validButtonLinks(buttons models.ButtonArray) bool {
+	for _, button := range buttons {
+		if !content.ValidButtonURL(button.Url) {
+			return false
+		}
+	}
+	return true
+}
+
+// keepValidEntries keeps the entries check accepts, in order, and the first of those that share a key;
+// every other entry is left out and counted in report.Skipped. check may normalise the entry.
+func keepValidEntries[T any](entries []T, report *ImportReport, check func(*T) (string, bool)) []T {
+	kept := entries[:0]
+	seen := make(map[string]bool, len(entries))
+	for i := range entries {
+		key, ok := check(&entries[i])
+		if !ok || seen[key] {
+			report.Skipped++
+			continue
+		}
+		seen[key] = true
+		kept = append(kept, entries[i])
+	}
+	return kept
 }
 
 func clearFederations(tx *gorm.DB, chatID int64) ([]string, error) {

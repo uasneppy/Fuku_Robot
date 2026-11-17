@@ -2162,6 +2162,8 @@ backup_import_success: |
   <b>Módulos:</b>
   {list}
 
+backup_import_skipped_entries: "⚠️ Se omitieron <b>{count}</b> filtros, palabras de la lista negra o notas porque no son válidos aquí."
+backup_import_log_skipped: "⚠️ No se importó la configuración del canal de registro: este grupo no tiene canal de registro. Vincula uno con /setlog y vuelve a importar."
 backup_import_rate_limited: "⏳ Por favor espera <b>{time}</b> antes de importar de nuevo."
 backup_import_no_reply: "❌ Por favor responde a un archivo de copia de seguridad con <code>/import</code>."
 backup_import_invalid_file: "❌ Formato de archivo de copia de seguridad inválido. Por favor envía un archivo JSON de copia de seguridad válido."

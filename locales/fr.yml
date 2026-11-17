@@ -2099,6 +2099,8 @@ backup_import_success: |
   <b>Modules :</b>
   {list}
 
+backup_import_skipped_entries: "⚠️ <b>{count}</b> filtres, mots de la liste noire ou notes ont été ignorés car ils ne sont pas valides ici."
+backup_import_log_skipped: "⚠️ Les réglages du canal de journal n'ont pas été importés : ce groupe n'a pas de canal de journal. Liez-en un avec /setlog, puis importez à nouveau."
 backup_import_rate_limited: "⏳ Veuillez attendre <b>{time}</b> avant d'importer à nouveau."
 backup_import_no_reply: "❌ Veuillez répondre à un fichier de sauvegarde avec <code>/import</code>."
 backup_import_invalid_file: "❌ Format de fichier de sauvegarde invalide. Veuillez envoyer un fichier JSON de sauvegarde valide."

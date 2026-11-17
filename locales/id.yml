@@ -2153,6 +2153,8 @@ backup_import_success: |
   <b>Modul:</b>
   {list}
 
+backup_import_skipped_entries: "⚠️ <b>{count}</b> filter, kata daftar hitam, atau catatan dilewati karena tidak valid di sini."
+backup_import_log_skipped: "⚠️ Pengaturan kanal log tidak diimpor: grup ini tidak punya kanal log. Tautkan satu dengan /setlog, lalu impor lagi."
 backup_import_rate_limited: "⏳ Silakan tunggu <b>{time}</b> sebelum mengimpor lagi."
 backup_import_no_reply: "❌ Silakan balas ke file cadangan dengan <code>/import</code>."
 backup_import_invalid_file: "❌ Format file cadangan tidak valid. Silakan kirim file cadangan JSON yang valid."
