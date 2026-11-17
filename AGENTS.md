@@ -3211,7 +3211,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   start runs synchronously in the handler, and only the posts that follow it run on goroutines (see the announcement
   bullet above); a crash half way leaves an unconfirmed row the worker settles. The counter shares its one live `getChatMember` of the performer with the guard (it returns the
   status it read and whether it asked), so a join or a join message still makes at most one performer lookup. Settings come from
-  `raidSettingsLookup`, a test seam; an unreadable read counts nothing.
+  `raidSettingsLookup`, a test seam; an unreadable read counts nothing. Joins are recorded while any of the three triggers is
+  on (`raidJoinSettings`), because the flood and AI paths read `fuku:raid:{<chat>}:joined` to tell a new member, and only the
+  surge switch lets a count start a lockdown.
 - The flood trigger is counted by two watchers that share one function, `raidFloodCountUpdate`: the group `-4` watcher
   (`raidFloodWatcher`, registered in `LoadLockdown`) and the group `12` watcher (`raidFloodLateWatcher`,
   `raidFloodLateGroup`). Both return `ext.ContinueGroups` on every path, so aispam, antiflood, locks and blacklists still

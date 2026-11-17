@@ -230,6 +230,44 @@ func TestRaidJoinSurgeSettings(t *testing.T) {
 		}
 	})
 
+	t.Run("ai trigger only", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		linkLockdownStaffGroup(env)
+		raidCleanup(t, env.chat.Id)
+		seedRaidSettings(t, models.ChatRaidDetection{
+			ChatID: env.chat.Id, JoinEnabled: false, JoinThreshold: 3, FloodEnabled: false, FloodThreshold: 30,
+			AIEnabled: true, AIThreshold: 5,
+		})
+
+		env.selfJoins(5)
+
+		if row := env.activeLockdown(); row != nil {
+			t.Errorf("a lockdown exists with only the AI trigger on")
+		}
+		if got := env.raidJoinedCount(); got != 5 {
+			t.Errorf("the joined set holds %d accounts, want the 5 joiners (the AI paths need them)", got)
+		}
+	})
+
+	t.Run("all three triggers off", func(t *testing.T) {
+		env := newLockdownEnv(t)
+		linkLockdownStaffGroup(env)
+		raidCleanup(t, env.chat.Id)
+		seedRaidSettings(t, models.ChatRaidDetection{
+			ChatID: env.chat.Id, JoinEnabled: false, JoinThreshold: 3, FloodEnabled: false, FloodThreshold: 30,
+			AIEnabled: false, AIThreshold: 5,
+		})
+
+		env.selfJoins(5)
+
+		if row := env.activeLockdown(); row != nil {
+			t.Errorf("a lockdown exists with every trigger off")
+		}
+		if got := env.raidJoinedCount(); got != 0 {
+			t.Errorf("the joined set holds %d accounts, want none with every trigger off", got)
+		}
+	})
+
 	t.Run("settings unreadable", func(t *testing.T) {
 		env := newLockdownEnv(t)
 		linkLockdownStaffGroup(env)
