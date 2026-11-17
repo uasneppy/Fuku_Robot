@@ -1720,7 +1720,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `settings_input.go`: Set (writes both keys and returns the replaced wait's fields; it deletes the hash first, so the
   refusal fields below never survive a new Set), note-refusal (adds the field `r<message id>` for a refusal reply, only for the
   holder of the nonce and at most 40 fields in all), claim (only the holder of the
-  current nonce, once), finish and release (only the claim holder; finish and release run on `context.WithoutCancel` with
+  current nonce, once; a wait with less than `settingsInputClaimMinTTL` (60 s) left is extended to it, its `x` with it, and
+  the marker is rewritten to outlive it by the usual 5 minutes, so the write after a claim can still finish or release it), finish and release (only the claim holder; finish and release run on `context.WithoutCancel` with
   their own bound, so a cancelled update never strands a claim; release removes only `k`, so the wait keeps its remaining
   TTL), and the Cancel button's and `/cancel`'s scripts (a held claim answers busy and deletes nothing; the button also
   compares `c`, `p`, `t` and the pressed message's ID with `m` or a noted refusal `r<id>`, so a stale prompt never ends a

@@ -854,3 +854,49 @@ func TestSettingsInputSetPrompt(t *testing.T) {
 		t.Errorf("the Cancel left the wait or its marker")
 	}
 }
+
+// TestSettingsInputClaimExtendsANearlyExpiredWait proves that a claim made in the wait's last seconds extends the wait
+// to at least a minute, and the marker with it, so a write that follows the claim can still finish or release the
+// wait, and the marker never ends before the wait it describes (review T2).
+func TestSettingsInputClaimExtendsANearlyExpiredWait(t *testing.T) {
+	env := newSettingsEnv(t)
+	user := settingsInputTestUser()
+	wait := settingsInputTestWait(t, -100)
+	if _, err := settingsInputSet(context.Background(), user.Id, wait); err != nil {
+		t.Fatalf("settingsInputSet() error = %v", err)
+	}
+	key, marker := settingsInputKey(user.Id), settingsInputDoneKey(user.Id)
+	env.redis.SetTTL(key, 2*time.Second)
+	env.redis.SetTTL(marker, 2*time.Second)
+
+	claim, ok, err := settingsInputClaim(context.Background(), user.Id, wait.Nonce)
+	if err != nil || !ok {
+		t.Fatalf("settingsInputClaim() = %q, %v, %v, want a claim", claim, ok, err)
+	}
+	waitTTL, markerTTL := env.redis.TTL(key), env.redis.TTL(marker)
+	if waitTTL < settingsInputClaimMinTTL {
+		t.Errorf("wait TTL after the claim = %v, want at least %v", waitTTL, settingsInputClaimMinTTL)
+	}
+	if markerTTL < waitTTL+settingsInputMarkerTTL-settingsInputTTL {
+		t.Errorf("marker TTL after the claim = %v, want at least the wait's %v plus %v", markerTTL, waitTTL, settingsInputMarkerTTL-settingsInputTTL)
+	}
+	if got, _ := env.redis.Get(marker); got != "-100|w|x" {
+		t.Errorf("marker after the claim = %q, want -100|w|x", got)
+	}
+
+	// The release gives the extended wait back; a wait with time left is not touched by a claim.
+	if err := settingsInputRelease(context.Background(), user.Id, claim); err != nil {
+		t.Fatalf("settingsInputRelease() error = %v", err)
+	}
+	env.redis.SetTTL(key, 5*time.Minute)
+	env.redis.SetTTL(marker, 10*time.Minute)
+	if _, ok, err := settingsInputClaim(context.Background(), user.Id, wait.Nonce); err != nil || !ok {
+		t.Fatalf("second settingsInputClaim() = %v, %v, want a claim", ok, err)
+	}
+	if got := env.redis.TTL(key); got != 5*time.Minute {
+		t.Errorf("a claim with time left changed the wait TTL to %v", got)
+	}
+	if got := env.redis.TTL(marker); got != 10*time.Minute {
+		t.Errorf("a claim with time left changed the marker TTL to %v", got)
+	}
+}
