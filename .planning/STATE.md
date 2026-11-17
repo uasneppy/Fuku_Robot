@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: v1.1
 status: Awaiting next milestone
 stopped_at: Completed 19-12-PLAN.md
-last_updated: "2026-11-17T05:00:23.120Z"
-last_activity: 2026-11-14
+last_updated: "2026-11-17T05:23:07.216Z"
+last_activity: 2026-11-17
 last_activity_desc: Quick task 261113-tjj completed (Staff Group forward-source blocklist)
-state_head: 4f68089c485f9a7cbd88107973a9af4e78f32f2a
+state_head: dfbf97714a07c37c5050f5ef6ededd9893c97de3
 milestone_name: PM Settings Hub & Member Screening
 current_phase: 19
 current_phase_name: Blacklist, Filter and Note Pages
@@ -32,7 +32,7 @@ See: .planning/PROJECT.md (updated 2026-11-13)
 Phase: Milestone v1.1 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-11-17 - Completed quick task 261116-wh3: Fix warn mode check, captcha service messages and refresh timer, AI-only raid gate and slash text in typed replies
+Last activity: 2026-11-17 - Completed quick task 261116-wgz: Fix the log channel flows: setlog, setfedlog and the dead log categories
 
 ## Performance Metrics
 
@@ -356,6 +356,7 @@ None yet.
 | 261116-v2r | Voice the v2.24.0 locale keys and the eight keys main changed (en, uk) and add an Attributions section to both READMEs | 2026-11-16 | f1872e0 | [261116-v2r-voice-the-v2-24-0-locale-keys-and-add-readme-a](./quick/261116-v2r-voice-the-v2-24-0-locale-keys-and-add-readme-a/) |
 | 261116-srv | Apply the full locale string review (47 wording rules, wrong facts, per-string findings) to en and uk, with the fact fixes in the other six locales | 2026-11-16 | 8d90aa5 | [261116-srv-apply-the-locale-string-review](./quick/261116-srv-apply-the-locale-string-review/) |
 | 261116-wh3 | Fix warn mode check, captcha service messages and refresh timer, AI-only raid gate and slash text in typed replies | 2026-11-17 | 4f68089 | [261116-wh3-fix-warn-mode-check-captcha-service-mess](./quick/261116-wh3-fix-warn-mode-check-captcha-service-mess/) |
+| 261116-wgz | Fix the log channel flows: setlog, setfedlog and the dead log categories | 2026-11-17 | dfbf977 | [261116-wgz-fix-the-log-channel-flows-setlog-setfedl](./quick/261116-wgz-fix-the-log-channel-flows-setlog-setfedl/) |
 
 ## Deferred Items
 
