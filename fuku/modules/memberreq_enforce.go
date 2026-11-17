@@ -657,7 +657,7 @@ func memberReqEnforce(ctx context.Context, b *gotgbot.Bot, c memberReqCase) memb
 	if memberReqMuteOverRestriction(ctx, b, c, member, action, keepUntil) {
 		return memberReqResult{}
 	}
-	if !memberReqCapAllow(ctx, b, c.Chat.Id) {
+	if !memberReqCapAllow(ctx, b, c.Chat.Id, c.User.Id) {
 		memberReqDeleteMessage(ctx, b, c)
 		return memberReqResult{}
 	}

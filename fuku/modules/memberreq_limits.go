@@ -6,13 +6,14 @@ import (
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
+	"github.com/redis/go-redis/v9"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
 )
 
 // The per-chat brake of the member requirements (D-13, D-21; research S-07). A mis-set rule in a
-// busy group must not punish everyone: at most memberReqCapPerMinute punishments start in a
+// busy group must not punish everyone: at most memberReqCapPerMinute members are punished in a
 // chat in one fixed minute, and the next violation pauses the chat's punishments for
 // memberReqPause with one visible notice. The brake only stops new punishments and notices; it
 // never drops a notice already due (the cap is counted before the claim, never after the
@@ -22,7 +23,7 @@ import (
 // punishment is allowed and nothing is paused, and the requirements work as before.
 
 var (
-	// memberReqCapPerMinute is the most punishments that start per chat in one fixed minute. A
+	// memberReqCapPerMinute is the most members whose punishment starts per chat in one fixed minute. A
 	// variable only so a test can make it small; production code never reassigns it.
 	memberReqCapPerMinute = 10
 	// memberReqPause is how long a chat's punishments stay paused once the cap is exceeded. A
@@ -34,7 +35,7 @@ var (
 // is read late is still there and an idle chat's counters expire on their own.
 const memberReqCapCounterTTL = 120 * time.Second
 
-// memberReqCapKey is the counter of one chat's punishment attempts in one fixed minute (the
+// memberReqCapKey is the counter of the members one chat's punishment attempts concerned in one fixed minute (the
 // Unix time divided by 60). The chat ID is a hash tag, so the chat's keys share a cluster slot.
 func memberReqCapKey(chatID, minute int64) string {
 	return "fuku:memberreq:{" + strconv.FormatInt(chatID, 10) + "}:cap:" + strconv.FormatInt(minute, 10)
@@ -45,30 +46,51 @@ func memberReqPausedKey(chatID int64) string {
 	return "fuku:memberreq:{" + strconv.FormatInt(chatID, 10) + "}:paused"
 }
 
-// memberReqCapAllow counts one punishment attempt of the chat in the current minute, before
-// the claim, and reports whether the punishment may start. An attempt over the cap is
-// refused and sets the pause latch with SET NX: only the caller whose SET NX succeeded posts
-// the one pause notice, so one notice is posted however many replicas tip the cap at once.
-// No Redis and a Redis error allow the punishment; a run that was cancelled punishes nobody.
-func memberReqCapAllow(ctx context.Context, b *gotgbot.Bot, chatID int64) bool {
+// memberReqCapMembersKey is the set of the members already counted in one chat's fixed minute
+// (Q2): the cap counts members, not jobs, so a member whose messages start several jobs (on one
+// replica or several) spends one unit. It shares the counter's hash tag and TTL.
+func memberReqCapMembersKey(chatID, minute int64) string {
+	return "fuku:memberreq:{" + strconv.FormatInt(chatID, 10) + "}:capm:" + strconv.FormatInt(minute, 10)
+}
+
+// memberReqCapScript adds the member to the minute's set (KEYS[1]) and increments the minute's
+// counter (KEYS[2]) only when the member is new to the set, renews both expiries (ARGV[2]
+// seconds) and returns the counter. One script, so two jobs of one member can never both count.
+var memberReqCapScript = redis.NewScript(`
+if redis.call('SADD', KEYS[1], ARGV[1]) == 1 then
+	redis.call('INCR', KEYS[2])
+end
+redis.call('EXPIRE', KEYS[1], ARGV[2])
+redis.call('EXPIRE', KEYS[2], ARGV[2])
+return tonumber(redis.call('GET', KEYS[2]) or '0')
+`)
+
+// memberReqCapAllow counts one punishment attempt of the member in the chat's current minute,
+// before the claim, and reports whether the punishment may start. A member already counted in
+// the minute adds nothing (Q2), so the cap is a number of members, and a member counted within
+// the cap stays allowed. An attempt while the count is over the cap is refused and sets the pause
+// latch with SET NX: only the caller whose SET NX succeeded posts the one pause notice, so one
+// notice is posted however many replicas tip the cap at once. No Redis and a Redis error allow the
+// punishment; a run that was cancelled punishes nobody.
+func memberReqCapAllow(ctx context.Context, b *gotgbot.Bot, chatID, userID int64) bool {
 	client := memberReqRedisClient()
 	if client == nil {
 		return true
 	}
 	countCtx, cancel := context.WithTimeout(ctx, raidRedisTimeout)
 	defer cancel()
-	key := memberReqCapKey(chatID, raidNow().Unix()/60)
-	pipe := client.Pipeline()
-	count := pipe.Incr(countCtx, key)
-	pipe.Expire(countCtx, key, memberReqCapCounterTTL)
-	if _, err := pipe.Exec(countCtx); err != nil {
+	minute := raidNow().Unix() / 60
+	count, err := memberReqCapScript.Run(countCtx, client,
+		[]string{memberReqCapMembersKey(chatID, minute), memberReqCapKey(chatID, minute)},
+		strconv.FormatInt(userID, 10), int64(memberReqCapCounterTTL/time.Second)).Int64()
+	if err != nil {
 		if ctx.Err() != nil {
 			return false
 		}
 		log.Warnf("[MemberReq] the punishment count of chat %d is unknown, so the punishment is allowed: %s", chatID, memberReqErrText(err))
 		return true
 	}
-	if count.Val() <= int64(memberReqCapPerMinute) {
+	if count <= int64(memberReqCapPerMinute) {
 		return true
 	}
 	memberReqPauseChat(ctx, b, chatID)

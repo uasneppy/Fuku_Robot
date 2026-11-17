@@ -1892,12 +1892,15 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   except the limit action the warn module takes when a warn reaches the limit (`applyWarn`'s kick or ban): that one call is
   neither paced here nor bounded by the job context, and is bounded instead by the HTTP client's 30 s timeout and the
   per-chat cap.
-- `fuku:memberreq:{<chat>}:cap:<unix minute>` and `fuku:memberreq:{<chat>}:paused` are the member requirements' per-chat
-  brake (`memberreq_limits.go`, the chat ID a hash tag, outside the cache prefix so `CLEAR_CACHE_ON_STARTUP` keeps them).
-  The counter is a fixed 60 s window (`raidNow().Unix()/60`, so a test can stop the clock) of punishment attempts,
-  `INCR` plus `EXPIRE 120` in one pipeline under 250 ms, counted before the claim (`memberReqCapAllow`, between the live
-  lookup and `memberreq.ClaimHold`), so an attempt that is refused, lost or never confirmed still counts and a bot that keeps
-  being refused reaches the pause. More than `memberReqCapPerMinute` (10) refuses the punishment and sets the latch with
+- `fuku:memberreq:{<chat>}:cap:<unix minute>`, `fuku:memberreq:{<chat>}:capm:<unix minute>` and
+  `fuku:memberreq:{<chat>}:paused` are the member requirements' per-chat brake (`memberreq_limits.go`, the chat ID a hash
+  tag, outside the cache prefix so `CLEAR_CACHE_ON_STARTUP` keeps them). The counter is a fixed 60 s window
+  (`raidNow().Unix()/60`, so a test can stop the clock) of the members whose punishment was attempted (Q2): one Lua script
+  (`memberReqCapScript`, under 250 ms) `SADD`s the user ID to the minute's `capm` set, `INCR`s the `cap` counter only when
+  the `SADD` added the member, renews `EXPIRE 120` on both and returns the counter, counted before the claim
+  (`memberReqCapAllow`, between the live lookup and `memberreq.ClaimHold`), so an attempt that is refused, lost or never
+  confirmed still counts its member, several jobs of one member (on one replica or several) count once, and a member
+  already counted within the cap stays allowed in that minute. More than `memberReqCapPerMinute` (10) refuses the punishment and sets the latch with
   `SET NX EX` for `memberReqPause` (10 minutes); only the caller whose `SET NX` succeeded posts the one `mreq_notice_paused`
   (`{n}` the cap, `{minutes}` the pause) in the group's language through `memberReqPostNotice`, best effort, so one notice
   is posted however many replicas tip the cap at once. While the latch stands (`memberReqPaused`, read after the held path
