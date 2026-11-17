@@ -100,3 +100,44 @@ func TestGreetingsNotConfiguredKeysExist(t *testing.T) {
 		}
 	}
 }
+
+// TestBackupHelpExportIsAdminCommand proves /export, which needs an admin, is listed under its own
+// heading above the owner commands and no longer under the old "user commands" heading.
+func TestBackupHelpExportIsAdminCommand(t *testing.T) {
+	oldHeading := map[string]string{
+		"en": "User Commands:", "uk": "Команди для користувачів:", "es": "Comandos de Usuario:",
+		"fr": "Commandes Utilisateur :", "hi": "उपयोगकर्ता कमांड:", "id": "Perintah Pengguna:",
+		"pt": "Comandos de Usuário:", "ru": "Команды пользователя:",
+	}
+	headingAbove := func(lines []string, command string) (string, int) {
+		heading := ""
+		for i, line := range lines {
+			if strings.HasPrefix(strings.TrimSpace(line), "<b>") {
+				heading = strings.TrimSpace(line)
+			}
+			if strings.Contains(line, command) {
+				return heading, i
+			}
+		}
+		return "", -1
+	}
+	for _, code := range staffLocales {
+		help, _ := loadStaffLocale(t, code)["backup_help_msg"].(string)
+		if help == "" {
+			t.Fatalf("%s: backup_help_msg is missing", code)
+		}
+		if strings.Contains(help, oldHeading[code]) {
+			t.Errorf("%s: the help still lists a user commands heading %q", code, oldHeading[code])
+		}
+		lines := strings.Split(help, "\n")
+		exportHeading, exportAt := headingAbove(lines, "/export")
+		importHeading, importAt := headingAbove(lines, "/import")
+		if exportAt < 0 || importAt < 0 || exportAt > importAt {
+			t.Errorf("%s: /export must be listed before /import (%d, %d)", code, exportAt, importAt)
+			continue
+		}
+		if exportHeading == "" || exportHeading == importHeading {
+			t.Errorf("%s: /export and /import share the heading %q", code, exportHeading)
+		}
+	}
+}

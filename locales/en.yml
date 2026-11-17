@@ -1136,7 +1136,7 @@ reactions_list_header: "<b>Configured reactions:</b>\n{list}"
 reactions_reset_success: "All reactions of this chat reset."
 
 # Backup/Restore module strings
-backup_help_msg: "<b>📦 Backup & Restore</b>\n\nBack up and restore your group settings with these commands. Facility records, filed and retrievable.\n\n<b>User Commands:</b>\n× /export - Export all group settings to a JSON file\n× /export notes filters rules - Export specific modules only\n\n<b>Owner Commands:</b>\n× /import - Reply to a backup file to restore settings\n× /import notes filters - Import specific modules only\n× /reset - Reset all settings to default\n× /reset warnings locks - Reset specific modules only\n\n<b>Rate Limits:</b>\n• Export: 1 per 5 minutes\n• Import: 1 per 10 minutes\n• Reset: 1 per hour\n"
+backup_help_msg: "<b>📦 Backup & Restore</b>\n\nBack up and restore your group settings with these commands. Facility records, filed and retrievable.\n\n<b>Admin Commands:</b>\n× /export - Export all group settings to a JSON file\n× /export notes filters rules - Export specific modules only\n\n<b>Owner Commands:</b>\n× /import - Reply to a backup file to restore settings\n× /import notes filters - Import specific modules only\n× /reset - Reset all settings to default\n× /reset warnings locks - Reset specific modules only\n\n<b>Rate Limits:</b>\n• Export: 1 per 5 minutes\n• Import: 1 per 10 minutes\n• Reset: 1 per hour\n"
 
 backup_export_button: "📤 Export"
 backup_import_button: "📥 Import"
