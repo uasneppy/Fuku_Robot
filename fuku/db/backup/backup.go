@@ -819,6 +819,11 @@ func importWarns(tx *gorm.DB, chatID int64, payload interface{}, preserveLegacyO
 		if data.WarnSettings.WarnLimit <= 0 {
 			return nil, fmt.Errorf("invalid warn limit %d", data.WarnSettings.WarnLimit)
 		}
+		// An export without a mode (the field is omitempty) or with an empty one is stored as mute,
+		// the warn module's default: an empty mode applies nothing at the limit.
+		if data.WarnSettings.WarnMode == "" {
+			data.WarnSettings.WarnMode = "mute"
+		}
 	}
 	for i := range data.Warns {
 		if data.Warns[i].UserId == 0 || data.Warns[i].NumWarns < 0 {
@@ -1069,7 +1074,7 @@ func clearWarns(tx *gorm.DB, chatID int64) ([]string, error) {
 	if err := tx.Model(&models.Warns{}).Where("chat_id = ?", chatID).Pluck("user_id", &userIDs).Error; err != nil {
 		return nil, err
 	}
-	if err := replaceChatSetting(tx, chatID, &models.WarnSettings{ChatId: chatID, WarnLimit: 3}); err != nil {
+	if err := replaceChatSetting(tx, chatID, &models.WarnSettings{ChatId: chatID, WarnLimit: 3, WarnMode: "mute"}); err != nil {
 		return nil, err
 	}
 	if err := replaceChatRows[models.Warns](tx, chatID, nil); err != nil {

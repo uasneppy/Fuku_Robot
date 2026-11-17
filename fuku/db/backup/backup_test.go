@@ -431,6 +431,37 @@ func TestImportChatData_SingleModule(t *testing.T) {
 	assert.Equal(t, "kick", settings.WarnMode)
 }
 
+// TestImportWarnsEmptyModeBecomesMute proves that a warns block whose settings carry no warn
+// mode, or an empty one, is stored with mode mute: an empty mode applies nothing at the limit and
+// the legacy chk_warns_mode of a chain-built PostgreSQL refused it. A stated mode is kept, which
+// TestImportChatData_SingleModule proves.
+func TestImportWarnsEmptyModeBecomesMute(t *testing.T) {
+	skipIfNoDb(t)
+
+	for _, tc := range []struct {
+		name     string
+		settings map[string]interface{}
+	}{
+		{name: "mode absent", settings: map[string]interface{}{"warn_limit": float64(5)}},
+		{name: "mode empty", settings: map[string]interface{}{"warn_limit": float64(5), "warn_mode": ""}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			chatID := time.Now().UnixNano()
+			require.NoError(t, chats.EnsureChatInDb(chatID, "test_import_warns_empty_mode"))
+			t.Cleanup(func() { cleanupBackupChat(t, chatID) })
+
+			backup := NewBackupFormat(chatID, "Test", 1, []string{BackupModuleWarns})
+			backup.Data[BackupModuleWarns] = map[string]interface{}{"warn_settings": tc.settings}
+			require.NoError(t, ImportChatData(chatID, backup, []string{BackupModuleWarns}))
+
+			settings := warns.GetWarnSetting(chatID)
+			require.NotNil(t, settings)
+			assert.Equal(t, 5, settings.WarnLimit)
+			assert.Equal(t, "mute", settings.WarnMode)
+		})
+	}
+}
+
 func TestImportChatData_EarlierBotNameExport(t *testing.T) {
 	skipIfNoDb(t)
 
@@ -540,7 +571,9 @@ func TestClearModuleData_IndividualModules(t *testing.T) {
 	require.NoError(t, warns.SetWarnMode(chatID, "ban"))
 	require.NoError(t, ClearModuleData(chatID, BackupModuleWarns))
 	assert.Equal(t, 3, warns.GetWarnSetting(chatID).WarnLimit)
-	assert.Equal(t, "", warns.GetWarnSetting(chatID).WarnMode)
+	// The reset stores mute, the mode the warn module applies by default (an empty mode applies
+	// nothing at the limit, and the legacy chk_warns_mode of a chain-built PostgreSQL refused it).
+	assert.Equal(t, "mute", warns.GetWarnSetting(chatID).WarnMode)
 
 	require.NoError(t, locks.UpdateLock(chatID, " stickers", true))
 	require.NoError(t, ClearModuleData(chatID, BackupModuleLocks))

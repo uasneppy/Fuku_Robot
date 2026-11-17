@@ -1030,9 +1030,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   changes the other value the page shows: a first limit write stores mode `mute` and a first action write stores limit 3 (the
   repository's upserts). Every press redraws from the row the apply function read back (a refusal or a failed save,
   `common_settings_save_failed`, from the row read before), and a press of the stored value writes the same row again (the
-  command's upsert is idempotent) and shows no notice. Known and left to the owner: `/reset warnings` stores an empty mode
-  (`backup.go`), which the page shows as Not set with the inert line and the warn module does not act on; the fix is one
-  line in the reset and a backup test, outside this phase (`18-SPIKE.md`, check 3). `TestSettingsWarnsOpens`,
+  command's upsert is idempotent) and shows no notice. `/reset warnings` stores limit 3 and mode mute, and a backup import
+  whose warns block has no mode or an empty one stores mute (`backup.go`, quick task 261116-wh3); an empty mode can still
+  exist only when written by hand or by an older build, and the page then draws it as Not set with the inert line, which the
+  warn module does not act on. `TestSettingsWarnsOpens`,
   `TestSettingsParityWarnLimit`, `TestSettingsParityWarnMode`, `TestSettingsWarnsInertAction`, `TestSettingsWarnsBounds`,
   `TestSettingsWarnsForged`, `TestSettingsDriftWarns`, `TestSettingsAuthorityParityWarns`, `TestSettingsWarnsCallbackBytes`,
   `TestSettingsWarnsPageFitsEveryLocale` and `TestSettingsWarnsReadsCreateNothing` hold it (`settings_warns_test.go`,
