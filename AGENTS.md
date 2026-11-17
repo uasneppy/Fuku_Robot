@@ -2423,6 +2423,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 ## Migrations
 
 - `migrations/*.sql` is the schema source of truth. Never edit an applied file; the SHA-256 checksum aborts startup.
+  Both appliers check every applied file's checksum on every run, also when nothing is pending, and warn about a
+  recorded version that has no file (it changes nothing).
 - Name new files with a timestamp greater than every existing one; order is plain filename sort.
 - Each file runs in one transaction: no top-level `BEGIN`/`COMMIT`/`ROLLBACK`, no `CREATE INDEX CONCURRENTLY`.
 - Change `fuku/db/migrations/runner.go` and `scripts/migrate_psql.sh` together; both appliers must agree.

@@ -72,14 +72,20 @@ func (m *MigrationRunner) RunMigrations() error {
 
 	log.Infof("[Migrations] Found %d migration files", len(files))
 
-	var appliedCount int64
-	if err := m.db.Model(&SchemaMigration{}).Count(&appliedCount).Error; err != nil {
-		return fmt.Errorf("failed to count applied migrations: %w", err)
+	return m.runMigrationFiles(files)
+}
+
+// runMigrationFiles verifies every applied file against its stored checksum and applies the
+// pending ones, in file order, on every run. It never decides from the number of recorded rows
+// (I5): a run whose counts matched used to skip the checksums, and a recorded row whose file is
+// gone then hid a new pending file. A recorded row with no file is reported as a warning.
+func (m *MigrationRunner) runMigrationFiles(files []string) error {
+	orphans, err := m.recordedWithoutFile(files)
+	if err != nil {
+		return err
 	}
-	if appliedCount == int64(len(files)) {
-		log.Infof("[Migrations] All %d migrations already applied; nothing to do", len(files))
-		m.logMigrationStatus()
-		return nil
+	for _, version := range orphans {
+		log.Warnf("[Migrations] %s is recorded as applied but has no migration file", version)
 	}
 
 	applied := 0
@@ -129,6 +135,27 @@ func (m *MigrationRunner) RunMigrations() error {
 	}
 
 	return nil
+}
+
+// recordedWithoutFile returns the recorded versions that have no file among files, in version
+// order. Such a row is reported and changes nothing: a file renamed or removed after it was
+// applied is the usual cause, and migrations are append-only.
+func (m *MigrationRunner) recordedWithoutFile(files []string) ([]string, error) {
+	var versions []string
+	if err := m.db.Model(&SchemaMigration{}).Order("version").Pluck("version", &versions).Error; err != nil {
+		return nil, fmt.Errorf("failed to list applied migrations: %w", err)
+	}
+	known := make(map[string]bool, len(files))
+	for _, file := range files {
+		known[filepath.Base(file)] = true
+	}
+	var orphans []string
+	for _, version := range versions {
+		if !known[version] {
+			orphans = append(orphans, version)
+		}
+	}
+	return orphans, nil
 }
 
 // ensureMigrationsTable creates the schema_migrations table if it doesn't exist,

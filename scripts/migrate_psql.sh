@@ -245,6 +245,23 @@ EOF
   print_color "$GREEN" "Found ${#migration_files[@]} migration files"
   echo
 
+  # Every applied file is verified below on every run, like fuku/db/migrations/runner.go; a
+  # recorded version with no file is reported and changes nothing.
+  known_versions=""
+  for migration_file in "${migration_files[@]}"; do
+    known_versions+="$(basename "$migration_file")"$'\n'
+  done
+  recorded_versions=$(execute_sql -At -c "SELECT version FROM schema_migrations ORDER BY version;") || {
+    print_color "$RED" "Error: Could not read migration status"
+    exit 1
+  }
+  while IFS= read -r recorded; do
+    [[ -z "$recorded" ]] && continue
+    if ! grep -Fxq -- "$recorded" <<< "$known_versions"; then
+      print_color "$YELLOW" "  ! ${recorded} is recorded as applied but has no migration file"
+    fi
+  done <<< "$recorded_versions"
+
   print_color "$BLUE" "Applying migrations..."
   applied_count=0
   skipped_count=0
