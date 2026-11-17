@@ -3593,8 +3593,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   UTF-16 offset, or an `@username` (4-32 of `A-Za-z0-9_`). A username resolves through `user.FindUsersByUsername` (users
   table only, case-insensitive, up to 10 rows, newest activity first) behind the `staffUserLookup` seam: no row is
   "never seen", more than one is refused with each name, ID and last-seen date, and a database error is "could not
-  check". Never call `extraction.GetUserId` or the extract-user helpers for staff targets: they are case-sensitive and
-  fall back to the channels table and live `getChat`. A reply is never a target (a bare reply gets a hint; a reply plus
+  check". Never call `extraction.GetUserId` or the extract-user helpers for staff targets: they match a username
+  case-insensitively and refuse one two accounts hold (`user.GetUserIdByUserName` goes through `FindUsersByUsername`),
+  but they still fall back to the channels table and live `getChat`. A reply is never a target (a bare reply gets a hint; a reply plus
   an explicit target uses the explicit one). `/sban`, `/dban`, `/skick`, `/dkick`, `/smute` and `/dmute` are
   intercepted in a Staff Group only to be refused with a hint (`staffCommandSpec.Refused`), after the anonymous check.
 - Per-group targets and delete ranges are never read from the raw `reply_to_message`, only through
