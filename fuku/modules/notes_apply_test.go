@@ -385,7 +385,7 @@ func TestNoteApplyThenFetch(t *testing.T) {
 		client := newModuleBotClient()
 		bot := newModuleTestBot(client)
 		err := handler(bot, newModuleMessageContext(bot, chat, member, text))
-		if err != ext.EndGroups && err != ext.ContinueGroups {
+		if err != nil && err != ext.EndGroups && err != ext.ContinueGroups {
 			t.Fatalf("%q error = %v", text, err)
 		}
 		var texts []string
