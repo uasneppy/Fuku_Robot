@@ -74,8 +74,16 @@ func GetNote(chatID int64, keyword string) (noteSrc *models.Notes) {
 }
 
 type cachedNoteInfo struct {
+	ID        uint
 	Name      string
 	AdminOnly bool
+}
+
+// NoteListEntry is one note of a chat's list: its row ID and its name. A value cached by an
+// earlier build has no ID and reads as ID 0 until the notes_list key is dropped or expires.
+type NoteListEntry struct {
+	ID   uint
+	Name string
 }
 
 func notesListCacheKey(chatID int64) string {
@@ -91,6 +99,17 @@ func GetNotesList(chatID int64, admin bool) []string {
 }
 
 func GetNotesListContext(ctx context.Context, chatID int64, admin bool) []string {
+	entries := GetNotesListEntriesContext(ctx, chatID, admin)
+	out := make([]string, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, e.Name)
+	}
+	return out
+}
+
+// GetNotesListEntriesContext is GetNotesListContext with each note's row ID beside its name, read
+// through the same notes_list cache key; admin-only notes are left out unless admin is true.
+func GetNotesListEntriesContext(ctx context.Context, chatID int64, admin bool) []NoteListEntry {
 	cacheKey := notesListCacheKey(chatID)
 	entries, err := cache.GetFromCacheOrLoad(ctx, cacheKey, cache.CacheTTLNotesList, func(ctx context.Context) ([]cachedNoteInfo, error) {
 		var notes []*models.Notes
@@ -99,17 +118,17 @@ func GetNotesListContext(ctx context.Context, chatID int64, admin bool) []string
 		}
 		infos := make([]cachedNoteInfo, 0, len(notes))
 		for _, n := range notes {
-			infos = append(infos, cachedNoteInfo{Name: n.NoteName, AdminOnly: n.AdminOnly})
+			infos = append(infos, cachedNoteInfo{ID: n.ID, Name: n.NoteName, AdminOnly: n.AdminOnly})
 		}
 		return infos, nil
 	})
 	if err != nil {
 		return nil
 	}
-	out := make([]string, 0, len(entries))
+	out := make([]NoteListEntry, 0, len(entries))
 	for _, e := range entries {
 		if admin || !e.AdminOnly {
-			out = append(out, e.Name)
+			out = append(out, NoteListEntry{ID: e.ID, Name: e.Name})
 		}
 	}
 	return out

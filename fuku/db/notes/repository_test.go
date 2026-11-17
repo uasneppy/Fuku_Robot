@@ -678,3 +678,50 @@ func TestNotesSettingsCacheDefaultsForMissingChat(t *testing.T) {
 		t.Fatalf("expected ChatId=%d, got %d", chatID, settings.ChatId)
 	}
 }
+
+// TestGetNotesListEntriesContext proves the cached note list carries each note's row ID with its
+// name, keeps the admin filter, and that the names-only reader returns the same names in order.
+func TestGetNotesListEntriesContext(t *testing.T) {
+	skipIfNoDb(t)
+
+	chatID := -time.Now().UnixNano()
+	t.Cleanup(func() {
+		if err := db.DB.Where("chat_id = ?", chatID).Delete(&models.Notes{}).Error; err != nil {
+			t.Fatalf("cleanup Notes failed: %v", err)
+		}
+		cache.DeleteCache(notesListCacheKey(chatID))
+	})
+	for _, n := range []struct {
+		name  string
+		admin bool
+	}{{"правила", false}, {"secret", true}, {"zeta", false}} {
+		if err := AddNote(chatID, n.name, "content", "", models.ButtonArray{}, db.TEXT, false, false, n.admin, false, false, false); err != nil {
+			t.Fatalf("AddNote(%q) error = %v", n.name, err)
+		}
+	}
+	cache.DeleteCache(notesListCacheKey(chatID))
+
+	for _, admin := range []bool{false, true} {
+		entries := GetNotesListEntriesContext(t.Context(), chatID, admin)
+		names := GetNotesListContext(t.Context(), chatID, admin)
+		if len(entries) != len(names) {
+			t.Fatalf("admin=%v: %d entries, %d names", admin, len(entries), len(names))
+		}
+		want := 2
+		if admin {
+			want = 3
+		}
+		if len(entries) != want {
+			t.Fatalf("admin=%v: %d entries, want %d", admin, len(entries), want)
+		}
+		for i, e := range entries {
+			if e.Name != names[i] {
+				t.Fatalf("admin=%v: entry %d is %q, name %q", admin, i, e.Name, names[i])
+			}
+			row := GetNote(chatID, e.Name)
+			if row == nil || e.ID == 0 || e.ID != row.ID {
+				t.Fatalf("admin=%v: entry %q has ID %d, the row has %v", admin, e.Name, e.ID, row)
+			}
+		}
+	}
+}

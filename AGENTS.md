@@ -3048,6 +3048,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   Telegram answers "group chat was upgraded" (or the `migrate_to_chat_id` parameter), which `deletionClassify` reads as
   `gone`: the worker latches the old chat, drops its rows and deletes nothing. The owner sets the rules again on the new group.
 - Entity offsets are UTF-16: slice with `extractEntityText`, and match against both `Entities` and `CaptionEntities`.
+- Private note links (`notes.go`): Telegram accepts only 1 to 64 characters of `A-Za-z0-9_-` as a start parameter, so a
+  Cyrillic or long note name broke the old `note_<chat>_<name>` payload. Every link the bot builds now goes through
+  `noteDeepLinkURL` and carries `noteid_<chat id>_<row id>` (the group button of the watcher and `/get`, the private
+  `/notes` list and the `notes_` list deep link, whose entries come from `notes.GetNotesListEntriesContext`, the same
+  `notes_list` key with the row ID beside the name). `noteIDDeepLinkHandler` (prefix `noteid_`, longer than `note_` and
+  `note`) parses strictly before any Telegram call (three parts, a negative chat, a positive row ID of at most 19 digits),
+  checks membership, reads the note with `notes.GetNoteEntryFresh(chat, id)`, so another chat's ID is not found, and
+  shares `sendDeepLinkNote` (the admin-only check and the send) with the old `note_` handler, which stays for buttons
+  already posted. An entry cached by an earlier build has no ID and falls back to the name form until `notes_list` is
+  dropped. Note names in the two HTML lists are escaped.
 - Captcha allows one attempt per `(user, chat)`; group `-10` stores the pending user's messages for replay. Service messages
   (join, leave, pin and the other deletion-table kinds, `memberContentMessage` false) are never held: group `-10` returns
   `ext.ContinueGroups` for them first, so the lockdown guard, fed-ban, the service deletion watcher and `cleanService` still
