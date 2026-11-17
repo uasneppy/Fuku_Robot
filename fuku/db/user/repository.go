@@ -157,8 +157,9 @@ func FindUsersByUsername(username string, limit int) ([]models.User, error) {
 		Limit(limit).
 		Find(&rows).Error
 	if err != nil {
-		log.Errorf("[Database] FindUsersByUsername: %v - %s", err, username)
-		return nil, fmt.Errorf("find users by username %q: %w", username, err)
+		// The username is the caller's input: it is never logged or put in the error.
+		log.Errorf("[Database] FindUsersByUsername: %v", err)
+		return nil, fmt.Errorf("find users by username: %w", err)
 	}
 	return rows, nil
 }
