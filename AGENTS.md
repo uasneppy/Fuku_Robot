@@ -3299,7 +3299,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `raidCountMemberJoin` and `lockdownOnJoinMessage` (the `new_chat_members` service message) through
   `raidCountMessageJoins`, right after the lockdown join tracker write and before the lockdown is read, so the join
   that tips the threshold is handled by the lockdown it starts. The service message's accounts go to Redis in one
-  script call, and the account is the set member, so the two deliveries of one join count once. Both counters and both
+  script call, and the account is the set member, so the two deliveries of one join count once. A self-performed join
+  (the sender is the one new member) is counted from the `chat_member` update only: the Bot API sends the service
+  message of a join request an administrator approved with the joiner as its sender and only member, exactly like a
+  join by link, while the `chat_member` update names the approver (`via_join_request`), so an approved request never
+  counts toward the surge and is not recorded as a new member for the flood and AI paths
+  (`TestRaidJoinApprovedRequestServiceMessage`). Accepted cost: in a group where the bot is not an administrator (no
+  `chat_member` updates) self-joins are not counted at all, and there a lockdown could not be started anyway. Both counters and both
   guard handlers build their `lockdownJoinInput` with `lockdownMemberJoinInput` and `lockdownMessageJoinInputs`, so
   the performer rule cannot drift. It is best effort and Redis only, and a count never bans,
   restricts or deletes anything: when `raidJoinCounts` holds (not the bot, not a request, not an approved user, not

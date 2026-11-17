@@ -47,13 +47,19 @@ func TestRaidJoinDoubleDelivery(t *testing.T) {
 		t.Errorf("the joined set holds %d accounts, want 14: both deliveries of a join are one account", got)
 	}
 
-	// The 15th account arrives only as a service message.
+	// A self-join seen only as a service message is not counted: the message cannot tell it
+	// from a join request an admin approved (TestRaidJoinApprovedRequestServiceMessage).
 	fifteenth := env.newJoiner("OnlyMessage")
 	env.serviceJoin(fifteenth, nil, fifteenth)
+	if row := env.activeLockdown(); row != nil {
+		t.Fatalf("a lockdown (count %d) exists after a self-join seen only as a service message, want none", row.TriggerCount)
+	}
 
+	// Its chat_member update is what counts it.
+	env.join(fifteenth, fifteenth, "")
 	row := env.activeLockdown()
 	if row == nil {
-		t.Fatal("no active lockdown after the 15th account joined by service message")
+		t.Fatal("no active lockdown after the 15th account's chat_member update")
 	}
 	if row.TriggerKind != models.LockdownTriggerJoinSurge || row.TriggerCount != 15 {
 		t.Errorf("trigger = %q with count %d, want join_surge with count 15", row.TriggerKind, row.TriggerCount)
@@ -374,5 +380,30 @@ func TestRaidJoinBelowThreshold(t *testing.T) {
 		if row.TriggerCount != 15 {
 			t.Errorf("TriggerCount = %d, want 15 (the old join is not one of them)", row.TriggerCount)
 		}
+	})
+}
+
+// TestRaidJoinApprovedRequestServiceMessage holds that a join request an admin approved is
+// no raid evidence whichever delivery arrives. The chat_member update names the approver as
+// its performer (from, with via_join_request), but the new_chat_members service message of
+// the same join is sent by the joiner and names only the joiner (the Bot API builds it from
+// messageChatJoinByRequest with the sender as the one new member), exactly like a self-join
+// by link. The service message therefore cannot tell the two apart, and a self-join is
+// counted from the chat_member update only.
+func TestRaidJoinApprovedRequestServiceMessage(t *testing.T) {
+	t.Run("both deliveries", func(t *testing.T) {
+		raidExemption(t, false, func(env *lockdownEnv) gotgbot.User {
+			guest := env.newJoiner("Approved")
+			env.memberUpdate(env.admin, gotgbot.ChatMemberLeft{User: guest}, gotgbot.ChatMemberMember{User: guest}, true)
+			env.serviceJoin(guest, nil, guest)
+			return guest
+		})
+	})
+	t.Run("only the service message", func(t *testing.T) {
+		raidExemption(t, false, func(env *lockdownEnv) gotgbot.User {
+			guest := env.newJoiner("Approved")
+			env.serviceJoin(guest, nil, guest)
+			return guest
+		})
 	})
 }
