@@ -289,7 +289,7 @@ func (m moduleStruct) addNote(b *gotgbot.Bot, ctx *ext.Context) error {
 	}
 	ctx.EffectiveChat = connectedChat
 	chat := ctx.EffectiveChat
-	msg := ctx.EffectiveMessage
+	msg := withRealReply(ctx.EffectiveMessage)
 	user := chat_status.RequireUser(b, ctx)
 	if user == nil {
 		return ext.EndGroups

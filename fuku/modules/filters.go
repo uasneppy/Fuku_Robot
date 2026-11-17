@@ -323,7 +323,7 @@ func (m moduleStruct) addFilter(b *gotgbot.Bot, ctx *ext.Context) error {
 			log.Errorf("[Filters][addFilter] Recovered from panic: %v", r)
 		}
 	}()
-	msg := ctx.EffectiveMessage
+	msg := withRealReply(ctx.EffectiveMessage)
 	connectedChat := chat_status.IsUserConnected(b, ctx, true, false)
 	if connectedChat == nil {
 		return ext.EndGroups
