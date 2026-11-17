@@ -62,10 +62,13 @@ func invalidateBan(fedID string, userID int64) {
 	cache.DeleteCache(cache.CacheKey(cachePrefixFedBan, fedID, userID))
 }
 
+// trimFedName trims a federation name and cuts it to maxFedNameLen characters. The
+// column is VARCHAR(64), which counts characters, so the cut is by runes: a byte cut
+// halved non-Latin names and could end inside a character.
 func trimFedName(name string) string {
 	name = strings.TrimSpace(name)
-	if len(name) > maxFedNameLen {
-		name = name[:maxFedNameLen]
+	if runes := []rune(name); len(runes) > maxFedNameLen {
+		name = strings.TrimSpace(string(runes[:maxFedNameLen]))
 	}
 	return name
 }

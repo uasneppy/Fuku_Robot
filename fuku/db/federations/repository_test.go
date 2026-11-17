@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
 	"github.com/uasneppy/fuku_robot/fuku/db/chats"
@@ -377,5 +378,50 @@ func TestLoadFederationStats(t *testing.T) {
 	if feds < 0 || chats < 0 || admins < 0 || bans < 0 || subs < 0 {
 		t.Fatalf("LoadFederationStats() = (%d, %d, %d, %d, %d), want all >= 0",
 			feds, chats, admins, bans, subs)
+	}
+}
+
+func TestFederationNameTruncatesByRunes(t *testing.T) {
+	ownerID := time.Now().UnixNano()
+	t.Cleanup(func() {
+		if fed := GetFedByOwner(ownerID); fed != nil {
+			_ = DeleteFederation(fed.FedID)
+		}
+		_ = db.DB.Where("user_id = ?", ownerID).Delete(&models.User{}).Error
+	})
+	wantName := func(what, got string, runes int) {
+		t.Helper()
+		if !utf8.ValidString(got) || utf8.RuneCountInString(got) != runes {
+			t.Fatalf("%s name = %q (%d runes, valid UTF-8 %v), want %d runes of valid UTF-8",
+				what, got, utf8.RuneCountInString(got), utf8.ValidString(got), runes)
+		}
+	}
+
+	fed, err := CreateFederation(ownerID, strings.Repeat("Ж", 70))
+	if err != nil {
+		t.Fatalf("CreateFederation: %v", err)
+	}
+	wantName("created", fed.Name, 64)
+
+	renamed, err := RenameFederation(ownerID, "  "+strings.Repeat("Ю", 40)+"  ")
+	if err != nil {
+		t.Fatalf("RenameFederation: %v", err)
+	}
+	if renamed.Name != strings.Repeat("Ю", 40) {
+		t.Fatalf("renamed name = %q, want 40 letters kept whole and trimmed", renamed.Name)
+	}
+
+	renamed, err = RenameFederation(ownerID, strings.Repeat("Я", 70))
+	if err != nil {
+		t.Fatalf("RenameFederation(70 letters): %v", err)
+	}
+	wantName("renamed", renamed.Name, 64)
+
+	renamed, err = RenameFederation(ownerID, strings.Repeat("a", 70))
+	if err != nil {
+		t.Fatalf("RenameFederation(ascii): %v", err)
+	}
+	if renamed.Name != strings.Repeat("a", 64) {
+		t.Fatalf("ascii name = %q, want 64 letters", renamed.Name)
 	}
 }
