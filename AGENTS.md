@@ -1684,6 +1684,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   evicts it on this replica only; list freshness-critical keys in `skipLocal` (`fuku/db/cache/local.go`). Tests that
   write rows directly must call `cache.ResetLocalForTest()` or `DeleteCache` before reading through the cache.
 - Two packages are named `cache`; the loader and generation guards are in `fuku/db/cache`, not `fuku/utils/cache`.
+- Accepted limit (review item I9, owner decision): the generation guard is per process. A load on replica A that read
+  the database before replica B's write and `DeleteCache` can still `SET` the old value into Redis after B's `DEL`,
+  and every replica then serves it until the key's TTL ends or the next write drops it. A Redis-side generation with a
+  Lua compare-and-set was not added: the write goes through gocache's marshaler and store (a memory store in tests), so
+  it would bypass that layer, duplicate its encoding and add a round trip to every load and every delete. Keys whose
+  staleness matters are read fresh (`*Fresh`, never cached) or kept short; a new cached setting that must change at once
+  on every replica needs that too, not only `skipLocal`.
 - Operational Redis keys (`fuku:anonAdmin:*`, `fuku:staff:*`, `fuku:lockdown:*`, `fuku:raid:*`, `fuku:memberreq:*`, `fuku:fed:*`) sit outside the
   `fuku:cache:` prefix; `CLEAR_CACHE_ON_STARTUP` does not clear them. `fuku:antiraid:*` is retired: nothing reads or
   writes it, and `sweepRetiredAntiRaidKeys` removes what the old raid mode left, once per process at startup.
