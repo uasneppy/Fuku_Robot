@@ -491,7 +491,7 @@ func TestRaidAIImageBreakerCap(t *testing.T) {
 	t.Run("a full map of failing chats warns once", func(t *testing.T) {
 		resetRaidAIImageBreakers(t)
 		hook := captureLogs(t, log.WarnLevel)
-		fillRaidAIImageBreakers(t, func(int64) *raidAIImageBreaker { return &raidAIImageBreaker{failures: 2} })
+		fillRaidAIImageBreakers(t, func(int64) *raidAIImageBreaker { return &raidAIImageBreaker{failures: 2, lastFailure: raidNow()} })
 
 		for range 3 * raidAIImageFailures {
 			raidAIImageRecordFailure(newChat, failure)
@@ -510,4 +510,30 @@ func TestRaidAIImageBreakerCap(t *testing.T) {
 			t.Errorf("%d warnings that the breaker map is full, want exactly 1", warnings)
 		}
 	})
+}
+
+// TestRaidAIImageBreakerPrunesStale holds that a breaker whose last failure is older than the
+// cooldown is stale and makes room in a full map: a chat that failed a few times long ago and
+// never again must not keep a newly failing chat untracked for ever.
+func TestRaidAIImageBreakerPrunesStale(t *testing.T) {
+	resetRaidAIImageBreakers(t)
+	failure := &claude.HTTPError{Status: 500}
+	const newChat = int64(-1009998)
+	start := time.Date(2026, 11, 17, 12, 0, 0, 0, time.UTC)
+	now := start
+	raidSetClock(t, func() time.Time { return now })
+
+	// Every tracked chat failed twice at the start and never again.
+	for id := int64(1); id <= raidAIImageBreakerMaxChats; id++ {
+		raidAIImageRecordFailure(id, failure)
+		raidAIImageRecordFailure(id, failure)
+	}
+
+	now = start.Add(raidAIImageCooldown + time.Second)
+	for range raidAIImageFailures {
+		raidAIImageRecordFailure(newChat, failure)
+	}
+	if !raidAIImagePaused(newChat) {
+		t.Error("a chat failing now was never paused: breakers whose last failure is older than the cooldown should have been pruned")
+	}
 }

@@ -266,9 +266,23 @@ func processAISpam(task aispamTask) {
 	// Redis round trip never sits between a message arriving and the bot
 	// answering it. A message is recorded even when the check that follows
 	// fails: the next check still sees it.
+	//
+	// Every provider call derives from the pool's context, which the shutdown drain cancels
+	// first: a queued check is then dropped and a check in flight aborts, both as "not
+	// checked" (shed), never as a provider failure that would count toward the breaker.
+	ctx := aispamContext()
+	if ctx.Err() != nil {
+		aispamShed.Add(1)
+		return
+	}
 	recent, lastHour := observeAISpamSender(task.chatID, task.userID, task.messageID, aispamTruncate(task.text, aispamHistoryTextLen), time.Now())
 
-	verdict, err := aispamJevDecide(context.Background(), config.AppConfig.TypeSafeAPIKey, task.state(recent, lastHour))
+	verdict, err := aispamJevDecide(ctx, config.AppConfig.TypeSafeAPIKey, task.state(recent, lastHour))
+	if err != nil && ctx.Err() != nil {
+		aispamShed.Add(1)
+		log.WithFields(log.Fields{"chat_id": task.chatID}).Debug("[AISpam] check cut off by the shutdown, no action taken")
+		return
+	}
 	if err != nil {
 		aispamFailed.Add(1)
 		log.WithFields(log.Fields{
@@ -409,6 +423,33 @@ var (
 	aispamDraining atomic.Bool
 )
 
+// aispamPoolContext holds the context every /aispam provider call derives from. The
+// shutdown drain cancels it first, so every check in flight aborts at once.
+var aispamPoolContext struct {
+	mu     sync.Mutex
+	ctx    context.Context
+	cancel context.CancelFunc
+}
+
+// aispamContext returns the pool's context, creating it on first use.
+func aispamContext() context.Context {
+	aispamPoolContext.mu.Lock()
+	defer aispamPoolContext.mu.Unlock()
+	if aispamPoolContext.ctx == nil {
+		aispamPoolContext.ctx, aispamPoolContext.cancel = context.WithCancel(context.Background())
+	}
+	return aispamPoolContext.ctx
+}
+
+// aispamCancel cancels the pool's context, creating it first when no check ever ran, so a
+// later check finds it already cancelled.
+func aispamCancel() {
+	aispamContext()
+	aispamPoolContext.mu.Lock()
+	defer aispamPoolContext.mu.Unlock()
+	aispamPoolContext.cancel()
+}
+
 func aispamEnsureWorkers() {
 	aispamWorkersOnce.Do(func() {
 		// ponytail: fixed pool. A provider brownout sheds checks instead of
@@ -463,16 +504,20 @@ func aispamEnqueue(task aispamTask) bool {
 	}
 }
 
-// aispamDrainTimeout bounds the shutdown drain: a full queue of slow checks can
-// outlast the shutdown budget, and exiting with work left behind beats blocking
-// the process.
-const aispamDrainTimeout = 30 * time.Second
+// aispamDrainTimeout bounds the shutdown drain's wait. It stays under the 10 s a plain
+// shutdown handler is given (defaultHandlerTimeout), so the drain's own timer ends it and
+// never the manager's. The checks are cancelled before the wait, so it is normally short.
+const aispamDrainTimeout = 9 * time.Second
 
-// DrainAISpamChecks stops accepting new checks and waits for the enqueued ones
-// to finish, so callers observe deletions without sleeping.
+// DrainAISpamChecks is the shutdown drain of the /aispam pool. It closes the queue for
+// good (aispamDraining is never reset: a late update is shed, not started), cancels the
+// pool's context first, so every provider call in flight aborts at once and every queued
+// check is dropped as not checked, then waits at most aispamDrainTimeout for the workers.
+// A check that already had its verdict may still delete its message and report it to the
+// AI burst counter while the wait runs.
 func DrainAISpamChecks() {
 	aispamDraining.Store(true)
-	defer aispamDraining.Store(false)
+	aispamCancel()
 
 	done := make(chan struct{})
 	go func() {
@@ -495,6 +540,23 @@ type aispamBreaker struct {
 	failures   int
 	pausedTill time.Time
 	notified   bool
+	// lastFailure is when the chat's last failure was counted; a breaker that is not paused
+	// and whose last failure is older than aispamBreakerCooldown is stale.
+	lastFailure time.Time
+}
+
+// aispamBreakerPruneLocked drops the stale breakers (not paused, last failure older than
+// aispamBreakerCooldown), so a full map makes room for a chat that is failing now. The
+// caller holds aispamBreakers.mu.
+func aispamBreakerPruneLocked(now time.Time) {
+	for chatID, breaker := range aispamBreakers.m {
+		if !breaker.pausedTill.IsZero() && now.Before(breaker.pausedTill) {
+			continue
+		}
+		if now.Sub(breaker.lastFailure) >= aispamBreakerCooldown {
+			delete(aispamBreakers.m, chatID)
+		}
+	}
 }
 
 var aispamBreakers = struct {
@@ -528,6 +590,9 @@ func aispamBreakerRecordFailure(chatID int64) bool {
 	breaker, ok := aispamBreakers.m[chatID]
 	if !ok {
 		if len(aispamBreakers.m) >= aispamBreakerMaxChats {
+			aispamBreakerPruneLocked(now)
+		}
+		if len(aispamBreakers.m) >= aispamBreakerMaxChats {
 			return false
 		}
 		breaker = &aispamBreaker{}
@@ -540,6 +605,7 @@ func aispamBreakerRecordFailure(chatID int64) bool {
 	}
 
 	breaker.failures++
+	breaker.lastFailure = now
 	if breaker.failures < aispamBreakerFailures || breaker.notified {
 		return false
 	}

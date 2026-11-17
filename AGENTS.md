@@ -83,6 +83,15 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`raidPosts`, a counter and not a `sync.WaitGroup`, because the drain gives up after its wait while a new post can still
   start). A post is best effort: the lockdown it announces is already in place and its alert is driven by the database,
   so a post still running when the 2 s are up is cut off with the process and only that notice is lost.
+- `DrainAISpamChecks` is the `/aispam` pool's drain, a plain shutdown handler (`RegisterHandler`, the 10 s default) that
+  `main.go` registers right after `RegisterRaidAIDrain`, so LIFO runs it before `StopRaidAI`. It sets `aispamDraining`
+  for good (a late update is shed, never started; nothing resets it), cancels the pool's root context first
+  (`aispamContext`: every TypeSafe call of a check derives from it, so all of them abort at once, and a check cut off or
+  dropped from the queue counts as shed, never as a provider failure or a breaker count), then waits at most
+  `aispamDrainTimeout` (9 s, under the handler's 10 s) for the workers. A lockdown start an AI verdict asks for is
+  refused once `raidAIDraining` is set (`raidAIFireAsync` counts the start in `raidAIFires` before it reads the flag), so
+  no start begins behind `StopRaidAI`'s back. Tests wait for checks with `waitAISpamChecks`, which closes and cancels
+  nothing, and a test that runs the drain restores the pool with `restoreAISpamPool` (`TestShutdownDrainsAISpamChecks`).
 - `StopRaidAI` is a drain registered after DB-close as well, through `RegisterRaidAIDrain` (`raidAIStopWait`, 1 s, plus
   grace), in `main.go` right after `RegisterRaidPostsDrain`. Shutdown is LIFO, so it runs after `DrainAISpamChecks`
   (whose verdicts can start lockdowns) and before `StopRaidPosts` (a start can post a notice) and the database close. It
@@ -3312,7 +3321,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `raidCountMemberJoin` and `lockdownOnJoinMessage` (the `new_chat_members` service message) through
   `raidCountMessageJoins`, right after the lockdown join tracker write and before the lockdown is read, so the join
   that tips the threshold is handled by the lockdown it starts. The service message's accounts go to Redis in one
-  script call, and the account is the set member, so the two deliveries of one join count once. Both counters and both
+  script call, and the account is the set member, so the two deliveries of one join count once. A self-performed join
+  (the sender is the one new member) is counted from the `chat_member` update only: the Bot API sends the service
+  message of a join request an administrator approved with the joiner as its sender and only member, exactly like a
+  join by link, while the `chat_member` update names the approver (`via_join_request`), so an approved request never
+  counts toward the surge and is not recorded as a new member for the flood and AI paths
+  (`TestRaidJoinApprovedRequestServiceMessage`). Accepted cost: in a group where the bot is not an administrator (no
+  `chat_member` updates) self-joins are not counted at all, and there a lockdown could not be started anyway. Both counters and both
   guard handlers build their `lockdownJoinInput` with `lockdownMemberJoinInput` and `lockdownMessageJoinInputs`, so
   the performer rule cannot drift. It is best effort and Redis only, and a count never bans,
   restricts or deletes anything: when `raidJoinCounts` holds (not the bot, not a request, not an approved user, not
@@ -3330,11 +3345,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `raidFloodLateGroup`). Both return `ext.ContinueGroups` on every path, so aispam, antiflood, locks and blacklists still
   see every message, and delete nothing: the lockdown's muting stops the flood. What counts (`raidFloodItemKey`) is any
   user content in a supergroup: text, photo, GIF (animation, checked before the document Telegram also sets), sticker,
-  video, video note, voice, audio, document, poll, contact, location, venue, dice and story, forwards and replies
-  included; an album counts once. A command the bot handles does not count (D-07), and the dispatcher is what says
+  video, video note, voice, audio, document, poll, contact, location, venue, dice, story, checklist and game,
+  and a rich message, forwards and replies included; an album counts once. A command the bot handles does not count (D-07), and the dispatcher is what says
   which: a handled command returns `ext.EndGroups`, which ends every later group. So the `-4` watcher counts every item
   except a slash-prefixed text (`raidFloodIsSlashText`: a `bot_command` entity at offset 0, or a text starting with `/`
-  and a non-space character, which gotgbot's command handler also runs), and the group `12` watcher counts only the
+  and a non-space character, which gotgbot's command handler also runs; a media message's caption and a rich message's
+  first paragraph are judged the same way, because the handler reads them as the command text), and the group `12` watcher counts only the
   slash-prefixed texts that reach it, the ones no command took: `/word` with no handler, `/////`, and a command addressed
   to another bot (`/start@otherbot`). Never keep a second list of command names for this. Group `12` must stay after every
   other group, so every new handler group needs a number below it. A slash text that a handler ends is not counted, and
@@ -3439,8 +3455,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   network error or unusable answer counts toward the chat's five). Each pause logs one warning naming its reason (status
   and error type only) and its end, and none posts anything: a paused check is `Shed`. Only provider answers count; a
   `getFile` or download failure never does, and a refusal stop counts as an answer, not a failure. The breaker clock is
-  `raidNow`. The breaker map holds at most 10000 chats (`raidAIImageBreakerMaxChats`); when it is full the idle breakers (no failures,
-  not paused) are evicted, and if every tracked chat is failing or paused a new chat stays untracked, so it cannot be
+  `raidNow`. The breaker map holds at most 10000 chats (`raidAIImageBreakerMaxChats`); when it is full the idle breakers (not paused, and
+  no failures or a last failure older than `raidAIImageCooldown`) are evicted; `/aispam`'s own per-chat breaker map
+  (`aispamBreakerMaxChats`, 10000) prunes its stale entries (not paused, last failure older than `aispamBreakerCooldown`)
+  the same way when it is full, and if every tracked chat is failing or paused a new chat stays untracked, so it cannot be
   paused, with one warning per process. The
   raid-only TypeSafe text checks keep sharing `/aispam`'s per-chat breaker silently and never touch these.
 - An automatic lockdown (`lockdownStartedAutomatically`: `trigger_kind` `join_surge`, `flood` or `ai_burst`) is

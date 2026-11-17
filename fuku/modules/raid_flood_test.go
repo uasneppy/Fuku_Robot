@@ -251,7 +251,6 @@ func TestRaidFloodItemKey(t *testing.T) {
 		{"a lone slash", gotgbot.Message{MessageId: 7, Text: "/ nothing"}, "m:7"},
 		{"photo", gotgbot.Message{MessageId: 7, Photo: photo}, "m:7"},
 		{"photo with a caption", gotgbot.Message{MessageId: 7, Photo: photo, Caption: "look"}, "m:7"},
-		{"photo with a command as its caption", gotgbot.Message{MessageId: 7, Photo: photo, Caption: "/ban now"}, "m:7"},
 		{"animation that is also a document", gotgbot.Message{
 			MessageId: 7, Animation: &gotgbot.Animation{FileId: floodTestFile}, Document: &file,
 		}, "m:7"},
@@ -766,4 +765,63 @@ func TestRaidFloodSlashTexts(t *testing.T) {
 		}
 	})
 
+}
+
+// TestRaidFloodItemKeyCountsRichKinds holds that a rich message, a checklist and a game
+// are user content the flood counter counts like any other item.
+func TestRaidFloodItemKeyCountsRichKinds(t *testing.T) {
+	rich := &gotgbot.RichMessage{Blocks: gotgbot.RichBlockArray{
+		gotgbot.RichBlockParagraph{Text: gotgbot.RichTextString("join my channel")},
+	}}
+	cases := []struct {
+		name string
+		msg  gotgbot.Message
+	}{
+		{"rich message", gotgbot.Message{MessageId: 7, RichMessage: rich}},
+		{"checklist", gotgbot.Message{MessageId: 7, Checklist: &gotgbot.Checklist{Title: "todo"}}},
+		{"game", gotgbot.Message{MessageId: 7, Game: &gotgbot.Game{Title: "play"}}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, slash, ok := raidFloodItemKey(&tc.msg)
+			if !ok || slash || got != "m:7" {
+				t.Errorf("raidFloodItemKey = %q, slash %v, %v, want \"m:7\", not slash, true", got, slash, ok)
+			}
+		})
+	}
+}
+
+// TestRaidFloodCaptionCommandIsSlash holds that a command the dispatcher would run is left
+// to the late watcher whether it is a text, a caption or a rich message: gotgbot's command
+// handler reads the caption and a rich message's first paragraph too, so a handled one ends
+// the update and must not have been counted at group -4.
+func TestRaidFloodCaptionCommandIsSlash(t *testing.T) {
+	photo := []gotgbot.PhotoSize{{FileId: floodTestFile, FileUniqueId: floodTestFile, Width: 1, Height: 1}}
+	cases := []struct {
+		name string
+		msg  gotgbot.Message
+	}{
+		{"photo with a command as its caption", gotgbot.Message{MessageId: 7, Photo: photo, Caption: "/ban now"}},
+		{"video with a bot_command caption entity", gotgbot.Message{
+			MessageId: 7, Video: &gotgbot.Video{FileId: floodTestFile}, Caption: "/warn@fuku_bot spam",
+			CaptionEntities: []gotgbot.MessageEntity{{Type: "bot_command", Offset: 0, Length: 14}},
+		}},
+		{"rich message that starts with a command", gotgbot.Message{MessageId: 7, RichMessage: &gotgbot.RichMessage{
+			Blocks: gotgbot.RichBlockArray{gotgbot.RichBlockParagraph{Text: gotgbot.RichTextString("/rules please")}},
+		}}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, slash, ok := raidFloodItemKey(&tc.msg)
+			if !ok || !slash || got != "m:7" {
+				t.Errorf("raidFloodItemKey = %q, slash %v, %v, want \"m:7\", slash, true", got, slash, ok)
+			}
+		})
+	}
+
+	// A caption that only mentions a command later is no command, as for a text.
+	later := gotgbot.Message{MessageId: 7, Photo: photo, Caption: "look /here"}
+	if _, slash, ok := raidFloodItemKey(&later); !ok || slash {
+		t.Errorf("a caption with a command later: slash %v, ok %v, want not slash, counted", slash, ok)
+	}
 }

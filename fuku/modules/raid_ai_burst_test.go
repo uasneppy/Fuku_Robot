@@ -123,7 +123,7 @@ func (e *lockdownEnv) textsFrom(chat gotgbot.Chat, user gotgbot.User, n int, pre
 func (e *lockdownEnv) settleAI() {
 	e.t.Helper()
 	raidAIJobs.wait()
-	DrainAISpamChecks()
+	waitAISpamChecks()
 	raidAIFires.wait()
 	raidPosts.wait()
 }

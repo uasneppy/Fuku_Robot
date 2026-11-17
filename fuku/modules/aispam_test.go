@@ -218,7 +218,7 @@ func TestCheckAISpamDeletesFlaggedMessageAndMirrorsIt(t *testing.T) {
 	LoadAISpam(dispatcher)
 
 	aispamProcessUpdate(t, dispatcher, bot, chat, gotgbot.User{Id: 42, FirstName: "Spammer"}, 501, "BUY CHEAP COINS NOW t.me/scam")
-	DrainAISpamChecks()
+	waitAISpamChecks()
 
 	if got := requests.Load(); got != 1 {
 		t.Fatalf("provider requests = %d, want 1", got)
@@ -260,7 +260,7 @@ func TestCheckAISpamKeepsMessageBelowThreshold(t *testing.T) {
 	LoadAISpam(dispatcher)
 
 	aispamProcessUpdate(t, dispatcher, bot, chat, gotgbot.User{Id: 42, FirstName: "Member"}, 502, "does anyone know a good pizza place")
-	DrainAISpamChecks()
+	waitAISpamChecks()
 
 	if deletes := client.callsFor("deleteMessage"); len(deletes) != 0 {
 		t.Fatalf("deleteMessage calls = %d, want 0", len(deletes))
@@ -312,7 +312,7 @@ func TestCheckAISpamThresholdFollowsMessageLanguage(t *testing.T) {
 			LoadAISpam(dispatcher)
 
 			aispamProcessUpdate(t, dispatcher, bot, chat, gotgbot.User{Id: 42, FirstName: "Member"}, 503, "check out my channel t.me/promo")
-			DrainAISpamChecks()
+			waitAISpamChecks()
 
 			deletes := client.callsFor("deleteMessage")
 			if tt.deleted && len(deletes) != 1 {
@@ -362,12 +362,12 @@ func TestCheckAISpamSenderHistorySurvivesProcessReset(t *testing.T) {
 
 	sender := gotgbot.User{Id: 42, FirstName: "Member"}
 	aispamProcessUpdate(t, dispatcher, bot, chat, sender, 601, "first message about pizza")
-	DrainAISpamChecks()
+	waitAISpamChecks()
 
 	resetAISpamRuntime()
 
 	aispamProcessUpdate(t, dispatcher, bot, chat, sender, 602, "second message about pizza")
-	DrainAISpamChecks()
+	waitAISpamChecks()
 
 	mu.Lock()
 	defer mu.Unlock()
@@ -521,7 +521,7 @@ func TestCheckAISpamSkipsCarveOuts(t *testing.T) {
 				tt.mutate(update)
 			}
 			aispamProcessRawUpdate(t, dispatcher, bot, update)
-			DrainAISpamChecks()
+			waitAISpamChecks()
 
 			if got := requests.Load(); got != 0 {
 				t.Fatalf("provider requests = %d, want 0", got)
@@ -585,7 +585,7 @@ func TestCheckAISpamCommandCarveOut(t *testing.T) {
 			LoadAISpam(dispatcher)
 
 			aispamProcessUpdate(t, dispatcher, bot, chat, gotgbot.User{Id: 42, FirstName: "Member"}, tt.messageID, tt.text)
-			DrainAISpamChecks()
+			waitAISpamChecks()
 
 			wantRequests := int64(0)
 			if tt.judged {
@@ -621,7 +621,7 @@ func TestCheckAISpamFailsOpenOnProviderErrors(t *testing.T) {
 	LoadAISpam(dispatcher)
 
 	aispamProcessUpdate(t, dispatcher, bot, chat, gotgbot.User{Id: 42, FirstName: "Member"}, 505, "BUY CHEAP COINS t.me/scam")
-	DrainAISpamChecks()
+	waitAISpamChecks()
 
 	if deletes := client.callsFor("deleteMessage"); len(deletes) != 0 {
 		t.Fatalf("deleteMessage calls = %d, want 0 (fail open)", len(deletes))
@@ -662,7 +662,7 @@ func TestAISpamBreakerPausesChatAfterRepeatedFailures(t *testing.T) {
 	for i := range aispamBreakerFailures {
 		aispamProcessUpdate(t, dispatcher, bot, chat, user, int64(700+i), fmt.Sprintf("BUY CHEAP COINS %d", i))
 	}
-	DrainAISpamChecks()
+	waitAISpamChecks()
 
 	if got := requests.Load(); got != aispamBreakerFailures {
 		t.Fatalf("provider requests = %d, want %d", got, aispamBreakerFailures)
@@ -676,7 +676,7 @@ func TestAISpamBreakerPausesChatAfterRepeatedFailures(t *testing.T) {
 	}
 
 	aispamProcessUpdate(t, dispatcher, bot, chat, user, 799, "BUY CHEAP COINS AGAIN")
-	DrainAISpamChecks()
+	waitAISpamChecks()
 
 	if got := requests.Load(); got != aispamBreakerFailures {
 		t.Fatalf("provider requests = %d, want %d (paused chat must not call the provider)", got, aispamBreakerFailures)
@@ -716,7 +716,7 @@ func TestAISpamBreakerResumesAfterCooldown(t *testing.T) {
 	for i := range aispamBreakerFailures {
 		aispamProcessUpdate(t, dispatcher, bot, chat, user, int64(800+i), fmt.Sprintf("BUY CHEAP COINS %d", i))
 	}
-	DrainAISpamChecks()
+	waitAISpamChecks()
 
 	if !aispamBreakerPaused(chat.Id) {
 		t.Fatal("breaker did not pause the chat")
@@ -726,7 +726,7 @@ func TestAISpamBreakerResumesAfterCooldown(t *testing.T) {
 	fail.Store(false)
 
 	aispamProcessUpdate(t, dispatcher, bot, chat, user, 899, "BUY CHEAP COINS AFTER COOLDOWN")
-	DrainAISpamChecks()
+	waitAISpamChecks()
 
 	if aispamBreakerPaused(chat.Id) {
 		t.Fatal("breaker stayed paused after its cooldown elapsed")
@@ -767,5 +767,46 @@ func TestAISpamIsReachableFromHelp(t *testing.T) {
 
 	if got := getModuleNameFromAltName("aispam", registry); got != aispamModule.moduleName {
 		t.Fatalf("/help aispam resolves to %q, want %q", got, aispamModule.moduleName)
+	}
+}
+
+// TestAISpamBreakerPrunesStale holds that the /aispam breaker map forgets a chat whose last
+// failure is older than the cooldown when it is full, so a chat failing now can still be
+// paused instead of staying untracked for ever.
+func TestAISpamBreakerPrunesStale(t *testing.T) {
+	resetAISpamRuntime()
+	t.Cleanup(resetAISpamRuntime)
+	start := time.Date(2026, 11, 17, 12, 0, 0, 0, time.UTC)
+	now := start
+	raidSetClock(t, func() time.Time { return now })
+
+	for id := int64(1); id <= aispamBreakerMaxChats; id++ {
+		aispamBreakerRecordFailure(id)
+	}
+
+	now = start.Add(aispamBreakerCooldown + time.Second)
+	const newChat = int64(-1009997)
+	tripped := false
+	for range aispamBreakerFailures {
+		tripped = aispamBreakerRecordFailure(newChat) || tripped
+	}
+	if !tripped || !aispamBreakerPaused(newChat) {
+		t.Errorf("tripped %v, paused %v: a chat failing now was never paused, stale breakers should have been pruned",
+			tripped, aispamBreakerPaused(newChat))
+	}
+}
+
+// waitAISpamChecks waits until every enqueued /aispam check has finished, so a test sees
+// its deletions without sleeping. Unlike the shutdown drain it neither closes the queue nor
+// cancels the checks, so the next test can still queue one.
+func waitAISpamChecks() {
+	done := make(chan struct{})
+	go func() {
+		aispamInFlight.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(30 * time.Second):
 	}
 }

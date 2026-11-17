@@ -102,7 +102,7 @@ func autoBreakerSite() autoNoticeSite {
 		for i := range aispamBreakerFailures {
 			aispamProcessUpdate(t, dispatcher, s.bot, s.chat, user, int64(700+i), fmt.Sprintf("BUY CHEAP COINS %d", i))
 		}
-		DrainAISpamChecks()
+		waitAISpamChecks()
 	}}
 }
 
@@ -219,7 +219,7 @@ func TestBotAutoPunishmentNotices(t *testing.T) {
 
 		user := gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: "Spammer"}
 		aispamProcessUpdate(t, dispatcher, s.bot, s.chat, user, 501, "BUY CHEAP COINS NOW t.me/scam")
-		DrainAISpamChecks()
+		waitAISpamChecks()
 
 		if requests.Load() != 1 {
 			t.Fatalf("provider requests = %d, want 1", requests.Load())
