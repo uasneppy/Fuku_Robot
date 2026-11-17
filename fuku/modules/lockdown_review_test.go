@@ -262,6 +262,18 @@ func TestLockdownInlineLiftPostsTally(t *testing.T) {
 	}
 }
 
+// TestLockdownStaleClaimOutlastsAPacedCall holds the stale-claim release above the
+// longest one paced call of the worker can take: a slot wait of up to MaxWait and the
+// call itself, repeated after every 429 up to MaxRetries times. A shorter one would
+// hand a row that a live worker is still banning or unbanning to a second worker.
+func TestLockdownStaleClaimOutlastsAPacedCall(t *testing.T) {
+	opts := lockdownPacerOptions
+	worst := time.Duration(opts.MaxRetries+1) * (opts.MaxWait + lockdownCallTimeout)
+	if lockdownStaleClaim <= worst {
+		t.Errorf("lockdownStaleClaim = %v, want more than the worst paced call, %v", lockdownStaleClaim, worst)
+	}
+}
+
 // TestLockdownLiftChecksBansWhoseAnswerFailed covers a ban call that answered a 5xx
 // but may have taken effect: the row is left pending with an attempt counted, or ends
 // ban_failed after three. The lift must still look at those joiners live and remove

@@ -29,13 +29,17 @@ import (
 // reservation and retry_after block live in Redis, so every replica shares one
 // budget, separate from the staff fan-outs' budget. It is a variable so tests can
 // install a fast one.
-var lockdownPacer = ratelimit.NewTelegramPacer(ratelimit.TelegramPacerOptions{
+var lockdownPacer = ratelimit.NewTelegramPacer(lockdownPacerOptions)
+
+// lockdownPacerOptions are the production options of lockdownPacer. lockdownStaleClaim
+// is sized from them.
+var lockdownPacerOptions = ratelimit.TelegramPacerOptions{
 	NextKey:    "fuku:lockdown:pace:next",
 	BlockKey:   "fuku:lockdown:pace:block",
 	Interval:   100 * time.Millisecond,
 	MaxRetries: 3,
 	MaxWait:    60 * time.Second,
-})
+}
 
 // lockdownPaced runs one Telegram call under the lockdown pacer: it waits for its
 // slot and, on a 429, waits out Telegram's retry_after and repeats the same closure.
@@ -63,10 +67,11 @@ const (
 )
 
 // lockdownStaleClaim is how old a claim (acting or unbanning with claimed_at) must be
-// before it is taken to belong to a worker that stopped. It is far above the 10 s a
-// Telegram call may take, so a live claim is never released. A variable so a test can
-// shorten it.
-var lockdownStaleClaim = 2 * time.Minute
+// before it is taken to belong to a worker that stopped. It is above the longest one
+// paced call can take, (MaxRetries+1) x (MaxWait + lockdownCallTimeout) = 4 min 40 s
+// with lockdownPacerOptions, so a live claim waiting out the pacer is never released
+// (TestLockdownStaleClaimOutlastsAPacedCall). A variable so a test can shorten it.
+var lockdownStaleClaim = 5 * time.Minute
 
 // lockdownReleaseStale gives back the claims older than lockdownStaleClaim on every
 // lockdown, on any replica: the joiner rows' and the alert copies' (a send or a close
@@ -231,7 +236,7 @@ func StartLockdownWorker(b *gotgbot.Bot) {
 // lockdownWorkerStopWait, so no cycle is still writing when shutdown closes the
 // database. A call that is blocked in Telegram does not hold shutdown up: the wait
 // ends and the row it was working on is resumed from the database, by a restart or by
-// another replica once its claim is two minutes old. It is safe to call when the
+// another replica once its claim is lockdownStaleClaim old. It is safe to call when the
 // worker is not running, and more than once.
 func StopLockdownWorker() {
 	lockdownWorkerMu.Lock()
@@ -733,7 +738,7 @@ func lockdownPostTally(ctx context.Context, b *gotgbot.Bot, ld models.ChatLockdo
 }
 
 // moveLockdownJoiner moves a row and logs a failed write; the row then stays in its
-// claimed state until the stale-claim release returns it two minutes later.
+// claimed state until the stale-claim release returns it lockdownStaleClaim later.
 func moveLockdownJoiner(id uint, from, to, detail string, countAttempt bool) {
 	if _, err := lockdown.MoveJoiner(id, from, to, detail, countAttempt); err != nil {
 		log.Errorf("[Lockdown] joiner row %d could not move from %s to %s: %v", id, from, to, err)

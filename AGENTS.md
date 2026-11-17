@@ -72,7 +72,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`lockdownWorkerStopWait` plus grace). It cancels the lockdown worker and waits at most
   5 s (`lockdownWorkerStopWait`), because every lockdown row resumes from the database: a cycle cut off at shutdown
   loses nothing, and a restart or a second replica picks the rows up again. A claim (an acting or unbanning joiner row
-  with `claimed_at`) older than 2 minutes (`lockdownStaleClaim`) belongs to a worker that stopped: the first cycle of any
+  with `claimed_at`) older than 5 minutes (`lockdownStaleClaim`, above the 4 min 40 s one paced call can take with
+  `lockdownPacerOptions`, `TestLockdownStaleClaimOutlastsAPacedCall`) belongs to a worker that stopped: the first cycle of any
   replica releases it through `lockdown.ReleaseStaleClaims`, before any other step and without counting an attempt.
   Acting goes back to pending in an active lockdown, to banned (a ban) or cancelled (a join request) in a lifting one,
   and unbanning goes back to banned, so a restart resumes every ban, decline and unban and the live check at the lift
@@ -3459,7 +3460,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   lockdown's copy is never sent. The alert shows the trigger, the counts, a sample of up to 10 accounts and the invite
   link (see `chat_lockdown_burst`), and every name, username and link is escaped and spliced in after the translator.
 - The alert copies resume like joiner rows. A copy claimed (`posting`) or close-claimed (`posted` with `claimed_at`) for
-  over 2 minutes (`lockdownStaleClaim`) is released by the first cycle of any replica, in `lockdownReleaseStale` through
+  over 5 minutes (`lockdownStaleClaim`) is released by the first cycle of any replica, in `lockdownReleaseStale` through
   `lockdown.ReleaseStaleAlertClaims`, without counting an attempt, so a crash between the send and the record can post a
   second copy (accepted over a lost one). A send is tried three times (`lockdownMaxAttempts`, then `FailAlertSlot` with
   Telegram's reason), a rate limit or a shutdown costs no attempt, each copy has its own claim and attempts so one
@@ -3489,7 +3490,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`lockdown.AlertDestKinds`) resolved again by `lockdownAlertDestinations`, so a Staff Group unlinked since, a kind the
   alert never went to and a log channel whose `admin` category is now off get none. Reminders use the alert's claims,
   retries and stale-claim release, so the duplicate-over-lost rule above holds: a reminder claimed in `posting` for over
-  2 minutes is released and its send repeated, which can post it twice after a crash, unless a newer reminder is due by
+  5 minutes (`lockdownStaleClaim`) is released and its send repeated, which can post it twice after a crash, unless a newer reminder is due by
   then, in which case it is superseded and lost on purpose. Posting a reminder calls `lockdown.SupersedeReminders`: the
   older reminders of that destination get `buttons_live` false and `edit_pending` true and lose their buttons through the
   sync step; the original alert copy keeps its buttons until the lift. Planning stops with the lockdown being active
