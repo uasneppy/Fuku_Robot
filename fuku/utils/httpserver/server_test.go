@@ -633,6 +633,33 @@ func TestRegisterPPROF(t *testing.T) {
 	}
 }
 
+// TestPPROFRequiresToken holds I7: with METRICS_AUTH_TOKEN set, /debug/pprof/ (heap, goroutine
+// dumps, the command line) needs the same bearer token as /metrics.
+func TestPPROFRequiresToken(t *testing.T) {
+	const token = "pprof-secret-token"
+
+	s := New(8080, time.Now())
+	s.SetMetricsAuthToken(token)
+	s.RegisterPPROF()
+
+	for _, path := range []string{"/debug/pprof/", "/debug/pprof/cmdline"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rr := httptest.NewRecorder()
+		s.mux.ServeHTTP(rr, req)
+		if rr.Code != http.StatusUnauthorized {
+			t.Errorf("%s without a token: status %d, want 401", path, rr.Code)
+		}
+
+		req = httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		rr = httptest.NewRecorder()
+		s.mux.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Errorf("%s with the token: status %d, want 200", path, rr.Code)
+		}
+	}
+}
+
 func TestRegisterWebhookConfiguresTelegramWebhook(t *testing.T) {
 	client := &httpServerBotClient{}
 	bot := newHTTPServerTestBot(client)

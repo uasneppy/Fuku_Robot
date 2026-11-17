@@ -198,8 +198,13 @@ func (s *Server) RegisterDBMetrics() {
 	log.Info("[HTTPServer] Registered /db_metrics endpoint")
 }
 
+// RegisterPPROF mounts the pprof handlers behind the metrics bearer token when one is set: the
+// profiles expose memory, goroutine stacks and the command line. Call SetMetricsAuthToken first.
 func (s *Server) RegisterPPROF() {
-	s.mux.Handle("/debug/pprof/", http.DefaultServeMux)
+	if s.metricsAuthToken == "" {
+		log.Warn("[HTTPServer] METRICS_AUTH_TOKEN is not set — /debug/pprof/ is unauthenticated")
+	}
+	s.mux.Handle("/debug/pprof/", s.requireMetricsAuth(http.DefaultServeMux))
 
 	s.pprofEnabled = true
 	log.Info("[HTTPServer] Registered /debug/pprof/* endpoints")
