@@ -165,7 +165,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   re-entered command, the `RequiredChecks` that `anonPipelineHandler` re-runs, and `PermissionResponder` see the
   command's chat as if the admin had sent it, with the tapper as the sender. `verifyAnonymousAdmin` refuses the tap as
   an invalid request, deleting and running nothing, unless the callback's `c`, the proof button's chat and the cached
-  command's chat are the same chat.
+  command's chat are the same chat. The cached command (`fuku:anonAdmin:<chat>:<message>`, 20 s) is the message as JSON
+  bytes, written by `chat_status.StoreAnonAdminCommand` and read by `chat_status.LoadAnonAdminCommand` (gotgbot's own
+  unmarshalers, so a reply to a forwarded or pin service message survives; msgpack of the struct could not decode its
+  interface fields). A value that does not decode, the old msgpack format included, and a decoder panic read as an
+  expired button. Rolling deploy: a replica on older code reads the new value as expired too (a 20 s window).
 - The `StaffActions` module (priority 65) registers raw interceptors, built through `helpers.NewBotCommand`, at group 0 ahead of Bans (70)
   and Mutes (80), looping over a table so the docs generator skips them. Outside a Staff Group they return
   `ext.ContinueGroups` with no reply, write or Telegram call. They are a documented exception to the `WrapCommand`

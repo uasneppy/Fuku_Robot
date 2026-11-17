@@ -525,15 +525,61 @@ func IsUserBanProtected(b *gotgbot.Bot, ctx *ext.Context, chat *gotgbot.Chat, us
 }
 
 func setAnonAdminCache(chatId int64, msg *gotgbot.Message) {
-	m := cache.GetMarshal()
-	if m == nil || msg == nil {
+	if cache.GetMarshal() == nil || msg == nil {
 		log.Debug("Skipping anonymous admin cache set: cache unavailable or message nil")
 		return
 	}
-	err := m.Set(cache.Context, fmt.Sprintf("fuku:anonAdmin:%d:%d", chatId, msg.MessageId), msg, store.WithExpiration(anonChatMapExpiration))
-	if err != nil {
+	if err := StoreAnonAdminCommand(chatId, msg); err != nil {
 		log.Errorf("Failed to set anonymous admin cache: %v", err)
 	}
+}
+
+// anonAdminCommandKey is the cache key of an anonymous admin's command waiting for the proof tap.
+func anonAdminCommandKey(chatID, msgID int64) string {
+	return fmt.Sprintf("fuku:anonAdmin:%d:%d", chatID, msgID)
+}
+
+// StoreAnonAdminCommand keeps an anonymous admin's command for the proof tap: the message as JSON
+// bytes under fuku:anonAdmin:<chat>:<message>, for 20 seconds. JSON, and not the cache's msgpack
+// of the struct, because msgpack cannot decode the interface fields of a message (a reply to a
+// forwarded message or to a pin service message), while gotgbot's own unmarshalers can.
+func StoreAnonAdminCommand(chatID int64, msg *gotgbot.Message) error {
+	m := cache.GetMarshal()
+	if m == nil {
+		return errors.New("cache not initialized")
+	}
+	if msg == nil {
+		return errors.New("no message to store")
+	}
+	raw, err := json.Marshal(msg)
+	if err != nil {
+		return fmt.Errorf("encode anonymous admin command: %w", err)
+	}
+	return m.Set(cache.Context, anonAdminCommandKey(chatID, msg.MessageId), raw, store.WithExpiration(anonChatMapExpiration))
+}
+
+// LoadAnonAdminCommand reads back a command StoreAnonAdminCommand kept. A missing key, a value that
+// does not decode (a value in the old msgpack format included) and a panic of the decoder are all
+// returned as an error, which the proof tap reads as an expired button.
+func LoadAnonAdminCommand(chatID, msgID int64) (msg *gotgbot.Message, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			msg, err = nil, fmt.Errorf("decode anonymous admin command: %v", r)
+		}
+	}()
+	m := cache.GetMarshal()
+	if m == nil {
+		return nil, errors.New("cache not initialized")
+	}
+	var raw []byte
+	if _, err := m.Get(cache.Context, anonAdminCommandKey(chatID, msgID), &raw); err != nil {
+		return nil, err
+	}
+	var decoded gotgbot.Message
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		return nil, fmt.Errorf("decode anonymous admin command: %w", err)
+	}
+	return &decoded, nil
 }
 
 // Returns nil for channel posts and cases where user is unavailable.
