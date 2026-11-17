@@ -799,6 +799,11 @@ func executeStaffUndoCall(
 		return executeStaffCall(ctx, b, groupID, targetID, v.staffVerdict, 0)
 	case staffCallRestore:
 		return staffPaced(ctx, func(ctx context.Context) error {
+			// The same guard as a staff ban or mute, inside the paced unit: a recorded end
+			// date that is now under staffUntilMinLead away would become permanent.
+			if staffUntilTooClose(v.Until) {
+				return errStaffTimeRanOut
+			}
 			callCtx, cancel := context.WithTimeout(ctx, staffActionCallTimeout)
 			defer cancel()
 			_, err := b.RestrictChatMemberWithContext(callCtx, groupID, targetID, v.Perms,

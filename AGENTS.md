@@ -3746,8 +3746,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `until_date` less than 30 s away as permanent, so right before every ban or restrict write, inside the paced closure
   of `executeStaffCall` (so a retry after a 429 wait is checked again), an end date under `staffUntilMinLead` (35 s)
   away or past is not sent (`staffUntilTooClose`, `errStaffTimeRanOut`): that group fails with `fail_time_ran_out`
-  (`staff_act_fail_time_ran_out`) and nobody is restricted for good. The one `until_date` for every group is unchanged,
-  and the undo path has no such guard.
+  (`staff_act_fail_time_ran_out`) and nobody is restricted for good. The one `until_date` for every group is unchanged.
+  The undo path has the same guard: a re-ban goes through `executeStaffCall`, and a restore of a recorded restriction
+  checks `staffUntilTooClose` inside its own paced unit in `executeStaffUndoCall` (`TestStaffUndoRestoreTimeRanOut`);
+  `decideStaffUndo` already skips an end date within `staffUndoMinRemaining` (120 s), so the guard only catches a
+  pacer wait or 429 retry that ran it down.
 - Greeting media types (Phase 12): `db.ANIMATION` (9) is a GIF saved by `/setwelcome`, `/setgoodbye` or the message
   editor's media part, stored with the animation's file ID and sent with `sendAnimation`. Only the greeting extraction
   returns it: `extractGreetingMedia` (animation first, then `extractMediaFromReply`) sits behind `ExtractWelcome` and
