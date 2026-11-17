@@ -3,6 +3,7 @@ package modules
 import (
 	"context"
 	"errors"
+	"sort"
 	"strings"
 	"sync"
 
@@ -54,6 +55,10 @@ type staffOwnerPass struct {
 	// pacing. Only the staff fan-out sets it; the panel, the sweeper and the
 	// watchers leave it nil and call CheckOwner directly.
 	call func(run func() error) error
+	// notices, when set, collects the owner-change notices of the links recheckLink
+	// removes in this pass instead of posting each at once; the caller flushes it.
+	// Only the staff fan-out sets it.
+	notices *staffNoticeBatch
 }
 
 // newStaffOwnerPass returns an empty pass cache.
@@ -120,12 +125,16 @@ func (p *staffOwnerPass) seed(chatID, want int64, result chat_status.OwnerResult
 // group was unlinked because its owner changed. Nothing is sent anywhere else
 // (D-13): the linked group and its members learn nothing from the bot.
 func postGroupOwnerChangedNotice(b *gotgbot.Bot, link models.StaffGroupLink) {
+	_ = sendStaffNotice(b, link.StaffChatID, groupOwnerChangedText(link))
+}
+
+// groupOwnerChangedText is the text of postGroupOwnerChangedNotice.
+func groupOwnerChangedText(link models.StaffGroupLink) string {
 	tr := staffChatTranslator(link.StaffChatID)
 	text, _ := tr.GetString("staff_notice_unlinked_group_owner_changed", i18n.TranslationParams{
 		"group": staffGroupTitleToken,
 	})
-	text = strings.Replace(text, staffGroupTitleToken, staffDisplayTitle(link.GroupTitle), 1)
-	_ = sendStaffNotice(b, link.StaffChatID, text)
+	return strings.Replace(text, staffGroupTitleToken, staffDisplayTitle(link.GroupTitle), 1)
 }
 
 // postStaffOwnerChangedNotice tells the Staff Group, in its own language, that the
@@ -136,6 +145,11 @@ func postStaffOwnerChangedNotice(b *gotgbot.Bot, staffChatID int64, titles []str
 	if len(titles) == 0 {
 		return
 	}
+	_ = sendStaffNotice(b, staffChatID, staffOwnerChangedText(staffChatID, titles))
+}
+
+// staffOwnerChangedText is the text of postStaffOwnerChangedNotice.
+func staffOwnerChangedText(staffChatID int64, titles []string) string {
 	escaped := make([]string, len(titles))
 	for i, title := range titles {
 		escaped[i] = staffDisplayTitle(title)
@@ -144,8 +158,65 @@ func postStaffOwnerChangedNotice(b *gotgbot.Bot, staffChatID int64, titles []str
 	text, _ := tr.GetString("staff_notice_unlinked_staff_owner_changed", i18n.TranslationParams{
 		"groups": staffGroupsListToken,
 	})
-	text = strings.Replace(text, staffGroupsListToken, strings.Join(escaped, "\n"), 1)
-	_ = sendStaffNotice(b, staffChatID, text)
+	return strings.Replace(text, staffGroupsListToken, strings.Join(escaped, "\n"), 1)
+}
+
+// staffNoticeBatch collects the owner-change notices of the links one pass removed,
+// so a run over many links of a Staff Group whose owner changed posts one combined
+// notice instead of one per link (S7). It is safe for concurrent callers.
+type staffNoticeBatch struct {
+	mu         sync.Mutex
+	groupSide  []models.StaffGroupLink
+	staffSide  []models.StaffGroupLink
+	flushedOut bool
+}
+
+func (n *staffNoticeBatch) add(link models.StaffGroupLink, groupSide bool) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if groupSide {
+		n.groupSide = append(n.groupSide, link)
+	} else {
+		n.staffSide = append(n.staffSide, link)
+	}
+}
+
+// flush posts what was collected, each message through send (which paces it): one
+// notice per group whose own owner changed, and one combined notice per Staff Group
+// whose owner changed, naming its removed groups in link-id order. It posts at most
+// once.
+func (n *staffNoticeBatch) flush(b *gotgbot.Bot, send func(run func() error) error) {
+	n.mu.Lock()
+	if n.flushedOut {
+		n.mu.Unlock()
+		return
+	}
+	n.flushedOut = true
+	groupSide := append([]models.StaffGroupLink(nil), n.groupSide...)
+	staffSide := append([]models.StaffGroupLink(nil), n.staffSide...)
+	n.mu.Unlock()
+
+	post := func(chatID int64, text string) {
+		if err := send(func() error { return sendStaffNotice(b, chatID, text) }); err != nil {
+			log.Warnf("[Staff] owner-change notice to Staff Group %d not sent: %v", chatID, err)
+		}
+	}
+	sort.Slice(groupSide, func(i, j int) bool { return groupSide[i].ID < groupSide[j].ID })
+	for _, link := range groupSide {
+		post(link.StaffChatID, groupOwnerChangedText(link))
+	}
+	sort.Slice(staffSide, func(i, j int) bool { return staffSide[i].ID < staffSide[j].ID })
+	titles := make(map[int64][]string)
+	var chats []int64
+	for _, link := range staffSide {
+		if _, seen := titles[link.StaffChatID]; !seen {
+			chats = append(chats, link.StaffChatID)
+		}
+		titles[link.StaffChatID] = append(titles[link.StaffChatID], link.GroupTitle)
+	}
+	for _, chatID := range chats {
+		post(chatID, staffOwnerChangedText(chatID, titles[chatID]))
+	}
 }
 
 // recheckLink is the single authority recheck of one link (D-15): the ownership
@@ -181,6 +252,10 @@ func recheckLink(b *gotgbot.Bot, link models.StaffGroupLink, pass *staffOwnerPas
 		}
 		if !deleted {
 			return staffRecheckGone
+		}
+		if pass.notices != nil {
+			pass.notices.add(link, groupSideChanged)
+			return staffRecheckRemoved
 		}
 		if groupSideChanged {
 			postGroupOwnerChangedNotice(b, link)

@@ -97,6 +97,9 @@ func staffUntilTooClose(until int64) bool {
 var (
 	// staffActionCallTimeout bounds each Telegram call made for a staff action.
 	staffActionCallTimeout = 8 * time.Second
+	// staffNoticeFlushTimeout bounds the owner-change notices a staff run posts after
+	// its workers, all of them together.
+	staffNoticeFlushTimeout = 10 * time.Second
 	// staffActionRunsWG joins every running fan-out, so a shutdown can wait for them.
 	staffActionRunsWG sync.WaitGroup
 	// staffActionsMu guards staffActionsCtx and staffActionsCancel.
@@ -486,6 +489,23 @@ func runStaffFanOut(
 	pass := newPacedStaffOwnerPass(func(run func() error) error {
 		return staffPaced(ctx, func(context.Context) error { return run() })
 	})
+	// The owner-change notices of every link this run removes are posted once, after
+	// the workers, combined and paced (S7). A removal already happened, so the posts
+	// do not stop with a shutdown: they get a short budget of their own, cut to one
+	// second when the run was cancelled, so the staff drain keeps its time for the
+	// summaries.
+	pass.notices = &staffNoticeBatch{}
+	defer func() {
+		budget := staffNoticeFlushTimeout
+		if ctx.Err() != nil {
+			budget = time.Second
+		}
+		noticeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), budget)
+		defer cancel()
+		pass.notices.flush(b, func(run func() error) error {
+			return staffPaced(noticeCtx, func(context.Context) error { return run() })
+		})
+	}()
 
 	var workers errgroup.Group
 	workers.SetLimit(staffActionWorkers)

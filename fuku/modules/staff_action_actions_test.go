@@ -4,6 +4,7 @@ package modules
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -378,6 +379,41 @@ func TestStaffActionSkipsUnlinkedGroup(t *testing.T) {
 	}
 	wantSkippedLine(t, summary, "Group A", "staff_act_skip_no_longer_linked")
 	wantDoneLine(t, summary, "Group B")
+}
+
+// TestStaffActionOwnerChangeOneNotice: when the Staff Group's owner changed, the run's
+// owner recheck removes every link; the Staff Group gets one combined notice naming
+// all of them, not one notice per worker (S7).
+func TestStaffActionOwnerChangeOneNotice(t *testing.T) {
+	env := newStaffActionEnv(t, 3)
+	for _, group := range env.groups {
+		env.fake.setMember(group, staffTestTarget, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+	}
+	env.send(env.issuer, "/ban 4242")
+	token, msgID := env.card()
+	env.fake.setCreator(env.staffChat, env.owner+1000)
+	env.tap(env.issuer, staffActRunConfirm, token, msgID)
+	env.waitRuns()
+
+	var notices []string
+	for _, sent := range env.fake.sentTo(env.staffChat) {
+		if text := fmt.Sprint(sent.Params["text"]); strings.Contains(text, staffMarker("staff_notice_unlinked_staff_owner_changed")) {
+			notices = append(notices, text)
+		}
+	}
+	if len(notices) != 1 {
+		t.Fatalf("owner-change notices = %q, want exactly one combined notice", notices)
+	}
+	for _, title := range []string{"Group A", "Group B", "Group C"} {
+		if !strings.Contains(notices[0], title) {
+			t.Fatalf("notice %q does not name %s", notices[0], title)
+		}
+	}
+	for _, group := range env.groups {
+		if writes := env.writes(group); len(writes) != 0 {
+			t.Fatalf("write calls in group %d = %+v, want none after the link was removed", group, writes)
+		}
+	}
 }
 
 func TestStaffActionKickClearsMute(t *testing.T) {
