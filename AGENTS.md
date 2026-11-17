@@ -157,7 +157,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   accepts every name in the list, so an unchecked name is a silent no-op (`TestDisableRefusesNamesThatHaveNoCheck`).
   `/blocklists` checks its own name and then `blacklists`, so disabling either silences the alias. Do not add replies for failed checks; the pipeline sends them. Every command handler,
   wrapped or raw, is built by `helpers.NewBotCommand` (`fuku/utils/helpers/command_registry.go`), which records the
-  lower-cased name and returns the library's own command handler unchanged (so routing is the library's). Command
+  lower-cased name and returns the library's own command handler (so routing is the library's) with one change to its
+  response: an automatic forward (`helpers.IsAutomaticForward`: `is_automatic_forward`, or the Telegram service account
+  777000 posting on behalf of a chat) returns `ext.ContinueGroups` at once, with no reply and no I/O, so a linked
+  channel's post never runs a command, whatever it says (777000 is in `tgAdminList`, which every admin predicate counts as
+  an administrator of every chat; `TestAutomaticForwardRunsNoCommand`, `TestIsAutomaticForward`). A watcher that judges a
+  sender's authority checks `helpers.IsAutomaticForward` itself (`bindSetLogForward` does). Command
   deletion reads the registry through `helpers.IsBotCommand`, so only a command this bot registers is ever deleted.
   `WrapCommand`'s `register` and `MultiCommand` go through it, and `TestNoRawNewCommand` (a `go/parser` walk of `fuku/`
   and `main.go`, tests excluded) fails on any other construction of the library's command handler. Never call
@@ -4011,9 +4016,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   one-hour marker `fuku:setlog:<channel>:<message>` (outside the `fuku:cache:` prefix, `storePendingMarker`) and asks for
   the forward; the post needs no sender, because only a channel administrator can post there. Step 2: that post forwarded
   to a group by a live administrator of the group binds the channel as the group's log channel (`bindSetLogForward`: group
-  or supergroup, a channel origin with a message ID, the sender, `chat_status.RequireUserAdmin` of that group, and only then
-  the single-use consume, `consumePendingMarker`, GETDEL with Redis, so a member's forward never burns the marker, then
-  `logchannels.Set`, `logs_set_ok` and the `#SETTINGS` audit post). `setlog` is a documented raw `helpers.NewBotCommand`
+  or supergroup, not an automatic forward (`helpers.IsAutomaticForward`: a linked channel's own post binds nothing), a
+  channel origin with a message ID, the sender, `chat_status.RequireUserAdmin` of that group, and only then
+  the single-use consume, `consumePendingMarker`, GETDEL with Redis and a get then delete under one process-wide mutex
+  without it, so a member's forward never burns the marker, then `logchannels.Set`, `logs_set_ok` and the `#SETTINGS`
+  audit post; a failed save puts the marker back with `storePendingMarker` and answers `common_settings_save_failed`,
+  so the next forward can still bind, `TestSetLogMarkerSurvivesFailedSave`, `TestConsumePendingMarkerOnce`). `setlog` is a documented raw `helpers.NewBotCommand`
   with `SetAllowChannel(true)` (like the other log channel commands it is not wrapped), because a channel post has no
   sender and `WrapCommand` would reply to it. The forward still
   carries the command text and entity, so the group-0 command binds it itself; the group-11 watcher
