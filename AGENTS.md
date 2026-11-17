@@ -3308,8 +3308,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `raidFloodLateGroup`). Both return `ext.ContinueGroups` on every path, so aispam, antiflood, locks and blacklists still
   see every message, and delete nothing: the lockdown's muting stops the flood. What counts (`raidFloodItemKey`) is any
   user content in a supergroup: text, photo, GIF (animation, checked before the document Telegram also sets), sticker,
-  video, video note, voice, audio, document, poll, contact, location, venue, dice and story, forwards and replies
-  included; an album counts once. A command the bot handles does not count (D-07), and the dispatcher is what says
+  video, video note, voice, audio, document, poll, contact, location, venue, dice, story, checklist and game,
+  and a rich message, forwards and replies included; an album counts once. A command the bot handles does not count (D-07), and the dispatcher is what says
   which: a handled command returns `ext.EndGroups`, which ends every later group. So the `-4` watcher counts every item
   except a slash-prefixed text (`raidFloodIsSlashText`: a `bot_command` entity at offset 0, or a text starting with `/`
   and a non-space character, which gotgbot's command handler also runs), and the group `12` watcher counts only the

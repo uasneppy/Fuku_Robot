@@ -123,8 +123,8 @@ return {redis.call('ZCARD', KEYS[1]), redis.call('ZCARD', KEYS[2]), redis.call('
 // content; it reports false for everything that never counts: service messages and
 // messages with nothing to count. User content is text, and a photo, GIF (an animation is
 // checked before the document Telegram also sets on it), sticker, video, video note,
-// voice, audio, document, poll, contact, location, venue, dice or story, forwards and
-// replies included. An album counts once: its parts share the key g:<media_group_id>,
+// voice, audio, document, poll, contact, location, venue, dice, story, checklist or game,
+// and a rich message, forwards and replies included. An album counts once: its parts share the key g:<media_group_id>,
 // every other item is m:<message_id>.
 //
 // A slash-prefixed text (raidFloodIsSlashText) is a command only when some handler takes
@@ -144,8 +144,8 @@ func raidFloodItemKey(msg *gotgbot.Message) (key string, slash bool, ok bool) {
 	media := msg.Animation != nil || msg.Sticker != nil || msg.Photo != nil || msg.Video != nil ||
 		msg.VideoNote != nil || msg.Voice != nil || msg.Audio != nil || msg.Document != nil ||
 		msg.Poll != nil || msg.Contact != nil || msg.Location != nil || msg.Venue != nil ||
-		msg.Dice != nil || msg.Story != nil
-	text := msg.Text != ""
+		msg.Dice != nil || msg.Story != nil || msg.Checklist != nil || msg.Game != nil
+	text := msg.Text != "" || msg.RichMessage != nil
 	if !media && !text {
 		return "", false, false
 	}

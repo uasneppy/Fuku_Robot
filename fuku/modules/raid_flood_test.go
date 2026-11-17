@@ -767,3 +767,27 @@ func TestRaidFloodSlashTexts(t *testing.T) {
 	})
 
 }
+
+// TestRaidFloodItemKeyCountsRichKinds holds that a rich message, a checklist and a game
+// are user content the flood counter counts like any other item.
+func TestRaidFloodItemKeyCountsRichKinds(t *testing.T) {
+	rich := &gotgbot.RichMessage{Blocks: gotgbot.RichBlockArray{
+		gotgbot.RichBlockParagraph{Text: gotgbot.RichTextString("join my channel")},
+	}}
+	cases := []struct {
+		name string
+		msg  gotgbot.Message
+	}{
+		{"rich message", gotgbot.Message{MessageId: 7, RichMessage: rich}},
+		{"checklist", gotgbot.Message{MessageId: 7, Checklist: &gotgbot.Checklist{Title: "todo"}}},
+		{"game", gotgbot.Message{MessageId: 7, Game: &gotgbot.Game{Title: "play"}}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, slash, ok := raidFloodItemKey(&tc.msg)
+			if !ok || slash || got != "m:7" {
+				t.Errorf("raidFloodItemKey = %q, slash %v, %v, want \"m:7\", not slash, true", got, slash, ok)
+			}
+		})
+	}
+}
