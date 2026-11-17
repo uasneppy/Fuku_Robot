@@ -279,6 +279,20 @@ func TestSettingsFwdBlockOpens(t *testing.T) {
 		}
 	})
 
+	t.Run("a plain administrator's forged write press in a plain group is the invalid request, not the owner-only alert", func(t *testing.T) {
+		e := newSettingsFwdEnv(t)
+		chat := e.addChat()
+		e.newOwner(chat) // e.admin stays a live administrator, not the creator
+		settingsListCleanup(t, chat.Id)
+		m := &settingsBlacklistMenu{env: e.settingsListEnv, chat: chat, user: e.admin, msgID: e.updateID()}
+		for _, fields := range settingsFwdCodes("5") {
+			e.wantAlert(m, "code "+fields[1], "common_callback_invalid_request", fields...)
+		}
+		if n := fwdRowCount(t, chat.Id); n != 0 {
+			t.Errorf("the forged presses left %d rows", n)
+		}
+	})
+
 	t.Run("a Staff Group whose cached gate says no refuses the page like any other group", func(t *testing.T) {
 		e := newSettingsFwdEnv(t)
 		mreqSwap(t, &settingsFwdBlockStaffGate, func(int64) bool { return false })

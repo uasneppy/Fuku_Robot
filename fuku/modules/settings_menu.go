@@ -667,7 +667,7 @@ func (p *settingsPress) runControl() {
 		return
 	}
 	control, ok := pg.Controls[p.fields["t"]]
-	if !ok || control.Set == nil {
+	if !ok || control.Set == nil || p.pageHidden(pg.Key) {
 		p.answer(settingsText(p.tr, "common_callback_invalid_request"), true)
 		return
 	}
@@ -679,10 +679,18 @@ func (p *settingsPress) runControl() {
 	}
 }
 
+// pageHidden reports whether the page of key does not exist in the press's group (its Hidden hook). A control or
+// action of a hidden page is refused as an invalid request before its right is judged, so a forged press is answered
+// the same whoever presses it and never reveals which right the hidden page's control would need.
+func (p *settingsPress) pageHidden(key string) bool {
+	pg, ok := settingsPageByKey(key)
+	return ok && pg.Hidden != nil && pg.Hidden(p.group)
+}
+
 // runPageAction handles an action code a page declared.
 func (p *settingsPress) runPageAction() {
 	entry, ok := settingsActions[p.action]
-	if !ok || entry.action.Run == nil {
+	if !ok || entry.action.Run == nil || p.pageHidden(entry.pageKey) {
 		p.answer(settingsText(p.tr, "common_callback_invalid_request"), true)
 		return
 	}

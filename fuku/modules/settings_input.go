@@ -55,6 +55,9 @@ const (
 	settingsInputAlbumTTL = 30 * time.Second
 	// settingsInputRedisTimeout bounds one wait-store round trip.
 	settingsInputRedisTimeout = 5 * time.Second
+	// settingsInputClaimMinTTL is the least time a claimed wait has left: a claim made in the wait's last
+	// seconds extends it to this, so the write that follows can still finish or release it.
+	settingsInputClaimMinTTL = time.Minute
 )
 
 // errSettingsInputUnavailable means there is no Redis, so no wait can be kept. The editor's
@@ -194,15 +197,31 @@ redis.call('HSET', KEYS[1], 'r' .. ARGV[2], '1')
 return 1
 `)
 
-// settingsInputClaimScript claims the wait for the holder of the nonce, once.
+// settingsInputClaimScript claims the wait for the holder of the nonce, once. A wait with less
+// than the minimum left is extended to it (its expiry field x too), and the marker is rewritten to
+// outlive it by the usual gap, so the write that follows the claim can still finish or release
+// the wait and the marker never ends before the wait it describes.
 //
-// KEYS[1] = the wait. ARGV = the wait's nonce, the new claim. Returns 0 for a stale nonce, a
-// gone wait or one already claimed, else the wait's remaining PTTL.
+// KEYS[1] = the wait, KEYS[2] = the marker. ARGV = the wait's nonce, the new claim, the minimum
+// ms, the marker's gap ms, now in unix ms. Returns 0 for a stale nonce, a gone wait or one
+// already claimed, else the wait's remaining PTTL.
 var settingsInputClaimScript = redis.NewScript(`
 if redis.call('HGET', KEYS[1], 'n') ~= ARGV[1] then return 0 end
 if redis.call('HEXISTS', KEYS[1], 'k') == 1 then return 0 end
 redis.call('HSET', KEYS[1], 'k', ARGV[2])
-return redis.call('PTTL', KEYS[1])
+local left = redis.call('PTTL', KEYS[1])
+local least = tonumber(ARGV[3])
+if left >= 0 and left < least then
+  left = least
+  redis.call('PEXPIRE', KEYS[1], least)
+  redis.call('HSET', KEYS[1], 'x', tostring(tonumber(ARGV[5]) + least))
+  local m = redis.call('HMGET', KEYS[1], 'c', 'p', 't')
+  local gap = tonumber(ARGV[4])
+  if redis.call('PTTL', KEYS[2]) < least + gap then
+    redis.call('SET', KEYS[2], m[1] .. '|' .. m[2] .. '|' .. m[3], 'PX', least + gap)
+  end
+end
+return left
 `)
 
 // settingsInputFinishScript deletes the wait and the marker for the holder of the claim.
@@ -512,7 +531,11 @@ func settingsInputClaim(ctx context.Context, userID int64, nonce string) (string
 	ctx, cancel := context.WithTimeout(ctx, settingsInputRedisTimeout)
 	defer cancel()
 
-	left, err := settingsInputClaimScript.Run(ctx, client, []string{settingsInputKey(userID)}, nonce, claim).Int64()
+	left, err := settingsInputClaimScript.Run(ctx, client,
+		[]string{settingsInputKey(userID), settingsInputDoneKey(userID)}, nonce, claim,
+		settingsInputClaimMinTTL.Milliseconds(), (settingsInputMarkerTTL - settingsInputTTL).Milliseconds(),
+		time.Now().UnixMilli(),
+	).Int64()
 	if err != nil {
 		return "", false, err
 	}
