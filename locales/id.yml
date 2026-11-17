@@ -906,6 +906,7 @@ common_user_not_in_chat: Pengguna ini tidak ada di obrolan ini, bagaimana saya b
 common_cannot_target_admin: "Saya tidak dapat melakukan tindakan ini pada admin grup."
 common_cannot_target_self: "Saya tidak dapat melakukan tindakan ini pada diri saya sendiri."
 common_no_reply_to_message: "Anda perlu membalas pesan pengguna untuk melakukan tindakan ini."
+common_reply_target_mismatch: "Pengguna yang Anda sebut tidak menulis pesan yang Anda balas. Balas pesannya, atau jangan sebut nama."
 
 # Common action verbs (for dynamic error messages)
 common_action_ban: "blokir"

@@ -80,6 +80,7 @@ common_user_not_in_chat: Cet utilisateur n'est pas dans ce chat, comment puis-je
 common_cannot_target_admin: "Je ne peux pas effectuer cette action sur les administrateurs du groupe."
 common_cannot_target_self: "Je ne peux pas effectuer cette action sur moi-même."
 common_no_reply_to_message: "Vous devez répondre au message d'un utilisateur pour effectuer cette action."
+common_reply_target_mismatch: "L'utilisateur indiqué n'a pas écrit le message auquel vous avez répondu. Répondez à son message ou n'indiquez pas de nom."
 
 # Common action verbs (for dynamic error messages)
 common_action_ban: "bannir"

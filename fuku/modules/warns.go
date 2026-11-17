@@ -302,8 +302,8 @@ func (moduleStruct) warnThisUser(b *gotgbot.Bot, ctx *ext.Context, userId int64,
 	res, err := applyWarn(tracing.UpdateContext(ctx), b, chat, userId, reason, func() {
 		switch warnType {
 		case "dwarn":
-			if msg.ReplyToMessage != nil {
-				if _, deleteErr := msg.ReplyToMessage.Delete(b, nil); deleteErr != nil {
+			if reply := extraction.ReplyTarget(msg); reply != nil {
+				if _, deleteErr := reply.Delete(b, nil); deleteErr != nil {
 					log.Errorf("[Warns] Failed to delete message: %v", deleteErr)
 				}
 			}
@@ -440,14 +440,12 @@ func (m moduleStruct) dispatchWarn(b *gotgbot.Bot, ctx *ext.Context, warnType st
 	if !chat_status.IsUserInChat(b, chat, userId) {
 		return ext.EndGroups
 	}
-	var warnusr int64
-	if msg.ReplyToMessage != nil && msg.ReplyToMessage.From != nil && msg.ReplyToMessage.From.Id == userId {
-		warnusr = msg.ReplyToMessage.From.Id
-	} else {
-		warnusr = userId
+	if warnType == "dwarn" && replyTargetMismatch(msg, userId) {
+		_ = refuseReplyMismatch(mc)
+		return ext.EndGroups
 	}
 
-	return m.warnThisUser(b, ctx, warnusr, reason, warnType, warnSourceManual)
+	return m.warnThisUser(b, ctx, userId, reason, warnType, warnSourceManual)
 }
 
 func (m moduleStruct) warnUser(b *gotgbot.Bot, ctx *ext.Context) error {

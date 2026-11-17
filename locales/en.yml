@@ -280,6 +280,7 @@ common_user_not_in_chat: "This user is not in this chat. There is nobody to rest
 common_cannot_target_admin: "Request denied. I do not perform this action on group admins."
 common_cannot_target_self: "Request denied. I do not perform this action on myself."
 common_no_reply_to_message: "Reply to a user's message to perform this action."
+common_reply_target_mismatch: "The user you named did not write the message you replied to. Reply to their message, or leave out the name."
 
 # Common action verbs (for dynamic error messages)
 common_action_ban: "ban"

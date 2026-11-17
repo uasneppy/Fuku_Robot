@@ -740,6 +740,7 @@ common_user_not_in_chat: Этот пользователь не в этом ча
 common_cannot_target_admin: "Я не могу выполнить это действие по отношению к администраторам группы."
 common_cannot_target_self: "Я не могу выполнить это действие по отношению к себе."
 common_no_reply_to_message: "Вам нужно ответить на сообщение пользователя, чтобы выполнить это действие."
+common_reply_target_mismatch: "Указанный пользователь не писал сообщение, на которое вы ответили. Ответьте на его сообщение или не указывайте имя."
 
 # Common action verbs (for dynamic error messages)
 common_action_ban: "забанить"

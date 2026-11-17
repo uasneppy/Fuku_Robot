@@ -915,6 +915,7 @@ common_user_not_in_chat: Este usuario no está en este chat, ¿cómo puedo restr
 common_cannot_target_admin: "No puedo realizar esta acción en los administradores del grupo."
 common_cannot_target_self: "No puedo realizar esta acción en mí mismo."
 common_no_reply_to_message: "Debes responder al mensaje de un usuario para realizar esta acción."
+common_reply_target_mismatch: "El usuario que indicaste no escribió el mensaje al que respondiste. Responde a su mensaje o no indiques el nombre."
 
 # Common action verbs (for dynamic error messages)
 common_action_ban: "banear"

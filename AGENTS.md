@@ -3652,10 +3652,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   service message on every topic message that is not an explicit reply, so `ReplyTarget` answers nil for that message
   and for a topic message's own thread root (`IsTopicMessage` with `MessageThreadId` equal to the reply's ID; outside a
   forum replying to a thread's root is a real reply). `ExtractUserAndText`, `IdFromReply`, `extractFromReply`, `/dkick`,
-  `/dban`, `/dmute`, `/purge`, `/del`, `/purgefrom`, `/purgeto` and `/id` use it. In `ExtractUserAndText` an explicit
+  `/dban`, `/dmute`, `/dwarn`, `/purge`, `/del`, `/purgefrom`, `/purgeto` and `/id` use it. In `ExtractUserAndText` an explicit
   target (a `text_mention` at the argument, an `@username` or a numeric ID) always beats the reply: the reply is the
   fallback only when the first argument named nobody, and `/id` shows a reply's details only when the resolved user is
-  the reply's sender.
+  the reply's sender. `/dban`, `/dmute` and `/dwarn` delete the replied message, so an explicit target that did not send
+  it is refused with `common_reply_target_mismatch` (`replyTargetMismatch`) and nothing is deleted or punished.
 - A staff action card has one writer once its run starts: the run's coordinator goroutine, which edits at most every
   2.5 s (`staffActionEditEvery`), only when a result changed, and never before a progress edit's 429 `retry_after` has
   passed. The summary never drops a group: over 3800 UTF-16 units (counted on the escaped HTML) only done lines

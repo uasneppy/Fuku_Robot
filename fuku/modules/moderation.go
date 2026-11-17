@@ -311,6 +311,33 @@ var (
 	errTargetIsBot   = fmt.Errorf("target is the bot itself")
 )
 
+// errReplyTargetMismatch is returned when a delete-and-punish command names an
+// explicit target that did not send the message it replies to.
+var errReplyTargetMismatch = fmt.Errorf("explicit target is not the reply's sender")
+
+// replyTargetMismatch reports whether msg replies (extraction.ReplyTarget) to a
+// message whose sender is not userID. A message with no reply target never
+// mismatches; a reply whose sender cannot be read always does.
+func replyTargetMismatch(msg *gotgbot.Message, userID int64) bool {
+	reply := extraction.ReplyTarget(msg)
+	if reply == nil {
+		return false
+	}
+	sender := reply.GetSender()
+	return sender == nil || sender.Id() != userID
+}
+
+// refuseReplyMismatch answers common_reply_target_mismatch: /dban, /dmute and
+// /dwarn delete the replied message, so they act only when the explicit target
+// wrote it, and otherwise delete and punish nothing.
+func refuseReplyMismatch(c *moderationCtx) error {
+	text, _ := c.Tr.GetString("common_reply_target_mismatch")
+	if err := replyValidationError(c, text); err != nil {
+		return err
+	}
+	return errReplyTargetMismatch
+}
+
 // replyValidationError sends a validation failure reply, logging send errors.
 func replyValidationError(c *moderationCtx, text string) error {
 	_, err := c.Msg.Reply(c.Bot, text, formatting.Shtml())
