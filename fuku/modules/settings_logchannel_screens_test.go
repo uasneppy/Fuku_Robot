@@ -12,7 +12,7 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
 )
 
-// settingsLogStates are every stored combination of the six categories with a channel linked, and
+// settingsLogStates are every stored combination of the four categories with a channel linked, and
 // the all-off state of a chat with none.
 func settingsLogStates() []settingsLogState {
 	var states []settingsLogState
@@ -38,8 +38,8 @@ func TestSettingsLogChannelCallbackBytes(t *testing.T) {
 				if screen.Omitted != 0 {
 					t.Errorf("%s omitted %d buttons for overflow, want none", name, screen.Omitted)
 				}
-				if got := settingsSwWidths(screen.Keyboard.InlineKeyboard); !slices.Equal(got, []int{2, 2, 2, 2}) {
-					t.Errorf("%s keyboard widths = %v, want [2 2 2 2]", name, got)
+				if got := settingsSwWidths(screen.Keyboard.InlineKeyboard); !slices.Equal(got, []int{2, 2, 2}) {
+					t.Errorf("%s keyboard widths = %v, want [2 2 2]", name, got)
 				}
 				for _, button := range settingsAllButtons(screen.Keyboard.InlineKeyboard) {
 					n := len(button.CallbackData)
@@ -94,8 +94,8 @@ func TestSettingsLogChannelPageFitsEveryLocale(t *testing.T) {
 									t.Errorf("%s page keeps the unfilled %s", label, placeholder)
 								}
 							}
-							if got := settingsSwWidths(screen.Keyboard.InlineKeyboard); !slices.Equal(got, []int{2, 2, 2, 2}) {
-								t.Errorf("%s keyboard widths = %v, want [2 2 2 2]", label, got)
+							if got := settingsSwWidths(screen.Keyboard.InlineKeyboard); !slices.Equal(got, []int{2, 2, 2}) {
+								t.Errorf("%s keyboard widths = %v, want [2 2 2]", label, got)
 							}
 							for _, button := range settingsAllButtons(screen.Keyboard.InlineKeyboard) {
 								if strings.TrimSpace(button.Text) == "" {

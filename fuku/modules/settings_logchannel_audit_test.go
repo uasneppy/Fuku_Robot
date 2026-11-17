@@ -4,7 +4,6 @@ package modules
 
 import (
 	"errors"
-	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -54,9 +53,9 @@ func TestSettingsLogChannelAuditSurvivesFailedReadBack(t *testing.T) {
 	if left := failNext.Load(); left != 0 {
 		t.Fatalf("%d of the two reads after the write were not made, so the test did not reach its scenario", left)
 	}
-	wantFlags := []byte(strings.Repeat("1", len(logchannels.AllCategories)))
-	wantFlags[slices.Index(logchannels.AllCategories, logchannels.CategoryUser)] = '0'
-	if got := logGoldenFlags(t, env.chat.Id); got != string(wantFlags) {
+	// logGoldenFlags reads the six stored columns: settings, admin, user, automated, reports, other.
+	const wantFlags = "110111"
+	if got := logGoldenFlags(t, env.chat.Id); got != wantFlags {
 		t.Errorf("the flags are %s, want %s (only the user category stored off)", got, wantFlags)
 	}
 	if got := env.answerCount() - answers; got != 1 {

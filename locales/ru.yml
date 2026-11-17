@@ -2134,7 +2134,7 @@ logchannels_help_msg: |
   × /log <category>: Enable a category.
   × /nolog <category>: Disable a category.
 
-  Categories: settings, admin, user, automated, reports, other.
+  Categories: settings, admin, user, reports.
 feds_pm_only: "This command can only be used in private chat with me."
 feds_group_only: "This command can only be used in groups."
 feds_need_name: "Give your federation a name."
@@ -2218,7 +2218,7 @@ logs_set_ok: "Log channel set. Admin actions from this chat will be sent there."
 logs_unset_ok: "Log channel removed."
 logs_not_set: "No log channel is set for this chat."
 logs_current: "Log channel: <code>{id}</code>"
-logs_categories: "Categories: settings, admin, user, automated, reports, other."
+logs_categories: "Categories: settings, admin, user, reports."
 logs_enabled: "Enabled logging for: {cats}"
 logs_disabled: "Disabled logging for: {cats}"
 logs_unknown_category: "Unknown category. See /logcategories."
@@ -3092,9 +3092,7 @@ settings_log_hint: "Канал привязывается командой /setl
 settings_log_cat_settings: "Настройки"
 settings_log_cat_admin: "Действия админов"
 settings_log_cat_user: "Действия юзеров"
-settings_log_cat_automated: "Автоматика"
 settings_log_cat_reports: "Жалобы"
-settings_log_cat_other: "Прочее"
 settings_anon_hint: "Изменить это может только владелец группы, и я должен быть админом в группе."
 settings_btn_anon_toggle: "Режим AnonAdmin: {state}"
 settings_locks_intro: "Я удаляю сообщения заблокированного типа от участников, которые не админы и не одобрены. Блокировка ботов не даёт не-админам добавлять ботов."

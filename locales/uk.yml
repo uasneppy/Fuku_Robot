@@ -1109,7 +1109,7 @@ antiraid_help_msg: "Старий режим рейду вимкнено, тим�
 
 # Rose feature-parity keys (federations, log channels, extras)
 federations_help_msg: "Федерація — це спільний список банів для груп, якими ви володієте. Один бан — усі об'єкти.\n\n*Власник (у приватному чаті):*\n× /newfed <name>: Створити федерацію (одна на користувача).\n× /renamefed <name>: Перейменувати федерацію.\n× /delfed: Видалити федерацію (з підтвердженням).\n× /fedpromote /feddemote: Керувати адмінами федерації.\n× /fedreason on/off: Вимагати причину для fban.\n× /fednotif on/off: Повідомляти власника про fban у приватному чаті.\n× /subfed /unsubfed /fedsubs: Підписка на іншу федерацію (до 5).\n× /fbanlist [csv|json|minicsv]: Експорт fban.\n× /importfbans: Імпорт із CSV/JSON-файлу, на який ви відповіли.\n× /unsetfedlog: Прибрати чат журналу федерації.\n\n*Чат журналу федерації (власник):*\n× /setfedlog: У групі зробити цю групу журналом федерації (ви маєте бути там адміном).\n× Для каналу: опублікуйте в каналі /setfedlog <fed_id> (я маю бути там адміном), потім перешліть цей допис мені в приватний чат або в групу з акаунта власника протягом 1 години.\n\n*Власник групи:*\n× /joinfed <fed_id>: Приєднати цей чат до федерації.\n× /leavefed: Вийти з федерації.\n× /quietfed on/off: Приховати пасивні сповіщення про fban.\n\n*Адміни федерації:*\n× /fban /unfban /funban: Бан/розбан у федерації.\n× /fedstat /fbanstat: Перевірити fban користувача.\n\n*Усі:*\n× /fedinfo /fedadmins /chatfed /myfeds\n"
-logchannels_help_msg: "Надсилайте дії адмінів в окремий канал журналу. Кожен об'єкт веде записи.\n\n1. Додайте мене в канал як адміна.\n2. У цьому каналі надішліть /setlog.\n3. Перешліть це повідомлення в групу.\n\n*Команди адмінів:*\n× /unsetlog: Прибрати канал журналу.\n× /logchannel: Показати поточний канал журналу.\n× /logcategories: Список категорій.\n× /log <category>: Увімкнути категорію.\n× /nolog <category>: Вимкнути категорію.\n\nКатегорії: settings, admin, user, automated, reports, other.\n"
+logchannels_help_msg: "Надсилайте дії адмінів в окремий канал журналу. Кожен об'єкт веде записи.\n\n1. Додайте мене в канал як адміна.\n2. У цьому каналі надішліть /setlog.\n3. Перешліть це повідомлення в групу.\n\n*Команди адмінів:*\n× /unsetlog: Прибрати канал журналу.\n× /logchannel: Показати поточний канал журналу.\n× /logcategories: Список категорій.\n× /log <category>: Увімкнути категорію.\n× /nolog <category>: Вимкнути категорію.\n\nКатегорії: settings, admin, user, reports.\n"
 feds_pm_only: "Ця команда працює лише у приватному чаті зі мною."
 feds_group_only: "Ця команда працює лише в групах."
 feds_need_name: "Дайте федерації назву."
@@ -1193,7 +1193,7 @@ logs_set_ok: "Канал журналу задано. Дії адмінів ць
 logs_unset_ok: "Канал журналу прибрано."
 logs_not_set: "Для цього чату канал журналу не задано."
 logs_current: "Канал журналу: <code>{id}</code>"
-logs_categories: "Категорії: settings, admin, user, automated, reports, other."
+logs_categories: "Категорії: settings, admin, user, reports."
 logs_enabled: "Журнал увімкнено для: {cats}"
 logs_disabled: "Журнал вимкнено для: {cats}"
 logs_unknown_category: "Невідома категорія. Дивіться /logcategories."
@@ -2003,9 +2003,7 @@ settings_log_hint: "Канал прив'язується командою /setlo
 settings_log_cat_settings: "Налаштування"
 settings_log_cat_admin: "Дії адмінів"
 settings_log_cat_user: "Дії користувачів"
-settings_log_cat_automated: "Автоматика"
 settings_log_cat_reports: "Скарги"
-settings_log_cat_other: "Інше"
 settings_anon_hint: "Змінити це може лише власник групи, і я маю бути адміном у групі."
 settings_btn_anon_toggle: "Режим AnonAdmin: {state}"
 settings_locks_intro: "Я видаляю повідомлення закритого типу від учасників, які не є адмінами чи схваленими. Замок на ботів не дає неадмінам додавати ботів."

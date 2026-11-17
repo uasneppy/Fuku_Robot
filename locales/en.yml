@@ -1218,7 +1218,7 @@ antiraid_help_msg: |
 
 # Rose feature-parity keys (federations, log channels, extras)
 federations_help_msg: "Federations share one ban list across the groups you own. One ban, every facility.\n\n*Owner (in private):*\n× /newfed <name>: Create a federation (one per user).\n× /renamefed <name>: Rename your federation.\n× /delfed: Delete your federation (confirm).\n× /fedpromote /feddemote: Manage fed admins.\n× /fedreason on/off: Require a reason for fbans.\n× /fednotif on/off: Tell the owner about fbans in private.\n× /subfed /unsubfed /fedsubs: Subscribe to another fed (max 5).\n× /fbanlist [csv|json|minicsv]: Export fbans.\n× /importfbans: Import from a replied CSV/JSON file.\n× /unsetfedlog: Clear the federation log chat.\n\n*Federation log chat (owner):*\n× /setfedlog: In a group, make that group the federation log (you must be an admin there).\n× For a channel: post /setfedlog <fed_id> in the channel (I must be an admin there), then forward that post to me in private or to a group, from the owner account, within 1 hour.\n\n*Group owner:*\n× /joinfed <fed_id>: Join this chat to a federation.\n× /leavefed: Leave the federation.\n× /quietfed on/off: Suppress passive fban notices.\n\n*Fed admins:*\n× /fban /unfban /funban: Federation ban/unban.\n× /fedstat /fbanstat: Check a user's fban.\n\n*Anyone:*\n× /fedinfo /fedadmins /chatfed /myfeds\n"
-logchannels_help_msg: "Send admin actions to a dedicated log channel. Every facility keeps records.\n\n1. Add me to a channel as admin.\n2. In that channel, send /setlog.\n3. Forward that message to the group.\n\n*Admin commands:*\n× /unsetlog: Remove the log channel.\n× /logchannel: Show the current log channel.\n× /logcategories: List categories.\n× /log <category>: Enable a category.\n× /nolog <category>: Disable a category.\n\nCategories: settings, admin, user, automated, reports, other.\n"
+logchannels_help_msg: "Send admin actions to a dedicated log channel. Every facility keeps records.\n\n1. Add me to a channel as admin.\n2. In that channel, send /setlog.\n3. Forward that message to the group.\n\n*Admin commands:*\n× /unsetlog: Remove the log channel.\n× /logchannel: Show the current log channel.\n× /logcategories: List categories.\n× /log <category>: Enable a category.\n× /nolog <category>: Disable a category.\n\nCategories: settings, admin, user, reports.\n"
 feds_pm_only: "This command works only in private chat with me."
 feds_group_only: "This command works only in groups."
 feds_need_name: "Give your federation a name."
@@ -1302,7 +1302,7 @@ logs_set_ok: "Log channel set. Admin actions from this chat now go on record the
 logs_unset_ok: "Log channel removed."
 logs_not_set: "No log channel is set for this chat."
 logs_current: "Log channel: <code>{id}</code>"
-logs_categories: "Categories: settings, admin, user, automated, reports, other."
+logs_categories: "Categories: settings, admin, user, reports."
 logs_enabled: "Logging enabled for: {cats}"
 logs_disabled: "Logging disabled for: {cats}"
 logs_unknown_category: "Unknown category. See /logcategories."
@@ -2146,9 +2146,7 @@ settings_log_hint: "A channel is linked with /setlog and removed with /unsetlog.
 settings_log_cat_settings: "Settings"
 settings_log_cat_admin: "Admin actions"
 settings_log_cat_user: "User actions"
-settings_log_cat_automated: "Automated"
 settings_log_cat_reports: "Reports"
-settings_log_cat_other: "Other"
 settings_anon_hint: "Only the group owner can change this, and I must be an admin in the group."
 settings_btn_anon_toggle: "AnonAdmin mode: {state}"
 settings_locks_intro: "I delete a locked kind of message from members who are not admins or approved. Locking bots stops non-admins from adding bots."

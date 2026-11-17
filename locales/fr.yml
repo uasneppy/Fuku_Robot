@@ -2268,7 +2268,7 @@ logchannels_help_msg: |
   × /log <category>: Enable a category.
   × /nolog <category>: Disable a category.
 
-  Categories: settings, admin, user, automated, reports, other.
+  Categories: settings, admin, user, reports.
 feds_pm_only: "This command can only be used in private chat with me."
 feds_group_only: "This command can only be used in groups."
 feds_need_name: "Give your federation a name."
@@ -2352,7 +2352,7 @@ logs_set_ok: "Log channel set. Admin actions from this chat will be sent there."
 logs_unset_ok: "Log channel removed."
 logs_not_set: "No log channel is set for this chat."
 logs_current: "Log channel: <code>{id}</code>"
-logs_categories: "Categories: settings, admin, user, automated, reports, other."
+logs_categories: "Categories: settings, admin, user, reports."
 logs_enabled: "Enabled logging for: {cats}"
 logs_disabled: "Disabled logging for: {cats}"
 logs_unknown_category: "Unknown category. See /logcategories."
@@ -3226,9 +3226,7 @@ settings_log_hint: "Un canal se lie avec /setlog et se retire avec /unsetlog. Ic
 settings_log_cat_settings: "Réglages"
 settings_log_cat_admin: "Actions d'admin"
 settings_log_cat_user: "Actions membres"
-settings_log_cat_automated: "Automatisé"
 settings_log_cat_reports: "Signalements"
-settings_log_cat_other: "Autres"
 settings_anon_hint: "Seul le propriétaire du groupe peut le modifier, et je dois être admin du groupe."
 settings_btn_anon_toggle: "Mode AnonAdmin : {state}"
 settings_locks_intro: "Je supprime un type de message verrouillé envoyé par des membres qui ne sont ni admins ni approuvés. Verrouiller les bots empêche les non-admins d'ajouter des bots."

@@ -11,10 +11,10 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/utils/actionlog"
 )
 
-// The Log channel page (page o) turns each of the six log categories of a group on or off, as /log
+// The Log channel page (page o) turns each of the four log categories of a group on or off, as /log
 // and /nolog do: every cell writes exactly one category through applyLogCategory and then posts the
 // same #SETTINGS audit entry the commands post. Linking and unlinking a channel stay /setlog and
-// /unsetlog. The page shows only whether a channel is linked and the six flags: it is read by every
+// /unsetlog. The page shows only whether a channel is linked and the four flags: it is read by every
 // member of a group menu while the log channel is private to the administrators, so the renderer
 // never receives the row and no screen, notice or alert can name the channel.
 
@@ -22,7 +22,7 @@ const (
 	// settingsPageLog is the p value of the Log channel page.
 	settingsPageLog = "o"
 	// settingsLogCategoryCount is the number of log categories.
-	settingsLogCategoryCount = 6
+	settingsLogCategoryCount = 4
 )
 
 // settingsLogCategory is one row of the page's category table: the t value of its control, the
@@ -40,9 +40,7 @@ var settingsLogCategories = [settingsLogCategoryCount]settingsLogCategory{
 	{"s", logchannels.CategorySettings, "settings_log_cat_settings"},
 	{"a", logchannels.CategoryAdmin, "settings_log_cat_admin"},
 	{"u", logchannels.CategoryUser, "settings_log_cat_user"},
-	{"m", logchannels.CategoryAutomated, "settings_log_cat_automated"},
 	{"r", logchannels.CategoryReports, "settings_log_cat_reports"},
-	{"o", logchannels.CategoryOther, "settings_log_cat_other"},
 }
 
 // settingsLogRead reads the chat's log channel row the way the commands' loader does, with the
@@ -134,7 +132,7 @@ func settingsLogOpen(p *settingsPress, notice string) (settingsScreen, error) {
 
 // renderSettingsLogChannel draws the Log channel page: the linked state, one line per category
 // with its state word, the hint that links and unlinks are commands, and the toggle grid of the
-// six categories (every cell drawn, linked or not: a press without a channel is refused with the
+// four categories (every cell drawn, linked or not: a press without a channel is refused with the
 // notice of the command). It is pure and receives the state only, never the row.
 func renderSettingsLogChannel(v settingsView, state settingsLogState, notice string) settingsScreen {
 	body := []string{

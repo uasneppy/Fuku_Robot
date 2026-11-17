@@ -343,9 +343,7 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_log_cat_settings":   {18, 18},
 	"settings_log_cat_admin":      {18, 18},
 	"settings_log_cat_user":       {18, 18},
-	"settings_log_cat_automated":  {18, 18},
 	"settings_log_cat_reports":    {18, 18},
-	"settings_log_cat_other":      {18, 18},
 	"settings_anon_hint":          {90, 110},
 	"settings_btn_anon_toggle":    {30, 35},
 
@@ -850,7 +848,7 @@ func TestSettingsLabelLengths(t *testing.T) {
 	lockIcons := []string{"🔒", "🔓"}
 	logCategoryNames := []string{
 		"settings_log_cat_settings", "settings_log_cat_admin", "settings_log_cat_user",
-		"settings_log_cat_automated", "settings_log_cat_reports", "settings_log_cat_other",
+		"settings_log_cat_reports",
 	}
 	// The full-width toggles of the Switches and Anonymous admins pages (Phase 18): each is
 	// rendered with the check or cross icon and the language's longer On or Off word.

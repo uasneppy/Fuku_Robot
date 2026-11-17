@@ -146,7 +146,7 @@ var (
 		settingsPageWarns:    {settingsWarnsLimitKey, settingsWarnsModeKey},
 		settingsPageSwitches: {settingsSwReportsKey, settingsSwAIKey, settingsSwApproveKey},
 		settingsPageLang:     {settingsLangControlKey},
-		settingsPageLog:      {"s", "a", "u", "m", "r", "o"},
+		settingsPageLog:      {"s", "a", "u", "r"},
 		settingsPageAnon:     {settingsAnonControl},
 	}
 )

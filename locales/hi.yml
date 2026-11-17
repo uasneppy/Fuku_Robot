@@ -2039,7 +2039,7 @@ logchannels_help_msg: |
   × /log <category>: Enable a category.
   × /nolog <category>: Disable a category.
 
-  Categories: settings, admin, user, automated, reports, other.
+  Categories: settings, admin, user, reports.
 feds_pm_only: "This command can only be used in private chat with me."
 feds_group_only: "This command can only be used in groups."
 feds_need_name: "Give your federation a name."
@@ -2123,7 +2123,7 @@ logs_set_ok: "Log channel set. Admin actions from this chat will be sent there."
 logs_unset_ok: "Log channel removed."
 logs_not_set: "No log channel is set for this chat."
 logs_current: "Log channel: <code>{id}</code>"
-logs_categories: "Categories: settings, admin, user, automated, reports, other."
+logs_categories: "Categories: settings, admin, user, reports."
 logs_enabled: "Enabled logging for: {cats}"
 logs_disabled: "Disabled logging for: {cats}"
 logs_unknown_category: "Unknown category. See /logcategories."
@@ -2997,9 +2997,7 @@ settings_log_hint: "चैनल /setlog से जुड़ता है और
 settings_log_cat_settings: "सेटिंग्स"
 settings_log_cat_admin: "एडमिन कार्रवाई"
 settings_log_cat_user: "सदस्य कार्रवाई"
-settings_log_cat_automated: "स्वचालित"
 settings_log_cat_reports: "रिपोर्ट"
-settings_log_cat_other: "अन्य"
 settings_anon_hint: "इसे केवल ग्रुप का ओनर बदल सकता है, और मेरा ग्रुप में एडमिन होना ज़रूरी है।"
 settings_btn_anon_toggle: "AnonAdmin मोड: {state}"
 settings_locks_intro: "मैं लॉक किए गए प्रकार का संदेश उन सदस्यों से हटा देता हूँ जो एडमिन या स्वीकृत नहीं हैं। बॉट लॉक करने पर गैर-एडमिन बॉट नहीं जोड़ सकते।"

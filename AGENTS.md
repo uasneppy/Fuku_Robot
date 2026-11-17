@@ -1110,13 +1110,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `TestSettingsAuthorityParityLanguage` hold it (`settings_language_test.go`, `settings_language_screens_test.go`).
 - The Log channel page (`settings_logchannel.go`, page `o`, `Order` 88, icon 🧾, `settings_page_log`, between Language and
   Access, Phase 18, plan 18-09) registers from its own file through `registerSettingsPage`, with no `Hidden`, so a Staff Group's
-  own menu shows it too. It turns each of the six log categories on or off as `/log` and `/nolog` do. The six come from one table
-  (`settingsLogCategories`: the control code `s a u m r o`, the repository name `settings admin user automated reports other`,
+  own menu shows it too. It turns each of the four log categories on or off as `/log` and `/nolog` do. The four come from one table
+  (`settingsLogCategories`: the control code `s a u r`, the repository name `settings admin user reports`,
   the `settings_log_cat_*` name key; its order is that of `logchannels.AllCategories`) and the controls, the body lines and the
   cells are all built from it. Each control is `tg` only (`Actions`, so an `st` is an invalid request before any I/O) with
   `Validate` exactly `0` or `1` (`settingsEditSwitchValue`) and right `settingsRightAdmin`, as `/log` and `/nolog` ask for
   `RequireUserAdmin` and nothing more (no bot check). A press goes through `settingsToggleSet` and writes exactly its own
-  category through `applyLogCategory`, the function the commands call, so the other five categories are untouched. After a
+  category through `applyLogCategory`, the function the commands call, so the other three categories are untouched. After a
   stored change the page answers and redraws first and only then posts the same `#SETTINGS` audit entry the commands post,
   `actionlog.Settings(bot, group, presser, key+" "+name)` with the apply function's `logs_enabled` or `logs_disabled` key and the
   repository name (`settingsLogControl`; the commands inline the call, there is no shared poster). `actionlog.Destination` gates
@@ -1129,13 +1129,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   seam: the `log_channel:<chat>` key the commands read, its error returned, a chat with no channel read as `nil`, nothing created)
   and a failed read is the cannot-open edit and the unknown mark on Main. Privacy (D-07): the page is read by every member of
   a group menu while the log channel is private to the administrators, so the renderer (`renderSettingsLogChannel`, pure) receives
-  only `settingsLogState` (linked or not, and the six flags) and never the row, `logs_current` is never used and no screen, notice
+  only `settingsLogState` (linked or not, and the four flags) and never the row, `logs_current` is never used and no screen, notice
   or alert names the channel's title or ID. The body is `settings_log_status` with `settings_state_linked` or
   `settings_state_not_linked`, one `settings_main_state_line` per category (check or cross, the name, On or Off), a blank line and
   the hint `settings_log_hint` (linking and unlinking stay `/setlog` and `/unsetlog`); the keyboard is the shared two-column
   toggle grid `settingsToggleGrid` (`settings_toggle.go`: cells "icon name", two to a row, an odd last cell alone, the icons
-  passed in; the Locks page reuses it with the lock icons) then Back and Close, so the rows are `{2,2,2,2}`. Main's state is Linked
-  or Not linked. With no channel linked (`settingsLogStateOf(nil)`) the six lines read Off, the cells are still drawn and a press is
+  passed in; the Locks page reuses it with the lock icons) then Back and Close, so the rows are `{2,2,2}`. Main's state is Linked
+  or Not linked. With no channel linked (`settingsLogStateOf(nil)`) the four lines read Off, the cells are still drawn and a press is
   refused with the command's own notice `logs_not_set` (a warn line over the redraw, the callback answered once): `applyLogCategory`
   answers `logNotSet` before any write, so no row is created, and nothing is posted; a channel unlinked after the page was drawn is
   refused the same way and the redraw reads Not linked. A failed save (`logSaveFailed`) redraws the stored state with
@@ -1152,7 +1152,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   a plain member is refused by both, an administrator the owner gate refuses is refused by the menu only, the documented
   carve-out), `TestSettingsLogChannelReadsCreateNothing` (no row, no chats row and no cache key for a chat with no channel, the
   commands' own key for a linked one, a failing reader is the cannot-open edit and the unknown mark) and the worst-case
-  tests `TestSettingsLogChannelCallbackBytes` (45 bytes private, 41 group, `{2,2,2,2}` for every one of the 65 states) and
+  tests `TestSettingsLogChannelCallbackBytes` (45 bytes private, 41 group, `{2,2,2}` for every one of the 17 states) and
   `TestSettingsLogChannelPageFitsEveryLocale` (3800 UTF-16 units and 20-code-point cells in 8 languages)
   (`settings_logchannel_screens_test.go`).
 - The Anonymous admins page (`settings_anonadmin.go`, page `y`, `Order` 89, icon 🎭, `settings_page_anon`, between Log channel and
@@ -3710,7 +3710,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `/nolog` (`setLogCategories`) keep their own loop, their group, admin and not-linked checks, their `#SETTINGS` audit post
   to the log channel and their quirk, and call it once per category: a failed save is logged and the loop goes on, so when
   every save fails the reply is `logs_enabled` (or `logs_disabled`) with an empty list and the audit post carries the same
-  empty list (`TestLegacyLogCategoryRequests` pins every request and stored row, never to be re-recorded). The audit post is
+  empty list (`TestLegacyLogCategoryRequests` pins every request and stored row, never to be re-recorded; only its `several_off`
+  case changed on purpose when the two dead categories were dropped, audit 261116 Q1 item 3: `other` is now an unknown name, so
+  only `admin, user` apply and are audited, and its six-character flags read the stored columns straight from the row). The
+  accepted categories are `settings`, `admin`, `user` and `reports` (`logchannels.AllCategories`); the columns
+  `cat_automated` and `cat_other` and their JSON keys stay in the table and the model for old rows and backup exports (an old
+  export carrying all six flags still imports, `TestImportLogChannelsOldExportKeepsAllSixFlags`), and nothing writes or reads
+  them: nothing ever posted to those two categories. The audit post is
   the commands' (a page posts the same entry itself after a change). The page reads through `logchannels.LoadContext`, the
   `log_channel:<chat>` key and loader `GetContext` uses (they share one function), which returns `(nil, nil)` for a chat with
   no linked channel, returns a failed read as an error, creates nothing and caches nothing for a miss. `log_channel` is not in
@@ -3742,7 +3748,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   control code a button carries (never the lock's name, never the pager's `kg` or a core action code), the kind, the name key
   and the page (12 on page 1, 10 on page 2). `TestSettingsLocksTableMatchesCommand` holds it equal to `/locktypes` in both
   directions (a lock added to `lockMap` or `restrMap` needs a row, and the reverse) and `TestSettingsLocksKeysExist`
-  holds every name key, the Locks words, the six Phase 18 page titles and the six log category names in all 8 languages,
+  holds every name key, the Locks words, the six Phase 18 page titles and the four log category names in all 8 languages,
   because `make check-translations` cannot see table fields. The page that draws the table is the Locks page (see the settings
   Callbacks bullets).
   The blacklist (Phase 19) is written by four apply functions in `blacklists.go`, through the `blacklistWrites` seam (defaults
@@ -4329,12 +4335,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   goroutines uses Mute or Kick and never Warn (the warn module's SQLite transaction); a test that joins, rejoins or sends with
   a date takes the date before the message and at least 2 s apart; and a test never `t.Skip`s (CI's
   `scripts/check_test_results` fails on an unexpected skip, so a case that cannot run in a menu kind is not registered
-  there). The locale files now hold 452 `settings_` keys and 31 `mreq_` keys, each `settings_` key one row of the limits table
+  there). The locale files now hold 464 `settings_` keys and 31 `mreq_` keys, each `settings_` key one row of the limits table
   of `fuku/i18n/settings_locale_test.go` (Phase 19 plan 19-02 added two, `settings_state_private_only` and `settings_entries_group_note`, and plan 19-03 seven for the Blacklist page in task 1, three for its delete card in task 2 and seven for its action screen in task 3, and plan 19-04 nine for the typed add in task 1 and seven (the wait-ended note, the five part words and the no-addable-word refusal) in task 2; the typed add's tests are `TestSettingsListDoor*` (`settings_list_door_test.go`: one step, refusals, authority with the live bot classification, replaced waits, expiry, Cancel, albums, no Redis), `TestSettingsParityBlacklistAdd` and the typed column of `TestSettingsAuthorityParityBlacklist` (`settings_blacklist_test.go`); the list toolkit is `settings_list_env_test.go`: `newSettingsListEnv`, `settingsListSeedBlacklist`, `settingsListCleanup`, `settingsListOpenPrivate`, `settingsListSentinel`; plan 19-06 adds four keys, rows 11 to 14 of the UI-SPEC (the step line, the closed step-1 prompt, the blank-entry refusal and the content limits), and `withTestSettingsList(t, def)`, which installs a test-only list page over the registries by saving the entries of its key, its list table and its action codes and replacing them, restoring every one in `t.Cleanup` (never `registerSettingsPage`, which panics on a duplicate key, so a test page may reuse key `i` or `e` before or after the real page exists); the two-step engine is proved on such a page, `settingsListTestTwoStepDef` with key `i` and codes `zg zx zy za zc`, by `TestSettingsListTwoStepFlow` and `TestSettingsListTwoStepBranches` (`settings_list_twostep_test.go`: every step-1 refusal including U+3000 alone, a `Check` error, the Add gate, the `q` guard, a poll, a `Check` that now refuses, a taken and a failed `Apply`, an album, Add at step 2, expiry and `/cancel`); plan 19-07 adds the Filters page's 14 keys, rows 40 to 53 of the UI-SPEC (the page name, the list page, the Add button, both prompts, the key line, the two refusals, the delete card and the two notices; the keys are read through table fields and `settingsListExtraKeys`, so `TestSettingsListKeysExist` and the limits rows are their guard) and the tests `TestSettingsFiltersOpens`, `TestSettingsFiltersDelete` (`settings_filters_test.go`), `TestSettingsListDoorTwoStep`, `TestSettingsListDoorTwoStepRefusals` and `TestSettingsListDoorTwoStepCap` (`settings_list_door_test.go`) on the toolkit `newSettingsFiltersFlow`, `settingsFiltersOwner` (a live creator, so `can_change_info` holds) and `settingsListSeedFilters`; plan 19-09 adds the Notes page's 14 keys, rows 54 to 67 of the UI-SPEC, 11 in task 1 and the refusal, delete card and removed notice in task 2, read through table fields and `settingsListExtraKeys`, and the tests `TestSettingsNotesOpens`, `TestSettingsListDoorTwoStepNotes`, `TestSettingsNotesDelete` and `TestSettingsListDoorNotesRefusals` in `settings_notes_test.go` on `newSettingsNotesFlow`, which wraps the Filters flow, and `settingsListSeedNotes`) and each `mreq_` key one row of `memberReqLocaleLimits`. Phase 18 added 55 `settings_`
   keys (four of them, the Warnings page's, in plan 18-01 and 51 in plan 18-02: the six page names, three Main state words,
   the Warnings, Switches, Language, Log channel and Anonymous admins lines, and the Locks intro, two state words and 22 lock
   names), each one row of `settingsLocaleLimits` (`settings_sw_ai_unavailable` also in `settingsAlertKeys`, being the alert of
-  a stale On press). The page names, the six log category names and the 22 lock names are read through table fields that
+  a stale On press). The page names, the four log category names and the 22 lock names are read through table fields that
   `make check-translations` cannot see, so the limits table, `TestSettingsLabelLengths` (the page cells, every lock name with
   🔒 and 🔓, every category with ✅ and ❌, each file's own Language cell `language_flag` plus `language_name` plain and marked,
   the four full-width toggles with the longer state word at most 40, and the two Main state words with their largest count)

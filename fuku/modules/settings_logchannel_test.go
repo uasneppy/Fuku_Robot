@@ -152,8 +152,8 @@ func TestSettingsLogChannelOpens(t *testing.T) {
 				t.Errorf("Log channel page %q does not contain %q", text, want)
 			}
 		}
-		if got := fmt.Sprint(settingsSwWidths(keyboard)); got != "[2 2 2 2]" {
-			t.Errorf("page rows = %s, want [2 2 2 2] (three rows of two cells, then Back and Close)", got)
+		if got := fmt.Sprint(settingsSwWidths(keyboard)); got != "[2 2 2]" {
+			t.Errorf("page rows = %s, want [2 2 2] (two rows of two cells, then Back and Close)", got)
 		}
 		last := keyboard[len(keyboard)-1]
 		if len(last) != 2 || !containsMarker(last[0].Text, "settings_btn_back") || !containsMarker(last[1].Text, "settings_btn_close") {
@@ -221,7 +221,7 @@ func TestSettingsLogChannelOpens(t *testing.T) {
 			t.Errorf("page %q does not say Not linked", text)
 		}
 		if got := len(settingsAllButtons(keyboard)); got != settingsLogCategoryCount+2 {
-			t.Errorf("page has %d buttons, want the six cells plus Back and Close", got)
+			t.Errorf("page has %d buttons, want the four cells plus Back and Close", got)
 		}
 	})
 }
@@ -416,7 +416,7 @@ func TestSettingsLogChannelNotLinked(t *testing.T) {
 				t.Errorf("a press of %s drew %q, want the notice logs_not_set", cat.Name, text)
 			}
 			if got := len(settingsAllButtons(keyboard)); got != settingsLogCategoryCount+2 {
-				t.Errorf("the redraw has %d buttons, want the six cells plus Back and Close", got)
+				t.Errorf("the redraw has %d buttons, want the four cells plus Back and Close", got)
 			}
 			if got := len(env.fake.callsFor("sendMessage")); got != sends {
 				t.Errorf("a refused press of %s sent %d messages, want none", cat.Name, got-sends)
