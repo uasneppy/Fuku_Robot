@@ -442,3 +442,32 @@ func TestDropPendingMessage(t *testing.T) {
 		t.Errorf("another chat has %d rows, want its 1 untouched", n)
 	}
 }
+
+// TestDropPendingMessageAnyKind holds I2: a pinned message keeps every pending row it has,
+// whatever its kind (a bot's welcome or rules message an admin pinned as well as a member's
+// self-destruct row), while an acting row and another chat's row with the same message ID stay.
+func TestDropPendingMessageAnyKind(t *testing.T) {
+	ctx := context.Background()
+	chatID, other := deletionChat(t), deletionChat(t)
+	seedKind(t, chatID, KindBotRules, 20, 1, 0)           // message 20, pending
+	seedKind(t, chatID, KindMemberSelfDestruct, 21, 0, 1) // message 21, acting
+	seedKind(t, chatID, KindBotWelcome, 22, 1, 0)         // message 22, another message
+	seedKind(t, other, KindBotRules, 20, 1, 0)            // the same message ID in another chat
+
+	if n, err := DropPendingMessageAnyKind(ctx, chatID, 21); err != nil || n != 0 {
+		t.Errorf("dropping an acting row = %d, %v; want 0, nil", n, err)
+	}
+	if n, err := DropPendingMessageAnyKind(ctx, chatID, 20); err != nil || n != 1 {
+		t.Errorf("dropping the pending bot:rules row = %d, %v; want 1, nil", n, err)
+	}
+	left := map[int64]bool{}
+	for _, row := range storedQueue(t, chatID) {
+		left[row.MessageID] = true
+	}
+	if left[20] || !left[21] || !left[22] {
+		t.Errorf("rows left = %v, want the acting row 21 and the other message's row 22", left)
+	}
+	if n := len(storedQueue(t, other)); n != 1 {
+		t.Errorf("another chat has %d rows, want its 1 untouched", n)
+	}
+}

@@ -2354,7 +2354,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   with one fresh read per distinct chat (a Staff Group chat's entries are dropped, a failed read drops that chat's entries
   and is returned while other chats are written). `deletion.CountPending` is the exact count of a chat's queued rows of one
   kind bounded by a limit (`SELECT count(*) FROM (SELECT 1 ... LIMIT n)`, served by `uk_scheduled_deletions_message`) and
-  `deletion.DropPendingMessage` deletes the one pending row of a `(chat, message, kind)`; no migration was added for them.
+  `deletion.DropPendingMessage` deletes the one pending row of a `(chat, message, kind)` and
+  `deletion.DropPendingMessageAnyKind` every pending row of a `(chat, message)`, whatever its kind (the pin drop); no
+  migration was added for them.
   The queue is read and written only through fresh queries, so no `DeleteCache` applies, and it is
   never part of backup, export, import or reset. The worker (`deletion_worker.go`) claims at most 1000 due rows per cycle
   (`deletionBatch`) and screens the claimed member:selfdestruct rows against the chat's current rule, releases claims older than 2 minutes (`deletionStaleClaim`) without counting an attempt, ends a cycle
@@ -3000,18 +3002,20 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   automatic forward), bots and the bot's own messages, Telegram service IDs, every service message (the service rules own
   them), a private chat, a Staff Group (`deletion.ScheduleBatch` refuses it and fails closed on a read error, DEL-07) and a
   member whose captcha is pending (group `-10` holds and ends that update). Pinned messages stay (D-11): a `pinned_message`
-  service message drops the pending row of the message it names (exactly its chat, message, kind and the pending state: an
-  acting row is left to the worker), and the bot's own `/pin` does the same through the hook in `pins.go` after its successful
+  service message drops every pending row of the message it names, whatever its kind (`deletion.DropPendingMessageAnyKind`:
+  exactly its chat, message and the pending state, so a member's self-destruct row and the row of a bot message an admin
+  pinned, a welcome, the rules or a punishment reply, both go; an acting row is left to the worker; I2), and the bot's own `/pin` does the same through the hook in `pins.go` after its successful
   `pinChatMessage`, because the pin service message the bot causes has a bot sender that a watcher without `SetAllowBot` never
   sees. `memberDeletePinned` first notes the pin in a small bounded in-process set (`memberPinnedNotes`: `memberPinnedTTL` 10 s,
   `memberPinnedMax` 4096, expired notes pruned on every write, the oldest evicted when full, on the replica that handled the
   pin) which the flush consults right before its write (`memberDeleteDropPinnedEntries`, counted in `memberDeletePinnedDropped`,
   correct and not a shed), so a message pinned while it sat in the buffer or in the flush's screening is dropped instead of
-  written; it then drops the pending row through the `memberDeleteDropPinned` seam, retried once on a fresh context because the
+  written; it then drops the pending rows through the `memberDeleteDropPinned` seam, retried once on a fresh context because the
   pin event is never delivered again (`TestMemberSelfDestructPinRace`). A pin in a chat whose cached rules hold no
-  `member:selfdestruct` entry (`memberSelfDestructRuleStored`, one cached read; an unreadable rule counts as stored, the old
-  behaviour) notes nothing and makes no database call, so a Staff Group or a chat that never used the rule pays no synchronous
-  write in group `-8` (`TestMemberDeletePinnedNeedsRule`); unpinning queues nothing, and `/permapin` pins a message the bot sent, which is never queued. Switching Self-destruct
+  delete rule at all (`memberDeleteRuleStored`, one cached read; any stored rule, a member or a bot kind, counts, and an
+  unreadable rule counts as stored, the old behaviour) notes nothing and makes no database call, so a Staff Group or a chat
+  that never used a rule pays no synchronous write in group `-8` (`TestMemberDeletePinnedNeedsRule`,
+  `TestMemberDeletePinnedAnyKind`); unpinning queues nothing, and `/permapin` pins a message the bot sent, which is never queued. Switching Self-destruct
   Off drops the chat's pending self-destruct rows in the same write (`RemoveRule`), and turning it on or changing the delay
   drops nothing: rows queued under the old delay keep their time (D-12). Accepted limits, stated and not tested as wanted
   behaviour: a pin that lands after the worker claimed its row still deletes it, and a pin handled by another replica while the

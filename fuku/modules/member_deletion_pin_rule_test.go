@@ -18,7 +18,7 @@ func TestMemberDeletePinnedNeedsRule(t *testing.T) {
 		env := newMemberDeletionEnv(t)
 		var calls atomic.Int32
 		mreqSwap(t, &memberDeleteDropPinned,
-			func(context.Context, int64, int64, string) (int64, error) {
+			func(context.Context, int64, int64) (int64, error) {
 				calls.Add(1)
 				return 0, nil
 			})
@@ -37,7 +37,7 @@ func TestMemberDeletePinnedNeedsRule(t *testing.T) {
 		env := newSelfDestructEnv(t, memberSelfDestructRuleDelay)
 		var calls atomic.Int32
 		mreqSwap(t, &memberDeleteDropPinned,
-			func(context.Context, int64, int64, string) (int64, error) {
+			func(context.Context, int64, int64) (int64, error) {
 				calls.Add(1)
 				return 0, nil
 			})
@@ -52,7 +52,7 @@ func TestMemberDeletePinnedNeedsRule(t *testing.T) {
 		env := newMemberDeletionEnv(t)
 		var calls atomic.Int32
 		mreqSwap(t, &memberDeleteDropPinned,
-			func(context.Context, int64, int64, string) (int64, error) {
+			func(context.Context, int64, int64) (int64, error) {
 				calls.Add(1)
 				return 0, nil
 			})
