@@ -3418,7 +3418,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `fuku/db/antiraid` repository is gone, since nothing but tests called it, and no command reads the timing columns
   any more.
 - The lockdown lift runs in the same worker after `/unlockdown` restored the permissions. It unbans (`only_if_banned=true`)
-  only a joiner whose live `getChatMember` shows kicked with that row's `ban_until` (`isLockdownBan`, 2 s tolerance); anyone
+  only a joiner whose live `getChatMember`, read in the same paced unit as the unban (so a slot wait or a 429 retry reads
+  again, `TestLockdownUnbanRereadsAfterWait`), shows kicked with that row's `ban_until` (`isLockdownBan`, 2 s tolerance); anyone
   else, a deliberate `/ban` or `/tban` included, is kept and never touched (a staff `/ban` or `/tban` over a lockdown's
   ban replaces it with its own end date, so it falls here too; see the StaffActions bullet). A ban call that failed
   without a refusal (a 5xx, a timeout) may still have taken effect, so before anything else the lift (inline in

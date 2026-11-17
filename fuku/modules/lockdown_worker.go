@@ -563,10 +563,15 @@ func lockdownProcessLift(ctx context.Context, b *gotgbot.Bot, ld models.ChatLock
 // call can never remove a member; anyone else, a deliberate ban included, is kept and
 // never touched. It reports whether the row reached a final state.
 func lockdownUnbanOne(ctx context.Context, b *gotgbot.Bot, row models.LockdownJoiner) bool {
+	// The live read and the unban are one paced unit, like the worker's ban: a wait for
+	// a slot or a 429 retry re-runs the whole closure, so the unban never acts on a
+	// status read before the wait (an admin's ban placed meanwhile would be lifted).
 	var member gotgbot.MergedChatMember
+	var unbanned bool
 	err := lockdownPaced(ctx, func(callCtx context.Context) error {
 		call, cancel := context.WithTimeout(callCtx, lockdownCallTimeout)
 		defer cancel()
+		unbanned = false
 		live, lookupErr := b.GetChatMemberWithContext(call, row.ChatID, row.UserID, nil)
 		if lookupErr != nil {
 			return lookupErr
@@ -575,13 +580,20 @@ func lockdownUnbanOne(ctx context.Context, b *gotgbot.Bot, row models.LockdownJo
 			return errors.New("getChatMember returned no member")
 		}
 		member = live.MergeChatMember()
-		return nil
+		if !isLockdownBan(member, row.BanUntil) {
+			return nil
+		}
+		_, unbanErr := b.UnbanChatMemberWithContext(call, row.ChatID, row.UserID, &gotgbot.UnbanChatMemberOpts{OnlyIfBanned: true})
+		if unbanErr == nil {
+			unbanned = true
+		}
+		return unbanErr
 	})
 	if err != nil {
 		return lockdownUnbanFailed(ctx, row, err)
 	}
 
-	if !isLockdownBan(member, row.BanUntil) {
+	if !unbanned {
 		// A row the lift routed here because its ban answer failed, and whose member
 		// carries no ban at all, was never banned: it ends like a pending row the lift
 		// cancels, and is not counted as a ban left alone on purpose.
@@ -596,16 +608,6 @@ func lockdownUnbanOne(ctx context.Context, b *gotgbot.Bot, row models.LockdownJo
 		}
 		moveLockdownJoiner(row.ID, models.JoinerStateUnbanning, models.JoinerStateKept, detail, false)
 		return true
-	}
-
-	err = lockdownPaced(ctx, func(callCtx context.Context) error {
-		call, cancel := context.WithTimeout(callCtx, lockdownCallTimeout)
-		defer cancel()
-		_, unbanErr := b.UnbanChatMemberWithContext(call, row.ChatID, row.UserID, &gotgbot.UnbanChatMemberOpts{OnlyIfBanned: true})
-		return unbanErr
-	})
-	if err != nil {
-		return lockdownUnbanFailed(ctx, row, err)
 	}
 	moveLockdownJoiner(row.ID, models.JoinerStateUnbanning, models.JoinerStateUnbanned, "", false)
 	return true

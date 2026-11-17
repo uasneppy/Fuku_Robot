@@ -3,6 +3,8 @@
 package modules
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"sync"
 	"testing"
@@ -92,6 +94,69 @@ func TestLockdownAlertForgedCardPress(t *testing.T) {
 			}
 			env.wantRefused(fix, before, staffMarker("lockdown_alert_expired"))
 		}
+	}
+}
+
+// lockdownUnbanRaceClient is the lockdown fake with one change: the first
+// unbanChatMember for user is answered 429 after before ran, so a test can change
+// the member while the unban waits for its retry.
+type lockdownUnbanRaceClient struct {
+	*lockdownFake
+	user   int64
+	before func()
+	once   sync.Once
+}
+
+func (c *lockdownUnbanRaceClient) RequestWithContext(
+	ctx context.Context, token, method string, params map[string]any, opts *gotgbot.RequestOpts,
+) (json.RawMessage, error) {
+	if method == "unbanChatMember" && staffParamInt(params, "user_id") == c.user {
+		raced := false
+		c.once.Do(func() {
+			raced = true
+			c.before()
+		})
+		if raced {
+			return nil, staffFake429(1)
+		}
+	}
+	return c.lockdownFake.RequestWithContext(ctx, token, method, params, opts)
+}
+
+// TestLockdownUnbanRereadsAfterWait covers a lift's unban that has to wait (here a
+// 429) while an admin bans the joiner on purpose: the live status the unban decided on
+// is stale by then, so the read and the unban must be one paced unit and the retry
+// must read again and keep the deliberate ban.
+func TestLockdownUnbanRereadsAfterWait(t *testing.T) {
+	env := newLockdownEnv(t)
+	env.lockAsAdmin("raid")
+	raider := env.newJoiner("Raider")
+	env.join(raider, raider, "https://t.me/+abc")
+	env.cycle()
+	if got := env.joinerRow(raider.Id); got.State != models.JoinerStateBanned {
+		t.Fatalf("setup: joiner is %q, want banned", got.State)
+	}
+	deliberate := time.Now().Add(48 * time.Hour).Unix()
+	env.bot.BotClient = &lockdownUnbanRaceClient{
+		lockdownFake: env.fake,
+		user:         raider.Id,
+		before: func() {
+			env.fake.setMember(env.chat.Id, raider.Id, staffFakeMember{
+				Status:    gotgbot.ChatMemberStatusKicked,
+				UntilDate: deliberate,
+			})
+		},
+	}
+
+	env.send(env.admin, "/unlockdown")
+	env.cycle()
+
+	member := env.fake.member(env.chat.Id, raider.Id)
+	if member == nil || member.Status != gotgbot.ChatMemberStatusKicked || member.UntilDate != deliberate {
+		t.Errorf("raider = %+v, want still banned until the deliberate date", member)
+	}
+	if got := env.joinerRow(raider.Id); got.State != models.JoinerStateKept {
+		t.Errorf("joiner state = %q, want kept", got.State)
 	}
 }
 
