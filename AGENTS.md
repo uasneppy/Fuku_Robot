@@ -2737,7 +2737,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   paced `deleteMessage`, only for a message case with a message ID, never for a join or a clean member) deletes the
   violating message after the punishment whatever became of it (it took effect, was refused or unknown, or another
   replica won the claim), every further message of a held member, and during a pause the message of a violator the
-  cached admin list knows as a non-admin. It is not a punishment and posts no notice; a failed delete is only logged
+  cached admin list knows as a non-admin, only when the sender's names break a name rule of the case's settings
+  (`memberReqNameBreach`, the watcher's own check): a member handed to a job only for a lookup miss has established no
+  breach, so a pause never deletes their message (Q1). It is not a punishment and posts no notice; a failed delete is only logged
   (chat, user and message IDs and the error code, never the content) and never changes a punishment, hold or notice. A
   message is deleted only when its sender is established as a non-admin (MREQ-09), by `memberReqSenderNonAdmin`: on the
   punishing path the job's own live `getChatMember`; on the held and paused paths the cached admin list read at the
