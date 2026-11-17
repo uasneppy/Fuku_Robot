@@ -119,6 +119,22 @@ func TestMemberReqJoinNoCaptcha(t *testing.T) {
 		}
 	})
 
+	t.Run("a join mute whose notice was undelivered and lifted is welcomed (Q4)", func(t *testing.T) {
+		env := mreqJoinEnv(t, map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionMute}, true)
+		env.fake.setChatPermsRaw(env.chat.Id, `{"can_send_messages":true}`)
+		env.fake.script("sendMessage", env.chat.Id, mreqRefusals(2)...)
+		member := env.mreqMember("Alex", "", "alex")
+
+		env.mreqJoin(member)
+
+		if n := env.mreqCallsAbout(member.Id, "restrictChatMember"); n != 2 {
+			t.Fatalf("restrictChatMember calls = %d, want the mute and its lift", n)
+		}
+		if got := mreqCountText(env.mreqSentTexts(), mreqWelcomeWord); got != 1 {
+			t.Errorf("welcomes = %d, want one: the mute was lifted, so nothing holds the welcome", got)
+		}
+	})
+
 	t.Run("a warn posts its notice and then the usual welcome", func(t *testing.T) {
 		env := mreqJoinEnv(t, map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionWarn}, true)
 		member := env.mreqMember("Alex", "", "alex")
@@ -487,6 +503,33 @@ func TestMemberReqCaptchaGuard(t *testing.T) {
 		}
 		if !isMemberReqMute(mreqLiveRecord(t, env, member.Id), hold.MuteUntil) {
 			t.Error("the member no longer carries the requirement marker after the captcha's unmute")
+		}
+	})
+
+	t.Run("a pending mute hold keeps its live marker and unmutes without one (Q5)", func(t *testing.T) {
+		env := newMemberReqEnv(t)
+		member := env.mreqMember("Alex", "", "alex")
+		hold := mreqPendingMuteHold(t, env, member)
+		env.fake.setMember(env.chat.Id, member.Id, staffFakeMember{
+			Status: gotgbot.ChatMemberStatusRestricted, IsMember: true, UntilDate: hold.MuteUntil, Perms: &gotgbot.ChatPermissions{},
+		})
+
+		if err := unmuteCaptchaUser(env.bot, env.chat.Id, member.Id); err != nil {
+			t.Fatalf("unmuteCaptchaUser error = %v, want nil", err)
+		}
+		if !isMemberReqMute(mreqLiveRecord(t, env, member.Id), hold.MuteUntil) {
+			t.Fatal("the captcha's unmute freed a member under a pending requirement mute")
+		}
+
+		other := env.mreqMember("Bo", "", "bo")
+		mreqPendingMuteHold(t, env, other)
+		if err := unmuteCaptchaUser(env.bot, env.chat.Id, other.Id); err != nil {
+			t.Fatalf("unmuteCaptchaUser(no marker) error = %v", err)
+		}
+		if restricts := env.mreqRestricts(other.Id); len(restricts) != 1 {
+			t.Fatalf("restricts of the member with no live marker = %d, want the unmute", len(restricts))
+		} else {
+			mreqWantUnmute(t, restricts[0])
 		}
 	})
 

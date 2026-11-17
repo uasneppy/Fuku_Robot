@@ -6,6 +6,7 @@ import (
 	"context"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -148,7 +149,8 @@ func TestMemberReqCapPausesPunishments(t *testing.T) {
 		mreqSwap(t, &memberReqCapPerMinute, 2)
 		clock := mreqFixedClock(t)
 		env := newMemberReqEnv(t)
-		allow := func() bool { return memberReqCapAllow(context.Background(), env.bot, env.chat.Id) }
+		var next int64
+		allow := func() bool { next++; return memberReqCapAllow(context.Background(), env.bot, env.chat.Id, next) }
 
 		first, second, third := allow(), allow(), allow()
 		if !first || !second || third {
@@ -171,7 +173,7 @@ func TestMemberReqCapPausesPunishments(t *testing.T) {
 		env := newMemberReqEnv(t)
 		replica := env.mreqReplica()
 		for i := 0; i < 2; i++ {
-			if !memberReqCapAllow(context.Background(), env.bot, env.chat.Id) {
+			if !memberReqCapAllow(context.Background(), env.bot, env.chat.Id, int64(i+1)) {
 				t.Fatalf("attempt %d under the cap was refused", i)
 			}
 		}
@@ -184,10 +186,10 @@ func TestMemberReqCapPausesPunishments(t *testing.T) {
 			if i%2 == 1 {
 				bot = replica.bot
 			}
-			go func() {
+			go func(userID int64) {
 				defer wg.Done()
-				results <- memberReqCapAllow(context.Background(), bot, env.chat.Id)
-			}()
+				results <- memberReqCapAllow(context.Background(), bot, env.chat.Id, userID)
+			}(int64(100 + i))
 		}
 		wg.Wait()
 		close(results)
@@ -222,6 +224,44 @@ func TestMemberReqCapPausesPunishments(t *testing.T) {
 			t.Error("the member over the cap was held")
 		}
 	})
+}
+
+// TestMemberReqCapCountsMembers proves that the cap counts members, not jobs (Q2): a second job
+// for a member another replica already punished in the same minute spends no second unit.
+func TestMemberReqCapCountsMembers(t *testing.T) {
+	mreqSwap(t, &memberReqCapPerMinute, 1)
+	mreqFixedClock(t)
+	env := newMemberReqEnv(t)
+	env.mreqRules(map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionMute})
+	member := env.mreqMember("Alex", "", "alex")
+
+	// The other replica's job runs inside this job's settings read, after this job's live lookup
+	// and before its cap: it counts the member and wins the claim.
+	real := memberReqSettingsLookup
+	var raced atomic.Bool
+	mreqSwap(t, &memberReqSettingsLookup, func(ctx context.Context, chatID int64) (*models.ChatRequirements, error) {
+		if raced.CompareAndSwap(false, true) {
+			if got := memberReqEnforce(ctx, env.bot, env.mreqCase(member)); got.Outcome != memberReqMuted {
+				t.Errorf("the other replica's job = %+v, want Muted", got)
+			}
+		}
+		return real(ctx, chatID)
+	})
+
+	if got := env.mreqEnforce(env.mreqCase(member)); got.Outcome != memberReqHeld {
+		t.Fatalf("second job of the same member = %+v, want Held (the claim was lost)", got)
+	}
+	if env.redis.Exists(memberReqPausedKey(env.chat.Id)) || mreqPausedNotices(env) != 0 {
+		t.Fatal("one member's two jobs paused the chat")
+	}
+
+	other := env.mreqMember("Bo", "", "bo")
+	if got := env.mreqEnforce(env.mreqCase(other)); got.Outcome != memberReqNone {
+		t.Fatalf("a second member = %+v, want None over the cap", got)
+	}
+	if mreqPausedNotices(env) != 1 {
+		t.Error("the second member did not pause the chat")
+	}
 }
 
 func TestMemberReqCapWithoutRedis(t *testing.T) {

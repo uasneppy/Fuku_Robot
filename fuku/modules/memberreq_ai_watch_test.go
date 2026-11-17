@@ -135,6 +135,10 @@ func TestMemberReqWatcherAI(t *testing.T) {
 			mreqAIPlant(t, env, mreqAIKeyOf(t, mreqAINamesOfUser(member)), "0.95")
 			mreqAIPlant(t, env, memberReqAIBaselineKey(member.Id), "0123456789abcdef0123456789abcdef")
 		}},
+		{"a cached verdict below the bar and a join marker (Q3: the job records the baseline)", func(t *testing.T, env *memberReqEnv, member gotgbot.User) {
+			mreqAIPlant(t, env, mreqAIKeyOf(t, mreqAINamesOfUser(member)), "0.2")
+			mreqAIMarkNew(t, env.chat.Id, member.Id)
+		}},
 		{"a verdict value that is not a probability", func(t *testing.T, env *memberReqEnv, member gotgbot.User) {
 			mreqAIPlant(t, env, mreqAIKeyOf(t, mreqAINamesOfUser(member)), "NaN")
 		}},
@@ -149,6 +153,30 @@ func TestMemberReqWatcherAI(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("a joiner with a cached pass gets the baseline from one job and then needs none (Q3)", func(t *testing.T) {
+		env, ai := mreqAIWatchEnv(t, models.RequirementActionMute)
+		member := mreqAIOrdinary(env)
+		mreqAIPlant(t, env, mreqAIKeyOf(t, mreqAINamesOfUser(member)), "0.2")
+		mreqAIMarkNew(t, env.chat.Id, member.Id)
+		env.mreqSend(member, "hello")
+		memberReqJobs.wait()
+		if value, _, ok := mreqAIKeyState(t, memberReqAIBaselineKey(member.Id)); !ok || value != mreqAIHashOfUser(t, member) {
+			t.Errorf("baseline = %q, %t, want the names hash recorded by the job", value, ok)
+		}
+		if _, _, ok := mreqAIKeyState(t, memberReqAIMarkerKey(env.chat.Id, member.Id)); ok {
+			t.Error("the join marker is still set")
+		}
+		if n := ai.count(); n != 0 {
+			t.Errorf("provider requests = %d, want none: the cached verdict answers", n)
+		}
+		starts := mreqCountJobStarts(t)
+		env.mreqSend(member, "hello again")
+		memberReqJobs.wait()
+		if n := starts(); n != 0 {
+			t.Errorf("job starts after the baseline = %d, want none", n)
+		}
+	})
 
 	t.Run("a member the cache knows as an administrator or who is approved starts no job", func(t *testing.T) {
 		env, ai := mreqAIWatchEnv(t, models.RequirementActionMute)
@@ -306,8 +334,10 @@ func TestMemberReqWatcherAI(t *testing.T) {
 			marker   bool
 			want     bool
 		}{
-			{"below the bar", "0.2", "", true, true},
-			{"just below the bar", "0.8999", other, true, true},
+			{"below the bar", "0.2", "", false, true},
+			{"below the bar with a marker (Q3)", "0.2", "", true, false},
+			{"just below the bar", "0.8999", other, false, true},
+			{"just below the bar with a marker (Q3)", "0.8999", other, true, false},
 			{"zero", "0", "", false, true},
 			{"at the bar, nothing else", "0.9", "", false, false},
 			{"above the bar, nothing else", "0.97", "", false, false},

@@ -229,8 +229,11 @@ func (r memberReqAIWatchRead) satisfied() bool {
 }
 
 // memberReqAIWatchSatisfied is the watcher's decision for the AI rule (D-21), pure: no Redis and
-// no clock. The member needs no job when the cached verdict of their names parses and is below
-// the bar, or when they have no marker and their baseline equals the current names hash. A miss
+// no clock. The member needs no job when they have no marker and either the cached verdict of their
+// names parses and is below the bar or their baseline equals the current names hash. A member who
+// still holds a marker is never satisfied (Q3): a cached pass would leave a joiner with no baseline
+// and the marker for good, so one job judges them from the cache, records the baseline and deletes
+// the marker, and their next message is satisfied by the baseline. A miss
 // (empty value), a text that does not parse, NaN, an infinity and a value out of range are not a
 // verdict. The baseline half is the rule, not a gap (SEC-01): a member whose baseline equals their
 // names and who has no marker stays satisfied even when another account's judgement of the same
@@ -238,10 +241,13 @@ func (r memberReqAIWatchRead) satisfied() bool {
 // accepted for this member (it errs toward not punishing); the job answers the same way, because
 // memberReqAIDecide puts the baseline step before the verdict cache.
 func memberReqAIWatchSatisfied(verdictValue, baseline string, marker bool, hash string) bool {
+	if marker {
+		return false
+	}
 	if probability, ok := memberReqAIParseProbability(verdictValue); ok && probability < memberReqAIBar {
 		return true
 	}
-	return !marker && baseline != "" && baseline == hash
+	return baseline != "" && baseline == hash
 }
 
 // memberReqLookupCached is the watcher's whole read for a member whose names are clean in a

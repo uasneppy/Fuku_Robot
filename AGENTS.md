@@ -375,9 +375,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   unconfigured stored value counts as Off there, or every message of every member would start a job for ever) the same
   round also reads `fuku:memberreq:nv:<verdict key hash>`, `fuku:memberreq:nm:<user>` and `fuku:memberreq:nu:<chat>:<user>`
   (`memberReqAIWatchQueue`: the canonical names and the verdict key come from pure Go, with `config.AppConfig.AnthropicModel`),
-  and the AI part is satisfied when the verdict parses and is below the bar, or when the marker is absent and the baseline
-  equals the current names hash (`memberReqAIWatchSatisfied`, pure: a miss, an unparsable value, NaN, an infinity and any
-  Redis error are not satisfied); names that are not judgeable are satisfied with no key read, and everything else is one job
+  and the AI part is satisfied only when the marker is absent and either the verdict parses and is below the bar or the
+  baseline equals the current names hash (`memberReqAIWatchSatisfied`, pure: a miss, an unparsable value, NaN, an infinity
+  and any Redis error are not satisfied; a marker holder is never satisfied, so a joiner whose names have a cached pass gets
+  one job that records the baseline and deletes the marker from the cache with no provider call, Q3); names that are not judgeable are satisfied with no key read, and everything else is one job
   after `memberReqMissExempt`. `memberReqLookupCached` takes the names for this and its complexity is held at 18 or less by
   keeping the AI part in those two small functions. The watcher writes no verdict, baseline or marker and calls nobody.
   While the AI breaker is paused for the chat (`memberReqAIPaused`: in memory and pure, the provider-wide pause or the group's
@@ -1892,12 +1893,15 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   except the limit action the warn module takes when a warn reaches the limit (`applyWarn`'s kick or ban): that one call is
   neither paced here nor bounded by the job context, and is bounded instead by the HTTP client's 30 s timeout and the
   per-chat cap.
-- `fuku:memberreq:{<chat>}:cap:<unix minute>` and `fuku:memberreq:{<chat>}:paused` are the member requirements' per-chat
-  brake (`memberreq_limits.go`, the chat ID a hash tag, outside the cache prefix so `CLEAR_CACHE_ON_STARTUP` keeps them).
-  The counter is a fixed 60 s window (`raidNow().Unix()/60`, so a test can stop the clock) of punishment attempts,
-  `INCR` plus `EXPIRE 120` in one pipeline under 250 ms, counted before the claim (`memberReqCapAllow`, between the live
-  lookup and `memberreq.ClaimHold`), so an attempt that is refused, lost or never confirmed still counts and a bot that keeps
-  being refused reaches the pause. More than `memberReqCapPerMinute` (10) refuses the punishment and sets the latch with
+- `fuku:memberreq:{<chat>}:cap:<unix minute>`, `fuku:memberreq:{<chat>}:capm:<unix minute>` and
+  `fuku:memberreq:{<chat>}:paused` are the member requirements' per-chat brake (`memberreq_limits.go`, the chat ID a hash
+  tag, outside the cache prefix so `CLEAR_CACHE_ON_STARTUP` keeps them). The counter is a fixed 60 s window
+  (`raidNow().Unix()/60`, so a test can stop the clock) of the members whose punishment was attempted (Q2): one Lua script
+  (`memberReqCapScript`, under 250 ms) `SADD`s the user ID to the minute's `capm` set, `INCR`s the `cap` counter only when
+  the `SADD` added the member, renews `EXPIRE 120` on both and returns the counter, counted before the claim
+  (`memberReqCapAllow`, between the live lookup and `memberreq.ClaimHold`), so an attempt that is refused, lost or never
+  confirmed still counts its member, several jobs of one member (on one replica or several) count once, and a member
+  already counted within the cap stays allowed in that minute. More than `memberReqCapPerMinute` (10) refuses the punishment and sets the latch with
   `SET NX EX` for `memberReqPause` (10 minutes); only the caller whose `SET NX` succeeded posts the one `mreq_notice_paused`
   (`{n}` the cap, `{minutes}` the pause) in the group's language through `memberReqPostNotice`, best effort, so one notice
   is posted however many replicas tip the cap at once. While the latch stands (`memberReqPaused`, read after the held path
@@ -2271,7 +2275,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   unlike the lookups above, it ignores `mode.Fresh` and `mode.Classify` (the AI row answers from the cache whatever the mode).
 - `fuku:memberreq:warned:<chat>:<user>` is the recorded-warn note of the member requirements executor
   (`memberreq_warned.go`, WR-01): the value is the decimal ID of the hold whose warn was just stored, `SET EX` for
-  `memberreq.StaleClaim` plus 10 minutes (`memberReqWarnedGrace`), written inside the warn lock before the hold is marked
+  `memberreq.StaleClaim` plus 7 days (`memberReqWarnedGrace`, because the reclaim comes at the member's next violating
+  message, which can be days later, Q6), written inside the warn lock before the hold is marked
   punished and deleted once the mark landed, so it survives only when the mark failed three times (or the process stopped
   between the two). `memberReqAdoptRecordedWarn` reads it when a stale pending Warn hold is reclaimed for another Warn and
   compares the value with the hold's ID, so a note an earlier episode left never matches a later hold. Redis only and best
@@ -2699,7 +2704,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   Marking a hold punished (`memberReqMarkPunished`) is tried 3 times (`memberReqMarkAttempts`, `memberReqMarkRetryWait`
   apart, one detached 5 s record context, the write behind the `memberReqMarkHold` seam). A warn whose mark still fails
   must never be punished twice (WR-01): `afterRecord` first writes `fuku:memberreq:warned:<chat>:<user>` (value the hold's ID,
-  `StaleClaim` plus 10 minutes, best effort and Redis only: no Redis or a Redis error writes and finds nothing and the
+  `StaleClaim` plus 7 days, best effort and Redis only: no Redis or a Redis error writes and finds nothing and the
   reclaim then warns again, accepted) and drops it once the mark landed; the reclaim of a stale pending hold that was a Warn
   with a Warn action now (`memberReqAdoptRecordedWarn`, after the claim was won) finds the note naming that hold, marks the
   hold punished (a failure leaves it pending and the next reclaim adopts it again), warns and announces nothing and returns
@@ -2757,7 +2762,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   paced `deleteMessage`, only for a message case with a message ID, never for a join or a clean member) deletes the
   violating message after the punishment whatever became of it (it took effect, was refused or unknown, or another
   replica won the claim), every further message of a held member, and during a pause the message of a violator the
-  cached admin list knows as a non-admin. It is not a punishment and posts no notice; a failed delete is only logged
+  cached admin list knows as a non-admin, only when the sender's names break a name rule of the case's settings
+  (`memberReqNameBreach`, the watcher's own check): a member handed to a job only for a lookup miss has established no
+  breach, so a pause never deletes their message (Q1). It is not a punishment and posts no notice; a failed delete is only logged
   (chat, user and message IDs and the error code, never the content) and never changes a punishment, hold or notice. A
   message is deleted only when its sender is established as a non-admin (MREQ-09), by `memberReqSenderNonAdmin`: on the
   punishing path the job's own live `getChatMember`; on the held and paused paths the cached admin list read at the
@@ -2791,7 +2798,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `memberReqLookupJoinBudget` (a joiner whose lookup does not finish in 4 s is welcomed, leaves no hold, and is caught at their first
   message, so a raid of joins never parks a dispatcher goroutine for the entry's 15 s; `memberReqJoinThenWelcome` itself is unchanged,
   because `memberreq.AnyRuleOn` reads the eight-rule table, so a group with only the photo rule on is screened at join): a kick or ban sends no welcome, a mute sends none and has stored `welcome_held` on its hold
-  at the claim, a warn posts its notice and the usual welcome follows (a warn whose limit action kicked or banned is a
+  at the claim (unless its notice could not be delivered and `memberReqUndeliveredMute` lifted the mute again: the
+  executor then answers `memberReqNotApplied` and the joiner is welcomed, Q4), a warn posts its notice and the usual welcome follows (a warn whose limit action kicked or banned is a
   removal and gets none), and a clean member, an exempt one (approved, a live administrator, a bot), a check that could
   not be answered, and a joiner whose Mute is refused because an administrator's restriction is on them (CR-01: a rejoiner
   restricted for good, say; `memberReqNone`, no hold) are welcomed. The settings the entry read are only the pre-filter:
@@ -2800,7 +2808,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   every captcha unmute (the pass, `restoreCaptchaPermissions`, restart recovery and the `captcha_muted_users` retry
   worker). While `memberReqLive()` is false it reads nothing and changes no captcha unmute: no hold read, no Telegram call,
   no error (`TestMemberReqCaptchaGuardOffUntilLive`, with a counting always-failing `memberReqHoldRead`). The switch is
-  true in production, so the guard reads a hold on every captcha unmute. Once the switch is on it reads the member's hold, and a punished requirement mute makes it re-apply `MutedPermissions` with `until_date`
+  true in production, so the guard reads a hold on every captcha unmute. Once the switch is on it reads the member's hold, and a punished requirement mute, or a pending one whose marker the
+  member's live record still carries (`memberReqPendingMuteLive`, one paced `getChatMember`, only for a pending mute hold; a
+  read that fails fails closed like an unreadable hold, Q5), makes it re-apply `MutedPermissions` with `until_date`
   the hold's own marker through `memberReqPaced` instead of unmuting, so a captcha pass never frees a held member and the
   marker stays valid for "I fixed it" (D-08). A hold-read error fails closed: the guard returns an error wrapped with the
   chat and user IDs only (`errMemberReqHoldUnreadable`, none of the database's text), `isPermanentUnmuteError` answers
