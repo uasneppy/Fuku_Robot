@@ -186,8 +186,22 @@ func TestSettingsListDoorRefusals(t *testing.T) {
 		keepWait(kind)
 	}
 
-	// Too broad, too long and already listed, in one message: counts and the still-waiting line, no word.
+	// A slash text that is not a registered command is refused with the slash line, its Cancel the list's (audit item 33).
 	before := settingsEditSentCount(env.settingsEnv, owner)
+	slash := []gotgbot.MessageEntity{{Type: "bot_command", Offset: 0, Length: 6}}
+	sendPrivateMessage(env.settingsEnv, owner, gotgbot.Message{Text: "/alpha", Entities: slash})
+	slashReply := settingsListDoorReply(t, env, owner, before, "settings_edit_refuse_slash", "settings_edit_still_waiting")
+	slashKeyboard := staffKeyboardOf(slashReply.Params["reply_markup"])
+	if len(slashKeyboard) != 1 || len(slashKeyboard[0]) != 1 {
+		t.Fatalf("the slash refusal keyboard = %+v, want one Cancel", slashKeyboard)
+	}
+	if fields := settingsButtonFields(t, slashKeyboard[0][0]); fields["a"] != "bc" || fields["t"] != "w" || len(fields) != 3 {
+		t.Errorf("the slash refusal's Cancel carries %v, want bc, t=w and c", fields)
+	}
+	keepWait("a slash text")
+
+	// Too broad, too long and already listed, in one message: counts and the still-waiting line, no word.
+	before = settingsEditSentCount(env.settingsEnv, owner)
 	settingsListDoorSay(env, owner, "a "+strings.Repeat("x", 101)+" ALPHA")
 	reply := settingsListDoorReply(t, env, owner, before, "settings_bl_refuse_none", "settings_bl_saved_too_broad",
 		"settings_bl_saved_too_long", "settings_bl_saved_already", "settings_edit_still_waiting")

@@ -214,6 +214,7 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_edit_refuse_buttons_limit":   {120, 168},
 	"settings_edit_refuse_text_buttons":    {150, 210},
 	"settings_edit_refuse_access_lost":     {140, 196},
+	"settings_edit_refuse_slash":           {130, 182},
 	"settings_edit_preview_header":         {90, 126},
 	"settings_edit_preview_header_rules":   {50, 70},
 	"settings_edit_preview_buttons_body":   {40, 56},

@@ -3021,6 +3021,7 @@ settings_edit_refuse_button_url: "Le bouton {n} a un lien que je ne peux pas uti
 settings_edit_refuse_buttons_limit: "Il y a trop de boutons. Un message peut avoir au plus 100 boutons, et 8 par ligne."
 settings_edit_refuse_text_buttons: "Ce texte contient des lignes de boutons. Envoyez le texte sans elles, et définissez les boutons comme une partie à part."
 settings_edit_refuse_access_lost: "Je ne peux plus confirmer que vous pouvez modifier les réglages de ce groupe, j'ai donc cessé d'attendre. Rien n'a changé."
+settings_edit_refuse_slash: "Je ne peux pas enregistrer un texte qui commence par une barre oblique, car il ressemble à une commande. Changez le premier caractère et renvoyez-le."
 settings_edit_preview_header: "👁 Aperçu, rempli avec votre nom et le titre du groupe."
 settings_edit_preview_header_rules: "👁 Aperçu du message des règles."
 settings_edit_preview_buttons_body: "👁 Voici les boutons."

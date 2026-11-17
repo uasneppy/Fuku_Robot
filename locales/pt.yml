@@ -3066,6 +3066,7 @@ settings_edit_refuse_button_url: "O botão {n} tem um link que não posso usar. 
 settings_edit_refuse_buttons_limit: "São botões demais. Uma mensagem pode ter no máximo 100 botões e no máximo 8 por linha."
 settings_edit_refuse_text_buttons: "Esse texto contém linhas de botões. Envie o texto sem elas e defina os botões como uma parte separada."
 settings_edit_refuse_access_lost: "Não consigo mais confirmar que você pode alterar as configurações deste grupo, então parei de esperar. Nada mudou."
+settings_edit_refuse_slash: "Não consigo salvar um texto que começa com uma barra, porque parece um comando. Troque o primeiro caractere e envie de novo."
 settings_edit_preview_header: "👁 Prévia, preenchida com seu nome e o título do grupo."
 settings_edit_preview_header_rules: "👁 Prévia da mensagem de regras."
 settings_edit_preview_buttons_body: "👁 Estes são os botões."

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
+	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 	logrustest "github.com/sirupsen/logrus/hooks/test"
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
@@ -19,6 +20,7 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/db/greetings"
 	"github.com/uasneppy/fuku_robot/fuku/utils/cache"
 	"github.com/uasneppy/fuku_robot/fuku/utils/content"
+	"github.com/uasneppy/fuku_robot/fuku/utils/helpers"
 )
 
 // privateUpdate builds the update of a private message of from to the bot (the chat, the sender,
@@ -348,7 +350,7 @@ func TestSettingsEditDoorPassThrough(t *testing.T) {
 
 	t.Run("a message that cannot be a reply leaves the wait alone", func(t *testing.T) {
 		photo := []gotgbot.PhotoSize{{FileId: "photo-id", FileUniqueId: "photo-unique", Width: 1, Height: 1}}
-		command := []gotgbot.MessageEntity{{Type: "bot_command", Offset: 0, Length: 4}}
+		command := []gotgbot.MessageEntity{{Type: "bot_command", Offset: 0, Length: int64(len(settingsDoorProbeText))}}
 		cases := []struct {
 			name string
 			// who is the person with the wait; nil is the group's owner.
@@ -382,21 +384,23 @@ func TestSettingsEditDoorPassThrough(t *testing.T) {
 				},
 			},
 			{
-				name: "a command",
+				// A command this bot registers (its handler returns nil, so the update reaches the door).
+				name: "a registered command",
 				send: func(env *settingsEnv, who gotgbot.User) {
-					sendPrivateMessage(env, who, gotgbot.Message{Text: "/foo", Entities: command})
+					sendPrivateMessage(env, who, gotgbot.Message{Text: settingsDoorProbeText, Entities: command})
 				},
 			},
 			{
-				name: "a photo captioned with a command",
+				name: "a photo captioned with a registered command",
 				send: func(env *settingsEnv, who gotgbot.User) {
-					sendPrivateMessage(env, who, gotgbot.Message{Photo: photo, Caption: "/foo", CaptionEntities: command})
+					sendPrivateMessage(env, who, gotgbot.Message{Photo: photo, Caption: settingsDoorProbeText, CaptionEntities: command})
 				},
 			},
 		}
 		for _, tc := range cases {
 			t.Run(tc.name, func(t *testing.T) {
 				env := newSettingsEditEnv(t)
+				settingsDoorProbeCommand(env)
 				var who gotgbot.User
 				if tc.who != nil {
 					who = *tc.who
@@ -667,6 +671,132 @@ func TestSettingsEditRefusalKeepsWait(t *testing.T) {
 		t.Errorf("the welcome is %+v (row %v), want the valid text", row.WelcomeSettings, ok)
 	}
 	settingsEditWaitGone(t, env, owner)
+}
+
+// settingsDoorProbeText is a command this bot registers in the door tests, through
+// settingsDoorProbeCommand.
+const settingsDoorProbeText = "/zzdoorprobe"
+
+// settingsDoorProbeCommand registers the probe command on env's dispatcher at group 0, built
+// through helpers.NewBotCommand so helpers.IsBotCommand knows it. Its handler returns nil, which
+// leaves group 0 and hands the update on to group 1, the typed-reply door.
+func settingsDoorProbeCommand(env *settingsEnv) {
+	env.dispatcher.AddHandlerToGroup(helpers.NewBotCommand(strings.TrimPrefix(settingsDoorProbeText, "/"),
+		func(*gotgbot.Bot, *ext.Context) error { return nil }), 0)
+}
+
+// TestSettingsEditDoorSlashText proves that with a live wait a text or caption that starts with a
+// slash and is not a command this bot registers is refused with settings_edit_refuse_slash, the
+// still-waiting line and the Cancel button, the wait kept and nothing stored (audit item 33),
+// while a registered command, a slash followed by a space and a sender with no wait or only a
+// marker keep their old handling.
+func TestSettingsEditDoorSlashText(t *testing.T) {
+	photo := []gotgbot.PhotoSize{{FileId: "photo-id", FileUniqueId: "photo-unique", Width: 1, Height: 1}}
+	entity := func(text string) []gotgbot.MessageEntity {
+		word := text
+		if end := strings.IndexByte(text, ' '); end != -1 {
+			word = text[:end]
+		}
+		return []gotgbot.MessageEntity{{Type: "bot_command", Offset: 0, Length: int64(len(word))}}
+	}
+	const unregistered = "/zzunregistered hello"
+	refused := []struct {
+		name string
+		msg  gotgbot.Message
+	}{
+		{name: "an unregistered command", msg: gotgbot.Message{Text: unregistered, Entities: entity(unregistered)}},
+		{name: "a caption that is an unregistered command", msg: gotgbot.Message{
+			Photo: photo, Caption: unregistered, CaptionEntities: entity(unregistered),
+		}},
+		{name: "a command addressed to another bot", msg: gotgbot.Message{
+			Text: settingsDoorProbeText + "@someotherbot", Entities: entity(settingsDoorProbeText + "@someotherbot"),
+		}},
+	}
+	for _, tc := range refused {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newSettingsEditEnv(t)
+			settingsDoorProbeCommand(env)
+			owner := env.newOwner(env.chat)
+			settingsEditSetWait(env, owner, settingsPageWelcome, settingsEditPartText)
+			env.redis.FastForward(2 * time.Second)
+			ttl := env.redis.TTL(settingsInputKey(owner.Id))
+			before := settingsEditSentCount(env, owner)
+
+			sendPrivateMessage(env, owner, tc.msg)
+
+			settingsEditWantReply(t, env, owner, before, "settings_edit_refuse_slash", "settings_edit_still_waiting")
+			sent := env.fake.sentTo(owner.Id)
+			reply := sent[len(sent)-1]
+			if reply.Params["reply_parameters"] == nil {
+				t.Error("the refusal is not a reply to the message")
+			}
+			keyboard := staffKeyboardOf(reply.Params["reply_markup"])
+			if len(keyboard) != 1 || len(keyboard[0]) != 1 || !containsMarker(keyboard[0][0].Text, "settings_btn_edit_cancel") {
+				t.Fatalf("the refusal keyboard = %+v, want one row with Cancel", keyboard)
+			}
+			fields := settingsButtonFields(t, keyboard[0][0])
+			if fields["a"] != "wc" || fields["t"] != "x" || fields["c"] != fmt.Sprint(env.chat.Id) || len(fields) != 3 {
+				t.Errorf("Cancel carries %v, want wc, t=x and c", fields)
+			}
+			settingsEditWaitKept(t, env, owner)
+			if after := env.redis.TTL(settingsInputKey(owner.Id)); after != ttl {
+				t.Errorf("the wait TTL = %v after the refusal, want the unchanged %v", after, ttl)
+			}
+			if row, ok := settingsEditStored(t, env.chat.Id); ok {
+				t.Errorf("a greetings row was stored: %+v", row)
+			}
+		})
+	}
+
+	t.Run("a registered command passes through", func(t *testing.T) {
+		env := newSettingsEditEnv(t)
+		settingsDoorProbeCommand(env)
+		owner := env.newOwner(env.chat)
+		settingsEditSetWait(env, owner, settingsPageWelcome, settingsEditPartText)
+		before := settingsEditSentCount(env, owner)
+
+		sendPrivateMessage(env, owner, gotgbot.Message{Text: settingsDoorProbeText, Entities: entity(settingsDoorProbeText)})
+
+		if texts := settingsEditTextsSince(env, owner, before); len(texts) != 0 {
+			t.Errorf("the door answered a registered command: %q", texts)
+		}
+		settingsEditWaitKept(t, env, owner)
+	})
+
+	t.Run("a slash followed by a space is saved as the text", func(t *testing.T) {
+		env := newSettingsEditEnv(t)
+		owner := env.newOwner(env.chat)
+		settingsEditSetWait(env, owner, settingsPageWelcome, settingsEditPartText)
+
+		sendPrivateMessage(env, owner, gotgbot.Message{Text: "/ not a command"})
+
+		if row, ok := settingsEditStored(t, env.chat.Id); !ok || row.WelcomeSettings.WelcomeText != "/ not a command" {
+			t.Errorf("the welcome is %+v (row %v), want the typed text", row.WelcomeSettings, ok)
+		}
+		settingsEditWaitGone(t, env, owner)
+	})
+
+	t.Run("no wait and only a marker leave it alone", func(t *testing.T) {
+		env := newSettingsEditEnv(t)
+		stranger := gotgbot.User{Id: uniqueLinkOwnerID() + 8_300_000, FirstName: "Stranger"}
+		before := settingsEditSentCount(env, stranger)
+		sendPrivateMessage(env, stranger, gotgbot.Message{Text: unregistered, Entities: entity(unregistered)})
+		if texts := settingsEditTextsSince(env, stranger, before); len(texts) != 0 {
+			t.Errorf("the door answered a sender with no wait: %q", texts)
+		}
+
+		owner := env.newOwner(env.chat)
+		settingsEditSetWait(env, owner, settingsPageWelcome, settingsEditPartText)
+		env.redis.FastForward(settingsInputTTL + time.Second)
+		before = settingsEditSentCount(env, owner)
+		sendPrivateMessage(env, owner, gotgbot.Message{Text: unregistered, Entities: entity(unregistered)})
+		if texts := settingsEditTextsSince(env, owner, before); len(texts) != 0 {
+			t.Errorf("the door answered a slash text after the wait ended: %q", texts)
+		}
+		if !env.redis.Exists(settingsInputDoneKey(owner.Id)) {
+			t.Error("the slash text took the marker of the ended wait")
+		}
+	})
 }
 
 func TestSettingsEditWriteFailureReleases(t *testing.T) {

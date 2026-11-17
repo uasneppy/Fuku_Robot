@@ -16,6 +16,7 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
 	"github.com/uasneppy/fuku_robot/fuku/utils/error_handling"
 	"github.com/uasneppy/fuku_robot/fuku/utils/formatting"
+	"github.com/uasneppy/fuku_robot/fuku/utils/helpers"
 )
 
 // settingsInputGroup is the handler group of the typed-reply door. Group 0 holds the commands,
@@ -37,9 +38,11 @@ func settingsInputIsPrivate(msg *gotgbot.Message) bool {
 	return msg != nil && msg.Chat.Type == "private"
 }
 
-// settingsInputLooksLikeCommand reports whether the message is a command: a bot_command entity
-// at offset 0 of its text or caption, or a slash followed by a character that is not a space
-// (which gotgbot's own command handler also runs). A command is never taken as content.
+// settingsInputLooksLikeCommand reports whether the message looks like a command: a bot_command
+// entity at offset 0 of its text or caption, or a slash followed by a character that is not a
+// space (which gotgbot's own command handler also runs). Such a message is never taken as
+// content: a command this bot registers is passed on, any other is a slash text that a live wait
+// refuses (settingsInputRegisteredCommand).
 func settingsInputLooksLikeCommand(msg *gotgbot.Message) bool {
 	for _, entity := range msg.GetEntities() {
 		if entity.Type == "bot_command" && entity.Offset == 0 {
@@ -54,13 +57,21 @@ func settingsInputLooksLikeCommand(msg *gotgbot.Message) bool {
 	return !unicode.IsSpace(next)
 }
 
-// settingsInputCandidate reports whether the message may be the reply to a wait: a new private
-// message whose sender is the chat itself (not the bot and not a Telegram service identity),
-// that carries no rich message and is not a command.
+// settingsInputCandidate reports whether the message may be the reply to a wait by its sender and
+// shape: a new private message whose sender is the chat itself (not the bot and not a Telegram
+// service identity) and that carries no rich message. Commands are judged by settingsInput.
 func settingsInputCandidate(msg *gotgbot.Message) bool {
 	return msg != nil && msg.From != nil &&
 		msg.From.Id == msg.Chat.Id && !msg.From.IsBot && !staffServiceUserIDs[msg.From.Id] &&
-		msg.RichMessage == nil && !settingsInputLooksLikeCommand(msg)
+		msg.RichMessage == nil
+}
+
+// settingsInputRegisteredCommand reports whether the message is a command this bot registers: a
+// name the library's matcher would accept for this bot (an @name suffix must be this bot's
+// username) that helpers.IsBotCommand knows.
+func settingsInputRegisteredCommand(b *gotgbot.Bot, msg *gotgbot.Message) bool {
+	name, ok := botCommandName(b, msg)
+	return ok && helpers.IsBotCommand(name)
 }
 
 // settingsInputReply is one candidate message being judged against its sender's wait.
@@ -76,6 +87,9 @@ type settingsInputReply struct {
 	group  gotgbot.Chat
 	// list is the table of the list page whose wait is being run (nil for an editor page).
 	list *settingsListDef
+	// slash is set for a text or caption that looks like a command but is not one this bot
+	// registers: with a live wait it is refused after authority (refuseSlash).
+	slash bool
 }
 
 // settingsInput is the typed-reply door. It returns ext.ContinueGroups for a message that is
@@ -87,6 +101,15 @@ func (m moduleStruct) settingsInput(b *gotgbot.Bot, ctx *ext.Context) (ret error
 	if !settingsInputCandidate(msg) {
 		return ext.ContinueGroups
 	}
+	// A registered command is never content and costs no I/O; any other text that looks like a
+	// command is a slash text, refused only while a wait is live.
+	slash := false
+	if settingsInputLooksLikeCommand(msg) {
+		if settingsInputRegisteredCommand(b, msg) {
+			return ext.ContinueGroups
+		}
+		slash = true
+	}
 	wait, marker, err := settingsInputRead(context.Background(), msg.From.Id)
 	if err != nil {
 		if !errors.Is(err, errSettingsInputUnavailable) {
@@ -97,9 +120,10 @@ func (m moduleStruct) settingsInput(b *gotgbot.Bot, ctx *ext.Context) (ret error
 	if wait == nil && marker == "" {
 		return ext.ContinueGroups
 	}
-	r := &settingsInputReply{b: b, ctx: ctx, msg: msg, user: msg.From, tr: ctxTr(ctx), wait: wait}
+	r := &settingsInputReply{b: b, ctx: ctx, msg: msg, user: msg.From, tr: ctxTr(ctx), wait: wait, slash: slash}
 	if wait == nil {
-		if !r.waitEnded() {
+		// The wait-ended note is for ordinary replies: a slash text leaves the marker alone.
+		if slash || !r.waitEnded() {
 			return ext.ContinueGroups
 		}
 		return ext.EndGroups
@@ -196,6 +220,9 @@ func (r *settingsInputReply) run() {
 	}
 	r.def = def
 	if !r.authorize(def.EditRight) {
+		return
+	}
+	if r.refuseSlash() {
 		return
 	}
 	loadCtx, cancel := context.WithTimeout(context.Background(), settingsReadTimeout)
@@ -477,6 +504,17 @@ func (r *settingsInputReply) refuse(reason string) {
 	if err := settingsInputNoteRefusal(context.Background(), r.user.Id, r.wait.Nonce, id); err != nil {
 		log.Warnf("[Settings] noting the refusal reply of user %d failed: %v", r.user.Id, err)
 	}
+}
+
+// refuseSlash refuses a slash text after authority, exactly as a check refusal: the wait is kept,
+// not claimed and not extended, and the reply carries the page's or list's Cancel button. The text
+// is a fixed key, so nothing the person typed is echoed or logged. It reports whether it refused.
+func (r *settingsInputReply) refuseSlash() bool {
+	if !r.slash {
+		return false
+	}
+	r.refuse(r.text("settings_edit_refuse_slash"))
+	return true
 }
 
 // apply writes the checked message through the apply function of the part's command and

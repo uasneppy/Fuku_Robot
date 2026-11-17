@@ -3075,6 +3075,7 @@ settings_edit_refuse_button_url: "Tombol {n} punya tautan yang tidak bisa saya p
 settings_edit_refuse_buttons_limit: "Tombolnya terlalu banyak. Satu pesan bisa memiliki paling banyak 100 tombol, dan paling banyak 8 dalam satu baris."
 settings_edit_refuse_text_buttons: "Teks itu berisi baris tombol. Kirim teks tanpa baris tersebut, lalu atur tombol sebagai bagian tersendiri."
 settings_edit_refuse_access_lost: "Saya tidak bisa lagi memastikan bahwa Anda boleh mengubah pengaturan grup ini, jadi saya berhenti menunggu. Tidak ada yang berubah."
+settings_edit_refuse_slash: "Saya tidak bisa menyimpan teks yang diawali garis miring, karena terlihat seperti perintah. Ubah karakter pertama lalu kirim lagi."
 settings_edit_preview_header: "👁 Pratinjau, diisi dengan nama Anda dan judul grup."
 settings_edit_preview_header_rules: "👁 Pratinjau pesan aturan."
 settings_edit_preview_buttons_body: "👁 Ini tombolnya."

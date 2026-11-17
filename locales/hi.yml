@@ -2792,6 +2792,7 @@ settings_edit_refuse_button_url: "बटन {n} का लिंक मैं �
 settings_edit_refuse_buttons_limit: "बहुत ज़्यादा बटन हैं। एक संदेश में अधिकतम 100 बटन और एक पंक्ति में अधिकतम 8 हो सकते हैं।"
 settings_edit_refuse_text_buttons: "इस टेक्स्ट में बटन की लाइनें हैं। टेक्स्ट उनके बिना भेजें, और बटन अलग हिस्से के रूप में सेट करें।"
 settings_edit_refuse_access_lost: "मैं अब पुष्टि नहीं कर सकता कि आप इस ग्रुप की सेटिंग बदल सकते हैं, इसलिए मैंने इंतज़ार बंद कर दिया। कुछ नहीं बदला।"
+settings_edit_refuse_slash: "मैं स्लैश से शुरू होने वाला टेक्स्ट सेव नहीं कर सकता, क्योंकि वह कमांड जैसा दिखता है। पहला अक्षर बदलकर फिर से भेजें।"
 settings_edit_preview_header: "👁 प्रीव्यू, आपके नाम और ग्रुप के शीर्षक के साथ भरा हुआ।"
 settings_edit_preview_header_rules: "👁 नियम संदेश का प्रीव्यू।"
 settings_edit_preview_buttons_body: "👁 ये बटन हैं।"

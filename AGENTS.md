@@ -413,9 +413,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `handlers.NewMessage(settingsInputIsPrivate, ...)` at group `settingsInputGroup` = 1, after the group-0 commands and
   before every group that could end a private update) reads the owner's next private message after Set. A candidate is a
   new private message whose sender is the chat itself (not the bot, not a Telegram service identity), with no
-  `rich_message` and no command (`settingsInputLooksLikeCommand`: a `bot_command` entity at offset 0 or a slash followed
-  by a non-space, in the text or the caption); anything else, and a sender with neither a wait nor a marker, returns
-  `ext.ContinueGroups` with no reply, no write and no Telegram call, so ordinary private chat is untouched. The order is
+  `rich_message`. A message that looks like a command (`settingsInputLooksLikeCommand`: a `bot_command` entity at offset 0
+  or a slash followed by a non-space, in the text or the caption) is never content: a registered command (a name
+  `botCommandName` accepts for this bot and `helpers.IsBotCommand` knows) returns `ext.ContinueGroups` at once with no I/O;
+  any other (an unregistered word, or a command addressed to another bot) is a slash text, which with a live wait goes
+  through the album gate and the live checks below and, once authority holds (editor path and list path alike,
+  `refuseSlash`), is refused with `settings_edit_refuse_slash`, a blank line, `settings_edit_still_waiting` and the page's or
+  list's Cancel button, the wait kept, not claimed and not extended, nothing stored (quick task 261116-wh3); with no wait
+  or only a marker a slash text is untouched and the marker stays. Anything else that is not a candidate, and a sender with
+  neither a wait nor a marker, returns `ext.ContinueGroups` with no reply, no write and no Telegram call, so ordinary
+  private chat is untouched. The order is
   fixed, each step refusing before the next: `settingsInputRead` (an error or no Redis is not the door's); no wait but a
   marker is one plain `settings_edit_wait_ended_note` naming the part (the marker taken with `GETDEL`, so two deliveries
   answer once; nothing is saved); with a live wait, a message whose `media_group_id` is 1 to 20 digits passes the album gate
