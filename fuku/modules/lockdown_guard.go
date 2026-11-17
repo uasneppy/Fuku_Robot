@@ -46,6 +46,9 @@ type lockdownJoinInput struct {
 	BotID                 int64
 	// PerformerAnonymousAdmin is true when the performer is the anonymous-admin identity.
 	PerformerAnonymousAdmin bool
+	// PerformerIsBot is true when the performer is a bot account. Only a human creator or
+	// administrator lets a joiner in, so a bot administrator is no gate past a lockdown.
+	PerformerIsBot bool
 	// PerformerStatus is the performer's live status in the group, empty when it
 	// could not be read.
 	PerformerStatus string
@@ -53,9 +56,10 @@ type lockdownJoinInput struct {
 
 // decideLockdownJoin is the whole policy for a user who joined a locked group, as a
 // pure function. Like decideStaffAction it never lifts a restriction by accident:
-// only a user added by a live creator or administrator gets in. Everything else is
-// banned, including a self-join, a join the bot itself performed, a bot account and
-// any join whose performer's status could not be read. A join request is declined,
+// only a user added by a live human creator or administrator, or by the anonymous
+// admin, gets in. Everything else is banned, including a self-join, a join the bot
+// itself performed or another bot account performed, a bot account and any join whose
+// performer's status could not be read. A join request is declined,
 // and the bot's own join is ignored.
 func decideLockdownJoin(in lockdownJoinInput) lockdownJoinVerdict {
 	switch {
@@ -71,6 +75,8 @@ func decideLockdownJoin(in lockdownJoinInput) lockdownJoinVerdict {
 		return lockdownJoinBan
 	case in.PerformerAnonymousAdmin:
 		return lockdownJoinExempt
+	case in.PerformerIsBot:
+		return lockdownJoinBan
 	case in.PerformerStatus == gotgbot.ChatMemberStatusCreator ||
 		in.PerformerStatus == gotgbot.ChatMemberStatusAdministrator:
 		return lockdownJoinExempt
@@ -86,7 +92,8 @@ func lockdownNeedsPerformerLookup(in lockdownJoinInput) bool {
 		!in.MemberIsBot &&
 		in.PerformerID != in.MemberID &&
 		in.PerformerID != in.BotID &&
-		!in.PerformerAnonymousAdmin
+		!in.PerformerAnonymousAdmin &&
+		!in.PerformerIsBot
 }
 
 // lockdownMemberJoinInput builds the guard's input for the user of a chat_member join.
@@ -101,6 +108,7 @@ func lockdownMemberJoinInput(b *gotgbot.Bot, update *gotgbot.ChatMemberUpdated) 
 		MemberIsBot:             member.IsBot,
 		BotID:                   b.Id,
 		PerformerAnonymousAdmin: update.From.Id == lockdownGroupAnonymousBot,
+		PerformerIsBot:          update.From.IsBot,
 	}
 }
 
@@ -110,8 +118,10 @@ func lockdownMemberJoinInput(b *gotgbot.Bot, update *gotgbot.ChatMemberUpdated) 
 // to the group, or the Group Anonymous Bot); the ID is 0 when the message has no sender.
 // PerformerStatus is left empty for the caller to fill.
 func lockdownMessageJoinInputs(b *gotgbot.Bot, chat *gotgbot.Chat, msg *gotgbot.Message) (inputs []lockdownJoinInput, performerID int64) {
+	performerIsBot := false
 	if msg.From != nil {
 		performerID = msg.From.Id
+		performerIsBot = msg.From.IsBot
 	}
 	anonymous := (msg.SenderChat != nil && msg.SenderChat.Id == chat.Id) || performerID == lockdownGroupAnonymousBot
 
@@ -124,6 +134,7 @@ func lockdownMessageJoinInputs(b *gotgbot.Bot, chat *gotgbot.Chat, msg *gotgbot.
 			MemberIsBot:             member.IsBot,
 			BotID:                   b.Id,
 			PerformerAnonymousAdmin: anonymous,
+			PerformerIsBot:          performerIsBot,
 		}
 	}
 	return inputs, performerID

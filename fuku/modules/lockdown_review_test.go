@@ -160,6 +160,32 @@ func TestLockdownUnbanRereadsAfterWait(t *testing.T) {
 	}
 }
 
+// TestLockdownGuardBansWhenABotAdminAddsSomeone covers a join performed by another
+// bot that is an administrator of the group: only a human creator or administrator, or
+// the anonymous admin, lets a joiner in during a lockdown, so a bot account (which a
+// raider may control) is no gate past it. Both join paths are judged alike.
+func TestLockdownGuardBansWhenABotAdminAddsSomeone(t *testing.T) {
+	env := newLockdownEnv(t)
+	env.lockAsAdmin("raid")
+	helper := gotgbot.User{Id: uniqueLinkOwnerID(), FirstName: "HelperBot", IsBot: true}
+	env.fake.setMember(env.chat.Id, helper.Id, staffFakeMember{
+		Status:             gotgbot.ChatMemberStatusAdministrator,
+		CanRestrictMembers: true,
+	})
+
+	byUpdate := env.newJoiner("Guest")
+	env.join(byUpdate, helper, "")
+	if row := env.joinerRow(byUpdate.Id); row.State != models.JoinerStatePending {
+		t.Errorf("chat_member join: state = %q, want pending: a bot administrator does not exempt", row.State)
+	}
+
+	byMessage := env.newJoiner("Guest2")
+	env.serviceJoin(helper, nil, byMessage)
+	if row := env.joinerRow(byMessage.Id); row.State != models.JoinerStatePending {
+		t.Errorf("service join: state = %q, want pending: a bot administrator does not exempt", row.State)
+	}
+}
+
 // TestLockdownLiftChecksBansWhoseAnswerFailed covers a ban call that answered a 5xx
 // but may have taken effect: the row is left pending with an attempt counted, or ends
 // ban_failed after three. The lift must still look at those joiners live and remove

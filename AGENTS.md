@@ -3212,8 +3212,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   attempt follows. It acts only on a confirmed lockdown (`locked_at` set); an unconfirmed row is not a lockdown yet and
   every join path lets the joiner through. Its write to the `fuku:lockdown:recent:<chat>` tracker comes first, is best
   effort and its result is ignored. It never gates a ban on Redis, never uses the cached admin predicates (a
-  performer is judged by a live `getChatMember`, and `decideLockdownJoin` bans everything but a user a live creator or
-  administrator, or an anonymous admin, added), and never makes a Telegram write: the worker (`StartLockdownWorker`, a
+  performer is judged by a live `getChatMember`, and `decideLockdownJoin` bans everything but a user a live human creator
+  or administrator, or an anonymous admin, added), and never makes a Telegram write: the worker (`StartLockdownWorker`, a
   DB-driven loop on every replica that claims rows with conditional updates) makes every write and bans with
   `until_date` = the row's `ban_until`, 330 days after the join, the marker that tells the lockdown's own ban from a
   deliberate one. Before every ban `lockdownBanOne` reads the joiner's live `getChatMember` in the same paced unit: a
@@ -3229,8 +3229,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   Deduplication is the `(lockdown_id, user_id)` row alone and never Redis (it does not use `claimRecentJoinProcessing`):
   the first path to insert decides, a second delivery within 20 s (`lockdownJoinDedupeWindow`) of the row's last change
   is the same join, and an older finished row (`lockdownReclaimStates`) is a re-join, reclaimed by one conditional
-  update with a new `ban_until`. Only a user added by a live creator or administrator, or by an anonymous admin, is
-  exempt, and bots never are (D-07, D-08); a failed performer lookup bans. The chat_member path may turn a still
+  update with a new `ban_until`. Only a user added by a live creator or administrator who is not a bot account
+  (`PerformerIsBot`, from the update's or the message's `from`; another bot administrator is no gate past a lockdown and
+  costs no performer lookup), or by an anonymous admin, is exempt, and bots never are (D-07, D-08); a failed performer
+  lookup bans. The raid join counter (`raidJoinCounts`) keeps its own rule and does not read `PerformerIsBot`. The chat_member path may turn a still
   pending row exempt, because that update shows an admin added or approved the user; once the worker claimed the row
   the ban stands until the lift (D-24). The service message's `NewChatMembers` is filtered in place to the users let in
   and the bot itself, so greetings welcome only them, and the update ends when nobody is left. The join message ID is
