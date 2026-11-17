@@ -2126,6 +2126,10 @@ func (moduleStruct) captchaRefreshCallback(bot *gotgbot.Bot, ctx *ext.Context) e
 		}
 	}
 
+	// The join's timer now sees a changed refresh count and exits as stale, so the refreshed
+	// attempt gets its own timer; its expiry is unchanged, so it fires when the attempt ends.
+	scheduleCaptchaTimeout(bot, updated)
+
 	if m := cache.GetMarshal(); m != nil {
 		if err := m.Set(cache.Context, cooldownKey, true, store.WithExpiration(time.Duration(captchaRefreshCooldownS)*time.Second)); err != nil {
 			log.Errorf("[CaptchaRefresh] Failed to set refresh cooldown for chat %d user %d: %v", chat.Id, targetUserID, err)
