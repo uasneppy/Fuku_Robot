@@ -1071,6 +1071,25 @@ func TestMemberReqWarnRecovery(t *testing.T) {
 		}
 	})
 
+	t.Run("the note outlives a reclaim that comes hours later (Q6)", func(t *testing.T) {
+		mreqShortenStale(t, 50*time.Millisecond)
+		env := newMemberReqEnv(t)
+		env.mreqRules(map[memberreq.Rule]int{memberreq.RuleLastName: models.RequirementActionWarn})
+		member := env.mreqMember("Alex", "", "alex")
+		failingMark(t, 3)
+
+		env.mreqEnforce(env.mreqCase(member))
+		time.Sleep(80 * time.Millisecond)
+		// The member's next violating message can come hours after the failed mark.
+		env.redis.FastForward(6 * time.Hour)
+		if got := env.mreqEnforce(env.mreqCase(member)); got.Outcome != memberReqHeld {
+			t.Fatalf("reclaim = %+v, want Held (the recorded warn is adopted)", got)
+		}
+		if row := env.mreqWarnRow(member.Id); row == nil || row.NumWarns != 1 {
+			t.Errorf("warns = %+v, want still one", row)
+		}
+	})
+
 	t.Run("the note is dropped once the hold is punished and never matches another hold", func(t *testing.T) {
 		mreqShortenStale(t, 50*time.Millisecond)
 		env := newMemberReqEnv(t)

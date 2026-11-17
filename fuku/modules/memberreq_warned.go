@@ -22,8 +22,10 @@ import (
 // Redis, or on a Redis error, the key is neither written nor found, and the reclaim warns again.
 
 // memberReqWarnedGrace is how long the marker outlives memberreq.StaleClaim, so it is still
-// there when the reclaim runs.
-const memberReqWarnedGrace = 10 * time.Minute
+// there when the reclaim runs. The reclaim happens at the member's next violating message, which
+// can come days after the failed mark, so the note lives a week (Q6); it names one hold ID and
+// costs one small key per such failure.
+const memberReqWarnedGrace = 7 * 24 * time.Hour
 
 // memberReqWarnedKey is the marker of a warn recorded for the member in the chat. Its value is
 // the ID of the hold the warn belongs to, so a marker left by an earlier episode never matches

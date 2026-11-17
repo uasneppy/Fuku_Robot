@@ -2275,7 +2275,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   unlike the lookups above, it ignores `mode.Fresh` and `mode.Classify` (the AI row answers from the cache whatever the mode).
 - `fuku:memberreq:warned:<chat>:<user>` is the recorded-warn note of the member requirements executor
   (`memberreq_warned.go`, WR-01): the value is the decimal ID of the hold whose warn was just stored, `SET EX` for
-  `memberreq.StaleClaim` plus 10 minutes (`memberReqWarnedGrace`), written inside the warn lock before the hold is marked
+  `memberreq.StaleClaim` plus 7 days (`memberReqWarnedGrace`, because the reclaim comes at the member's next violating
+  message, which can be days later, Q6), written inside the warn lock before the hold is marked
   punished and deleted once the mark landed, so it survives only when the mark failed three times (or the process stopped
   between the two). `memberReqAdoptRecordedWarn` reads it when a stale pending Warn hold is reclaimed for another Warn and
   compares the value with the hold's ID, so a note an earlier episode left never matches a later hold. Redis only and best
@@ -2683,7 +2684,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   Marking a hold punished (`memberReqMarkPunished`) is tried 3 times (`memberReqMarkAttempts`, `memberReqMarkRetryWait`
   apart, one detached 5 s record context, the write behind the `memberReqMarkHold` seam). A warn whose mark still fails
   must never be punished twice (WR-01): `afterRecord` first writes `fuku:memberreq:warned:<chat>:<user>` (value the hold's ID,
-  `StaleClaim` plus 10 minutes, best effort and Redis only: no Redis or a Redis error writes and finds nothing and the
+  `StaleClaim` plus 7 days, best effort and Redis only: no Redis or a Redis error writes and finds nothing and the
   reclaim then warns again, accepted) and drops it once the mark landed; the reclaim of a stale pending hold that was a Warn
   with a Warn action now (`memberReqAdoptRecordedWarn`, after the claim was won) finds the note naming that hold, marks the
   hold punished (a failure leaves it pending and the next reclaim adopts it again), warns and announces nothing and returns
