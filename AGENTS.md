@@ -3312,7 +3312,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   and a rich message, forwards and replies included; an album counts once. A command the bot handles does not count (D-07), and the dispatcher is what says
   which: a handled command returns `ext.EndGroups`, which ends every later group. So the `-4` watcher counts every item
   except a slash-prefixed text (`raidFloodIsSlashText`: a `bot_command` entity at offset 0, or a text starting with `/`
-  and a non-space character, which gotgbot's command handler also runs), and the group `12` watcher counts only the
+  and a non-space character, which gotgbot's command handler also runs; a media message's caption and a rich message's
+  first paragraph are judged the same way, because the handler reads them as the command text), and the group `12` watcher counts only the
   slash-prefixed texts that reach it, the ones no command took: `/word` with no handler, `/////`, and a command addressed
   to another bot (`/start@otherbot`). Never keep a second list of command names for this. Group `12` must stay after every
   other group, so every new handler group needs a number below it. A slash text that a handler ends is not counted, and

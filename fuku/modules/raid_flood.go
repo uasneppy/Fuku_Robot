@@ -149,7 +149,7 @@ func raidFloodItemKey(msg *gotgbot.Message) (key string, slash bool, ok bool) {
 	if !media && !text {
 		return "", false, false
 	}
-	slash = !media && raidFloodIsSlashText(msg)
+	slash = raidFloodIsSlashText(msg)
 
 	if msg.MediaGroupId != "" {
 		return "g:" + msg.MediaGroupId, slash, true
@@ -157,18 +157,42 @@ func raidFloodItemKey(msg *gotgbot.Message) (key string, slash bool, ok bool) {
 	return "m:" + strconv.FormatInt(msg.MessageId, 10), slash, true
 }
 
-// raidFloodIsSlashText reports whether the text message looks like a bot command the way
-// the dispatcher sees one: its first entity is a bot_command at offset 0, or it begins
-// with "/" and a non-space character. gotgbot's command handler accepts the second form
-// too (a text with no entity at offset 0). Looking like a command is not being one the
-// bot handles: that is only known once the dispatcher has run the handlers.
+// raidFloodIsSlashText reports whether the message looks like a bot command the way the
+// dispatcher sees one. gotgbot's command handler reads the caption of a media message as
+// its text (GetText, GetEntities) and the first paragraph of a rich message, so all three
+// are judged: the first entity is a bot_command at offset 0, or the text begins with "/"
+// and a non-space character (gotgbot accepts a text with no entity at offset 0 too).
+// Looking like a command is not being one the bot handles: that is only known once the
+// dispatcher has run the handlers.
 func raidFloodIsSlashText(msg *gotgbot.Message) bool {
-	for _, entity := range msg.Entities {
+	if msg.RichMessage != nil {
+		return raidFloodRichIsSlash(msg.RichMessage)
+	}
+	for _, entity := range msg.GetEntities() {
 		if entity.Offset == 0 && entity.Type == "bot_command" {
 			return true
 		}
 	}
-	rest, found := strings.CutPrefix(msg.Text, "/")
+	return raidFloodStartsWithSlash(msg.GetText())
+}
+
+// raidFloodRichIsSlash mirrors the command handler's reading of a rich message: only a
+// first block that is a paragraph can carry a command, judged on its content with the
+// leading white space trimmed.
+func raidFloodRichIsSlash(rich *gotgbot.RichMessage) bool {
+	if len(rich.Blocks) == 0 {
+		return false
+	}
+	paragraph, ok := rich.Blocks[0].(gotgbot.RichBlockParagraph)
+	if !ok {
+		return false
+	}
+	return raidFloodStartsWithSlash(strings.TrimLeft(gotgbot.RichBlockContent(paragraph), " \n\t"))
+}
+
+// raidFloodStartsWithSlash is "/" followed by a non-space character.
+func raidFloodStartsWithSlash(text string) bool {
+	rest, found := strings.CutPrefix(text, "/")
 	if !found || rest == "" {
 		return false
 	}
