@@ -2,6 +2,7 @@ package modules
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"html"
@@ -28,6 +29,7 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/utils/extraction"
 	"github.com/uasneppy/fuku_robot/fuku/utils/formatting"
 	"github.com/uasneppy/fuku_robot/fuku/utils/helpers"
+	"github.com/uasneppy/fuku_robot/fuku/utils/ratelimit"
 	"github.com/uasneppy/fuku_robot/fuku/utils/tracing"
 )
 
@@ -736,12 +738,16 @@ func (moduleStruct) applyFban(b *gotgbot.Bot, ctx *ext.Context, ban bool) error 
 				formatting.MentionHtml(from.Id, from.FirstName),
 				html.EscapeString(reason),
 			))
-			go applyActiveFban(b, fed.FedID, targetID)
+			go runFedFanout(b, fed, *from, "FBAN", targetID, applyActiveFban)
 		}
 		return ext.EndGroups
 	}
 	if err := federations.Unfban(fed.FedID, targetID); err != nil {
-		text, _ := tr.GetString("feds_unfban_not_banned")
+		key := "common_settings_save_failed"
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			key = "feds_unfban_not_banned"
+		}
+		text, _ := tr.GetString(key)
 		replyHTML(b, msg, text)
 		return ext.EndGroups
 	}
@@ -755,8 +761,44 @@ func (moduleStruct) applyFban(b *gotgbot.Bot, ctx *ext.Context, ban bool) error 
 		targetID,
 		formatting.MentionHtml(from.Id, from.FirstName),
 	))
-	go applyActiveUnfban(b, fed.FedID, targetID)
+	go runFedFanout(b, fed, *from, "UNFBAN", targetID, applyActiveUnfban)
 	return ext.EndGroups
+}
+
+// runFedFanout runs an fban or unfban across the federation's chats and, when some
+// of them failed, follows the federation notice with "N of M groups failed" to the
+// same destinations, so a partial failure is reported and never dropped.
+func runFedFanout(b *gotgbot.Bot, fed *models.Federation, actor gotgbot.User, label string, userID int64,
+	apply func(*gotgbot.Bot, string, int64) (failed, total int)) {
+	defer error_handling.RecoverFromPanic("runFedFanout", "Federations")
+	failed, total := apply(b, fed.FedID, userID)
+	if failed == 0 {
+		return
+	}
+	notifyFedAction(b, fed, &actor, fmt.Sprintf("%s <code>%d</code>: %d of %d groups failed", label, userID, failed, total))
+}
+
+// fedPacer paces the federation fan-out's Telegram calls fleet-wide, with its own
+// keys so an /fban across many groups never spends the staff, lockdown, member
+// requirements or deletion budgets, and a 429 in one group slows the rest.
+var fedPacer = ratelimit.NewTelegramPacer(ratelimit.TelegramPacerOptions{
+	NextKey:    "fuku:fed:pace:next",
+	BlockKey:   "fuku:fed:pace:block",
+	Interval:   100 * time.Millisecond,
+	MaxRetries: 3,
+	MaxWait:    60 * time.Second,
+})
+
+// fedCallTimeout bounds one Telegram request of the federation fan-out.
+const fedCallTimeout = 10 * time.Second
+
+// fedPaced runs one fan-out call through fedPacer, bounded by fedCallTimeout.
+func fedPaced(call func(context.Context) error) error {
+	return fedPacer.Do(context.Background(), func(callCtx context.Context) error {
+		bounded, cancel := context.WithTimeout(callCtx, fedCallTimeout)
+		defer cancel()
+		return call(bounded)
+	})
 }
 
 // fbanChanged reports whether an /fban changed anything worth announcing: a new ban,
@@ -768,17 +810,28 @@ func fbanChanged(created bool, previous *models.FederationBan, reason string) bo
 	return strings.TrimSpace(previous.Reason) != strings.TrimSpace(reason)
 }
 
-func applyActiveFban(b *gotgbot.Bot, fedID string, userID int64) {
+// applyActiveFban bans the user in every chat of the federation the bot has seen
+// them in, each call through fedPacer, and returns how many of those chats failed
+// and how many there were. A failure is logged at Warn by IDs.
+func applyActiveFban(b *gotgbot.Bot, fedID string, userID int64) (failed, total int) {
 	defer error_handling.RecoverFromPanic("applyActiveFban", "Federations")
 	chatIDs, err := federations.ListFedChatIDs(fedID)
 	if err != nil {
-		return
+		log.Warnf("[Federations] active fban: listing the chats of a federation failed for user %d: %v", userID, err)
+		return 0, 0
 	}
 	for _, chatID := range federations.ChatsContainingUser(userID, chatIDs) {
-		if _, err := b.BanChatMember(chatID, userID, nil); err != nil {
-			log.Debugf("[Federations] active fban chat %d user %d: %v", chatID, userID, err)
+		total++
+		err := fedPaced(func(ctx context.Context) error {
+			_, err := b.BanChatMemberWithContext(ctx, chatID, userID, nil)
+			return err
+		})
+		if err != nil {
+			failed++
+			log.Warnf("[Federations] active fban chat %d user %d: %v", chatID, userID, err)
 		}
 	}
+	return failed, total
 }
 
 // applyActiveUnfban mirrors applyActiveFban after an /unfban: it unbans the user, with
@@ -787,20 +840,28 @@ func applyActiveFban(b *gotgbot.Bot, fedID string, userID int64) {
 // bans the user, because the passive check would ban them again at their next message.
 // Accepted: only_if_banned cannot tell a ban a chat admin placed separately apart, so
 // that one is lifted too.
-func applyActiveUnfban(b *gotgbot.Bot, fedID string, userID int64) {
+func applyActiveUnfban(b *gotgbot.Bot, fedID string, userID int64) (failed, total int) {
 	defer error_handling.RecoverFromPanic("applyActiveUnfban", "Federations")
 	if ban, _ := federations.FindBanInFedTree(fedID, userID); ban != nil {
-		return
+		return 0, 0
 	}
 	chatIDs, err := federations.ListFedChatIDs(fedID)
 	if err != nil {
-		return
+		log.Warnf("[Federations] active unfban: listing the chats of a federation failed for user %d: %v", userID, err)
+		return 0, 0
 	}
 	for _, chatID := range federations.ChatsContainingUser(userID, chatIDs) {
-		if _, err := b.UnbanChatMember(chatID, userID, &gotgbot.UnbanChatMemberOpts{OnlyIfBanned: true}); err != nil {
-			log.Debugf("[Federations] active unfban chat %d user %d: %v", chatID, userID, err)
+		total++
+		err := fedPaced(func(ctx context.Context) error {
+			_, err := b.UnbanChatMemberWithContext(ctx, chatID, userID, &gotgbot.UnbanChatMemberOpts{OnlyIfBanned: true})
+			return err
+		})
+		if err != nil {
+			failed++
+			log.Warnf("[Federations] active unfban chat %d user %d: %v", chatID, userID, err)
 		}
 	}
+	return failed, total
 }
 
 func notifyFedAction(b *gotgbot.Bot, fed *models.Federation, actor *gotgbot.User, htmlText string) {

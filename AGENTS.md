@@ -1676,7 +1676,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   evicts it on this replica only; list freshness-critical keys in `skipLocal` (`fuku/db/cache/local.go`). Tests that
   write rows directly must call `cache.ResetLocalForTest()` or `DeleteCache` before reading through the cache.
 - Two packages are named `cache`; the loader and generation guards are in `fuku/db/cache`, not `fuku/utils/cache`.
-- Operational Redis keys (`fuku:anonAdmin:*`, `fuku:staff:*`, `fuku:lockdown:*`, `fuku:raid:*`, `fuku:memberreq:*`) sit outside the
+- Operational Redis keys (`fuku:anonAdmin:*`, `fuku:staff:*`, `fuku:lockdown:*`, `fuku:raid:*`, `fuku:memberreq:*`, `fuku:fed:*`) sit outside the
   `fuku:cache:` prefix; `CLEAR_CACHE_ON_STARTUP` does not clear them. `fuku:antiraid:*` is retired: nothing reads or
   writes it, and `sweepRetiredAntiRaidKeys` removes what the old raid mode left, once per process at startup.
 - `fuku:settings:sweep:lock` (new family `fuku:settings:*`, also outside the `fuku:cache:` prefix, so
@@ -2357,6 +2357,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - `fuku:delete:pace:next` and `fuku:delete:pace:block` are the fleet-wide Telegram pacing of the deletion code
   (`deletionPaced`, `deletionPacer`: 100 ms, 3 retries, 60 s): the staff pacer's slot-plus-block design with its own keys, so
   deletions, member requirements, lockdown and staff fan-outs each keep their own budget (`TestDeletionPacerIsIndependent`).
+- `fuku:fed:pace:next` and `fuku:fed:pace:block` are the fleet-wide Telegram pacing of the federation fan-out
+  (`fedPaced`, `fedPacer`: 100 ms, 3 retries, 60 s, each call bounded by `fedCallTimeout`, 10 s): every ban of
+  `applyActiveFban` and every unban of `applyActiveUnfban` goes through it, with its own keys so an `/fban` across many
+  groups spends no other budget. A failed group is logged at Warn by chat and user ID, and `runFedFanout` follows the
+  federation notice (owner and log chat, as `notifyFedAction` sends it) with `<FBAN|UNFBAN> <id>: N of M groups failed`
+  whenever any group failed. A database error removing an fban answers `common_settings_save_failed`, and only a missing
+  ban answers `feds_unfban_not_banned`. The fan-out is a recover-protected goroutine with no shutdown drain (a restart cuts
+  it off, accepted). They sit outside the `fuku:cache:` prefix, so `CLEAR_CACHE_ON_STARTUP` keeps them.
 - `fuku:delete:norights:<chat>` is the 10 minute negative latch of a chat the bot cannot act in (`deletionLatchKey`,
   `deletionLatched`, `deletionSetLatch`, `deletionLatchTTL`), outside the `fuku:cache:` prefix so `CLEAR_CACHE_ON_STARTUP`
   keeps it. Its value is the scope: `gone` (the bot is not in the chat, was kicked, or the chat is gone or was upgraded: stops
