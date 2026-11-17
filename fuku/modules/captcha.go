@@ -196,6 +196,7 @@ func startCaptchaLifecycleTask(task func(context.Context)) bool {
 
 	go func() {
 		defer captchaLifecycleWG.Done()
+		defer error_handling.RecoverFromPanic("captchaLifecycleTask", "captcha")
 		task(ctx)
 	}()
 	return true

@@ -3,6 +3,7 @@
 package modules
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -274,6 +275,26 @@ func TestRestoreCaptchaPermissionsIgnoresScheduleDeleteError(t *testing.T) {
 	}
 	if got := unmutesOf(t, env.client, env.userID); got != 1 {
 		t.Fatalf("unmutes = %d, want 1", got)
+	}
+}
+
+// TestCaptchaLifecycleTaskRecoversFromPanic pins C8: a lifecycle task that panics is recovered
+// and still releases the lifecycle's wait group, so the process survives and a shutdown drain
+// is not left waiting.
+func TestCaptchaLifecycleTaskRecoversFromPanic(t *testing.T) {
+	withCaptchaLifecycleForTest(t)
+	if !startCaptchaLifecycleTask(func(context.Context) { panic("lifecycle task panic") }) {
+		t.Fatal("startCaptchaLifecycleTask() = false, want the task started")
+	}
+	done := make(chan struct{})
+	go func() {
+		captchaLifecycleWG.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the panicking task never released the lifecycle wait group")
 	}
 }
 
