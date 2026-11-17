@@ -884,24 +884,29 @@ func (moduleStruct) unrestrictButtonHandler(b *gotgbot.Bot, ctx *ext.Context) er
 		helpText = fmt.Sprintf(temp, formatting.MentionHtml(user.Id, user.FirstName))
 	}
 
+	// The card's own text goes back in as HTML, so it is rebuilt from its entities
+	// (OriginalHTML escapes the text and keeps the mentions), never inserted raw.
 	updatedText := ""
 	if ctx.EffectiveMessage != nil {
-		updatedText = ctx.EffectiveMessage.Text
+		updatedText = ctx.EffectiveMessage.OriginalHTML()
 	}
 	if updatedText != "" {
 		updatedText = "<s>" + updatedText + "</s>\n\n"
 	}
 
-	_, _, err = msg.EditText(b, &gotgbot.EditMessageTextOpts{Text: updatedText + helpText, ParseMode: formatting.HTML})
-	if err != nil {
-		log.Error(err)
-		return err
+	_, _, editErr := msg.EditText(b, &gotgbot.EditMessageTextOpts{Text: updatedText + helpText, ParseMode: formatting.HTML})
+	if editErr != nil {
+		log.Error(editErr)
 	}
 
+	// The press is answered whether or not the edit landed: the action already took effect.
 	_, err = query.Answer(b, nil)
 	if err != nil {
 		log.Error(err)
 		return err
+	}
+	if editErr != nil {
+		return editErr
 	}
 
 	return ext.EndGroups
