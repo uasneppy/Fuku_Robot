@@ -141,3 +141,21 @@ func TestBackupHelpExportIsAdminCommand(t *testing.T) {
 		}
 	}
 }
+
+// TestCaptchaMutedActionStatesTheDuration proves the captcha failure mute, which lasts 24 hours,
+// is no longer described as permanent in any locale.
+func TestCaptchaMutedActionStatesTheDuration(t *testing.T) {
+	permanent := map[string]string{
+		"en": "permanent", "es": "permanente", "fr": "définitiv", "hi": "स्थायी",
+		"id": "permanen", "pt": "permanente", "ru": "навсегда", "uk": "назавжди",
+	}
+	for _, code := range staffLocales {
+		value, _ := loadStaffLocale(t, code)["captcha_action_muted"].(string)
+		if !strings.Contains(value, "24") {
+			t.Errorf("%s: captcha_action_muted does not say 24 hours: %q", code, value)
+		}
+		if strings.Contains(strings.ToLower(value), permanent[code]) {
+			t.Errorf("%s: captcha_action_muted still says permanent: %q", code, value)
+		}
+	}
+}

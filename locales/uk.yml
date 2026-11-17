@@ -550,7 +550,7 @@ captcha_wrong_answer_final: "❌ Хибна відповідь. Результа
 captcha_wrong_answer_remaining: "❌ Хибна відповідь. Залишилося спроб: %d."
 captcha_action_kicked: "вигнання"
 captcha_action_banned: "бан"
-captcha_action_muted: "мут назавжди"
+captcha_action_muted: "мут на 24 години"
 captcha_refresh_success: "🔄 Нову капчу надіслано."
 captcha_timeout_failure_kicked: "❌ %s: перевірку капчею не пройдено. Користувача вигнано."
 captcha_timeout_failure_banned: "❌ %s: перевірку капчею не пройдено. Користувача забанено."
