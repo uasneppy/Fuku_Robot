@@ -887,7 +887,7 @@ func (m moduleStruct) notesWatcher(b *gotgbot.Bot, ctx *ext.Context) error {
 	var replyMsgId int64
 	var err error
 
-	if reply := msg.ReplyToMessage; reply != nil {
+	if reply := extraction.ReplyTarget(msg); reply != nil {
 		replyMsgId = reply.MessageId
 	} else {
 		replyMsgId = msg.MessageId
@@ -912,7 +912,7 @@ func (m moduleStruct) notesWatcher(b *gotgbot.Bot, ctx *ext.Context) error {
 			log.Error(err)
 			return err
 		}
-		return ext.EndGroups
+		return nil
 	}
 
 	if noteData.AdminOnly {
@@ -924,16 +924,18 @@ func (m moduleStruct) notesWatcher(b *gotgbot.Bot, ctx *ext.Context) error {
 				log.Error(err)
 				return err
 			}
-			return ext.EndGroups
+			return nil
 		}
 	}
 
 	if noformatNote {
 		err = m.sendNoFormatNote(b, ctx, replyMsgId, noteData)
 		if err != nil {
-			if !errors.Is(err, ext.EndGroups) && !errors.Is(err, ext.ContinueGroups) {
-				log.Error(err)
+			if errors.Is(err, ext.EndGroups) || errors.Is(err, ext.ContinueGroups) {
+				// The refusal was answered; the message still goes on to the later groups.
+				return nil
 			}
+			log.Error(err)
 			return err
 		}
 	} else {
@@ -977,7 +979,9 @@ func (m moduleStruct) notesWatcher(b *gotgbot.Bot, ctx *ext.Context) error {
 		return err
 	}
 
-	return ext.EndGroups
+	// nil leaves group 0 but lets the later groups (locks, blacklists, antiflood, the log channel) see
+	// the message: ext.EndGroups would let a "#note" prefix carry anything past them.
+	return nil
 }
 
 func (m moduleStruct) getNotes(b *gotgbot.Bot, ctx *ext.Context) error {
