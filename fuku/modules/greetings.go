@@ -543,7 +543,7 @@ func (moduleStruct) displayGreeting(bot *gotgbot.Bot, ctx *ext.Context, config g
 		}
 
 	} else if len(args) >= 1 {
-		if !chat_status.RequireUserAdmin(bot, ctx, nil, user.Id) {
+		if !chat_status.RequireUserAdmin(bot, ctx, chat, user.Id) {
 			chat_status.NewPermissionResponder(bot).Respond(ctx, "chat_status_user_admin_cmd_error", "chat_status_user_admin_button_error", chat_status.WithReplyFallback())
 			return ext.EndGroups
 		}

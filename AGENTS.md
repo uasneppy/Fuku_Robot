@@ -1502,6 +1502,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `helpers.CheckFunc` replies and is valid only inside `WrapCommand`.
 - `IsUserAdmin` returns false for channel and non-positive IDs. Never pass a chat ID as a user ID.
 - `*ForUpdate` predicates are memoised per update. Watchers only, never after a state change in the same update.
+- PM connections: a command that ran `IsUserConnected` passes the connected chat to every later admin predicate
+  (`RequireUserAdmin(b, ctx, chat, ...)`, never the nil form), because `RequireUserAdmin` and the other `chat_status`
+  predicates resolve a nil chat from `ctx.Update`, not from `ctx.EffectiveChat`, so in the bot's private chat the nil
+  form asks about the private chat and refuses a real admin (`/lock`, `/unlock`, `/setwarnmode`, `/setwarnlimit`,
+  `/welcome on|off`, `/notes`, `/get <note> noformat`). A test of this uses a real user ID listed as an administrator of
+  the connected group, never 777000 or 1087968824, which `tgAdminList` makes an admin of every chat
+  (`TestConnectedAdminCommandsInPrivateChat`).
 - `/lockdown` and `/unlockdown` authority is `requireLockdownAuthority`, a live `getChatMember` of the sender (creator,
   or administrator with `can_restrict_members`), never the admin cache, the Telegram service IDs or a chat's AnonAdmin
   setting; a failed lookup refuses. Lockdowns need a supergroup, and `/lockdown` is refused, with nothing recorded,
