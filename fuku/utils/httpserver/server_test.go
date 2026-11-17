@@ -15,12 +15,13 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers/filters/message"
-	gocache "github.com/eko/gocache/lib/v4/cache"
-	"github.com/eko/gocache/lib/v4/store"
+	"github.com/alicebob/miniredis/v2"
+	"github.com/redis/go-redis/v9"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
+	"github.com/uasneppy/fuku_robot/fuku/config"
 	"github.com/uasneppy/fuku_robot/fuku/db"
 	"github.com/uasneppy/fuku_robot/fuku/utils/cache"
 	"github.com/uasneppy/fuku_robot/fuku/utils/captchaweb"
@@ -163,94 +164,6 @@ func setupHTTPServerDB(t *testing.T) {
 	}
 }
 
-type httpServerMemoryStore struct {
-	mu   sync.RWMutex
-	data map[string]any
-	ttls map[string]time.Time
-}
-
-func newHTTPServerMemoryStore() *httpServerMemoryStore {
-	return &httpServerMemoryStore{
-		data: make(map[string]any),
-		ttls: make(map[string]time.Time),
-	}
-}
-
-func (m *httpServerMemoryStore) Get(_ context.Context, key any) (any, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	k := fmt.Sprint(key)
-	if expiry, ok := m.ttls[k]; ok && time.Now().After(expiry) {
-		return nil, fmt.Errorf("key expired")
-	}
-	value, ok := m.data[k]
-	if !ok {
-		return nil, fmt.Errorf("key not found")
-	}
-	return value, nil
-}
-
-func (m *httpServerMemoryStore) GetWithTTL(_ context.Context, key any) (any, time.Duration, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	k := fmt.Sprint(key)
-	value, ok := m.data[k]
-	if !ok {
-		return nil, 0, fmt.Errorf("key not found")
-	}
-	if expiry, ok := m.ttls[k]; ok {
-		ttl := time.Until(expiry)
-		if ttl < 0 {
-			return nil, 0, fmt.Errorf("key expired")
-		}
-		return value, ttl, nil
-	}
-	return value, 0, nil
-}
-
-func (m *httpServerMemoryStore) Set(_ context.Context, key, value any, options ...store.Option) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	k := fmt.Sprint(key)
-	m.data[k] = value
-	if expiration := store.ApplyOptions(options...).Expiration; expiration > 0 {
-		m.ttls[k] = time.Now().Add(expiration)
-	} else {
-		delete(m.ttls, k)
-	}
-	return nil
-}
-
-func (m *httpServerMemoryStore) Delete(_ context.Context, key any) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	k := fmt.Sprint(key)
-	delete(m.data, k)
-	delete(m.ttls, k)
-	return nil
-}
-
-func (m *httpServerMemoryStore) Invalidate(context.Context, ...store.InvalidateOption) error {
-	return nil
-}
-
-func (m *httpServerMemoryStore) Clear(context.Context) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.data = make(map[string]any)
-	m.ttls = make(map[string]time.Time)
-	return nil
-}
-
-func (m *httpServerMemoryStore) GetType() string {
-	return "httpserver-memory-test"
-}
-
 func TestNewServer(t *testing.T) {
 	t.Parallel()
 
@@ -278,20 +191,62 @@ func TestCheckDatabaseWithHealthyConnection(t *testing.T) {
 	}
 }
 
-func TestCheckRedisWithNilAndHealthyManagers(t *testing.T) {
+// TestCheckRedisPings holds I8: the health check asks Redis with PING and writes no key, so two
+// replicas probing at once never touch a shared key; with no Redis client it reports false.
+func TestCheckRedisPings(t *testing.T) {
 	prevMarshal, prevManager, prevClient := cache.GetCacheState()
-	cache.SetCacheState(nil, nil, prevClient)
-	t.Cleanup(func() {
-		cache.SetCacheState(prevMarshal, prevManager, prevClient)
-	})
+	t.Cleanup(func() { cache.SetCacheState(prevMarshal, prevManager, prevClient) })
 
+	cache.SetCacheState(prevMarshal, prevManager, nil)
 	if checkRedis() {
-		t.Fatal("checkRedis() = true, want false with nil manager")
+		t.Fatal("checkRedis() = true, want false with no Redis client")
 	}
 
-	cache.SetCacheState(cache.GetMarshal(), gocache.New[any](newHTTPServerMemoryStore()), prevClient)
+	server := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: server.Addr()})
+	t.Cleanup(func() { _ = client.Close() })
+	cache.SetCacheState(prevMarshal, prevManager, client)
 	if !checkRedis() {
-		t.Fatal("checkRedis() = false, want true with memory manager")
+		t.Fatal("checkRedis() = false, want true with a live Redis")
+	}
+	if keys := server.Keys(); len(keys) != 0 {
+		t.Fatalf("the health check wrote keys %v, want none", keys)
+	}
+
+	server.Close()
+	if checkRedis() {
+		t.Fatal("checkRedis() = true, want false once Redis is down")
+	}
+}
+
+// TestHealthWithCacheDisabledAndNoRedis holds I8: with DISABLE_CACHE=true the bot runs without
+// Redis, so /health is not unhealthy for want of it; with the cache on it is.
+func TestHealthWithCacheDisabledAndNoRedis(t *testing.T) {
+	setupHTTPServerDB(t)
+	prevMarshal, prevManager, prevClient := cache.GetCacheState()
+	t.Cleanup(func() { cache.SetCacheState(prevMarshal, prevManager, prevClient) })
+	cache.SetCacheState(prevMarshal, prevManager, nil)
+	prevConfig := config.AppConfig
+	t.Cleanup(func() { config.AppConfig = prevConfig })
+
+	for _, tc := range []struct {
+		disable bool
+		want    int
+	}{{true, http.StatusOK}, {false, http.StatusServiceUnavailable}} {
+		cfg := config.Config{}
+		if prevConfig != nil {
+			cfg = *prevConfig
+		}
+		cfg.DisableCache = tc.disable
+		config.AppConfig = &cfg
+
+		s := New(8080, time.Now())
+		s.RegisterHealth()
+		rr := httptest.NewRecorder()
+		s.mux.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/health", nil))
+		if rr.Code != tc.want {
+			t.Errorf("DISABLE_CACHE=%v with no Redis: status %d, want %d (%s)", tc.disable, rr.Code, tc.want, rr.Body.String())
+		}
 	}
 }
 

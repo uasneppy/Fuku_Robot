@@ -137,7 +137,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `/metrics`, `/db_metrics`, `/health`, pprof and the webhook, so `modules.CaptchaWebStartupWarnings` makes `main` warn
   when `METRICS_AUTH_TOKEN` or `CAPTCHA_WEB_TRUSTED_PROXIES` is empty, and the owner's public proxy must forward only
   `/captcha` and `/captcha/*` (D-31; the bot enforces no path allow-list). With `METRICS_AUTH_TOKEN` set, `/metrics`,
-  `/db_metrics` and `/debug/pprof/` all need it as a bearer token (`requireMetricsAuth`).
+  `/db_metrics` and `/debug/pprof/` all need it as a bearer token (`requireMetricsAuth`). `/health` asks Redis with `PING`
+  (it writes no key) and, with `DISABLE_CACHE=true`, is not unhealthy when there is no Redis.
 
 ## Handlers
 
