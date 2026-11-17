@@ -26,8 +26,22 @@ func spawnAsyncUpdate(fn func()) {
 	usersAsyncWG.Add(1)
 	go func() {
 		defer usersAsyncWG.Done()
+		defer error_handling.RecoverFromPanic("spawnAsyncUpdate", "users")
 		fn()
 	}()
+}
+
+// trackableUser reports whether sender is a real user the users tracker records:
+// no sender_chat (an anonymous admin's group, a channel, a linked channel's
+// automatic forward), a positive ID and not a Telegram service account. A chat ID
+// stored as a user would later resolve as a user in /info, /ban @name and the
+// chat's member list.
+func trackableUser(sender *gotgbot.Sender) bool {
+	if sender == nil || !sender.IsUser() {
+		return false
+	}
+	id := sender.User.Id
+	return id > 0 && !staffServiceUserIDs[id]
 }
 
 func asyncUpdateUser(userId int64, username, name string) {
@@ -156,7 +170,7 @@ func (moduleStruct) logUsers(bot *gotgbot.Bot, ctx *ext.Context) error {
 				uid, uname, username := user.Id(), user.Name(), user.Username()
 				spawnAsyncUpdate(func() { asyncUpdateChannel(uid, uname, username) })
 			}
-		} else {
+		} else if trackableUser(user) {
 			if chat_status.RequireGroup(bot, ctx, chat) {
 				updateCurrentChat(chat.Id, chat.Title, user.Id())
 			}
@@ -174,7 +188,7 @@ func (moduleStruct) logUsers(bot *gotgbot.Bot, ctx *ext.Context) error {
 					sid, sname, susername := replySender.Id(), replySender.Name(), replySender.Username()
 					spawnAsyncUpdate(func() { asyncUpdateChannel(sid, sname, susername) })
 				}
-			} else {
+			} else if trackableUser(replySender) {
 				if shouldUpdate(userUpdateCache, replySender.Id(), userUpdateInterval) {
 					log.Debugf("Updating user %d in db", replySender.Id())
 					sid, susername, sname := replySender.Id(), replySender.Username(), replySender.Name()

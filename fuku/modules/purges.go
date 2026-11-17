@@ -129,6 +129,7 @@ func (moduleStruct) purgeMsgsConcurrent(bot *gotgbot.Bot, chat *gotgbot.Chat, pF
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			defer error_handling.RecoverFromPanic("purgeMsgsConcurrent", "purges")
 			for messageID := range jobs {
 				if err := helpers.DeleteMessageWithErrorHandling(bot, chat.Id, messageID); err != nil {
 					worker.mu.Lock()
