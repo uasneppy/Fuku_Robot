@@ -4417,7 +4417,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   the 2026-11-17 review, `TestGreetingDisplayRepliesToCommand`); the join and leave cases are unchanged. Phase 18's goldens follow the same rule: `TestLegacyWarnSettingsRequests`
   (`warns_legacy_request_test.go`, every request and stored row of `/setwarnlimit` and `/setwarnmode`, committed before the
   extraction into `applyWarnLimit` and `applyWarnMode`) is never re-recorded, and every `TestLegacy*Requests` golden of Phase 18
-  joins that rule as its plan records it. The other Phase 12 families are `TestGreetOnce*` (`greet_once_test.go`),
+  joins that rule as its plan records it. One exception, dated 2026-11-18: the owner allowed the `TestLegacy*Requests`
+  goldens to be re-recorded once, text only, for the formatting cleanup (plan of 2026-11-18, decision D6). 39 literals of
+  eight files (aispam, autoapprove, blacklists, filters, locks, notes, reports, warns) were re-recorded in their own
+  commit after the text changes, and `.planning/quick/261118-p4r-formatting-rest/golden_text_only.py <base>` proves
+  that against the commit before it every request kept its method, chat, reply parameters, keyboard callback data and
+  every other field, only the message text and button labels changed and `parse_mode` changed only from Markdown to
+  HTML; the stored-row assertions of those tests were not touched. The rule stands again from that commit on. The other
+  Phase 12 families are `TestGreetOnce*` (`greet_once_test.go`),
   `TestGreetingsMediaBelow*` (`greetings_media_below_test.go`), `TestRules*` in `rules_media_send_test.go`,
   `TestSettingsEditMediaBelow*`, `TestSettings*MediaBelow`, `TestSettings*Once`, `TestSettingsEditSwitchGrid` and
   `TestSettingsEditRules*` (`settings_edit_switch_test.go`, `settings_edit_rules_test.go`, `settings_input_rules_test.go`),
