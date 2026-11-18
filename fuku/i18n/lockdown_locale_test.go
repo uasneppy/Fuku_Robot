@@ -149,14 +149,25 @@ func TestLockdownStringsHaveBalancedTags(t *testing.T) {
 		help, _ := data["lockdown_help_msg"].(string)
 		bullets := 0
 		for _, line := range strings.Split(help, "\n") {
+			// A command bullet is "×" (the old style) or "•" (the style guide of 2026-11-18) followed by the
+			// command, bare or in <code> with its arguments; other bullets (the triggers) are not commands.
 			trimmed := strings.TrimSpace(line)
-			if !strings.HasPrefix(trimmed, "×") {
+			var rest string
+			switch {
+			case strings.HasPrefix(trimmed, "×"):
+				rest = strings.TrimSpace(strings.TrimPrefix(trimmed, "×"))
+			case strings.HasPrefix(trimmed, "•"):
+				rest = strings.TrimSpace(strings.TrimPrefix(trimmed, "•"))
+			default:
+				continue
+			}
+			if !strings.HasPrefix(rest, "<code>/") && !strings.HasPrefix(rest, "/") {
+				if strings.HasPrefix(trimmed, "×") {
+					failures = append(failures, fmt.Sprintf("%s: help bullet %q does not start with a command", lang, trimmed))
+				}
 				continue
 			}
 			bullets++
-			if !strings.HasPrefix(strings.TrimSpace(strings.TrimPrefix(trimmed, "×")), "<code>/") {
-				failures = append(failures, fmt.Sprintf("%s: help bullet %q does not start with a <code> command", lang, trimmed))
-			}
 		}
 		if bullets != 4 {
 			failures = append(failures, fmt.Sprintf("%s: lockdown_help_msg has %d command bullets, want 4", lang, bullets))

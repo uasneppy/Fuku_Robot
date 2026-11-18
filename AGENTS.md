@@ -4290,6 +4290,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `TestCanonVerdictKey` pin one vector each for that reason.
 - A missing i18n key returns `""` with an error callers ignore; a typo'd key in Go ships an empty message. Copy key
   names from `locales/en.yml`. `locales/config.yml` is the help alt-name pseudo-locale, not a language.
+- Ukrainian and English texts follow the style guide and glossary in `docs/src/content/docs/contributing/locale-style.md`
+  (HTML only, a bold title line on every help page, `•` bullets, ` — ` after a command, one fixed set of section
+  headings). `TestLocaleStyle` (`fuku/i18n/locale_style_test.go`) checks what a program can check for `uk` and `en`; its
+  allow-list (`locale_style_allowlist_test.go`) holds the keys not yet converted, may only shrink, and fails when a listed
+  key already passes. The cleanup is in batches: the sample batch of 2026-11-18 (main help, module header, the Bans, Locks,
+  Reactions and Lockdown pages, the /ban, /mute and /warn replies) waits for the owner's approval before the rest. A help
+  page that opens with its own bold title line followed by a blank line gets no generic header (`helpHasOwnTitle`), and the
+  header of a page without one shows the module's icon (`helpModuleIcons`) and translated name.
 - A string filled with `i18n.TranslationParams` uses `{name}` placeholders equal to the param names. A `%s` or `%d`
   verb is filled only from the keys `0` to `9` or the fixed common names of `extractOrderedValues`, and prints raw
   for any other name (`modules`, `list`, `chat`, `time`, `types`, `attempts` did). `TestRawPlaceholderKeysRender`

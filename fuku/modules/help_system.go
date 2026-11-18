@@ -110,7 +110,7 @@ func getModuleHelpAndKb(module, lang string, registry *moduleStruct) (helpText s
 	tr := helpTranslator(lang)
 	helpMsg, _ := tr.GetString(fmt.Sprintf("%s_help_msg", strings.ToLower(ModName)))
 	headerTemplate, _ := tr.GetString("helpers_module_help_header")
-	helpText = renderModuleHelp(headerTemplate, helpModuleLabel(tr, ModName), helpMsg)
+	helpText = renderModuleHelp(headerTemplate, helpModuleTitle(tr, ModName), helpMsg)
 
 	backText, _ := tr.GetString("common_back_arrow")
 	homeText, _ := tr.GetString("common_home")
@@ -145,8 +145,37 @@ func (registry *moduleStruct) moduleHelpKb(module string, tr *i18n.Translator) [
 	return slices.Clone(static)
 }
 
-func renderModuleHelp(headerTemplate, modName, helpMsg string) string {
-	return formatting.ToTelegramHTML(fmt.Sprintf(headerTemplate, modName)) +
+// helpModuleIcons is the icon of each help module, shown before its translated name in the page title.
+var helpModuleIcons = map[string]string{
+	"Admin": "👮", "AISpam": "🤖", "Antiflood": "🌊", "AntiRaid": "🛡", "Approvals": "👤", "Backup": "📦",
+	"Bans": "🔨", "Blacklists": "🔤", "Captcha": "🧩", "Connections": "🔗", "Disabling": "🚫", "Federations": "🏛",
+	"Filters": "🔁", "Formatting": "✍️", "Greetings": "🎉", "Languages": "🌐", "Lockdown": "🔒", "Locks": "🔐",
+	"LogChannels": "🧾", "Misc": "🧰", "Mutes": "🔇", "Notes": "📝", "Pins": "📌", "Purges": "🧹",
+	"Reactions": "👍", "Reports": "📣", "Rules": "📜", "Settings": "⚙️", "Staff": "👥", "Warns": "🚩",
+}
+
+// helpModuleTitle is a module page's title text: its icon, when it has one, and its translated name.
+func helpModuleTitle(tr *i18n.Translator, module string) string {
+	label := helpModuleLabel(tr, module)
+	if icon := helpModuleIcons[module]; icon != "" {
+		return icon + " " + label
+	}
+	return label
+}
+
+// helpHasOwnTitle reports whether a help text opens with its own title line: one bold line followed by a
+// blank line. Such a page gets no generic header, so the title is never shown twice.
+func helpHasOwnTitle(helpMsg string) bool {
+	first, rest, found := strings.Cut(helpMsg, "\n")
+	return found && strings.HasPrefix(first, "<b>") && strings.HasSuffix(first, "</b>") &&
+		strings.Count(first, "<b>") == 1 && strings.HasPrefix(rest, "\n")
+}
+
+func renderModuleHelp(headerTemplate, title, helpMsg string) string {
+	if helpHasOwnTitle(helpMsg) {
+		return formatting.ToTelegramHTML(helpMsg)
+	}
+	return formatting.ToTelegramHTML(fmt.Sprintf(headerTemplate, title)) +
 		formatting.ToTelegramHTML(helpMsg)
 }
 

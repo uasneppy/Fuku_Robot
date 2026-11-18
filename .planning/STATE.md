@@ -373,7 +373,8 @@ None yet.
 | 261117-w10t | Review wave 10: settings menu | 2026-11-17 | a9c457d | [261117-w10t-settings](./quick/261117-w10t-settings/) |
 | 261118-p1h | Translated /help module buttons, per-language help keyboard | 2026-11-18 | 38bf67c | .planning/quick/261118-p1h-translated-help-module-buttons |
 | 261118-p2r | Reactions page in /settings, reaction cap of 100 | 2026-11-18 | e4ca847 | .planning/quick/261118-p2r-reactions-settings-page |
-| 261118-p3t | Per-group timezone: /timezone, settings page, times in the group's zone | 2026-11-18 | (this commit) | .planning/quick/261118-p3t-per-group-timezone |
+| 261118-p3t | Per-group timezone: /timezone, settings page, times in the group's zone | 2026-11-18 | 2a6df9c | .planning/quick/261118-p3t-per-group-timezone |
+| 261118-p4s | Formatting cleanup sample batch (uk, en), style guide, locale style test | 2026-11-18 | (this commit) | .planning/quick/261118-p4s-formatting-sample-batch |
 
 ## Deferred Items
 

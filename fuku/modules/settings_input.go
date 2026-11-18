@@ -292,7 +292,7 @@ func settingsInputValidPart(page, part string) bool {
 }
 
 // settingsTypedPage is a page whose typed reply is one value (the Timezone page's zone): its part, the
-// part's word, the Cancel code of its prompt, the right a typed reply is judged with and the handler the
+// Cancel code of its prompt, the right a typed reply is judged with and the handler the
 // door runs after the authority and slash checks.
 type settingsTypedPage struct {
 	Part, CancelCode string
