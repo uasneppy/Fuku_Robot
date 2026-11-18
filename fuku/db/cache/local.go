@@ -50,6 +50,8 @@ var (
 	deleteRulesPrefix        = CacheKey("delete_rules") + ":"
 
 	staffForwardBlockPrefix = CacheKey("staff_forward_block") + ":"
+
+	eventMessagesPrefix = CacheKey("event_messages") + ":"
 )
 
 // skipLocal reports whether key must never be served from process memory.
@@ -81,13 +83,18 @@ func skipLocal(key string) bool {
 	// The staff_forward_block key (a Staff Group's forward source list and its action) is read
 	// by the forward watcher on every forward from a listed source: a removed source must stop
 	// acting on every replica at the next message, not after CACHE_LOCAL_TTL seconds.
+	//
+	// The event_messages key (a group's custom event messages) is read at every manual
+	// punishment reply: a Remove or a Silent switch must act at the very next command on every
+	// replica, not after CACHE_LOCAL_TTL seconds (D-05).
 	return strings.HasPrefix(key, captchaPendingPrefix) ||
 		strings.HasPrefix(key, staffGroupPrefix) ||
 		strings.HasPrefix(key, staffLinkOfPrefix) ||
 		strings.HasPrefix(key, raidDetectionPrefix) ||
 		strings.HasPrefix(key, memberRequirementsPrefix) ||
 		strings.HasPrefix(key, deleteRulesPrefix) ||
-		strings.HasPrefix(key, staffForwardBlockPrefix)
+		strings.HasPrefix(key, staffForwardBlockPrefix) ||
+		strings.HasPrefix(key, eventMessagesPrefix)
 }
 
 func localSettings() (ttl, size int) {
