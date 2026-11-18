@@ -2497,6 +2497,24 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   cards use the Staff Group's; a lockdown alert copy uses its destination's (`lockdownSlotClock`: the Staff Group's for a
   Staff Group copy, the locked group's for the log channel copy), and the stored `body` keeps the time it was posted
   with. Log lines, file names, Redis hour stamps, stored values and the fban export's RFC 3339 dates stay UTC.
+- `chat_event_messages` (migration 20261119120000) holds a group's custom event messages, one row per `(chat_id, event,
+  dest)` under the inline primary key `pk_chat_event_messages`: `text`, `file_id` and `media_type` (one media item, 0 for
+  none, the `db.*` media constants the greetings and rules rows use), `buttons` (jsonb, `'[]'` for none,
+  `models.ButtonArray`), `silent`, `updated_by` and `updated_at`, every column `NOT NULL` with a zero default and no foreign
+  key. `models.ChatEventMessage` maps it with no `default:` tag. The event and the destination are validated in Go by
+  `eventmsg.ValidEvent` and `eventmsg.ValidDest` (`fuku/db/eventmsg/events.go`: today the seven manual events `ban`,
+  `tban`, `kick`, `mute`, `tmute`, `unban`, `unmute` and the destination `group`) and never by a CHECK, so Phases 22 to 24
+  add events and Phase 21 the `pm` destination with no migration; an unknown one is `ErrUnknownEvent` or `ErrUnknownDest`
+  before any write. It is read through `cache.GetFromCacheOrLoad` as one `eventmsg.Messages` per chat (a map keyed
+  `event|dest`, `Lookup(event, dest)`) under `event_messages:<chat>` (`eventmsg.Get`; `eventmsg.GetFresh` is the same query
+  without the cache, for the settings page), a read creates nothing and a failed read is returned, never an empty set. The
+  prefix is in `skipLocal`, because a Remove or a Silent switch must act at the very next command on every replica. The
+  four writers `SetText`, `SetMedia` (file and type together), `SetButtons` and `SetSilent` are column-targeted
+  `INSERT ... ON CONFLICT (chat_id, event, dest) DO UPDATE` of their own column(s) plus `updated_by` and `updated_at`, so a
+  Go false, 0 and empty string are written and two writers of different parts never clobber each other, and each drops
+  the key after the write. A row whose parts are all empty with Silent off (`Message.HasContent` false) reads as the
+  default, exactly like no row; rows are kept when every part is removed. It is never part of backup, export, import or
+  reset in Phase 20 (`TestEventMessagesStayOutOfBackup`; Phase 29 adds it).
 - `UpdateRecord` skips zero values. Use `UpdateRecordWithZeroValues` to write `false`/`0`/`""`. Both return
   `gorm.ErrRecordNotFound` when no row matched.
 - Check `TableName()` before raw SQL: `ConnectionSettings→connection` (per user), `ConnectionChatSettings→
@@ -4508,6 +4526,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`./fuku/db/migrations`: the statements run twice without error, a row with only its required columns reads the defaults,
   the three named constraints refuse with SQLSTATE 23505 and 23514; PostgreSQL only, it skips locally;
   `TestStaffForwardBlockMigrationStatements` is its database-free half and runs in `make test`).
+  The event messages guarantees (Phase 20) are `TestEventMessagesUpsert` (`./fuku/db/eventmsg`: writers of different
+  columns of one key leave both values, one row per `(chat_id, event, dest)`, chats and events stay apart; it also runs on
+  SQLite in `make test`) and `TestChatEventMessagesMigrationDefaults` (`./fuku/db/migrations`: the statement runs twice
+  without error, a row with only its key reads every zero default, a second row of the key fails with SQLSTATE 23505;
+  PostgreSQL only, it skips locally; `TestChatEventMessagesMigrationStatements` is its database-free half and runs in
+  `make test`).
   The pattern is anchored with `$`, so list the real top-level test function names and add the test's package to the
   target. Add a test there when a new guarantee rests on a partial unique index, a `CHECK` or a conditional update.
 - In CI, keep the migration-chain step before `make test-rest`; its `schema_migrations` rows back the checksum test.
