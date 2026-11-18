@@ -3,6 +3,7 @@
 package modules
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -155,6 +156,36 @@ func TestStaffActionUsernameAmbiguous(t *testing.T) {
 	}
 	if strings.Index(text, "910002") > strings.Index(text, "910001") {
 		t.Fatalf("reply = %q, want the most recently seen user listed first", text)
+	}
+	env.wantNoWrites()
+}
+
+// TestStaffActionUsernameAmbiguousStaffZone: the last-seen dates of the refusal are in the Staff
+// Group's zone, with its label, not in UTC.
+func TestStaffActionUsernameAmbiguousStaffZone(t *testing.T) {
+	env := newStaffActionEnv(t, 1)
+	previous := chatTimezoneLookup
+	t.Cleanup(func() { chatTimezoneLookup = previous })
+	chatTimezoneLookup = func(_ context.Context, chatID int64) (string, error) {
+		if chatID == env.staffChat {
+			return "UTC+14:00", nil
+		}
+		return "", nil
+	}
+	name := fmt.Sprintf("zone_%d", env.owner)
+	// 20:00 UTC on 1 March is 10:00 on 2 March at UTC+14.
+	seen := time.Date(2026, 3, 1, 20, 0, 0, 0, time.UTC)
+	seedStaffUsers(t,
+		models.User{UserId: 910021, UserName: name, Name: "Zone A", LastActivity: seen},
+		models.User{UserId: 910022, UserName: name, Name: "Zone B", LastActivity: seen.Add(-time.Hour)},
+	)
+
+	env.send(env.issuer, "/ban @"+name)
+
+	env.wantReplyMarker("staff_act_username_ambiguous")
+	text := textsToChat(env.fake.staffBotClient, env.staffChat)[0]
+	if !strings.Contains(text, "2026-03-02 (UTC+14)") || strings.Contains(text, "2026-03-01") {
+		t.Fatalf("reply = %q, want the last-seen date in the Staff Group's zone", text)
 	}
 	env.wantNoWrites()
 }

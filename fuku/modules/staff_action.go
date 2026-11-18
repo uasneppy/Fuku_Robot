@@ -178,7 +178,7 @@ func (m moduleStruct) handleStaffAction(b *gotgbot.Bot, ctx *ext.Context, spec s
 		return reply("staff_act_hint_bad_duration")
 	}
 
-	target, targetName, refusal, ok := resolveStaffTarget(tr, req)
+	target, targetName, refusal, ok := resolveStaffTarget(tr, req, group.ChatID)
 	if !ok {
 		replyStaffAction(b, msg, refusal)
 		return ext.EndGroups
@@ -235,7 +235,10 @@ func (m moduleStruct) handleStaffAction(b *gotgbot.Bot, ctx *ext.Context, spec s
 //   - an @username is looked up in the users table only, case-insensitively. No
 //     match, or more than one, is refused; a lookup that fails is reported as such,
 //     never as "never seen". There is no channels-table or live Telegram fallback.
-func resolveStaffTarget(tr *i18n.Translator, req staffActionRequest) (target staffTargetRef, name, refusal string, ok bool) {
+//
+// staffChatID is the Staff Group the command was sent in: a refusal that lists
+// several users shows when each was last seen in that Staff Group's zone.
+func resolveStaffTarget(tr *i18n.Translator, req staffActionRequest, staffChatID int64) (target staffTargetRef, name, refusal string, ok bool) {
 	target = req.Target
 	switch {
 	case target.Username != "":
@@ -253,7 +256,7 @@ func resolveStaffTarget(tr *i18n.Translator, req staffActionRequest) (target sta
 			target.UserID = rows[0].UserId
 			return target, staffRowName(rows[0]), "", true
 		}
-		return target, "", staffAmbiguousUsernameText(tr, target.Username, rows), false
+		return target, "", staffAmbiguousUsernameText(tr, target.Username, rows, chatClockOf(staffChatID)), false
 	case target.MentionName != "":
 		return target, target.MentionName, "", true
 	}
@@ -263,14 +266,14 @@ func resolveStaffTarget(tr *i18n.Translator, req staffActionRequest) (target sta
 // staffAmbiguousUsernameText lists every user that has used the username: one line
 // with the escaped name, the numeric ID and when the bot last saw them, newest
 // first, then asks for the numeric ID. The list is built here, so stored names never
-// go through the translator.
-func staffAmbiguousUsernameText(tr *i18n.Translator, username string, rows []models.User) string {
+// go through the translator. The date is shown in loc, the Staff Group's zone.
+func staffAmbiguousUsernameText(tr *i18n.Translator, username string, rows []models.User, loc *time.Location) string {
 	lines := make([]string, 0, len(rows))
 	for _, row := range rows {
 		line := "• <b>" + staffDisplayTitle(staffRowName(row)) + "</b> <code>" + strconv.FormatInt(row.UserId, 10) + "</code>"
 		if seen := staffLastSeen(row); !seen.IsZero() {
 			lastSeen, _ := tr.GetString("staff_act_username_last_seen", i18n.TranslationParams{"date": staffDatePlaceholder})
-			line += " · " + strings.Replace(lastSeen, staffDatePlaceholder, seen.UTC().Format("2006-01-02"), 1)
+			line += " · " + strings.Replace(lastSeen, staffDatePlaceholder, formatChatTime(seen, loc, "2006-01-02"), 1)
 		}
 		lines = append(lines, line)
 	}
