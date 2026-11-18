@@ -8,6 +8,7 @@ import (
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
 	"github.com/uasneppy/fuku_robot/fuku/db/reactions"
+	"github.com/uasneppy/fuku_robot/fuku/i18n"
 	"github.com/uasneppy/fuku_robot/fuku/utils/cache"
 )
 
@@ -272,7 +273,7 @@ func TestLoadReactionsRegistersHelpAndHandlers(t *testing.T) {
 	if got := DefaultHelpRegistry().AltHelpOptions["Reactions"]; len(got) != 1 || got[0] != "reaction" {
 		t.Fatalf("reactions alt help = %v, want [reaction]", got)
 	}
-	if got := DefaultHelpRegistry().helpableKb["Reactions"]; len(got) != 1 || len(got[0]) != 2 {
+	if got := DefaultHelpRegistry().moduleHelpKb("Reactions", i18n.MustNewTranslator("en")); len(got) != 1 || len(got[0]) != 2 {
 		t.Fatalf("reactions help keyboard = %#v, want one row with two buttons", got)
 	}
 }

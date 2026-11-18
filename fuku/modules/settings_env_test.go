@@ -145,6 +145,10 @@ func withRealLocales(t *testing.T) {
 		}
 		files[code] = string(raw)
 	}
+	// config.yml is the help alt-name pseudo-locale that /help reads.
+	if raw, err := os.ReadFile("../../locales/config.yml"); err == nil {
+		files["config"] = string(raw)
+	}
 	restore, err := i18n.OverrideManagerLanguagesForTest(files)
 	if err != nil {
 		t.Fatalf("install real locales: %v", err)

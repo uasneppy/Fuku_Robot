@@ -756,9 +756,10 @@ func TestAISpamIsReachableFromHelp(t *testing.T) {
 	LoadAISpam(ext.NewDispatcher(&ext.DispatcherOpts{MaxRoutines: -1}))
 
 	var button bool
-	for _, row := range initHelpButtonsFrom(registry).InlineKeyboard {
+	want := encodeCallbackData("helpq", map[string]string{"m": aispamModule.moduleName})
+	for _, row := range initHelpButtonsFrom(registry, "en").InlineKeyboard {
 		for _, each := range row {
-			button = button || each.Text == aispamModule.moduleName
+			button = button || each.CallbackData == want
 		}
 	}
 	if !button {

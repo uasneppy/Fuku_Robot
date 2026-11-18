@@ -49,18 +49,7 @@ func LoadReactions(dispatcher *ext.Dispatcher) {
 	SetModuleEnabled(reactionsModule.moduleName, true)
 
 	DefaultHelpRegistry().AltHelpOptions["Reactions"] = []string{"reaction"}
-	DefaultHelpRegistry().helpableKb["Reactions"] = [][]gotgbot.InlineKeyboardButton{
-		{
-			{
-				Text:         "Додати реакцію",
-				CallbackData: encodeCallbackData("reactions_help", map[string]string{"action": "add"}),
-			},
-			{
-				Text:         "Видалити реакцію",
-				CallbackData: encodeCallbackData("reactions_help", map[string]string{"action": "remove"}),
-			},
-		},
-	}
+	SetModuleHelpFunc(reactionsModule.moduleName, reactionsHelpKb)
 
 	log.Info("[Modules] Reactions module loaded")
 }
@@ -386,4 +375,18 @@ func (m moduleStruct) checkReactions(b *gotgbot.Bot, ctx *ext.Context) error {
 
 func init() {
 	RegisterLegacyModule("Reactions", 250, LoadReactions)
+}
+
+// reactionsHelpKb is the Reactions help keyboard in the reader's language.
+func reactionsHelpKb(tr *i18n.Translator) [][]gotgbot.InlineKeyboardButton {
+	return [][]gotgbot.InlineKeyboardButton{{
+		{
+			Text:         trS(tr, "reactions_button_add"),
+			CallbackData: encodeCallbackData("reactions_help", map[string]string{"action": "add"}),
+		},
+		{
+			Text:         trS(tr, "reactions_button_remove"),
+			CallbackData: encodeCallbackData("reactions_help", map[string]string{"action": "remove"}),
+		},
+	}}
 }

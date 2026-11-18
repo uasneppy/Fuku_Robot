@@ -82,44 +82,51 @@ func TestListModulesViaDefaultRegistry(t *testing.T) {
 }
 
 func TestInitHelpButtonsBuildsSortedKeyboard(t *testing.T) {
+	withRealLocales(t)
 	registry := DefaultHelpRegistry()
 	previousAbleMap := registry.AbleMap
-	previousMarkup := markup
 	registry.AbleMap = make(map[string]bool)
 	t.Cleanup(func() {
 		registry.AbleMap = previousAbleMap
-		markup = previousMarkup
 	})
 
 	registry.AbleMap["Warns"] = true
 	registry.AbleMap["Admin"] = true
 	registry.AbleMap["Filters"] = true
 
-	initHelpButtons()
-	if len(markup.InlineKeyboard) == 0 {
-		t.Fatal("initHelpButtons() produced no rows")
+	cases := map[string][]string{
+		"en": {"Admins", "Filters", "Warnings"},
+		"uk": {"Адміни", "Попередження", "Фільтри"},
 	}
-	firstRow := markup.InlineKeyboard[0]
-	if len(firstRow) != 3 {
-		t.Fatalf("first keyboard row len = %d, want 3", len(firstRow))
-	}
-	if firstRow[0].Text != "Admin" || firstRow[1].Text != "Filters" || firstRow[2].Text != "Warns" {
-		t.Fatalf("first keyboard row = %#v, want Admin/Filters/Warns sorted", firstRow)
-	}
-	for _, button := range firstRow {
-		if button.CallbackData == "" {
-			t.Fatalf("button %q has empty callback data", button.Text)
+	for langCode, want := range cases {
+		kb := initHelpButtonsFrom(registry, langCode)
+		if len(kb.InlineKeyboard) != 2 {
+			t.Fatalf("%s: keyboard rows = %d, want the module row and Back", langCode, len(kb.InlineKeyboard))
+		}
+		firstRow := kb.InlineKeyboard[0]
+		if len(firstRow) != 3 {
+			t.Fatalf("%s: first keyboard row len = %d, want 3", langCode, len(firstRow))
+		}
+		for i, button := range firstRow {
+			if button.Text != want[i] {
+				t.Fatalf("%s: first keyboard row = %#v, want %v sorted by the translated label", langCode, firstRow, want)
+			}
+			if button.CallbackData == "" {
+				t.Fatalf("button %q has empty callback data", button.Text)
+			}
+		}
+		back, _ := i18n.MustNewTranslator(langCode).GetString("helpers_back_button")
+		if got := kb.InlineKeyboard[1][0].Text; got != back {
+			t.Fatalf("%s: Back = %q, want %q", langCode, got, back)
 		}
 	}
 }
 
 func TestModuleHelpLookupRenderingAndSend(t *testing.T) {
 	previousRegistry := defaultHelpRegistry
-	previousMarkup := markup
 	defaultHelpRegistry = newHelpRegistry()
 	t.Cleanup(func() {
 		defaultHelpRegistry = previousRegistry
-		markup = previousMarkup
 	})
 
 	registry := DefaultHelpRegistry()
@@ -127,7 +134,6 @@ func TestModuleHelpLookupRenderingAndSend(t *testing.T) {
 	registry.helpableKb["Admin"] = [][]gotgbot.InlineKeyboardButton{
 		{{Text: "Admin", CallbackData: "admin-test"}},
 	}
-	initHelpButtons()
 
 	if got := getModuleNameFromAltName("admin", DefaultHelpRegistry()); got != "Admin" {
 		t.Fatalf("getModuleNameFromAltName() = %q, want Admin", got)
@@ -160,11 +166,9 @@ func TestModuleHelpLookupRenderingAndSend(t *testing.T) {
 
 func TestHandleDeepLinkRoutesHelpDeepLink(t *testing.T) {
 	previousRegistry := defaultHelpRegistry
-	previousMarkup := markup
 	defaultHelpRegistry = newHelpRegistry()
 	t.Cleanup(func() {
 		defaultHelpRegistry = previousRegistry
-		markup = previousMarkup
 	})
 
 	registry := DefaultHelpRegistry()
@@ -172,7 +176,6 @@ func TestHandleDeepLinkRoutesHelpDeepLink(t *testing.T) {
 	registry.helpableKb["Admin"] = [][]gotgbot.InlineKeyboardButton{
 		{{Text: "Admin", CallbackData: "admin-test"}},
 	}
-	initHelpButtons()
 
 	client := newModuleBotClient()
 	bot := newModuleTestBot(client)

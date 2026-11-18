@@ -1149,13 +1149,11 @@ func (moduleStruct) sendNoFormatNote(b *gotgbot.Bot, ctx *ext.Context, replyMsgI
 func LoadNotes(dispatcher *ext.Dispatcher) {
 	SetModuleEnabled(notesModule.moduleName, true)
 
-	SetModuleHelp(notesModule.moduleName, [][]gotgbot.InlineKeyboardButton{
-		{
-			{
-				Text:         trS(i18n.MustNewTranslator("uk"), "button_formatting"),
-				CallbackData: encodeCallbackData("helpq", map[string]string{"m": "Formatting"}),
-			},
-		},
+	SetModuleHelpFunc(notesModule.moduleName, func(tr *i18n.Translator) [][]gotgbot.InlineKeyboardButton {
+		return [][]gotgbot.InlineKeyboardButton{{{
+			Text:         trS(tr, "button_formatting"),
+			CallbackData: encodeCallbackData("helpq", map[string]string{"m": "Formatting"}),
+		}}}
 	})
 	dispatcher.AddHandler(helpers.NewBotCommand("save", notesModule.addNote))
 	dispatcher.AddHandler(helpers.NewBotCommand("addnote", notesModule.addNote))

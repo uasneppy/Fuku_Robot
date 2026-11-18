@@ -4238,6 +4238,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`fuku/i18n`) renders the backup and captcha keys that once printed raw verbs through the real locale files. Both kinds
   are filled in one pass over the raw template, the verbs counted on the template alone, so a value a user typed that
   holds a verb or a `{name}` is printed as typed (`TestInterpolateParamsIgnoresVerbsInValues`).
+- The `/help` keyboard is built per reader language on request (`initHelpButtonsFrom(registry, lang)`; there is no
+  startup-time keyboard): every module enabled with `SetModuleEnabled` is labelled with its `help_module_name_<module>`
+  key (lower-cased internal name, all 8 locale files, at most 14 code points so three fit a row) and sorted by that label
+  with the language's collation; a missing key shows the internal name, and `TestHelpModuleNamesExist` loads every module
+  and fails on a help module without a key in any language. Callback data and the `help_` deep link keep the internal
+  name. `/help <name>` also takes the translated name of the reader's language (`findHelpModule`). A module's own help
+  buttons are registered with `SetModuleHelpFunc` (a builder called with the reader's translator); `SetModuleHelp` is
+  only for rows whose labels need no translation (the language flags).
 - The docs generator finds raw commands in the module source by the shim's call, `helpers.NewBotCommand("name", ...)`
   (`scripts/generate_docs/parsers.go`); a command registered another way is not listed, and the guard test rejects it.
 - The docs generator reads only `locales/en.yml`. Pages marked `<!-- MANUALLY MAINTAINED: do not regenerate -->` in

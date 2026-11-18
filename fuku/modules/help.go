@@ -287,7 +287,7 @@ func (moduleStruct) helpButtonHandler(b *gotgbot.Bot, ctx *ext.Context) error {
 		switch module {
 		case "Help":
 			helpText = getMainHelp(tr, html.EscapeString(query.From.FirstName))
-			replyKb = markup
+			replyKb = helpMenuMarkup(ctx)
 		case "BackStart":
 			helpText = getStartHelp(tr)
 			replyKb = getStartMarkup(tr, getBotUsername(b))
@@ -379,7 +379,7 @@ func (moduleStruct) donate(b *gotgbot.Bot, ctx *ext.Context) error {
 
 	_, err := b.SendMessage(chat.Id,
 		func() string {
-			tr := i18n.MustNewTranslator("uk")
+			tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 			text, _ := tr.GetString("help_donatetext")
 			return text
 		}(),
@@ -441,7 +441,7 @@ func (moduleStruct) botConfig(b *gotgbot.Bot, ctx *ext.Context) error {
 		text      string
 	)
 
-	tr := i18n.MustNewTranslator("uk")
+	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 
 	switch response {
 	case "step1":
@@ -522,19 +522,21 @@ func (moduleStruct) help(b *gotgbot.Bot, ctx *ext.Context) error {
 				name = html.EscapeString(msg.From.FirstName)
 			}
 			mainHelpText := getMainHelp(tr, name)
+			kb := helpMenuMarkup(ctx)
 			_, err := b.SendMessage(chat.Id,
 				mainHelpText,
 				&gotgbot.SendMessageOpts{
 					ParseMode:   formatting.HTML,
-					ReplyMarkup: &markup,
+					ReplyMarkup: &kb,
 				},
 			)
 			if err != nil {
 				log.Error(err)
 				return err
 			}
-		} else if len(args) == 2 {
-			module := strings.ToLower(args[1])
+		} else if len(args) >= 2 {
+			// A translated module name can have more than one word ("Log channels").
+			module := strings.ToLower(strings.Join(args[1:], " "))
 			helpText, replyMarkup, _parsemode := getHelpTextAndMarkup(ctx, module, DefaultHelpRegistry())
 			_, err := b.SendMessage(
 				chat.Id,
@@ -557,14 +559,13 @@ func (moduleStruct) help(b *gotgbot.Bot, ctx *ext.Context) error {
 		replyMsgId := msg.MessageId
 		var lowerModName string
 
-		if len(args) == 2 {
-			helpModName := args[1]
-			lowerModName = strings.ToLower(helpModName)
-			originalModuleName := getModuleNameFromAltName(lowerModName, DefaultHelpRegistry())
-			if originalModuleName != "" && slices.Contains(getAltNamesOfModule(originalModuleName), lowerModName) {
-				contactPmText, _ := tr.GetString("help_contact_pm")
-				moduleHelpString = strings.Replace(contactPmText, "for help!", fmt.Sprintf("for help regarding <code>%s</code>!", originalModuleName), 1)
-				pmMeKbUri = fmt.Sprintf("https://t.me/%s?start=help_%s", b.Username, lowerModName)
+		if len(args) >= 2 {
+			lowerModName = strings.ToLower(strings.Join(args[1:], " "))
+			originalModuleName := findHelpModule(lowerModName, lang.GetLanguage(ctx), DefaultHelpRegistry())
+			if originalModuleName != "" {
+				// The deep link carries the internal name: a start parameter takes
+				// only Latin letters, digits, _ and -, which a translated name is not.
+				pmMeKbUri = fmt.Sprintf("https://t.me/%s?start=help_%s", b.Username, strings.ToLower(originalModuleName))
 			}
 		}
 
@@ -605,7 +606,6 @@ func LoadHelp(dispatcher *ext.Dispatcher) {
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("configuration"), DefaultHelpRegistry().botConfig))
 	dispatcher.AddHandler(helpers.NewBotCommand("about", DefaultHelpRegistry().about))
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("about"), DefaultHelpRegistry().about))
-	initHelpButtons()
 }
 
 func init() {
