@@ -5,32 +5,35 @@ description: Complete guide to Logchannels module commands and features
 
 # 📜 Logchannels Commands
 
+**🧾 Log channel**
+
 Send admin actions to a dedicated log channel. Every facility keeps records.
 
-1. Add me to a channel as admin.
-2. In that channel, send /setlog.
-3. Forward that message to the group.
+**How to set it up**
+- Add me to a channel as an admin.
+- In that channel, send /setlog.
+- Forward that message to the group.
 
-### Admin commands:
-- `/unsetlog`: Remove the log channel.
-- `/logchannel`: Show the current log channel.
-- `/logcategories`: List categories.
-- `/log <category>`: Enable a category.
-- `/nolog <category>`: Disable a category.
+**Admin commands**
+- /unsetlog — removes the log channel.
+- /logchannel — shows the current log channel.
+- /logcategories — lists the categories.
+- /log `<category>` — turns a category on.
+- /nolog `<category>` — turns a category off.
 
-Categories: settings, admin, user, reports.
-
+**Notes**
+Categories: `settings`, `admin`, `user`, `reports`.
 
 ## Available Commands
 
 | Command | Description | Disableable |
 |---------|-------------|-------------|
-| `/log` | Enable a category. | ❌ |
-| `/logcategories` | List categories. | ❌ |
-| `/logchannel` | Show the current log channel. | ❌ |
-| `/nolog` | Disable a category. | ❌ |
+| `/log` | No description available | ❌ |
+| `/logcategories` | No description available | ❌ |
+| `/logchannel` | No description available | ❌ |
+| `/nolog` | No description available | ❌ |
 | `/setlog` | No description available | ❌ |
-| `/unsetlog` | Remove the log channel. | ❌ |
+| `/unsetlog` | No description available | ❌ |
 
 ## Usage Examples
 

@@ -175,8 +175,10 @@ func renderModuleHelp(headerTemplate, title, helpMsg string) string {
 	if helpHasOwnTitle(helpMsg) {
 		return formatting.ToTelegramHTML(helpMsg)
 	}
-	return formatting.ToTelegramHTML(fmt.Sprintf(headerTemplate, title)) +
-		formatting.ToTelegramHTML(helpMsg)
+	// The header template is one line; the blank line after it is added here, so a translation that still
+	// carries it is not doubled.
+	header := strings.TrimRight(fmt.Sprintf(headerTemplate, title), "\n") + "\n\n"
+	return formatting.ToTelegramHTML(header) + formatting.ToTelegramHTML(helpMsg)
 }
 
 func sendHelpkb(b *gotgbot.Bot, ctx *ext.Context, module string, registry *moduleStruct) (msg *gotgbot.Message, err error) {

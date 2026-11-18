@@ -4294,10 +4294,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (HTML only, a bold title line on every help page, `•` bullets, ` — ` after a command, one fixed set of section
   headings). `TestLocaleStyle` (`fuku/i18n/locale_style_test.go`) checks what a program can check for `uk` and `en`; its
   allow-list (`locale_style_allowlist_test.go`) holds the keys not yet converted, may only shrink, and fails when a listed
-  key already passes. The cleanup is in batches: the sample batch of 2026-11-18 (main help, module header, the Bans, Locks,
-  Reactions and Lockdown pages, the /ban, /mute and /warn replies) waits for the owner's approval before the rest. A help
-  page that opens with its own bold title line followed by a blank line gets no generic header (`helpHasOwnTitle`), and the
-  header of a page without one shows the module's icon (`helpModuleIcons`) and translated name.
+  key already passes. The owner approved the sample batch on 2026-11-18 and the rest is converted in batches by the same
+  guide. Two guards hold the facts through the rewrite (`locale_rewrite_guard_test.go`):
+  `TestLocalePlaceholdersMatchOtherLanguages` (the fmt verbs and `{name}` placeholders of every Ukrainian and English text
+  equal those of the six other languages) and `TestHelpPagesKeepTheirCommands` (every `/command` a help page named before
+  the rewrite, recorded in the test). Every Ukrainian and English help page opens with its own bold title line followed by
+  a blank line, so it gets no generic header (`helpHasOwnTitle`); a page without one (the other six languages) gets
+  `helpers_module_help_header` (one line, the module's icon from `helpModuleIcons` and its translated name), and
+  `renderModuleHelp` adds the blank line after it.
 - A string filled with `i18n.TranslationParams` uses `{name}` placeholders equal to the param names. A `%s` or `%d`
   verb is filled only from the keys `0` to `9` or the fixed common names of `extractOrderedValues`, and prints raw
   for any other name (`modules`, `list`, `chat`, `time`, `types`, `attempts` did). `TestRawPlaceholderKeysRender`
