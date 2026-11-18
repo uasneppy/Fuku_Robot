@@ -4295,8 +4295,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   headings). `TestLocaleStyle` (`fuku/i18n/locale_style_test.go`) checks what a program can check for `uk` and `en`; its
   allow-list (`locale_style_allowlist_test.go`) is empty since every Ukrainian and English text was converted on 2026-11-18
   (the owner approved the guide that day), and stays empty: a new text follows the guide from its first commit. Two
-  guards hold the facts through any rewrite (`locale_rewrite_guard_test.go`): `TestLocalePlaceholdersMatchOtherLanguages` (the fmt verbs and `{name}` placeholders of every Ukrainian and English text
-  equal those of the six other languages) and `TestHelpPagesKeepTheirCommands` (every `/command` a help page named before
+  guards hold the facts through any rewrite (`locale_rewrite_guard_test.go`): `TestLocalePlaceholdersMatchOtherLanguages`
+  (the fmt verbs and `{name}` placeholders of every Ukrainian and English text equal those of the six other languages) and `TestHelpPagesKeepTheirCommands` (every `/command` a help page named before
   the rewrite, recorded in the test). Every Ukrainian and English help page opens with its own bold title line followed by
   a blank line, so it gets no generic header (`helpHasOwnTitle`); a page without one (the other six languages) gets
   `helpers_module_help_header` (one line, the module's icon from `helpModuleIcons` and its translated name), and
