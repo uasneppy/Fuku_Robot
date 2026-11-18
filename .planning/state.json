@@ -97,12 +97,62 @@
       "number": "19",
       "name": "Blacklist, Filter and Note Pages",
       "status": "complete"
+    },
+    {
+      "number": "20",
+      "name": "Message Engine, Messages Page and Manual Punishments",
+      "status": "pending"
+    },
+    {
+      "number": "21",
+      "name": "PM Copies",
+      "status": "pending"
+    },
+    {
+      "number": "22",
+      "name": "Warn, Flood, Blacklist and Forward Blocklist Messages",
+      "status": "pending"
+    },
+    {
+      "number": "23",
+      "name": "Captcha, AI Spam and Member Requirement Notices",
+      "status": "pending"
+    },
+    {
+      "number": "24",
+      "name": "Lockdown Messages",
+      "status": "pending"
+    },
+    {
+      "number": "25",
+      "name": "Timed Punishments, Escalation and Warn Expiry",
+      "status": "pending"
+    },
+    {
+      "number": "26",
+      "name": "Manual Command Defaults, Reason Shortcuts and Appeal Button",
+      "status": "pending"
+    },
+    {
+      "number": "27",
+      "name": "Advanced Thresholds",
+      "status": "pending"
+    },
+    {
+      "number": "28",
+      "name": "Plain Tone and Copy Settings",
+      "status": "pending"
+    },
+    {
+      "number": "29",
+      "name": "Backup Page and Custom Messages in Backups",
+      "status": "pending"
     }
   ],
   "next": {
     "command": "/gsd-discuss-phase",
-    "label": "Discuss the first phase",
-    "reason": "Project initialized — plan your first phase"
+    "label": "Discuss Phase 20",
+    "reason": "Roadmap created for v1.2. Discuss and plan Phase 20 first."
   },
-  "updated_at": "2026-11-18T22:41:05.020Z"
+  "updated_at": "2026-11-18T22:52:00.000Z"
 }

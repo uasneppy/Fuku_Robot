@@ -58,6 +58,12 @@ Scope rule for the whole milestone (owner decision, 2026-11-18): every message a
 - [ ] **TUNE-08**: A plain-tone switch per group replaces the bot's themed default texts with neutral ones for the events of this milestone, in all 8 languages.
 - [ ] **TUNE-09**: Copy settings: from a group's settings the owner copies the custom messages and tuning values of another group they own, after a confirmation that says what will be overwritten. The person must be allowed to change settings in both groups, checked live.
 
+### Backup page
+
+- [ ] **BKP-01**: A private-only Backup page in `/settings` exports the group's settings: the owner or an allowed admin picks all modules or some, and the bot sends the backup file to them in the private chat. It produces the same file as `/export`, with the same rate limit and the admin right `/export` asks for.
+- [ ] **BKP-02**: The Backup page imports a backup: the person sends the file in the private chat after pressing Import, sees what will be imported and confirms with a two-tap card. It runs the same import as `/import` (same checks, same report of what was left out, same rate limit) and only for the group's live owner, as `/import` requires.
+- [ ] **BKP-03**: The Backup page resets settings to their defaults for all or chosen modules behind a two-tap card, live owner only, exactly as `/reset` does, with its rate limit.
+
 ## Future Requirements
 
 - **MSG-F1**: A custom message per language.
@@ -76,16 +82,56 @@ Scope rule for the whole milestone (owner decision, 2026-11-18): every message a
 
 ## Traceability
 
-Filled in by the roadmap.
+Each requirement maps to exactly one phase. MSG-11 and EVT-10 are rules that hold across phases: each is mapped to the phase where it is first proved, and every later phase keeps it (see the roadmap's Cross-Cutting Constraints).
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
+| MSG-01 | Phase 20 | Pending |
+| MSG-02 | Phase 20 | Pending |
+| MSG-03 | Phase 20 | Pending |
+| MSG-04 | Phase 20 | Pending |
+| MSG-05 | Phase 20 | Pending |
+| MSG-06 | Phase 20 | Pending |
+| MSG-07 | Phase 20 | Pending |
+| MSG-08 | Phase 20 | Pending |
+| MSG-09 | Phase 20 | Pending |
+| MSG-10 | Phase 29 | Pending |
+| MSG-11 | Phase 20 | Pending |
+| EVT-01 | Phase 20 | Pending |
+| EVT-02 | Phase 22 | Pending |
+| EVT-03 | Phase 22 | Pending |
+| EVT-04 | Phase 23 | Pending |
+| EVT-05 | Phase 23 | Pending |
+| EVT-06 | Phase 24 | Pending |
+| EVT-07 | Phase 24 | Pending |
+| EVT-08 | Phase 24 | Pending |
+| EVT-09 | Phase 23 | Pending |
+| EVT-10 | Phase 24 | Pending |
+| PMSG-01 | Phase 21 | Pending |
+| PMSG-02 | Phase 21 | Pending |
+| PMSG-03 | Phase 21 | Pending |
+| PMSG-04 | Phase 21 | Pending |
+| PMSG-05 | Phase 21 | Pending |
+| PMSG-06 | Phase 21 | Pending |
+| PMSG-07 | Phase 21 | Pending |
+| TUNE-01 | Phase 25 | Pending |
+| TUNE-02 | Phase 25 | Pending |
+| TUNE-03 | Phase 25 | Pending |
+| TUNE-04 | Phase 26 | Pending |
+| TUNE-05 | Phase 26 | Pending |
+| TUNE-06 | Phase 26 | Pending |
+| TUNE-07 | Phase 27 | Pending |
+| TUNE-08 | Phase 28 | Pending |
+| TUNE-09 | Phase 28 | Pending |
+| BKP-01 | Phase 29 | Pending |
+| BKP-02 | Phase 29 | Pending |
+| BKP-03 | Phase 29 | Pending |
 
 **Coverage:**
-- v1.2 requirements: 37 total
-- Mapped to phases: 0
-- Unmapped: 37
+- v1.2 requirements: 40 total (MSG 11, EVT 10, PMSG 7, TUNE 9, BKP 3)
+- Mapped to phases: 40
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-11-18*
-*Last updated: 2026-11-18 after initial definition*
+*Last updated: 2026-11-18 after the roadmap (Backup page BKP-01 to BKP-03 added at the owner's request, 40 requirements in all)*

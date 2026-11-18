@@ -29,6 +29,7 @@ What v1.1 delivered:
 - Events: manual ban, timed ban, kick, mute, timed mute, unban, unmute, warn, warn limit; flood action, blacklist action, captcha failed, forward blocklist, a new AI spam deletion notice (off by default, rate-limited); lockdown started by hand, started automatically (join surge, flood, AI burst) and lifted; member requirement notices.
 - An optional PM copy to the punished person: best effort, its own pacing, a Details button on the group notice as fallback, never for raid-scale removals.
 - Custom messages travel in `/export` and `/import`.
+- A private-only Backup page in each group's settings: export, import and reset on the same code paths as `/export`, `/import` and `/reset`.
 - Tuning, per group: working timed punishments for warn limit, blacklist and flood; an escalation ladder; warn expiry; defaults for manual commands (duration, required reason, reason shortcuts); an appeal button; advanced thresholds with safe bounds; a plain-tone switch; copy settings from another group; a "PM not delivered" log line.
 
 ## Requirements
@@ -101,6 +102,7 @@ What v1.1 delivered:
 - [ ] A Messages page in `/settings` built on the message editor, with preview and a Silent switch (v1.2).
 - [ ] An AI spam deletion notice, off by default and rate-limited (v1.2).
 - [ ] Custom messages in backup export and import (v1.2).
+- [ ] A Backup page in the group's settings in the bot's private chat: export, import, reset (v1.2).
 - [ ] Per-group tuning: timed punishments, escalation ladder, warn expiry, manual-command defaults, appeal button, advanced thresholds, plain tone, copy settings (v1.2).
 
 The numbered requirements are in `.planning/REQUIREMENTS.md`. v1.0 and v1.1 follow-ups and deferred live checks remain in STATE.md.
