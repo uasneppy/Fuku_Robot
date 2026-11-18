@@ -64,7 +64,7 @@ func settingsEditPromptMax(def settingsEditPageDef, st settingsEditState) int {
 }
 
 // renderSettingsEditPrompt draws the waiting prompt. It is pure. It is a screen, not a page: the
-// header and group line, the part's prompt body, the end time in UTC, the replaced note when an
+// header and group line, the part's prompt body, the end time in the group's zone, the replaced note when an
 // earlier wait was cancelled by this one, and one Cancel button, with no Back and no Close.
 func renderSettingsEditPrompt(
 	v settingsView, def settingsEditPageDef, part string, until time.Time, maxLen int, replaced bool,
@@ -74,7 +74,7 @@ func renderSettingsEditPrompt(
 		body = append(body, settingsText(v.Tr, p.WaitKey, i18n.TranslationParams{"max": maxLen}))
 	}
 	body = append(body, "", settingsText(v.Tr, "settings_edit_wait_footer", i18n.TranslationParams{
-		"time": until.UTC().Format("15:04"),
+		"time": formatChatTime(until, chatClockOf(v.GroupID), "15:04"),
 	}))
 	if replaced {
 		body = append(body, "", settingsText(v.Tr, "settings_edit_replaced_note"))

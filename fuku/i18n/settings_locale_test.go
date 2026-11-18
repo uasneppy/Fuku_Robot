@@ -135,7 +135,7 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_start_owner_only":  {70, 98},
 
 	// The /help entry (plan 09-13, widened by plan 10-02).
-	"settings_help_msg": {1100, 1540},
+	"settings_help_msg": {1300, 1820},
 
 	// The message editor (plan 11-01). The ceilings are the UI-SPEC "New locale keys" columns.
 	"settings_page_welcome":                {12, 18},
@@ -586,6 +586,30 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_rct_removed":           {56, 90},
 	"settings_rct_saved":             {90, 140},
 	"settings_entries_part_reaction": {16, 24},
+
+	// The Timezone page (plan of 2026-11-18, Part 3): its name, body lines, buttons, prompt, notices and the
+	// preset cities.
+	"settings_page_tz":            {14, 18},
+	"settings_tz_current":         {40, 50},
+	"settings_tz_now":             {30, 40},
+	"settings_tz_is_default":      {40, 60},
+	"settings_tz_default_is":      {60, 80},
+	"settings_tz_hint":            {160, 230},
+	"settings_btn_tz_default":     {16, 18},
+	"settings_btn_tz_other":       {18, 18},
+	"settings_tz_wait":            {150, 220},
+	"settings_tz_saved":           {20, 30},
+	"settings_tz_group_note":      {90, 130},
+	"settings_tz_wait_ended_note": {90, 130},
+	"settings_tz_city_kyiv":       {12, 12},
+	"settings_tz_city_warsaw":     {12, 12},
+	"settings_tz_city_berlin":     {12, 12},
+	"settings_tz_city_london":     {12, 12},
+	"settings_tz_city_lisbon":     {12, 12},
+	"settings_tz_city_istanbul":   {12, 12},
+	"settings_tz_city_tbilisi":    {12, 12},
+	"settings_tz_city_newyork":    {12, 12},
+	"settings_tz_city_utc":        {12, 12},
 }
 
 // settingsAlertKeys are shown as answerCallbackQuery alerts: plain text, no tag, at most
@@ -813,6 +837,7 @@ func TestSettingsLabelLengths(t *testing.T) {
 		{"📝", "settings_page_notes"},
 		{"🚷", "settings_page_fwdblock"},
 		{"👍", "settings_page_reactions"},
+		{"🕒", "settings_page_tz"},
 	}
 	options := []string{
 		"settings_opt_math", "settings_opt_text", "settings_opt_turnstile",
@@ -1123,11 +1148,11 @@ func TestSettingsReusedKeyPlaceholders(t *testing.T) {
 var settingsHelpCommands = []string{
 	"/settings", "/linkstaff", "/unlinkstaff", "/unlockdown", "/autolockdown", "/captcha",
 	"/captchamode", "/captchatime", "/captchaaction", "/setflood", "/setfloodmode", "/delflood",
-	"/setwelcome", "/setgoodbye", "/setrules",
+	"/setwelcome", "/setgoodbye", "/setrules", "/timezone",
 }
 
 // TestSettingsHelpFitsOneMessage holds the /help entry of the settings menu to the UI-SPEC
-// ceiling (1100 runes in English, 1540 in the others), to the b tag only, to naming every
+// ceiling (1300 runes in English, 1820 in the others; raised with /timezone and the Reactions page), to the b tag only, to naming every
 // command it stands for, and, with the module help header, to one Telegram message.
 func TestSettingsHelpFitsOneMessage(t *testing.T) {
 	var failures []string
@@ -1140,9 +1165,9 @@ func TestSettingsHelpFitsOneMessage(t *testing.T) {
 			continue
 		}
 
-		ceiling := 1540
+		ceiling := 1820
 		if lang == "en" {
-			ceiling = 1100
+			ceiling = 1300
 		}
 		if runes := utf8.RuneCountInString(help); runes > ceiling {
 			failures = append(failures, fmt.Sprintf("%s: settings_help_msg has %d characters, ceiling %d", lang, runes, ceiling))

@@ -706,7 +706,7 @@ func buildExportCaption(tr *i18n.Translator, backup *backup.BackupFormat) string
 		"modules": fmt.Sprintf("%d", len(backup.Data)),
 		"list":    modulesList,
 		"chat":    html.EscapeString(backup.ChatName),
-		"time":    backup.ExportedAt.Format("2006-01-02 15:04:05"),
+		"time":    formatChatTime(backup.ExportedAt, chatClockOf(backup.ChatID), "2006-01-02 15:04:05"),
 	})
 	return caption
 }

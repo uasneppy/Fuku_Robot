@@ -188,7 +188,7 @@ func (m moduleStruct) lockdownStalePress(
 	b *gotgbot.Bot, query *gotgbot.CallbackQuery, tr *i18n.Translator,
 	slot *models.ChatLockdownAlert, ld *models.ChatLockdown,
 ) error {
-	answerStaffCallback(b, query, lockdownAlreadyLiftedText(tr, ld, false), false)
+	answerStaffCallback(b, query, lockdownAlreadyLiftedText(tr, ld, false, lockdownSlotClock(slot)), false)
 	if query.Message.GetChat().Id == slot.DestChatID && query.Message.GetMessageId() == slot.MessageID {
 		lockdownCloseSlotNow(context.Background(), b, slot, ld)
 		return ext.EndGroups
@@ -196,7 +196,7 @@ func (m moduleStruct) lockdownStalePress(
 	// Only a confirm card of this copy is edited; any other message the data was sent
 	// on is left as it is.
 	if lockdownIsCardOf(query, slot) {
-		editStaffCallbackMessage(b, query, lockdownAlreadyLiftedText(tr, ld, true))
+		editStaffCallbackMessage(b, query, lockdownAlreadyLiftedText(tr, ld, true, lockdownSlotClock(slot)))
 	}
 	return ext.EndGroups
 }
@@ -223,14 +223,14 @@ func lockdownButtonAuthority(b *gotgbot.Bot, chatID, userID int64) (ok bool, ref
 
 // lockdownAlreadyLiftedText says who lifted the lockdown and when. asHTML escapes the
 // name and mentions the lifter, for a card; otherwise it is plain text, for a toast.
-func lockdownAlreadyLiftedText(tr *i18n.Translator, ld *models.ChatLockdown, asHTML bool) string {
+func lockdownAlreadyLiftedText(tr *i18n.Translator, ld *models.ChatLockdown, asHTML bool, loc *time.Location) string {
 	when := ld.UpdatedAt
 	if ld.LiftStartedAt != nil {
 		when = *ld.LiftStartedAt
 	}
 	text := lockdownText(tr, "lockdown_alert_already_lifted", i18n.TranslationParams{
 		"name": lockdownNameToken,
-		"time": lockdownTime(when),
+		"time": lockdownTime(when, loc),
 	})
 	name := ld.LiftedByName
 	switch {
@@ -260,7 +260,7 @@ func (m moduleStruct) lockdownLiftAsk(
 	slot *models.ChatLockdownAlert, ld *models.ChatLockdown,
 ) error {
 	if ld.State != models.LockdownStateActive {
-		answerStaffCallback(b, query, lockdownAlreadyLiftedText(tr, ld, false), false)
+		answerStaffCallback(b, query, lockdownAlreadyLiftedText(tr, ld, false, lockdownSlotClock(slot)), false)
 		return ext.EndGroups
 	}
 	if ok, key := lockdownButtonAuthority(b, ld.ChatID, query.From.Id); !ok {
@@ -327,7 +327,7 @@ func (m moduleStruct) lockdownLiftConfirm(
 	answerStaffCallback(b, query, lockdownText(tr, "lockdown_alert_working"), false)
 
 	if ld.State != models.LockdownStateActive {
-		editStaffCallbackMessage(b, query, lockdownAlreadyLiftedText(tr, ld, true))
+		editStaffCallbackMessage(b, query, lockdownAlreadyLiftedText(tr, ld, true, lockdownPressClock(query, ld)))
 		return ext.EndGroups
 	}
 	if ok, key := lockdownButtonAuthority(b, ld.ChatID, query.From.Id); !ok {
@@ -351,7 +351,7 @@ func (m moduleStruct) lockdownLiftConfirm(
 			log.Warnf("[Lockdown] lockdown %d could not be read after a lost lift: %v", ld.ID, err)
 			current = ld
 		}
-		editStaffCallbackMessage(b, query, lockdownAlreadyLiftedText(tr, current, true))
+		editStaffCallbackMessage(b, query, lockdownAlreadyLiftedText(tr, current, true, lockdownPressClock(query, ld)))
 		return ext.EndGroups
 	}
 
@@ -393,7 +393,7 @@ func (m moduleStruct) lockdownBanAsk(
 	slot *models.ChatLockdownAlert, ld *models.ChatLockdown,
 ) error {
 	if ld.State != models.LockdownStateActive {
-		answerStaffCallback(b, query, lockdownAlreadyLiftedText(tr, ld, false), false)
+		answerStaffCallback(b, query, lockdownAlreadyLiftedText(tr, ld, false, lockdownSlotClock(slot)), false)
 		return ext.EndGroups
 	}
 	if ok, key := lockdownButtonAuthority(b, ld.ChatID, query.From.Id); !ok {
@@ -476,7 +476,7 @@ func (m moduleStruct) lockdownBanConfirm(
 	answerStaffCallback(b, query, lockdownText(tr, "lockdown_alert_working"), false)
 
 	if ld.State != models.LockdownStateActive {
-		editStaffCallbackMessage(b, query, lockdownAlreadyLiftedText(tr, ld, true))
+		editStaffCallbackMessage(b, query, lockdownAlreadyLiftedText(tr, ld, true, lockdownSlotClock(slot)))
 		return ext.EndGroups
 	}
 	if ok, key := lockdownButtonAuthority(b, ld.ChatID, query.From.Id); !ok {
@@ -608,7 +608,7 @@ func (m moduleStruct) lockdownRevokeAsk(
 	slot *models.ChatLockdownAlert, ld *models.ChatLockdown,
 ) error {
 	if ld.State != models.LockdownStateActive {
-		answerStaffCallback(b, query, lockdownAlreadyLiftedText(tr, ld, false), false)
+		answerStaffCallback(b, query, lockdownAlreadyLiftedText(tr, ld, false, lockdownSlotClock(slot)), false)
 		return ext.EndGroups
 	}
 	if !lockdownLinkRevocable(slot.Link) {
@@ -691,7 +691,7 @@ func (m moduleStruct) lockdownRevokeConfirm(
 	answerStaffCallback(b, query, lockdownText(tr, "lockdown_alert_working"), false)
 
 	if ld.State != models.LockdownStateActive {
-		editStaffCallbackMessage(b, query, lockdownAlreadyLiftedText(tr, ld, true))
+		editStaffCallbackMessage(b, query, lockdownAlreadyLiftedText(tr, ld, true, lockdownSlotClock(slot)))
 		return ext.EndGroups
 	}
 	if ld.LinkRevokedAt != nil {
@@ -790,4 +790,14 @@ func (m moduleStruct) lockdownCardCancel(
 	answerStaffCallback(b, query, "", false)
 	editStaffCallbackMessage(b, query, lockdownText(tr, "lockdown_alert_cancelled"))
 	return ext.EndGroups
+}
+
+// lockdownPressClock is the zone of a card that has no copy row at hand: the pressed chat's own zone in a
+// Staff Group, the locked group's in its log channel, as the copies themselves show times.
+func lockdownPressClock(query *gotgbot.CallbackQuery, ld *models.ChatLockdown) *time.Location {
+	chat := query.Message.GetChat()
+	if chat.Type == "channel" {
+		return chatClockOf(ld.ChatID)
+	}
+	return chatClockOf(chat.Id)
 }

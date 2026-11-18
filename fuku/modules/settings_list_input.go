@@ -119,7 +119,7 @@ func renderSettingsListPrompt(v settingsView, def settingsListDef, part string, 
 		body = append(body, "", settingsText(v.Tr, "settings_entries_step", i18n.TranslationParams{"n": step, "total": settingsListTwoSteps}))
 	}
 	body = append(body, "", settingsText(v.Tr, "settings_edit_wait_footer", i18n.TranslationParams{
-		"time": until.UTC().Format("15:04"),
+		"time": formatChatTime(until, chatClockOf(v.GroupID), "15:04"),
 	}))
 	if replaced {
 		body = append(body, "", settingsText(v.Tr, "settings_edit_replaced_note"))

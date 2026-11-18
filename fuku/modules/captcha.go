@@ -402,7 +402,7 @@ func (moduleStruct) viewPendingMessages(bot *gotgbot.Bot, ctx *ext.Context) erro
 			fmt.Fprintf(&response, contentText, html.EscapeString(preview))
 		}
 		timeText, _ := tr.GetString("captcha_pending_message_time")
-		fmt.Fprintf(&response, timeText, msg.CreatedAt.Format("15:04:05"))
+		fmt.Fprintf(&response, timeText, formatChatTime(msg.CreatedAt, chatClockOf(chat.Id), "15:04:05"))
 	}
 
 	_, err = msg.Reply(bot, response.String(), formatting.Shtml())

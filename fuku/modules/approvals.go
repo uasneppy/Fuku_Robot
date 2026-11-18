@@ -239,7 +239,7 @@ func (m moduleStruct) checkApprovalStatus(b *gotgbot.Bot, ctx *ext.Context) erro
 	}
 
 	text, _ := tr.GetString(strings.ToLower(m.moduleName) + "_check_status")
-	dateStr := foundUser.CreatedAt.Format("2006-01-02")
+	dateStr := formatChatDate(foundUser.CreatedAt, chatClockOf(chat.Id))
 	baseStr := fmt.Sprintf(text,
 		html.EscapeString(targetName),
 		html.EscapeString(dateStr),

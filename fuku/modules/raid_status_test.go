@@ -47,7 +47,7 @@ func TestRaidLockdownStatus(t *testing.T) {
 
 		env.wantReplyHas(
 			staffMarker("lockdown_status_active_auto"),
-			lockdownTime(*row.LockedAt),
+			lockdownTime(*row.LockedAt, defaultChatLocation()),
 			staffMarker("lockdown_trigger_join_surge")+" 15 60",
 			staffMarker("lockdown_status_removed"),
 		)

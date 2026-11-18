@@ -87,6 +87,8 @@ type settingsInputReply struct {
 	group  gotgbot.Chat
 	// list is the table of the list page whose wait is being run (nil for an editor page).
 	list *settingsListDef
+	// typed is the single-value page whose wait is being run (the Timezone page), nil otherwise.
+	typed *settingsTypedPage
 	// slash is set for a text or caption that looks like a command but is not one this bot
 	// registers: with a live wait it is refused after authority (refuseSlash).
 	slash bool
@@ -194,6 +196,8 @@ func (r *settingsInputReply) waitEnded() bool {
 	}
 	if listPart := settingsListPartByCode(page, part); listPart != nil {
 		r.plain(r.text("settings_entries_wait_ended_note", i18n.TranslationParams{"part": r.text(listPart.WordKey)}))
+	} else if typed, ok := settingsTypedPages[page]; ok && typed.Part == part {
+		r.plain(r.text("settings_tz_wait_ended_note"))
 	} else {
 		r.plain(r.text("settings_edit_wait_ended_note", i18n.TranslationParams{"part": r.text(settingsInputPartWordKey(part))}))
 	}
@@ -211,6 +215,16 @@ func (r *settingsInputReply) run() {
 			return
 		}
 		r.runList(listDef, *part)
+		return
+	}
+	// A wait of a single-value page (the Timezone page) is run by that page's own handler, after the same
+	// authority and slash checks.
+	if typed, ok := settingsTypedPages[r.wait.Page]; ok && typed.Part == r.wait.Part {
+		r.typed = &typed
+		if !r.authorize(typed.Right) || r.refuseSlash() {
+			return
+		}
+		typed.Typed(r)
 		return
 	}
 	def, ok := settingsEditPageByKey(r.wait.Page)
@@ -504,6 +518,9 @@ func (r *settingsInputReply) refuse(reason string) {
 	cancelCode := r.def.CancelCode
 	if r.list != nil {
 		cancelCode = r.list.CancelCode
+	}
+	if r.typed != nil {
+		cancelCode = r.typed.CancelCode
 	}
 	screen := renderSettingsInputRefusalCode(r.view(), cancelCode, r.wait.Part, reason)
 	id := r.send(screen.Text, &screen.Keyboard, true)

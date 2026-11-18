@@ -285,8 +285,23 @@ func settingsInputValidPart(page, part string) bool {
 	if def, ok := settingsEditPageByKey(page); ok && settingsEditPartByCode(def, part) != nil {
 		return true
 	}
+	if typed, ok := settingsTypedPages[page]; ok && typed.Part == part {
+		return true
+	}
 	return settingsListPartByCode(page, part) != nil
 }
+
+// settingsTypedPage is a page whose typed reply is one value (the Timezone page's zone): its part, the
+// part's word, the Cancel code of its prompt, the right a typed reply is judged with and the handler the
+// door runs after the authority and slash checks.
+type settingsTypedPage struct {
+	Part, CancelCode string
+	Right                     settingsRight
+	Typed                     func(r *settingsInputReply)
+}
+
+// settingsTypedPages records the single-value pages by page key; each registers from its own init.
+var settingsTypedPages = map[string]settingsTypedPage{}
 
 // settingsInputMarkerValue is the marker's value for a wait: "c|p|t".
 func settingsInputMarkerValue(groupID int64, page, part string) string {

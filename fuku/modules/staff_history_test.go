@@ -164,7 +164,7 @@ func TestStaffHistoryLine(t *testing.T) {
 	line := staffHistoryLine(tr, 1, &ban, staff.ActionTally{Done: 4, Skipped: 1, Failed: 1, UndoDone: 1}, now)
 	for _, want := range []string{
 		"🔨", staffMarker("staff_act_name_ban"), "Name", "(<code>123</code>)", "2d", "spamming",
-		staffMarker("staff_history_by"), "Alice", "5 Oct 12:04", "✅4 ⏭1 ❌1", staffMarker("staff_history_undone"),
+		staffMarker("staff_history_by"), "Alice", "5 Oct 15:04 (UTC+3)", "✅4 ⏭1 ❌1", staffMarker("staff_history_undone"),
 	} {
 		if !strings.Contains(line, want) {
 			t.Errorf("ban line %q lacks %q", line, want)
@@ -835,7 +835,7 @@ func TestStaffHistoryDetailUndoOutcome(t *testing.T) {
 		if !strings.Contains(head, "⏭ Group C") {
 			t.Errorf("the original block %q must still show Group C's skip", head)
 		}
-		wantInOrder(t, undo, "Bob", "5 Oct 14:30")
+		wantInOrder(t, undo, "Bob", "5 Oct 17:30 (UTC+3)")
 		lineA := lineStartingWith(undo, "✅ Group A")
 		if !strings.Contains(lineA, staffMarker("staff_undo_unbanned")) {
 			t.Errorf("Group A's undo line = %q, want the unbanned wording", lineA)

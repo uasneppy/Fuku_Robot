@@ -345,10 +345,10 @@ func TestSettingsFwdBlockMainShape(t *testing.T) {
 	// A Staff Group hides Deletion and shows Blocked sources, so its Main has the same nineteen cells as any other chat's:
 	// the grid pairs Blocked sources with Staff, and Access and the navigation follow.
 	const (
-		groupOwner   = "s|v / l|c / f|n / k|b / i|w / g|r / e|x / m|t / u|o / y / a / close"
-		privateOwner = "s|v / l|c / f|n / k|b / i|w / g|r / e|x / m|t / u|o / y / a / groups|close"
-		groupAdmin   = "s|v / l|c / f|n / k|b / i|w / g|r / e|x / m|t / u|o / y / close"
-		privateAdmin = "s|v / l|c / f|n / k|b / i|w / g|r / e|x / m|t / u|o / y / groups|close"
+		groupOwner   = "s|v / l|c / f|n / k|b / i|w / g|r / e|x / m|t / u|z / o|y / a / close"
+		privateOwner = "s|v / l|c / f|n / k|b / i|w / g|r / e|x / m|t / u|z / o|y / a / groups|close"
+		groupAdmin   = "s|v / l|c / f|n / k|b / i|w / g|r / e|x / m|t / u|z / o|y / close"
+		privateAdmin = "s|v / l|c / f|n / k|b / i|w / g|r / e|x / m|t / u|z / o|y / groups|close"
 	)
 	e := newSettingsFwdEnv(t)
 	check := func(name string, keyboard [][]gotgbot.InlineKeyboardButton, want string, rows int) {

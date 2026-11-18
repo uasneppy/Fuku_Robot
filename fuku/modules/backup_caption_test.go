@@ -20,7 +20,7 @@ func TestBuildExportCaptionRealLocales(t *testing.T) {
 	bkp.Data["notes"] = map[string]any{"x": 1}
 	bkp.Data["filters"] = map[string]any{"x": 1}
 	bkp.ExportedAt = bkp.ExportedAt.UTC()
-	stamp := bkp.ExportedAt.Format("2006-01-02 15:04:05")
+	stamp := formatChatTime(bkp.ExportedAt, chatClockOf(bkp.ChatID), "2006-01-02 15:04:05")
 
 	for _, code := range []string{"uk", "en", "es", "fr", "hi", "id", "pt", "ru"} {
 		caption := buildExportCaption(i18n.MustNewTranslator(code), bkp)

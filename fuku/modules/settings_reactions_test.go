@@ -16,6 +16,7 @@ import (
 	dbcache "github.com/uasneppy/fuku_robot/fuku/db/cache"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
+	"github.com/uasneppy/fuku_robot/fuku/utils/cache"
 )
 
 // settingsReactionsCleanup deletes the chats' reaction rows and cache keys before the test and again when it ends.
@@ -269,6 +270,9 @@ func TestSettingsParityReactionAdd(t *testing.T) {
 func TestSettingsAuthorityParityReactions(t *testing.T) {
 	env := newSettingsReactionsEnv(t)
 	settingsReactionsSeed(t, env.chat.Id, "alpha 👍")
+	// The cached administrator list the command reads agrees with the live record: no can_change_info.
+	listEditAdmin(env.settingsEnv, env.chat, env.admin, false)
+	cache.InvalidateAdminCache(env.chat.Id)
 	// env.admin is a live administrator without can_change_info: the page lets them view, refuses every write, and
 	// /addreaction refuses them too.
 	m := settingsListOpenMenuPage(env, env.chat, env.admin, settingsPageReactions)

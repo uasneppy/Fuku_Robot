@@ -1473,6 +1473,23 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `reactions` table keeps what backup does with it today. `TestSettingsReactions*`, `TestSettingsParityReactionAdd` (the page and
   `/addreaction` store the same row, and the page draws what the commands wrote), `TestSettingsAuthorityParityReactions`,
   `TestSettingsListReactionsFits` and `TestReactionCap` hold it.
+- The Timezone page (`settings_timezone.go`, page `z`, `Order` 87 with key `z`, so it sorts right after Language; icon 🕒,
+  `settings_page_tz`; plan of 2026-11-18, Part 3) and `/timezone` (`timezone.go`, `helpers.WrapCommand` with `RequireGroup`
+  and `RequireUserAdmin`, anonymous-admin re-entry, not `Disableable`) write through one apply function, `applyTimezone`
+  (`timezoneWrites` seam): an IANA name in any letter case (stored as the database spells it; an old alias such as
+  `Europe/Kiev` resolves), an offset `+3`, `-5`, `+5:30` or `UTC+2` (stored as `UTC+hh:mm`, hours to 14, minutes 00, 15, 30
+  or 45), `utc`, or `default` (removes the row); anything else is `timezone_invalid` with nothing written. Any administrator
+  may view (`/timezone` alone); changing needs `can_change_info` (the command's `CanUserChangeInfo`, the page's
+  `settingsRightChangeInfo`). The page draws the zone, the time there now and whether it is the default, a grid of nine
+  presets (control `z`, `st` only, `v` a two-letter preset code or `d` for Use default, never a zone name, so a button stays
+  far inside 64 bytes), Use default and Type another (`zo`), the Open in private row in a group menu and Back and Close; Main
+  shows the zone's label (`UTC+2`). Type another writes the settings wait (page `z`, part `z`) in a private menu and draws a
+  prompt with Cancel (`zk`, `t` = `z`); in a group menu it writes nothing and redraws with `settings_tz_group_note`. The
+  typed reply is run by the door's third branch, `settingsTypedPages` (`settings_input.go`): a single-value page registers its
+  part, its prompt's Cancel code, its right and its handler, `settingsInputValidPart` accepts the part, the door runs the same
+  `authorize` and slash refusal first, and a reply after the wait ended answers `settings_tz_wait_ended_note`. Main grows to
+  twenty cells (`... d|t / u|z / o|y`), still twelve rows for the owner. `TestChatClock*`, `TestApplyTimezone`,
+  `TestSettingsTimezone*`, `TestSettingsParityTimezone`, `TestSettingsAuthorityParityTimezone` and `TestDefaultTimezone` hold it.
 - The message editor's pages (`settings_edit.go`, pages `w` Welcome, `g` Goodbye and `r` Rules, orders 50, 60 and 70, each
   registered from that file's `init` through `registerSettingsPage` so `settings_pages.go` is never edited) show which
   parts of a message are set, one line per part from one parts table (`settingsEditPageDef.Parts`): Welcome and Goodbye
@@ -2466,6 +2483,20 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   adds `backup_import_skipped_entries` and `backup_import_log_skipped` to its success message
   (`TestGreetingsBackupDropsLastMessageIDs`, `TestImportNeverTakesTheLogChannel`, `TestImportSkipsInvalidListEntries`,
   `TestBackupConfirmImportReportsWhatItLeftOut`).
+- `chat_timezones` (migration 20261118120000) is one chat's choice of zone for the times the bot shows: `chat_id` primary
+  key, `tz` (an IANA name such as `Europe/Kyiv`, or a fixed offset stored as `UTC+hh:mm`, `chk_chat_timezones_tz` 1..64
+  characters), `updated_by`, `updated_at`. A chat without a row uses the bot-wide default (`DEFAULT_TIMEZONE`, default
+  `Europe/Kyiv`; an invalid name stops startup). It is read through `cache.GetFromCacheOrLoad` under
+  `cache.CacheKey("chat_tz", chat)` (`timezone.Get`, which creates nothing and returns its error; `GetFresh` is the same
+  query without the cache), and `timezone.Set` (one column-targeted upsert) and `timezone.Remove` drop the key. The key is
+  not in `skipLocal`: another replica showing the old zone for up to `CACHE_LOCAL_TTL` is accepted. It is never part of
+  backup, export, import or reset. `chatClock(ctx, chat)` (`chat_clock.go`) is the one reader (the row, else the default; a
+  failed read falls back to the default and logs once per process) and `formatChatTime(t, loc, layout)` the one formatter,
+  which appends the zone's short label (`14:05 (UTC+2)`, following daylight saving time). Which zone: a message about a
+  group in that group, its log channel or its settings menu uses the group's; the Staff Group panel, history and action
+  cards use the Staff Group's; a lockdown alert copy uses its destination's (`lockdownSlotClock`: the Staff Group's for a
+  Staff Group copy, the locked group's for the log channel copy), and the stored `body` keeps the time it was posted
+  with. Log lines, file names, Redis hour stamps, stored values and the fban export's RFC 3339 dates stay UTC.
 - `UpdateRecord` skips zero values. Use `UpdateRecordWithZeroValues` to write `false`/`0`/`""`. Both return
   `gorm.ErrRecordNotFound` when no row matched.
 - Check `TableName()` before raw SQL: `ConnectionSettings→connection` (per user), `ConnectionChatSettings→
@@ -4287,7 +4318,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Version strings are shape-locked (`BotVersion:` with two spaces in `fuku/config/config.go`, `version =` in
   `main.go`). Run `make bump-version` on a PR branch, merge, then tag. Tags match `^v\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$`.
 - `.env` in cwd auto-loads without overriding real env. Run `--version` smoke checks from `/tmp`.
-- Defaults that surprise: `REDIS_DB=1`; `ENABLE_AISPAM=true` (the global AI kill switch, text, images and the AI spam-name rule; the text checks are inert without `TYPESAFE_API_KEY`); `ANTHROPIC_API_KEY` empty
+- Defaults that surprise: `DEFAULT_TIMEZONE=Europe/Kyiv` (the zone every group without a choice shows times in; an invalid
+  name stops startup; the zone database is embedded through `time/tzdata`, imported in `fuku/config` so it is ready before
+  the config reads the variable); `REDIS_DB=1`; `ENABLE_AISPAM=true` (the global AI kill switch, text, images and the AI spam-name rule; the text checks are inert without `TYPESAFE_API_KEY`); `ANTHROPIC_API_KEY` empty
   means no raid image check, no AI name check and no image or name leaves the server, and `ANTHROPIC_MODEL` must be a model that
   accepts a forced tool call (a Haiku-class model: the names request and the image request both force the call) and falls back to `claude.DefaultModel`
   (with a warning) when empty or not a valid model name; because the bot reads the standard `ANTHROPIC_API_KEY` name, a

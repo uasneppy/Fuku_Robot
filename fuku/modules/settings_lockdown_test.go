@@ -215,7 +215,7 @@ func TestSettingsLockdownPage(t *testing.T) {
 		wantReason := html.EscapeString("<"+strings.Repeat("a", 199)) + "…"
 		for _, want := range []string{
 			staffMarker("lockdown_status_active"),
-			lockdownTime(*row.LockedAt),
+			lockdownTime(*row.LockedAt, defaultChatLocation()),
 			"Ad&lt;b&gt;min",
 			staffMarker("lockdown_reason_line"),
 			wantReason,
@@ -263,7 +263,7 @@ func TestSettingsLockdownPage(t *testing.T) {
 
 		text := settingsLockdownTestPageText(env, msgID)
 		for _, want := range []string{
-			staffMarker("lockdown_status_active"), lockdownTime(row.CreatedAt), staffMarker("lockdown_status_unconfirmed"),
+			staffMarker("lockdown_status_active"), lockdownTime(row.CreatedAt, defaultChatLocation()), staffMarker("lockdown_status_unconfirmed"),
 		} {
 			if !strings.Contains(text, want) {
 				t.Errorf("page %q does not contain %q", text, want)

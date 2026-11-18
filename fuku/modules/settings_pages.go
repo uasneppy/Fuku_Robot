@@ -166,7 +166,7 @@ func settingsCompose(v settingsView, titleKey string, body []string, notice stri
 			now = time.Now()
 		}
 		footer = append(footer, settingsText(v.Tr, "staff_panel_updated", i18n.TranslationParams{
-			"time": now.UTC().Format("15:04:05"),
+			"time": formatChatTime(now, chatClockOf(v.GroupID), "15:04:05"),
 		}))
 	}
 	if len(footer) > 0 {

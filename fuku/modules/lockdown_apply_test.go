@@ -376,8 +376,8 @@ func TestLockdownStatusHead(t *testing.T) {
 			t.Fatalf("lines = %q, want the active line and the reason line", lines)
 		}
 		if !strings.Contains(lines[0], staffMarker("lockdown_status_active")) ||
-			!strings.Contains(lines[0], lockdownTime(locked)) || !strings.Contains(lines[0], "Sta&lt;r&gt;ter") {
-			t.Errorf("active line = %q, want since %q and the escaped starter", lines[0], lockdownTime(locked))
+			!strings.Contains(lines[0], lockdownTime(locked, defaultChatLocation())) || !strings.Contains(lines[0], "Sta&lt;r&gt;ter") {
+			t.Errorf("active line = %q, want since %q and the escaped starter", lines[0], lockdownTime(locked, defaultChatLocation()))
 		}
 		wantReason := html.EscapeString("<" + strings.Repeat("a", 299))
 		if !strings.Contains(lines[1], staffMarker("lockdown_reason_line")) || !strings.Contains(lines[1], wantReason) ||
@@ -423,7 +423,7 @@ func TestLockdownStatusHead(t *testing.T) {
 		if len(lines) != 2 {
 			t.Fatalf("lines = %q, want the automatic line and the trigger sentence", lines)
 		}
-		if !strings.Contains(lines[0], staffMarker("lockdown_status_active_auto")) || !strings.Contains(lines[0], lockdownTime(locked)) {
+		if !strings.Contains(lines[0], staffMarker("lockdown_status_active_auto")) || !strings.Contains(lines[0], lockdownTime(locked, defaultChatLocation())) {
 			t.Errorf("first line = %q, want the automatic active line with the time", lines[0])
 		}
 		if !strings.Contains(lines[1], staffMarker("lockdown_trigger_join_surge")) {
@@ -445,8 +445,8 @@ func TestLockdownStatusHead(t *testing.T) {
 		if len(lines) != 3 {
 			t.Fatalf("lines = %q, want active, reason and unconfirmed", lines)
 		}
-		if !strings.Contains(lines[0], lockdownTime(row.CreatedAt)) {
-			t.Errorf("active line = %q, want it timed from %q", lines[0], lockdownTime(row.CreatedAt))
+		if !strings.Contains(lines[0], lockdownTime(row.CreatedAt, defaultChatLocation())) {
+			t.Errorf("active line = %q, want it timed from %q", lines[0], lockdownTime(row.CreatedAt, defaultChatLocation()))
 		}
 		if !strings.Contains(lines[2], staffMarker("lockdown_status_unconfirmed")) {
 			t.Errorf("last line = %q, want %q", lines[2], staffMarker("lockdown_status_unconfirmed"))

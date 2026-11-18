@@ -133,7 +133,7 @@ func staffHistoryLine(tr *i18n.Translator, index int, a *models.StaffAction, t s
 	by, _ := tr.GetString("staff_history_by", i18n.TranslationParams{"name": staffUserToken})
 	segment(strings.Replace(by, staffUserToken, issuer, 1))
 
-	segment(a.CreatedAt.UTC().Format("2 Jan 15:04"))
+	segment(formatChatTime(a.CreatedAt, chatClockOf(a.StaffChatID), "2 Jan 15:04"))
 	segment(fmt.Sprintf("✅%d ⏭%d ❌%d", t.Done, t.Skipped, t.Failed))
 	if state := staffHistoryState(tr, a, t.UndoDone, now); state != "" {
 		segment(state)
@@ -369,7 +369,7 @@ func renderStaffHistoryDetail(
 	by, _ := tr.GetString("staff_history_by", i18n.TranslationParams{"name": staffUserToken})
 	head := staffActionHeader(tr, card) + "\n" +
 		strings.Replace(by, staffUserToken, issuer, 1) + " · " +
-		a.CreatedAt.UTC().Format("2 Jan 15:04") + " UTC"
+		formatChatTime(a.CreatedAt, chatClockOf(a.StaffChatID), "2 Jan 15:04")
 	if state := staffHistoryState(tr, a, undoDone, now); state != "" {
 		head += " · " + state
 	}
@@ -386,7 +386,7 @@ func renderStaffHistoryDetail(
 		}
 		text, _ := tr.GetString("staff_history_undo_by", i18n.TranslationParams{
 			"name": staffUserToken,
-			"time": a.UndoStartedAt.UTC().Format("2 Jan 15:04"),
+			"time": formatChatTime(*a.UndoStartedAt, chatClockOf(a.StaffChatID), "2 Jan 15:04"),
 		})
 		undoHeader = strings.Replace(text, staffUserToken, undoBy, 1)
 		undoResults = staffUndoResultsFromRecord(groups)

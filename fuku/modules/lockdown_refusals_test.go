@@ -303,7 +303,7 @@ func TestLockdownCommandReportsExisting(t *testing.T) {
 
 	env.wantReplyHas(
 		staffMarker("lockdown_already_active"),
-		lockdownTime(*first.LockedAt),
+		lockdownTime(*first.LockedAt, defaultChatLocation()),
 		"Ad&lt;b&gt;min",
 		"first reason",
 	)
