@@ -160,7 +160,7 @@ func settingsEditCheckGreetingText(in settingsEditCheckInput) settingsEditVerdic
 	// The {rules} button this text adds at a join is counted against the stored buttons, as the
 	// buttons part counts it against the stored text, so neither part can make a join's welcome
 	// a keyboard Telegram refuses.
-	if total, widest := settingsEditButtonRows(in.State.Buttons, stored); total > settingsEditMaxButtons || widest > settingsEditMaxRowButtons {
+	if total, widest := settingsEditButtonRows(in.State.Buttons, stored); total+in.Def.ReservedButtons > settingsEditMaxButtons || widest > settingsEditMaxRowButtons {
 		return settingsEditRefusal("settings_edit_refuse_buttons_limit", nil)
 	}
 	return settingsEditVerdict{OK: true, Text: stored}
@@ -305,7 +305,8 @@ func settingsEditMediaCaptionRefusal(in settingsEditCheckInput, dataType int) (s
 }
 
 // settingsEditCheckButtons reads the button lines of a typed message with the commands' parser
-// and refuses what the commands would drop silently or Telegram would refuse at a join.
+// and refuses what the commands would drop silently or Telegram would refuse at a join. The buttons the
+// bot adds itself (ReservedButtons, the Unban row of an event message) count against the limit.
 func settingsEditCheckButtons(in settingsEditCheckInput) settingsEditVerdict {
 	if in.Msg.Text == "" {
 		return settingsEditRefusal("settings_edit_refuse_need_text", nil)
@@ -338,7 +339,7 @@ func settingsEditCheckButtons(in settingsEditCheckInput) settingsEditVerdict {
 		storedText = ""
 	}
 	total, widest := settingsEditButtonRows(buttons, storedText)
-	if total > settingsEditMaxButtons || widest > settingsEditMaxRowButtons {
+	if total+in.Def.ReservedButtons > settingsEditMaxButtons || widest > settingsEditMaxRowButtons {
 		return settingsEditRefusal("settings_edit_refuse_buttons_limit", nil)
 	}
 	return settingsEditVerdict{OK: true, Buttons: buttons}
