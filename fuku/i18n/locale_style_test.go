@@ -26,7 +26,29 @@ var (
 	localeStyleTag = regexp.MustCompile(`<(/?)([a-zA-Z][a-zA-Z0-9-]*)[^>]*>`)
 	// localeStyleAllowedTags are the tags Telegram's HTML takes that the texts may use.
 	localeStyleAllowedTags = []string{"b", "i", "u", "s", "code", "pre", "a", "blockquote", "tg-spoiler"}
+	// localeStyleShortOpener is a first line that is one short sentence with no value in it: a persona
+	// phrase such as "Noted." or "Access restored.".
+	localeStyleShortOpener = regexp.MustCompile(`^[^%{}<>.!?:\n]+[.!]$`)
 )
+
+// localeStyleTwoLineReply reports the reply shape the guide replaced: a short opener (at most four words,
+// no value) on line 1 and the fact alone on line 2. The guide joins them with a colon on one line. A
+// second line that is a labelled detail, a bullet or a question is another shape and passes. The check
+// reads the shape only, so it also catches a short fact followed by its explanation, which the guide
+// joins the same way.
+func localeStyleTwoLineReply(key, text string) bool {
+	if strings.HasSuffix(key, "_help_msg") {
+		return false
+	}
+	first, second, ok := strings.Cut(text, "\n")
+	if !ok || second == "" || strings.Contains(second, "\n") {
+		return false
+	}
+	if !localeStyleShortOpener.MatchString(first) || len(strings.Fields(first)) > 4 {
+		return false
+	}
+	return !strings.HasPrefix(second, "<b>") && !strings.HasPrefix(second, "•") && !strings.HasSuffix(second, "?")
+}
 
 // localeStyleProblems lists what is wrong with one text. A text may start with one newline: such a
 // text is a fragment appended to another (a reason line).
@@ -53,6 +75,9 @@ func localeStyleProblems(key, text string) []string {
 	}
 	if problem := localeStyleTagProblem(text); problem != "" {
 		problems = append(problems, problem)
+	}
+	if localeStyleTwoLineReply(key, text) {
+		problems = append(problems, "a two-line reply (join line 1 to the fact with a colon)")
 	}
 	if strings.HasSuffix(key, "_help_msg") {
 		first, rest, _ := strings.Cut(text, "\n")
@@ -97,7 +122,7 @@ func TestLocaleStyle(t *testing.T) {
 			}
 			id := lang + ":" + key
 			problems := localeStyleProblems(key, text)
-			allowed := localeStyleAllowList[id]
+			allowed := localeStyleAllowList[id] || localeStyleGoldenPinned[id]
 			switch {
 			case len(problems) > 0 && !allowed:
 				failures = append(failures, fmt.Sprintf("%s: %s", id, strings.Join(problems, ", ")))
@@ -106,10 +131,12 @@ func TestLocaleStyle(t *testing.T) {
 			}
 		}
 	}
-	for id := range localeStyleAllowList {
-		lang, key, _ := strings.Cut(id, ":")
-		if _, ok := loadStaffLocale(t, lang)[key]; !ok {
-			failures = append(failures, fmt.Sprintf("%s is on localeStyleAllowList but no longer exists", id))
+	for _, list := range []map[string]bool{localeStyleAllowList, localeStyleGoldenPinned} {
+		for id := range list {
+			lang, key, _ := strings.Cut(id, ":")
+			if _, ok := loadStaffLocale(t, lang)[key]; !ok {
+				failures = append(failures, fmt.Sprintf("%s is on an exception list of TestLocaleStyle but no longer exists", id))
+			}
 		}
 	}
 	sort.Strings(failures)
@@ -136,6 +163,14 @@ func TestLocaleStyleProblems(t *testing.T) {
 		{"x", "2 * 3 * 4", 0},
 		{"a_help_msg", "<b>🔨 Bans</b>\n\nText.", 0},
 		{"a_help_msg", "Text first.\n\n<b>Admin commands</b>", 1},
+		{"x", "Noted.\nI will not act on users for flooding.", 1},
+		{"x", "Access restored.\nUnbanned %s.", 1},
+		{"x", "Noted: I will not act on users for flooding.", 0},
+		{"x", "Note already exists.\nOverwrite it?", 0},
+		{"x", "Messages deleted: %d.\n<b>Reason:</b> %s", 0},
+		{"x", "Locked and sealed in this group:\n• %s", 0},
+		{"x", "Give me the regulations to file in this group now.\nReply to a message.", 0},
+		{"x", "Done.\nFirst line.\nSecond line.", 0},
 	} {
 		if got := localeStyleProblems(tc.key, tc.text); len(got) != tc.want {
 			t.Errorf("localeStyleProblems(%q) = %v, want %d problems", tc.text, got, tc.want)
