@@ -116,7 +116,19 @@ These were decided before this roadmap and are not reopened by any phase.
   3. After a custom text is set, the next `/ban`, `/tban`, `/kick`, `/mute`, `/tmute`, `/unban` or `/unmute` in that group posts it, with `{first}`, `{mention}`, `{reason}`, `{admin}`, `{duration}` and `{until}` filled in. A placeholder with no value for that event shows nothing or a neutral word, never raw. Names and reasons typed by users are escaped. `{admin}` reads "an admin" for an anonymous admin. The silent and delete-first variants behave as before.
   4. A group with nothing stored sends exactly today's reply for every command above, in the group's language. If Telegram refuses a custom message (too long, bad file, bad markup), the default text goes out instead and the punishment has already happened. A custom message is deleted on the same Bot messages timer as the default.
   5. Each event has a Silent switch. Silent means the bot acts and posts nothing in the group. Viewing the page needs the live admin check and the owner gate. Every change needs `can_change_info`, judged live on every press and every typed message.
-**Plans**: TBD
+**Plans**: 11 plans
+Plans:
+- [ ] 20-01-PLAN.md — goldens of every manual punishment reply, committed alone (wave 1)
+- [ ] 20-02-PLAN.md — chat_event_messages storage, eventmsg repository, skipLocal, backup exclusion (wave 1)
+- [ ] 20-03-PLAN.md — message editor hooks for page-defined messages (wave 1)
+- [ ] 20-04-PLAN.md — tracer: event message engine and the ban event end to end (wave 2)
+- [ ] 20-05-PLAN.md — tban, kick, unban, mute, tmute, unmute sites and the anonymous mark (wave 3)
+- [ ] 20-06-PLAN.md — private Messages page: families, events, states, Main (wave 4)
+- [ ] 20-07-PLAN.md — Silent switch (wave 5)
+- [ ] 20-08-PLAN.md — editor on event screens: Set, Remove, typed reply (wave 6)
+- [ ] 20-09-PLAN.md — previews through the send path's composer (wave 7)
+- [ ] 20-10-PLAN.md — page safeguards: bytes, lengths, forged presses, privacy (wave 8)
+- [ ] 20-11-PLAN.md — end-to-end proof and phase gates (wave 9)
 **UI hint**: yes
 
 ### Phase 21: PM Copies
