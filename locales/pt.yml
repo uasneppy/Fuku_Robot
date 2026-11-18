@@ -2121,6 +2121,7 @@ reactions_help_msg: |
 reactions_add_usage: "Uso: /addreaction <palavra_chave> <emoji>"
 reactions_invalid_emoji: "Por favor, informe um emoji válido."
 reactions_add_error: "Falha ao salvar reação. Tente novamente."
+reactions_limit_reached: "Limite de reações atingido: um grupo pode ter no máximo {max} reações. Remova uma para adicionar outra."
 reactions_add_success: "Reação adicionada: <code>{keyword}</code> -> {emoji}"
 reactions_remove_usage: "Uso: /removereaction <palavra_chave>"
 reactions_not_found: "Não há reações configuradas para este chat."

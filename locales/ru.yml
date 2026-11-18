@@ -1942,6 +1942,7 @@ reactions_help_msg: |
 reactions_add_usage: "Использование: /addreaction <ключевое_слово> <эмодзи>"
 reactions_invalid_emoji: "Пожалуйста, укажите корректный эмодзи."
 reactions_add_error: "Не удалось сохранить реакцию. Пожалуйста, попробуйте снова."
+reactions_limit_reached: "Лимит реакций исчерпан: в группе может быть не больше {max} реакций. Удалите одну, чтобы добавить новую."
 reactions_add_success: "Реакция добавлена: <code>{keyword}</code> -> {emoji}"
 reactions_remove_usage: "Использование: /removereaction <ключевое_слово>"
 reactions_not_found: "Для этого чата не настроено ни одной реакции."

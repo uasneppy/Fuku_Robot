@@ -2130,6 +2130,7 @@ reactions_help_msg: |
 reactions_add_usage: "Penggunaan: /addreaction <kata_kunci> <emoji>"
 reactions_invalid_emoji: "Silakan berikan emoji yang valid."
 reactions_add_error: "Gagal menyimpan reaksi. Silakan coba lagi."
+reactions_limit_reached: "Batas reaksi tercapai: grup dapat memiliki paling banyak {max} reaksi. Hapus satu untuk menambah yang baru."
 reactions_add_success: "Reaksi ditambahkan: <code>{keyword}</code> -> {emoji}"
 reactions_remove_usage: "Penggunaan: /removereaction <kata_kunci>"
 reactions_not_found: "Tidak ada reaksi yang dikonfigurasi untuk chat ini."

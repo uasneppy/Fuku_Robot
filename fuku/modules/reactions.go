@@ -159,6 +159,10 @@ func (m moduleStruct) addReaction(b *gotgbot.Bot, ctx *ext.Context) error {
 			return err
 		}
 		return ext.EndGroups
+	case reactionCapReached:
+		text, _ := tr.GetString("reactions_limit_reached", i18n.TranslationParams{"max": reactionsCapMax})
+		_, _ = msg.Reply(b, text, formatting.Shtml())
+		return ext.EndGroups
 	case reactionAdded:
 	default:
 		log.Errorf("[Reactions] Failed to save reaction: %v", result.Err)
@@ -412,6 +416,8 @@ const (
 	reactionBadEmoji
 	// reactionExists means the keyword already has a reaction and the caller asked not to overwrite it.
 	reactionExists
+	// reactionCapReached means the keyword is new and the chat already has reactionsCapMax reactions.
+	reactionCapReached
 	// reactionSaveFailed means a read or the write failed; nothing is known to be stored.
 	reactionSaveFailed
 )
@@ -429,6 +435,10 @@ func normaliseReactionEmoji(raw string) string {
 	return strings.ReplaceAll(strings.TrimSpace(raw), "\ufe0f", "")
 }
 
+// reactionsCapMax is the most reactions one chat can have. It is a soft cap read before the insert, so two
+// concurrent adds can pass it by one. Replacing the emoji of an existing keyword is allowed at the cap.
+const reactionsCapMax = 100
+
 // applyReactionAdd stores one reaction of a chat: the one write path of /addreaction and of the Reactions page.
 // The emoji must be one of Telegram's reactions (supportedReactionEmoji, after U+FE0F is stripped). With
 // overwrite (the command) an existing keyword gets the new emoji; without it (the page) an existing keyword is
@@ -437,6 +447,22 @@ func applyReactionAdd(ctx context.Context, chatID int64, keyword, rawEmoji strin
 	emoji := normaliseReactionEmoji(rawEmoji)
 	if !slices.Contains(supportedReactionEmoji, emoji) {
 		return reactionAddResult{Outcome: reactionBadEmoji}
+	}
+	exists, err := reactionWrites.Exists(ctx, chatID, keyword)
+	if err != nil {
+		return reactionAddResult{Outcome: reactionSaveFailed, Emoji: emoji, Err: err}
+	}
+	if exists && !overwrite {
+		return reactionAddResult{Outcome: reactionExists, Emoji: emoji}
+	}
+	if !exists {
+		n, err := reactionWrites.Count(ctx, chatID)
+		if err != nil {
+			return reactionAddResult{Outcome: reactionSaveFailed, Emoji: emoji, Err: err}
+		}
+		if n >= reactionsCapMax {
+			return reactionAddResult{Outcome: reactionCapReached, Emoji: emoji}
+		}
 	}
 	added, err := reactionWrites.Add(ctx, chatID, keyword, emoji, overwrite)
 	if err != nil {

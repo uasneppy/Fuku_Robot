@@ -1058,6 +1058,7 @@ reactions_help_msg: "<b>🎭 Автореакції</b>\n\nАвтоматичн�
 reactions_add_usage: "Використання: /addreaction &lt;keyword&gt; &lt;emoji&gt;"
 reactions_invalid_emoji: "Вкажіть коректний емодзі."
 reactions_add_error: "Збій: не вдалося зберегти реакцію. Спробуйте ще раз."
+reactions_limit_reached: "Ліміт реакцій вичерпано: у групі може бути щонайбільше {max} реакцій. Видаліть одну, щоб додати нову."
 reactions_add_success: "Реакцію внесено: <code>{keyword}</code> -> {emoji}"
 reactions_remove_usage: "Використання: /removereaction &lt;keyword&gt;"
 reactions_not_found: "Для цього чату реакцій не налаштовано."

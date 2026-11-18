@@ -1844,6 +1844,7 @@ reactions_help_msg: |
 reactions_add_usage: "उपयोग: /addreaction <कीवर्ड> <इमोजी>"
 reactions_invalid_emoji: "कृपया एक मान्य इमोजी दें।"
 reactions_add_error: "रिएक्शन सहेजा नहीं जा सका। कृपया फिर से प्रयास करें।"
+reactions_limit_reached: "रिएक्शन की सीमा पूरी हो गई: एक ग्रुप में अधिकतम {max} रिएक्शन हो सकते हैं। नया जोड़ने के लिए एक हटाएं।"
 reactions_add_success: "रिएक्शन जोड़ा गया: <code>{keyword}</code> -> {emoji}"
 reactions_remove_usage: "उपयोग: /removereaction <कीवर्ड>"
 reactions_not_found: "इस चैट के लिए कोई रिएक्शन कॉन्फ़िगर नहीं है।"

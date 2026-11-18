@@ -1158,6 +1158,7 @@ reactions_help_msg: "<b>🎭 Auto-Reactions</b>\n\nAutomatic reactions to chosen
 reactions_add_usage: "Usage: /addreaction &lt;keyword&gt; &lt;emoji&gt;"
 reactions_invalid_emoji: "Give me a valid emoji."
 reactions_add_error: "Malfunction: could not save the reaction. Try again."
+reactions_limit_reached: "Reaction limit reached: a group can have at most {max} reactions. Remove one to add a new one."
 reactions_add_success: "Reaction filed: <code>{keyword}</code> -> {emoji}"
 reactions_remove_usage: "Usage: /removereaction &lt;keyword&gt;"
 reactions_not_found: "No reactions are configured for this chat."
