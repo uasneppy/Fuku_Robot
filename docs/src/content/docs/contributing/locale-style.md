@@ -8,11 +8,13 @@ description: How Xenobot-72 writes its help pages and replies in Ukrainian and E
 This guide covers the Ukrainian (`locales/uk.yml`) and English (`locales/en.yml`) texts of the bot: the help pages and
 the replies after commands. The other six languages keep their wording; only mechanical markup changes reach them.
 
-`TestLocaleStyle` in `fuku/i18n` checks the rules a program can check. Its allow-list holds the keys not yet converted;
-it shrinks with every batch and ends empty.
+`TestLocaleStyle` in `fuku/i18n` checks the rules a program can check. Its allow-list is empty: every Ukrainian and
+English text follows the guide, and a new one must too.
 
-Status: the sample batch of 2026-11-18 follows this guide and waits for the owner's approval. Until then the guide is a
-proposal, and the rest of the texts are converted only after the owner agrees.
+Status: the owner approved this guide on 2026-11-18, with the sample batch, and every Ukrainian and English text was
+converted to it the same day. The decisions taken with the approval: long help pages keep their topic sections, a
+reply joins the persona phrase to the fact with a colon on line 1, and `/warn` keeps the count on its own labelled
+line.
 
 ## Voice
 
@@ -22,10 +24,12 @@ proposal, and the rest of the texts are converted only after the owner agrees.
 
 ## Markup
 
-- HTML only: `<b>`, `<i>`, `<code>`, `<a>`. No markdown (`*bold*`, `` `code` ``, `_italic_`) in Ukrainian or English
+- HTML only: `<b>`, `<i>`, `<code>`, `<a>`, and every message is sent with HTML parse mode. No markdown (`*bold*`, `` `code` ``, `_italic_`) in Ukrainian or English
   strings.
 - Angle-bracket placeholders are written as `&lt;…&gt;` inside `<code>`: `<code>&lt;користувач&gt;</code>`.
 - No leading or trailing whitespace, no double spaces, never three newlines in a row.
+- A text that shows Markdown syntax as an example writes a backtick as `&#96;` and an asterisk as `&#42;`
+  (`formatting_markdown`).
 
 ## Help pages
 
@@ -67,14 +71,22 @@ proposal, and the rest of the texts are converted only after the owner agrees.
 | Примітки | Notes |
 | Приклад | Example |
 
-- Proposal for the owner (sample batch): a long page may add topic sections between the commands and the notes, each a
-  noun phrase in bold (Lockdown: «Автоматичний локдаун» / «Automatic lockdown», «Кнопки сповіщення» / «Alert buttons»).
+- A long page may add topic sections between the command sections and the notes, each headed by a short noun phrase
+  in bold, the same words in both languages' sense (Lockdown: «Автоматичний локдаун» / «Automatic lockdown»,
+  «Кнопки сповіщення» / «Alert buttons»; Captcha: «Типи капчі» / «Captcha types»). The fixed headings above are still
+  used for the sections they name.
 
 ## Replies after commands
 
 - Line 1 says what happened, with the person as a mention. The persona phrase, where there is one, opens that line and
   is joined to the fact with a colon: `Видалення з об'єкта виконано: Олена забанено.`
-- Details follow as labelled lines: `<b>Причина:</b> …`, `<b>Термін:</b> …`, `<b>Попереджень:</b> 2/3`.
+- Details follow as labelled lines: `<b>Причина:</b> …`, `<b>Термін:</b> …`, `<b>Попереджень:</b> 2/3`. A count such as
+  the warnings of `/warn` always has its own labelled line.
+- A list in a reply puts each item on its own line after a bullet `•`; the code adds the bullets, so a translation
+  carries only the line before the list.
+- A text that is a fragment of a longer message carries no blank lines of its own at its start or end: the code joins
+  the parts (a fragment may start with one newline when it is a detail line, as `bans_kick_kicked_reason` does).
+- Values a user typed or a stored value spliced into a text are escaped for HTML at the send site.
 - No blank line inside a short reply; one blank line before a hint.
 - Errors: what went wrong, then what to do, in at most two sentences.
 

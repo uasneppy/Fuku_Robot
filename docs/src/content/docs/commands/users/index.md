@@ -36,4 +36,3 @@ The Users module is a passive background module with no user-facing commands. I 
 - No user interaction required — fully automatic
 - Other modules, such as `/info`, depend on the data this module collects
 
-
