@@ -21,7 +21,6 @@ import (
 )
 
 const (
-	Markdown             = "Markdown"
 	HTML                 = "HTML"
 	MaxMessageLength int = 4096
 )
@@ -86,18 +85,6 @@ func expireMemberCount(chatID int64, entry memberCountEntry) {
 func Shtml() *gotgbot.SendMessageOpts {
 	return &gotgbot.SendMessageOpts{
 		ParseMode: HTML,
-		LinkPreviewOptions: &gotgbot.LinkPreviewOptions{
-			IsDisabled: true,
-		},
-		ReplyParameters: &gotgbot.ReplyParameters{
-			AllowSendingWithoutReply: true,
-		},
-	}
-}
-
-func Smarkdown() *gotgbot.SendMessageOpts {
-	return &gotgbot.SendMessageOpts{
-		ParseMode: Markdown,
 		LinkPreviewOptions: &gotgbot.LinkPreviewOptions{
 			IsDisabled: true,
 		},
