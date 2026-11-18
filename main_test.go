@@ -114,10 +114,14 @@ func TestPostInitSetsCommandsAndStartupMessage(t *testing.T) {
 	}
 	db.DB = testDB
 	t.Cleanup(func() {
+		// postInit starts every background worker below, and each of them reads
+		// db.DB on its own goroutine; stop them all (the order of main's
+		// shutdown) before restoring the handle, so neither this restore nor a
+		// later test that replaces db.DB can race a running cycle.
+		modules.StopDeletionWorker()
+		modules.StopAdminIndexSweeper()
 		modules.StopStaffSweeper()
 		modules.StopCaptchaLifecycle()
-		// postInit starts the lockdown worker, whose cycle reads db.DB; stop it
-		// before restoring the handle so the restore cannot race a running cycle.
 		modules.StopLockdownWorker()
 		db.DB = previousDB
 	})
