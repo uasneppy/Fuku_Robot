@@ -1,21 +1,16 @@
 ---
 gsd_state_version: "1.0"
-milestone: v1.1
-status: Awaiting next milestone
-stopped_at: Completed 19-12-PLAN.md
-last_updated: "2026-11-17T06:59:09.171Z"
-last_activity: 2026-11-17
-last_activity_desc: Quick task 261113-tjj completed (Staff Group forward-source blocklist)
-state_head: 95d8ff420583e92b3cdf470c0a45f75e23f8b924
-milestone_name: PM Settings Hub & Member Screening
-current_phase: 19
-current_phase_name: Blacklist, Filter and Note Pages
+milestone: v1.2
+milestone_name: Custom Messages and Tuning
+status: planning
+last_updated: "2026-11-18T22:41:05.014Z"
+last_activity: 2026-11-18
 progress:
-  total_phases: 10
-  completed_phases: 10
-  total_plans: 126
-  completed_plans: 126
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -29,10 +24,11 @@ See: .planning/PROJECT.md (updated 2026-11-13)
 
 ## Current Position
 
-Phase: Milestone v1.1 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-11-17 - Completed quick task 261116-wh2: Fix raw placeholder strings, note deep links, wiki, reports in PM and disable no-ops
+Status: Defining requirements
+Last activity: 2026-11-18 — Milestone v1.2 started
+
 
 ## Performance Metrics
 
