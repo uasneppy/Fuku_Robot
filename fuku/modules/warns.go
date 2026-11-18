@@ -672,14 +672,14 @@ func (moduleStruct) setWarnLimit(b *gotgbot.Bot, ctx *ext.Context) error {
 		num, err := strconv.Atoi(args[0])
 		if err != nil {
 			temp, _ := tr.GetString("warns_invalid_number")
-			replyText = fmt.Sprintf(temp, args[0])
+			replyText = fmt.Sprintf(temp, html.EscapeString(args[0]))
 		} else {
 			result := applyWarnLimit(tracing.UpdateContext(ctx), chat.Id, num)
 			switch result.Outcome {
 			case warnSettingsSaveFailed:
 				log.Errorf("[Warns] SetWarnLimit failed for chat %d: %v", chat.Id, result.Err)
 				errText, _ := tr.GetString(result.Key)
-				_, _ = msg.Reply(b, errText, formatting.Smarkdown())
+				_, _ = msg.Reply(b, errText, formatting.Shtml())
 				return ext.EndGroups
 			case warnSettingsOutOfRange:
 				replyText, _ = tr.GetString(result.Key)
@@ -690,7 +690,7 @@ func (moduleStruct) setWarnLimit(b *gotgbot.Bot, ctx *ext.Context) error {
 		}
 	}
 
-	_, err := msg.Reply(b, replyText, formatting.Smarkdown())
+	_, err := msg.Reply(b, replyText, formatting.Shtml())
 	if err != nil {
 		log.Error(err)
 		return err

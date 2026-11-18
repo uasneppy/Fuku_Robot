@@ -73,19 +73,15 @@ antiflood_errors_invalid_int:
   Isso não é um número inteiro válido. Por favor, me dê um número inteiro válido,
   ou `off`.
 antiflood_errors_set_in_limit: O limite de antiflood deve ser definido entre 3 e 100.
-antiflood_flood_deleter_already_disabled:
-  Exclusão de mensagens de flood está atualmente
-  *desativada* neste chat, mensagens causando flood serão ignoradas!
-antiflood_flood_deleter_already_enabled:
-  Exclusão de mensagens de flood está atualmente *ativada*
-  neste chat, mensagens causando flood serão deletadas!
+antiflood_flood_deleter_already_disabled: "Exclusão de mensagens de flood está atualmente <b>desativada</b> neste chat, mensagens causando flood serão ignoradas!"
+antiflood_flood_deleter_already_enabled: "Exclusão de mensagens de flood está atualmente <b>ativada</b> neste chat, mensagens causando flood serão deletadas!"
 antiflood_flood_deleter_disabled:
   Desativei a Exclusão de Mensagens de Flood. Mensagens
   causando flood serão ignoradas!
 antiflood_flood_deleter_enabled:
   Ativei a Exclusão de Mensagens de Flood. Mensagens causando
   flood serão deletadas!
-antiflood_flood_deleter_invalid_option: "Eu só entendo uma opção de: `yes`/`no`/`on`/`off`"
+antiflood_flood_deleter_invalid_option: "Eu só entendo uma opção de: <code>yes</code>/<code>no</code>/<code>on</code>/<code>off</code>"
 antiflood_flood_disabled: Este chat não está aplicando controle de flood no momento.
 antiflood_flood_show_settings: "Este chat está aplicando controle de flood após %d mensagens. Qualquer usuário enviando mais que essa quantidade de mensagens será %s."
 antiflood_help_msg:
@@ -112,9 +108,7 @@ antiflood_setflood_disabled: "Ok.
 
   Não vou avisar usuários por flood."
 antiflood_setflood_success: "Limite de Flood definido para <b>%d</b> mensagens."
-antiflood_setfloodmode_specify_action:
-  "Você precisa especificar uma ação para tomar ao
-  floodar. Modos atuais são: `ban`/`kick`/`mute`"
+antiflood_setfloodmode_specify_action: "Você precisa especificar uma ação para tomar ao floodar. Modos atuais são: <code>ban</code>/<code>kick</code>/<code>mute</code>"
 antiflood_setfloodmode_success: "Modo de flood definido para %s."
 antiflood_setfloodmode_unknown_type: "Tipo desconhecido '%s'. Por favor use um de: ban/kick/mute"
 bans_ban_ban_reason: "<b>Motivo:</b> %s"
@@ -192,8 +186,8 @@ blacklists_rm_all_bl_button_handler_no:
   Cancelada a remoção de todas as Listas Negras deste Chat
   ❌
 blacklists_rm_all_bl_button_handler_yes: Removidas todas as Listas Negras deste Chat ✅
-blacklists_set_bl_action_changed_mode: "Modo de lista negra alterado com sucesso para: *%s*"
-blacklists_set_bl_action_choose_correct_option: Por favor escolha uma opção entre <mute/kick/ban/warn/none>
+blacklists_set_bl_action_changed_mode: "Modo de lista negra alterado com sucesso para: <b>%s</b>"
+blacklists_set_bl_action_choose_correct_option: "Por favor escolha uma opção entre &lt;mute/kick/ban/warn/none&gt;"
 blacklists_set_bl_action_current_mode: "\"O modo de lista negra atual para este chat é: %s\""
 blacklists_unblacklist_give_bl_word: Por favor, me dê uma palavra para removê-la da lista negra!
 blacklists_unblacklist_no_removed_bl:
@@ -983,7 +977,7 @@ warns_user_warnings_no_reasons: "Usuário tem %d/%d avisos, mas sem motivos para
 warns_user_no_warnings: Este usuário não tem nenhum aviso!
 warns_removed_by: "Aviso removido por %s."
 warns_no_warns_to_remove: Usuário já não tem avisos!
-warns_limit_set_help: "Por favor especifique quantos avisos um usuário deve poder receber antes de ter ação tomada. Ex. `/setwarnlimit 5`"
+warns_limit_set_help: "Por favor especifique quantos avisos um usuário deve poder receber antes de ter ação tomada. Ex. <code>/setwarnlimit 5</code>"
 warns_invalid_number: "%s não é um número inteiro válido."
 warns_limit_range_error: O limite de avisos deve ser definido entre 1 e 100.
 warns_limit_updated: "Configurações de limite de aviso para este chat foram atualizadas para %d."
@@ -1036,7 +1030,7 @@ pins_input_not_recognized: "Sua entrada não foi reconhecida como uma de: yes/no
 # Purges module strings
 purges_cannot_delete_old: Você não pode deletar mensagens com mais de dois dias. Por favor escolha uma mensagem mais recente.
 purges_purged_messages: "%d mensagens purgadas."
-purges_purged_with_reason: "Purgadas %d mensagens.\n*Motivo*:\n%s"
+purges_purged_with_reason: "Purgadas %d mensagens.\n<b>Motivo</b>:\n%s"
 purges_reply_to_purge: Responda a uma mensagem para selecionar de onde começar a purgar.
 purges_reply_to_delete: Responda a uma mensagem para deletá-la!
 purges_message_marked: Esta mensagem já está marcada para purga!
@@ -1075,12 +1069,12 @@ disabling_no_disabled_commands: Não há comandos desativados neste chat.
 disabling_disabled_commands: "Os seguintes comandos estão desativados neste chat:"
 disabling_delete_enabled: Mensagens desativadas serão agora deletadas.
 disabling_delete_disabled: Mensagens desativadas não serão mais deletadas.
-disabling_delete_current_enabled: Exclusão de Comando Desativado está *ativada*, comandos desativados de usuários serão deletados!
-disabling_delete_current_disabled: Exclusão de Comando Desativado está *desativada*, comandos desativados de usuários *não* serão deletados!
+disabling_delete_current_enabled: "Exclusão de Comando Desativado está <b>ativada</b>, comandos desativados de usuários serão deletados!"
+disabling_delete_current_disabled: "Exclusão de Comando Desativado está <b>desativada</b>, comandos desativados de usuários <b>não</b> serão deletados!"
 disabling_enabled_successfully: "Re-Ativado o uso do seguinte neste chat:%s"
 disabling_unknown_reenable: "Comando desconhecido para Re-Ativar:\n-%s\nVerifique /disableable!"
 disabling_no_command_reenable: "Você não especificou um comando para reativar."
-disabling_invalid_option: "Eu só entendo uma opção de: `yes`/`no`/`on`/`off`"
+disabling_invalid_option: "Eu só entendo uma opção de: <code>yes</code>/<code>no</code>/<code>on</code>/<code>off</code>"
 
 # Misc module strings
 misc_reply_to_someone: Responda a alguém.
@@ -1251,7 +1245,7 @@ notes_not_exists: "Nota não existe!"
 notes_removed_success: "Nota <b>%s</b> removida."
 notes_private_enabled: "Notas Privadas ativadas.\nAgora usuários receberão as notas como mensagem privada."
 notes_private_disabled: "Notas Privadas desativadas.\nAgora todas as notas serão enviadas para o Chat do Grupo."
-notes_private_invalid_option: "Eu só entendo uma opção de <on/off/yes/no>"
+notes_private_invalid_option: "Eu só entendo uma opção de &lt;on/off/yes/no&gt;"
 notes_private_status_on: "Notas Privadas estão atualmente ativadas!"
 notes_private_status_off: "Notas Privadas estão atualmente desativadas!"
 notes_none_in_chat: "Não há notas neste chat!"
@@ -1268,7 +1262,7 @@ notes_clear_all_success: "Removidas todas as Notas deste Chat ✅"
 notes_clear_all_cancelled: "Cancelada a remoção de todas as notas deste Chat ❌"
 notes_parsing_error: "Há algum erro ao analisar a nota, por favor reporte isso no chat de suporte."
 notes_admin_only: "Esta nota só pode ser acessada por um admin!"
-notes_click_for_private: "Clique no botão abaixo para obter a nota *%s*"
+notes_click_for_private: "Clique no botão abaixo para obter a nota <b>%s</b>"
 notes_get_insufficient_args: "Argumentos insuficientes."
 notes_does_not_exist: "Nota não existe!"
 notes_parsing_error_support: "Há algum erro ao analisar a nota, por favor reporte isso ao chat de suporte."

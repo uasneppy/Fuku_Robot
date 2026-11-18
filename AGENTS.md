@@ -4302,6 +4302,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   a blank line, so it gets no generic header (`helpHasOwnTitle`); a page without one (the other six languages) gets
   `helpers_module_help_header` (one line, the module's icon from `helpModuleIcons` and its translated name), and
   `renderModuleHelp` adds the blank line after it.
+- Every reply is sent with HTML parse mode; nothing sends Telegram's legacy Markdown any more (plan of 2026-11-18, Part 4
+  step 4: `/purge`, `/privatenotes`, a private note's button message, `/disable`, `/enable`, `/disableable`, `/disabled`,
+  `/disabledel`, `/cleanservice`, `/autoapprove`, `/setwarnlimit`, `/setfloodmode`, `/delflood` and `/blacklistaction`
+  moved, their texts converted in all 8 languages). A value a user typed or a stored value spliced into a text is
+  `html.EscapeString`-ed at the site (`purgeDoneText`, `noteClickForPrivateText`, `disablingCommandList`, the
+  `/setwarnlimit` argument, the blacklist action; `TestMarkdownSitesEscapeSplicedValues`,
+  `TestSetWarnLimitEscapesItsArgument`). A new text uses HTML, never Markdown.
 - A string filled with `i18n.TranslationParams` uses `{name}` placeholders equal to the param names. A `%s` or `%d`
   verb is filled only from the keys `0` to `9` or the fixed common names of `extractOrderedValues`, and prints raw
   for any other name (`modules`, `list`, `chat`, `time`, `types`, `attempts` did). `TestRawPlaceholderKeysRender`

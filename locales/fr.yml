@@ -350,7 +350,7 @@ warns_user_warnings_no_reasons: "L'utilisateur a %d/%d avertissements, mais aucu
 warns_user_no_warnings: Cet utilisateur n'a aucun avertissement !
 warns_removed_by: "Avertissement supprimé par %s."
 warns_no_warns_to_remove: L'utilisateur n'a déjà aucun avertissement !
-warns_limit_set_help: "Veuillez spécifier combien d'avertissements un utilisateur doit recevoir avant d'être sanctionné. Ex. `/setwarnlimit 5`"
+warns_limit_set_help: "Veuillez spécifier combien d'avertissements un utilisateur doit recevoir avant d'être sanctionné. Ex. <code>/setwarnlimit 5</code>"
 warns_invalid_number: "%s n'est pas un entier valide."
 warns_limit_range_error: La limite d'avertissements doit être définie entre 1 et 100.
 warns_limit_updated: "Les paramètres de limite d'avertissements de ce chat ont été mis à jour à %d."
@@ -411,8 +411,8 @@ blacklists_rm_all_bl_button_handler_no: |
   Suppression de la liste noire de ce chat annulée
   ❌
 blacklists_rm_all_bl_button_handler_yes: Tous les mots de la liste noire ont été supprimés de ce chat ✅
-blacklists_set_bl_action_changed_mode: "Mode de liste noire changé avec succès : *%s*"
-blacklists_set_bl_action_choose_correct_option: Veuillez choisir une option parmi <mute/kick/ban/warn/none>
+blacklists_set_bl_action_changed_mode: "Mode de liste noire changé avec succès : <b>%s</b>"
+blacklists_set_bl_action_choose_correct_option: "Veuillez choisir une option parmi &lt;mute/kick/ban/warn/none&gt;"
 blacklists_set_bl_action_current_mode: |
   Le mode de liste noire actuel pour ce chat est :
   %s
@@ -770,7 +770,7 @@ notes_not_exists: "La note n'existe pas !"
 notes_removed_success: "Note <b>%s</b> supprimée."
 notes_private_enabled: "Notes privées activées.\nLes utilisateurs recevront les notes en message privé."
 notes_private_disabled: "Notes privées désactivées.\nToutes les notes seront envoyées dans le chat du groupe."
-notes_private_invalid_option: "Je comprends uniquement une option parmi <on/off/yes/no>"
+notes_private_invalid_option: "Je comprends uniquement une option parmi &lt;on/off/yes/no&gt;"
 notes_private_status_on: "Les notes privées sont actuellement activées !"
 notes_private_status_off: "Les notes privées sont actuellement désactivées !"
 notes_none_in_chat: "Il n'y a pas de notes dans ce chat !"
@@ -787,7 +787,7 @@ notes_clear_all_success: "Toutes les notes ont été supprimées de ce chat ✅"
 notes_clear_all_cancelled: "Suppression de toutes les notes de ce chat annulée ❌"
 notes_parsing_error: "Il y a une erreur d'analyse de la note, veuillez le signaler dans le chat de support."
 notes_admin_only: "Cette note ne peut être consultée que par un admin !"
-notes_click_for_private: "Cliquez sur le bouton ci-dessous pour obtenir la note *%s*"
+notes_click_for_private: "Cliquez sur le bouton ci-dessous pour obtenir la note <b>%s</b>"
 notes_get_insufficient_args: "Pas assez d'arguments."
 notes_does_not_exist: "La note n'existe pas !"
 notes_parsing_error_support: "Il y a une erreur d'analyse de la note, veuillez le signaler au chat de support."
@@ -973,12 +973,12 @@ disabling_no_disabled_commands: Il n'y a pas de commandes désactivées dans ce 
 disabling_disabled_commands: "Les commandes suivantes sont désactivées dans ce chat :"
 disabling_delete_enabled: Les messages de commandes désactivées seront maintenant supprimés.
 disabling_delete_disabled: Les messages de commandes désactivées ne seront plus supprimés.
-disabling_delete_current_enabled: La suppression des commandes désactivées est *activée*, les commandes désactivées des utilisateurs seront supprimées !
-disabling_delete_current_disabled: La suppression des commandes désactivées est *désactivée*, les commandes désactivées des utilisateurs ne seront *pas* supprimées !
+disabling_delete_current_enabled: "La suppression des commandes désactivées est <b>activée</b>, les commandes désactivées des utilisateurs seront supprimées !"
+disabling_delete_current_disabled: "La suppression des commandes désactivées est <b>désactivée</b>, les commandes désactivées des utilisateurs ne seront <b>pas</b> supprimées !"
 disabling_enabled_successfully: "L'utilisation des commandes suivantes a été réactivée dans ce chat :%s"
 disabling_unknown_reenable: "Commande inconnue à réactiver :\n-%s\nVérifiez /disableable !"
 disabling_no_command_reenable: "Vous n'avez pas spécifié de commande à réactiver."
-disabling_invalid_option: "Je comprends uniquement une option parmi : `yes`/`no`/`on`/`off`"
+disabling_invalid_option: "Je comprends uniquement une option parmi : <code>yes</code>/<code>no</code>/<code>on</code>/<code>off</code>"
 
 # Locks module strings
 locks_help_msg: "*Admin uniquement* :
@@ -1241,7 +1241,7 @@ purges_help_msg: "*Admin uniquement :*
   × /del : Supprime le message auquel vous avez répondu."
 purges_cannot_delete_old: Vous ne pouvez pas supprimer des messages de plus de deux jours. Veuillez choisir un message plus récent.
 purges_purged_messages: "%d messages supprimés."
-purges_purged_with_reason: "%d messages supprimés.\n*Raison* :\n%s"
+purges_purged_with_reason: "%d messages supprimés.\n<b>Raison</b> :\n%s"
 purges_reply_to_purge: Répondez à un message pour sélectionner où commencer la suppression.
 purges_reply_to_delete: Répondez à un message pour le supprimer !
 purges_message_marked: Ce message est déjà marqué pour la suppression !
@@ -1956,19 +1956,15 @@ antiflood_errors_invalid_int: |
   Ce n'est pas un entier valide. Veuillez me donner un entier valide,
   ou `off`.
 antiflood_errors_set_in_limit: La limite antiflood doit être définie entre 3 et 100.
-antiflood_flood_deleter_already_disabled: |
-  La suppression des messages antiflood est actuellement
-  *désactivée* dans ce chat, les messages causant l'antiflood seront ignorés !
-antiflood_flood_deleter_already_enabled: |
-  La suppression des messages antiflood est actuellement *activée*
-  dans ce chat, les messages causant l'antiflood seront supprimés !
+antiflood_flood_deleter_already_disabled: "La suppression des messages antiflood est actuellement\n<b>désactivée</b> dans ce chat, les messages causant l'antiflood seront ignorés !\n"
+antiflood_flood_deleter_already_enabled: "La suppression des messages antiflood est actuellement <b>activée</b>\ndans ce chat, les messages causant l'antiflood seront supprimés !\n"
 antiflood_flood_deleter_disabled: |
   Désactivation de la suppression des messages antiflood. Les messages
   causant l'antiflood seront ignorés !
 antiflood_flood_deleter_enabled: |
   Activation de la suppression des messages antiflood. Les messages causant
   l'antiflood seront supprimés !
-antiflood_flood_deleter_invalid_option: "Je ne comprends qu'une option parmi : `yes`/`no`/`on`/`off`"
+antiflood_flood_deleter_invalid_option: "Je ne comprends qu'une option parmi : <code>yes</code>/<code>no</code>/<code>on</code>/<code>off</code>"
 antiflood_flood_disabled: Ce chat n'applique actuellement pas le contrôle d'inondation.
 antiflood_flood_show_settings: |
   Ce chat applique actuellement le contrôle d'inondation après
@@ -1977,9 +1973,7 @@ antiflood_setflood_disabled: |
   D'accord.
   Je n'avertirai pas les utilisateurs pour inondation.
 antiflood_setflood_success: La limite d'inondation a été définie à <b>%d</b> messages.
-antiflood_setfloodmode_specify_action: |
-  Vous devez spécifier une action à prendre en cas
-  d'inondation. Les modes actuels sont : `ban`/`kick`/`mute`
+antiflood_setfloodmode_specify_action: "Vous devez spécifier une action à prendre en cas\nd'inondation. Les modes actuels sont : <code>ban</code>/<code>kick</code>/<code>mute</code>\n"
 antiflood_setfloodmode_success: Le mode d'inondation a été défini sur %s.
 antiflood_setfloodmode_unknown_type: "Type inconnu '%s'. Veuillez utiliser l'un des suivants : ban/kick/mute"
 antiflood_button_unban_admins: "Débannir (Admins uniquement)"

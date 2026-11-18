@@ -640,16 +640,16 @@ antiflood_checkflood_perform_action: "हाँ, मुझे आपकी flood
 antiflood_errors_expected_args: "मुझे कुछ तर्क चाहिए! या तो off, या एक पूर्णांक। उदा: `/setflood 5`, या `/setflood off`"
 antiflood_errors_invalid_int: "यह एक वैध पूर्णांक नहीं है। कृपया मुझे एक वैध पूर्णांक दें, या `off`।"
 antiflood_errors_set_in_limit: antiflood सीमा 3 और 100 के बीच सेट होनी चाहिए।
-antiflood_flood_deleter_already_disabled: "Antiflood संदेश हटाना वर्तमान में इस चैट में *अक्षम* है, antiflood उत्पन्न करने वाले संदेशों को अनदेखा किया जाएगा!"
-antiflood_flood_deleter_already_enabled: "Antiflood संदेश हटाना वर्तमान में इस चैट में *सक्षम* है, antiflood उत्पन्न करने वाले संदेश हटा दिए जाएंगे!"
+antiflood_flood_deleter_already_disabled: "Antiflood संदेश हटाना वर्तमान में इस चैट में <b>अक्षम</b> है, antiflood उत्पन्न करने वाले संदेशों को अनदेखा किया जाएगा!"
+antiflood_flood_deleter_already_enabled: "Antiflood संदेश हटाना वर्तमान में इस चैट में <b>सक्षम</b> है, antiflood उत्पन्न करने वाले संदेश हटा दिए जाएंगे!"
 antiflood_flood_deleter_disabled: "Antiflood संदेश हटाना बंद कर दिया। antiflood उत्पन्न करने वाले संदेशों को अनदेखा किया जाएगा!"
 antiflood_flood_deleter_enabled: "Antiflood संदेश हटाना चालू कर दिया। antiflood उत्पन्न करने वाले संदेश हटा दिए जाएंगे!"
-antiflood_flood_deleter_invalid_option: "मैं केवल इन विकल्पों को समझता हूं: `yes`/`no`/`on`/`off`"
+antiflood_flood_deleter_invalid_option: "मैं केवल इन विकल्पों को समझता हूं: <code>yes</code>/<code>no</code>/<code>on</code>/<code>off</code>"
 antiflood_flood_disabled: यह चैट वर्तमान में flood नियंत्रण लागू नहीं कर रहा है।
 antiflood_flood_show_settings: "यह चैट वर्तमान में %d संदेशों के बाद flood नियंत्रण लागू कर रहा है। उस मात्रा से अधिक संदेश भेजने वाले किसी भी उपयोगकर्ता को %s कर दिया जाएगा।"
 antiflood_setflood_disabled: "ठीक है।\n\nमैं flooding के लिए उपयोगकर्ताओं को चेतावनी नहीं दूंगा।"
 antiflood_setflood_success: Flood सीमा <b>%d</b> संदेशों पर सेट की गई है।
-antiflood_setfloodmode_specify_action: "आपको flooding पर की जाने वाली कार्रवाई निर्दिष्ट करनी होगी। वर्तमान मोड हैं: `ban`/`kick`/`mute`"
+antiflood_setfloodmode_specify_action: "आपको flooding पर की जाने वाली कार्रवाई निर्दिष्ट करनी होगी। वर्तमान मोड हैं: <code>ban</code>/<code>kick</code>/<code>mute</code>"
 antiflood_setfloodmode_success: Flood मोड %s पर सेट किया गया है।
 antiflood_setfloodmode_unknown_type: "अज्ञात प्रकार '%s'। कृपया इनमें से एक का उपयोग करें: ban/kick/mute"
 antiflood_button_unban_admins: "अनबैन (केवल एडमिन)"
@@ -710,8 +710,8 @@ blacklists_ls_bl_no_blacklisted: इस चैट में कोई ब्ल�
 blacklists_rm_all_bl_ask: "क्या आप वाकई इस चैट से सभी ब्लैकलिस्ट किए गए शब्दों को हटाना चाहते हैं?"
 blacklists_rm_all_bl_button_handler_no: "इस चैट की सभी ब्लैकलिस्ट को हटाना रद्द किया गया ❌"
 blacklists_rm_all_bl_button_handler_yes: "इस चैट से सभी ब्लैकलिस्ट हटा दी गईं ✅"
-blacklists_set_bl_action_changed_mode: "ब्लैकलिस्ट मोड सफलतापूर्वक बदल दिया गया: *%s*"
-blacklists_set_bl_action_choose_correct_option: "कृपया <mute/kick/ban/warn/none> में से एक विकल्प चुनें"
+blacklists_set_bl_action_changed_mode: "ब्लैकलिस्ट मोड सफलतापूर्वक बदल दिया गया: <b>%s</b>"
+blacklists_set_bl_action_choose_correct_option: "कृपया &lt;mute/kick/ban/warn/none&gt; में से एक विकल्प चुनें"
 blacklists_set_bl_action_current_mode: "इस चैट के लिए वर्तमान ब्लैकलिस्ट मोड है: %s"
 blacklists_unblacklist_give_bl_word: कृपया मुझे ब्लैकलिस्ट से हटाने के लिए एक शब्द दें!
 blacklists_unblacklist_no_removed_bl: "दिए गए शब्दों में से कोई भी ब्लैकलिस्ट में नहीं था जिसे हटाया जा सके!"
@@ -929,12 +929,12 @@ disabling_no_disabled_commands: इस चैट में कोई अक्�
 disabling_disabled_commands: "इस चैट में निम्नलिखित कमांड अक्षम हैं:"
 disabling_delete_enabled: अक्षम संदेश अब हटा दिए जाएंगे।
 disabling_delete_disabled: अक्षम संदेश अब हटाए नहीं जाएंगे।
-disabling_delete_current_enabled: अक्षम कमांड हटाना *सक्षम* है, उपयोगकर्ताओं से अक्षम कमांड हटा दिए जाएंगे!
-disabling_delete_current_disabled: अक्षम कमांड हटाना *अक्षम* है, उपयोगकर्ताओं से अक्षम कमांड *हटाए नहीं* जाएंगे!
+disabling_delete_current_enabled: "अक्षम कमांड हटाना <b>सक्षम</b> है, उपयोगकर्ताओं से अक्षम कमांड हटा दिए जाएंगे!"
+disabling_delete_current_disabled: "अक्षम कमांड हटाना <b>अक्षम</b> है, उपयोगकर्ताओं से अक्षम कमांड <b>हटाए नहीं</b> जाएंगे!"
 disabling_enabled_successfully: "इस चैट में निम्नलिखित का उपयोग पुनः-सक्षम किया गया:%s"
 disabling_unknown_reenable: "पुनः-सक्षम करने के लिए अज्ञात कमांड:\n-%s\n/disableable देखें!"
 disabling_no_command_reenable: "आपने फिर से सक्षम करने के लिए कोई कमांड निर्दिष्ट नहीं किया है।"
-disabling_invalid_option: "मैं केवल इन विकल्पों को समझता हूं: `yes`/`no`/`on`/`off`"
+disabling_invalid_option: "मैं केवल इन विकल्पों को समझता हूं: <code>yes</code>/<code>no</code>/<code>on</code>/<code>off</code>"
 disabling_extended_docs: |
   <b>मुख्य विशेषताएं:</b>
   • गैर-एडमिन उपयोगकर्ताओं के लिए विशिष्ट बॉट कमांड अक्षम करें
@@ -1294,7 +1294,7 @@ notes_not_exists: "नोट मौजूद नहीं है!"
 notes_removed_success: "नोट <b>%s</b> हटा दिया गया।"
 notes_private_enabled: "प्राइवेट नोट्स चालू कर दिए गए।\nअब उपयोगकर्ताओं को नोट्स प्राइवेट संदेश के रूप में मिलेंगे।"
 notes_private_disabled: "प्राइवेट नोट्स बंद कर दिए गए।\nअब सभी नोट्स ग्रुप चैट में भेजे जाएंगे।"
-notes_private_invalid_option: "मैं केवल इन विकल्पों को समझता हूं <on/off/yes/no>"
+notes_private_invalid_option: "मैं केवल इन विकल्पों को समझता हूं &lt;on/off/yes/no&gt;"
 notes_private_status_on: "प्राइवेट नोट्स वर्तमान में चालू हैं!"
 notes_private_status_off: "प्राइवेट नोट्स वर्तमान में बंद हैं!"
 notes_none_in_chat: "इस चैट में कोई नोट्स नहीं हैं!"
@@ -1311,7 +1311,7 @@ notes_clear_all_success: "इस चैट से सभी नोट्स ह�
 notes_clear_all_cancelled: "इस चैट से सभी नोट्स हटाना रद्द किया गया ❌"
 notes_parsing_error: "नोट पार्स करने में कुछ त्रुटि है, कृपया इसे सपोर्ट चैट में रिपोर्ट करें।"
 notes_admin_only: "यह नोट केवल एडमिन द्वारा एक्सेस किया जा सकता है!"
-notes_click_for_private: "नोट *%s* प्राप्त करने के लिए नीचे बटन पर क्लिक करें"
+notes_click_for_private: "नोट <b>%s</b> प्राप्त करने के लिए नीचे बटन पर क्लिक करें"
 notes_get_insufficient_args: "पर्याप्त तर्क नहीं।"
 notes_does_not_exist: "नोट मौजूद नहीं है!"
 notes_parsing_error_support: "नोट पार्स करने में कुछ त्रुटि है, कृपया इसे सपोर्ट चैट में रिपोर्ट करें।"
@@ -1407,7 +1407,7 @@ pins_notes_docs: |
 # Purges module strings
 purges_cannot_delete_old: आप दो दिन से अधिक पुराने संदेश नहीं हटा सकते। कृपया एक अधिक हाल का संदेश चुनें।
 purges_purged_messages: "%d संदेश हटाए गए।"
-purges_purged_with_reason: "%d संदेश हटाए गए।\n*कारण*:\n%s"
+purges_purged_with_reason: "%d संदेश हटाए गए।\n<b>कारण</b>:\n%s"
 purges_reply_to_purge: पर्ज शुरू करने के लिए किसी संदेश का जवाब दें।
 purges_reply_to_delete: इसे हटाने के लिए किसी संदेश का जवाब दें!
 purges_message_marked: यह संदेश पहले से ही पर्ज के लिए चिह्नित है!
@@ -1567,7 +1567,7 @@ warns_user_warnings_no_reasons: "उपयोगकर्ता को %d/%d च
 warns_user_no_warnings: इस उपयोगकर्ता को कोई चेतावनी नहीं मिली है!
 warns_removed_by: "चेतावनी %s द्वारा हटाई गई।"
 warns_no_warns_to_remove: उपयोगकर्ता को पहले से कोई चेतावनी नहीं है!
-warns_limit_set_help: "कृपया निर्दिष्ट करें कि एक उपयोगकर्ता को कार्रवाई से पहले कितनी चेतावनियां मिलनी चाहिए। उदा. `/setwarnlimit 5`"
+warns_limit_set_help: "कृपया निर्दिष्ट करें कि एक उपयोगकर्ता को कार्रवाई से पहले कितनी चेतावनियां मिलनी चाहिए। उदा. <code>/setwarnlimit 5</code>"
 warns_invalid_number: "%s एक मान्य पूर्णांक नहीं है।"
 warns_limit_range_error: चेतावनी सीमा 1 और 100 के बीच होनी चाहिए।
 warns_limit_updated: "इस चैट के लिए चेतावनी सीमा सेटिंग्स %d पर अपडेट की गई हैं।"

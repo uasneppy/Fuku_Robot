@@ -511,7 +511,7 @@ func (moduleStruct) privNote(b *gotgbot.Bot, ctx *ext.Context) error {
 			txt, _ = tr.GetString("notes_private_status_off")
 		}
 	}
-	_, err := msg.Reply(b, txt, formatting.Smarkdown())
+	_, err := msg.Reply(b, txt, formatting.Shtml())
 	if err != nil {
 		log.Error(err)
 		return err
@@ -952,9 +952,8 @@ func (m moduleStruct) notesWatcher(b *gotgbot.Bot, ctx *ext.Context) error {
 				_, err = media.SendNote(b, ctx, chat, noteData, replyMsgId, ctx.Message.MessageThreadId)
 			} else {
 				tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-				clickForPrivateText, _ := tr.GetString("notes_click_for_private")
 				_, err = msg.Reply(b,
-					fmt.Sprintf(clickForPrivateText, noteName),
+					noteClickForPrivateText(tr, noteName),
 					&gotgbot.SendMessageOpts{
 						ReplyParameters: &gotgbot.ReplyParameters{
 							MessageId:                replyMsgId,
@@ -970,7 +969,7 @@ func (m moduleStruct) notesWatcher(b *gotgbot.Bot, ctx *ext.Context) error {
 								},
 							},
 						},
-						ParseMode: formatting.Markdown,
+						ParseMode: formatting.HTML,
 					},
 				)
 			}
@@ -1070,9 +1069,8 @@ func (m moduleStruct) getNotes(b *gotgbot.Bot, ctx *ext.Context) error {
 	} else {
 		if (notes.GetNotes(chat.Id).PrivateNotesEnabled() || noteData.PrivateOnly) && !noteData.GroupOnly {
 			tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-			clickForPrivateText, _ := tr.GetString("notes_click_for_private")
 			_, err = msg.Reply(b,
-				fmt.Sprintf(clickForPrivateText, noteName),
+				noteClickForPrivateText(tr, noteName),
 				&gotgbot.SendMessageOpts{
 					ReplyMarkup: gotgbot.InlineKeyboardMarkup{
 						InlineKeyboard: [][]gotgbot.InlineKeyboardButton{
@@ -1084,7 +1082,7 @@ func (m moduleStruct) getNotes(b *gotgbot.Bot, ctx *ext.Context) error {
 							},
 						},
 					},
-					ParseMode: formatting.Markdown,
+					ParseMode: formatting.HTML,
 					ReplyParameters: &gotgbot.ReplyParameters{
 						MessageId:                replyMsgId,
 						AllowSendingWithoutReply: true,
@@ -1389,4 +1387,10 @@ func invalidNoteDeepLinkHandler(b *gotgbot.Bot, ctx *ext.Context, user *gotgbot.
 	text, _ := tr.GetString("helpers_invalid_deep_link")
 	_, _ = ctx.EffectiveMessage.Reply(b, text, formatting.Shtml())
 	return ext.EndGroups
+}
+
+// noteClickForPrivateText is the HTML message that points to a note sent in private; the note name is escaped.
+func noteClickForPrivateText(tr *i18n.Translator, noteName string) string {
+	temp, _ := tr.GetString("notes_click_for_private")
+	return fmt.Sprintf(temp, html.EscapeString(noteName))
 }

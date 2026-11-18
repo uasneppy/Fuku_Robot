@@ -2,6 +2,7 @@ package modules
 
 import (
 	"fmt"
+	"html"
 	"slices"
 	"strings"
 
@@ -101,8 +102,8 @@ func (moduleStruct) toggleCommands(enable bool) func(*gotgbot.Bot, *ext.Context)
 
 		if len(successCmds) > 0 {
 			temp, _ := tr.GetString(cfg.successMsgKey)
-			text := fmt.Sprintf(temp, "\n - "+strings.Join(successCmds, "\n - "))
-			_, err := msg.Reply(b, text, formatting.Smarkdown())
+			text := fmt.Sprintf(temp, disablingCommandList(successCmds))
+			_, err := msg.Reply(b, text, formatting.Shtml())
 			if err != nil {
 				log.Error(err)
 				return err
@@ -136,13 +137,9 @@ func (moduleStruct) disableable(b *gotgbot.Bot, ctx *ext.Context) error {
 
 	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 	text, _ := tr.GetString("disabling_disableable_commands")
-	var sb strings.Builder
-	for _, cmds := range helpers.DisableableCommands() {
-		fmt.Fprintf(&sb, "\n - `%s`", cmds)
-	}
-	text += sb.String()
+	text += disablingCommandList(helpers.DisableableCommands())
 
-	_, err := msg.Reply(b, text, formatting.Smarkdown())
+	_, err := msg.Reply(b, text, formatting.Shtml())
 	if err != nil {
 		log.Error(err)
 		return err
@@ -192,12 +189,8 @@ func (moduleStruct) disabled(b *gotgbot.Bot, ctx *ext.Context) error {
 		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 		text, _ := tr.GetString("disabling_disabled_commands")
 		slices.Sort(disabled)
-		var sb strings.Builder
-		for _, cmds := range disabled {
-			fmt.Fprintf(&sb, "\n - `%s`", cmds)
-		}
-		text += sb.String()
-		_, err := msg.Reply(b, text, formatting.Smarkdown())
+		text += disablingCommandList(disabled)
+		_, err := msg.Reply(b, text, formatting.Shtml())
 		if err != nil {
 			log.Error(err)
 			return err
@@ -249,7 +242,7 @@ func (moduleStruct) disabledel(b *gotgbot.Bot, ctx *ext.Context) error {
 		}
 	}
 
-	_, err := msg.Reply(b, text, formatting.Smarkdown())
+	_, err := msg.Reply(b, text, formatting.Shtml())
 	if err != nil {
 		log.Error(err)
 		return err
@@ -271,4 +264,15 @@ func LoadDisabling(dispatcher *ext.Dispatcher) {
 
 func init() {
 	RegisterLegacyModule("Disabling", 180, LoadDisabling)
+}
+
+// disablingCommandList is a list of command names, one per line under a bullet, each escaped for HTML.
+func disablingCommandList(names []string) string {
+	var sb strings.Builder
+	for _, name := range names {
+		sb.WriteString("\n• <code>")
+		sb.WriteString(html.EscapeString(name))
+		sb.WriteString("</code>")
+	}
+	return sb.String()
 }

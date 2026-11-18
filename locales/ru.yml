@@ -50,17 +50,15 @@ antiflood_errors_invalid_int: |
   или `off`.
 
 antiflood_errors_set_in_limit: Лимит антифлуда должен быть установлен между 3 и 100.
-antiflood_flood_deleter_already_disabled: |
-  Удаление сообщений при флуде в данный момент *отключено* в этом чате, сообщения, вызывающие флуд, будут игнорироваться!
-antiflood_flood_deleter_already_enabled: |
-  Удаление сообщений при флуде в данный момент *включено* в этом чате, сообщения, вызывающие флуд, будут удалены!
+antiflood_flood_deleter_already_disabled: "Удаление сообщений при флуде в данный момент <b>отключено</b> в этом чате, сообщения, вызывающие флуд, будут игнорироваться!\n"
+antiflood_flood_deleter_already_enabled: "Удаление сообщений при флуде в данный момент <b>включено</b> в этом чате, сообщения, вызывающие флуд, будут удалены!\n"
 antiflood_flood_deleter_disabled: |
   Отключено удаление сообщений при флуде. Сообщения,
   вызывающие флуд, будут игнорироваться!
 antiflood_flood_deleter_enabled: |
   Включено удаление сообщений при флуде. Сообщения, вызывающие
   флуд, будут удалены!
-antiflood_flood_deleter_invalid_option: "Я понимаю только вариант из: `yes`/`no`/`on`/`off`"
+antiflood_flood_deleter_invalid_option: "Я понимаю только вариант из: <code>yes</code>/<code>no</code>/<code>on</code>/<code>off</code>"
 antiflood_flood_disabled: В этом чате в данный момент не применяется контроль флуда.
 antiflood_flood_show_settings: |
   В этом чате в данный момент применяется контроль флуда после %d сообщений. Любые пользователи, отправляющие больше этого количества сообщений, будут %s.
@@ -83,8 +81,7 @@ antiflood_help_msg: |
     × /delflood `<yes/no/on/off>`: Если вы хотите, чтобы бот удалял сообщения, создаваемые пользователем при флуде."
 antiflood_setflood_disabled: "Хорошо.\n\n  Я не буду предупреждать пользователей за флуд."
 antiflood_setflood_success: Лимит флуда установлен на <b>%d</b> сообщений.
-antiflood_setfloodmode_specify_action: |
-  "Вам нужно указать действие для применения при флуде. Текущие режимы: `ban`/`kick`/`mute`"
+antiflood_setfloodmode_specify_action: "\"Вам нужно указать действие для применения при флуде. Текущие режимы: <code>ban</code>/<code>kick</code>/<code>mute</code>\"\n"
 antiflood_setfloodmode_success: Режим флуда установлен на %s.
 antiflood_setfloodmode_unknown_type: "Неизвестный тип '%s'. Пожалуйста, используйте один из: ban/kick/mute"
 bans_ban_ban_reason: "<b>Причина:</b> %s"
@@ -152,8 +149,8 @@ blacklists_rm_all_bl_ask: |
 blacklists_rm_all_bl_button_handler_no: |
   Отменено удаление всех чёрных списков этого чата ❌
 blacklists_rm_all_bl_button_handler_yes: Удалены все чёрные списки из этого чата ✅
-blacklists_set_bl_action_changed_mode: "Успешно изменён режим чёрного списка на: *%s*"
-blacklists_set_bl_action_choose_correct_option: Пожалуйста, выберите вариант из <mute/kick/ban/warn/none>
+blacklists_set_bl_action_changed_mode: "Успешно изменён режим чёрного списка на: <b>%s</b>"
+blacklists_set_bl_action_choose_correct_option: "Пожалуйста, выберите вариант из &lt;mute/kick/ban/warn/none&gt;"
 blacklists_set_bl_action_current_mode: |
   "Текущий режим чёрного списка для этого чата:
     %s"
@@ -827,7 +824,7 @@ warns_user_warnings_no_reasons: "У пользователя %d/%d предуп�
 warns_user_no_warnings: У этого пользователя нет предупреждений!
 warns_removed_by: "Предупреждение удалено %s."
 warns_no_warns_to_remove: У пользователя уже нет предупреждений!
-warns_limit_set_help: "Пожалуйста, укажите, сколько предупреждений должен получить пользователь до применения действия. Например, `/setwarnlimit 5`"
+warns_limit_set_help: "Пожалуйста, укажите, сколько предупреждений должен получить пользователь до применения действия. Например, <code>/setwarnlimit 5</code>"
 warns_invalid_number: "%s не является правильным целым числом."
 warns_limit_range_error: Лимит предупреждений должен быть установлен между 1 и 100.
 warns_limit_updated: "Настройки лимита предупреждений для этого чата обновлены на %d."
@@ -880,7 +877,7 @@ pins_input_not_recognized: "Ваш ввод не был распознан ка�
 # Purges module strings
 purges_cannot_delete_old: Вы не можете удалять сообщения старше двух дней. Пожалуйста, выберите более свежее сообщение.
 purges_purged_messages: Удалено %d сообщений.
-purges_purged_with_reason: "Удалено %d сообщений.\n*Причина*:\n%s"
+purges_purged_with_reason: "Удалено %d сообщений.\n<b>Причина</b>:\n%s"
 purges_reply_to_purge: Ответьте на сообщение, чтобы выбрать, откуда начать удаление.
 purges_reply_to_delete: Ответьте на сообщение, чтобы удалить его!
 purges_message_marked: Это сообщение уже отмечено для удаления!
@@ -918,12 +915,12 @@ disabling_no_disabled_commands: В этом чате нет отключённы
 disabling_disabled_commands: "Следующие команды отключены в этом чате:"
 disabling_delete_enabled: Отключённые сообщения теперь будут удаляться.
 disabling_delete_disabled: Отключённые сообщения больше не будут удаляться.
-disabling_delete_current_enabled: Удаление отключённых команд *включено*, отключённые команды от пользователей будут удалены!
-disabling_delete_current_disabled: Удаление отключённых команд *отключено*, отключённые команды от пользователей *не будут* удалены!
+disabling_delete_current_enabled: "Удаление отключённых команд <b>включено</b>, отключённые команды от пользователей будут удалены!"
+disabling_delete_current_disabled: "Удаление отключённых команд <b>отключено</b>, отключённые команды от пользователей <b>не будут</b> удалены!"
 disabling_enabled_successfully: "Повторно включено использование следующего в этом чате:%s"
 disabling_unknown_reenable: "Неизвестная команда для повторного включения:\n-%s\nПроверьте /disableable!"
 disabling_no_command_reenable: "Вы не указали команду для повторного включения."
-disabling_invalid_option: "Я понимаю только вариант из: `yes`/`no`/`on`/`off`"
+disabling_invalid_option: "Я понимаю только вариант из: <code>yes</code>/<code>no</code>/<code>on</code>/<code>off</code>"
 
 # Misc module strings
 misc_reply_to_someone: Ответьте кому-то.
@@ -1093,7 +1090,7 @@ notes_not_exists: "Заметка не существует!"
 notes_removed_success: "Удалена заметка <b>%s</b>."
 notes_private_enabled: "Включены приватные заметки.\nТеперь пользователи будут получать заметки как личное сообщение."
 notes_private_disabled: "Отключены приватные заметки.\nТеперь все заметки будут отправляться в групповой чат."
-notes_private_invalid_option: "Я понимаю только вариант из <on/off/yes/no>"
+notes_private_invalid_option: "Я понимаю только вариант из &lt;on/off/yes/no&gt;"
 notes_private_status_on: "Приватные заметки в данный момент включены!"
 notes_private_status_off: "Приватные заметки в данный момент отключены!"
 notes_none_in_chat: "В этом чате нет заметок!"
@@ -1110,7 +1107,7 @@ notes_clear_all_success: "Удалены все заметки из этого �
 notes_clear_all_cancelled: "Отменено удаление всех заметок из этого чата ❌"
 notes_parsing_error: "Произошла ошибка при разборе заметки, пожалуйста, сообщите об этом в чате поддержки."
 notes_admin_only: "Эта заметка доступна только администраторам!"
-notes_click_for_private: "Нажмите на кнопку ниже, чтобы получить заметку *%s*"
+notes_click_for_private: "Нажмите на кнопку ниже, чтобы получить заметку <b>%s</b>"
 notes_get_insufficient_args: "Недостаточно аргументов."
 notes_does_not_exist: "Заметка не существует!"
 notes_parsing_error_support: "Произошла ошибка при разборе заметки, пожалуйста, сообщите об этом в чат поддержки."

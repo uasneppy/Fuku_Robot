@@ -78,19 +78,15 @@ antiflood_errors_invalid_int: |
   Itu bukan bilangan bulat yang valid. Berikan bilangan bulat yang valid,
   atau `off`.
 antiflood_errors_set_in_limit: Batas antiflood harus diatur antara 3 dan 100.
-antiflood_flood_deleter_already_disabled: |
-  Penghapusan pesan Antiflood saat ini
-  *dinonaktifkan* di obrolan ini, pesan yang menyebabkan antiflood akan diabaikan!
-antiflood_flood_deleter_already_enabled: |
-  Penghapusan pesan Antiflood saat ini *diaktifkan*
-  di obrolan ini, pesan yang menyebabkan antiflood akan dihapus!
+antiflood_flood_deleter_already_disabled: "Penghapusan pesan Antiflood saat ini\n<b>dinonaktifkan</b> di obrolan ini, pesan yang menyebabkan antiflood akan diabaikan!\n"
+antiflood_flood_deleter_already_enabled: "Penghapusan pesan Antiflood saat ini <b>diaktifkan</b>\ndi obrolan ini, pesan yang menyebabkan antiflood akan dihapus!\n"
 antiflood_flood_deleter_disabled: |
   Menonaktifkan Penghapusan Pesan Antiflood. Pesan
   yang menyebabkan antiflood akan diabaikan!
 antiflood_flood_deleter_enabled: |
   Mengaktifkan Penghapusan Pesan Antiflood. Pesan yang menyebabkan
   antiflood akan dihapus!
-antiflood_flood_deleter_invalid_option: "Saya hanya mengerti opsi dari: `yes`/`no`/`on`/`off`"
+antiflood_flood_deleter_invalid_option: "Saya hanya mengerti opsi dari: <code>yes</code>/<code>no</code>/<code>on</code>/<code>off</code>"
 antiflood_flood_disabled: Obrolan ini saat ini tidak menegakkan kontrol flood.
 antiflood_flood_show_settings: |
   Obrolan ini saat ini menegakkan kontrol flood setelah
@@ -119,9 +115,7 @@ antiflood_setflood_disabled: "Oke.
 
   Saya tidak akan memperingatkan pengguna karena flooding."
 antiflood_setflood_success: Batas Flood telah diatur ke <b>%d</b> pesan.
-antiflood_setfloodmode_specify_action: |
-  "Anda perlu menentukan tindakan yang akan diambil saat
-  flooding. Mode saat ini adalah: `ban`/`kick`/`mute`"
+antiflood_setfloodmode_specify_action: "\"Anda perlu menentukan tindakan yang akan diambil saat\nflooding. Mode saat ini adalah: <code>ban</code>/<code>kick</code>/<code>mute</code>\"\n"
 antiflood_setfloodmode_success: Mode flood telah diatur ke %s.
 antiflood_setfloodmode_unknown_type: "Tipe tidak dikenal '%s'. Silakan gunakan salah satu dari: ban/kick/mute"
 bans_ban_ban_reason: <b>Alasan:</b> %s
@@ -199,8 +193,8 @@ blacklists_rm_all_bl_button_handler_no: |
   Dibatalkan menghapus semua Daftar Hitam dari Obrolan Ini
   ❌
 blacklists_rm_all_bl_button_handler_yes: Menghapus semua Daftar Hitam dari Obrolan Ini ✅
-blacklists_set_bl_action_changed_mode: "Berhasil mengubah mode daftar hitam ke: *%s*"
-blacklists_set_bl_action_choose_correct_option: Silakan pilih opsi dari <mute/kick/ban/warn/none>
+blacklists_set_bl_action_changed_mode: "Berhasil mengubah mode daftar hitam ke: <b>%s</b>"
+blacklists_set_bl_action_choose_correct_option: "Silakan pilih opsi dari &lt;mute/kick/ban/warn/none&gt;"
 blacklists_set_bl_action_current_mode: |
   "Mode daftar hitam saat ini untuk obrolan ini adalah:
   %s"
@@ -993,7 +987,7 @@ warns_user_warnings_no_reasons: "Pengguna punya %d/%d peringatan, tetapi tidak a
 warns_user_no_warnings: Pengguna ini tidak punya peringatan apa pun!
 warns_removed_by: "Peringatan dihapus oleh %s."
 warns_no_warns_to_remove: Pengguna sudah tidak punya peringatan!
-warns_limit_set_help: "Silakan tentukan berapa banyak peringatan yang harus diizinkan untuk pengguna sebelum tindakan diambil. Mis. `/setwarnlimit 5`"
+warns_limit_set_help: "Silakan tentukan berapa banyak peringatan yang harus diizinkan untuk pengguna sebelum tindakan diambil. Mis. <code>/setwarnlimit 5</code>"
 warns_invalid_number: "%s bukan bilangan bulat yang valid."
 warns_limit_range_error: Batas peringatan harus diatur antara 1 dan 100.
 warns_limit_updated: "Pengaturan batas peringatan untuk obrolan ini telah diperbarui ke %d."
@@ -1046,7 +1040,7 @@ pins_input_not_recognized: "Masukan Anda tidak dikenali sebagai salah satu dari:
 # Purges module strings
 purges_cannot_delete_old: Anda tidak dapat menghapus pesan yang lebih dari dua hari. Silakan pilih pesan yang lebih baru.
 purges_purged_messages: Membersihkan %d pesan.
-purges_purged_with_reason: "Membersihkan %d pesan.\n*Alasan*:\n%s"
+purges_purged_with_reason: "Membersihkan %d pesan.\n<b>Alasan</b>:\n%s"
 purges_reply_to_purge: Balas ke pesan untuk memilih dari mana mulai membersihkan.
 purges_reply_to_delete: Balas ke pesan untuk menghapusnya!
 purges_message_marked: Pesan ini sudah ditandai untuk pembersihan!
@@ -1085,12 +1079,12 @@ disabling_no_disabled_commands: Tidak ada perintah yang dinonaktifkan di obrolan
 disabling_disabled_commands: "Perintah berikut dinonaktifkan di obrolan ini:"
 disabling_delete_enabled: Pesan yang dinonaktifkan sekarang akan dihapus.
 disabling_delete_disabled: Pesan yang dinonaktifkan tidak akan lagi dihapus.
-disabling_delete_current_enabled: Penghapusan Perintah yang Dinonaktifkan *diaktifkan*, perintah yang dinonaktifkan dari pengguna akan dihapus!
-disabling_delete_current_disabled: Penghapusan Perintah yang Dinonaktifkan *dinonaktifkan*, perintah yang dinonaktifkan dari pengguna *tidak* akan dihapus!
+disabling_delete_current_enabled: "Penghapusan Perintah yang Dinonaktifkan <b>diaktifkan</b>, perintah yang dinonaktifkan dari pengguna akan dihapus!"
+disabling_delete_current_disabled: "Penghapusan Perintah yang Dinonaktifkan <b>dinonaktifkan</b>, perintah yang dinonaktifkan dari pengguna <b>tidak</b> akan dihapus!"
 disabling_enabled_successfully: "Mengaktifkan kembali penggunaan berikut di obrolan ini:%s"
 disabling_unknown_reenable: "Perintah tidak dikenal untuk Diaktifkan Kembali:\n-%s\nPeriksa /disableable!"
 disabling_no_command_reenable: "Anda belum menentukan perintah untuk diaktifkan kembali."
-disabling_invalid_option: "Saya hanya mengerti opsi dari: `yes`/`no`/`on`/`off`"
+disabling_invalid_option: "Saya hanya mengerti opsi dari: <code>yes</code>/<code>no</code>/<code>on</code>/<code>off</code>"
 
 # Misc module strings
 misc_reply_to_someone: Balas ke seseorang.
@@ -1261,7 +1255,7 @@ notes_not_exists: "Catatan tidak ada!"
 notes_removed_success: "Catatan <b>%s</b> dihapus."
 notes_private_enabled: "Private Notes diaktifkan.\nSekarang pengguna akan mendapatkan catatan sebagai pesan pribadi."
 notes_private_disabled: "Private Notes dimatikan.\nSekarang semua catatan akan dikirim ke Grup Obrolan."
-notes_private_invalid_option: "Saya hanya mengerti opsi dari <on/off/yes/no>"
+notes_private_invalid_option: "Saya hanya mengerti opsi dari &lt;on/off/yes/no&gt;"
 notes_private_status_on: "Private Notes saat ini diaktifkan!"
 notes_private_status_off: "Private Notes saat ini dimatikan!"
 notes_none_in_chat: "Tidak ada catatan di obrolan ini!"
@@ -1278,7 +1272,7 @@ notes_clear_all_success: "Menghapus semua Catatan dari Obrolan Ini ✅"
 notes_clear_all_cancelled: "Dibatalkan menghapus semua catatan dari Obrolan Ini ❌"
 notes_parsing_error: "Ada kesalahan saat menguraikan catatan, silakan laporkan ini di obrolan dukungan."
 notes_admin_only: "Catatan ini hanya dapat diakses oleh admin!"
-notes_click_for_private: "Klik tombol di bawah untuk mendapatkan catatan *%s*"
+notes_click_for_private: "Klik tombol di bawah untuk mendapatkan catatan <b>%s</b>"
 notes_get_insufficient_args: "Argumen tidak cukup."
 notes_does_not_exist: "Catatan tidak ada!"
 notes_parsing_error_support: "Ada kesalahan saat menguraikan catatan, silakan laporkan ini ke obrolan dukungan."
