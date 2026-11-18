@@ -166,8 +166,8 @@ func TestSettingsPhase18Codes(t *testing.T) {
 			}
 		}
 		// The sixteen pages of Phase 18, the Blacklist, Filters and Notes pages of Phase 19 and the Blocked sources page of a
-		// Staff Group's forward blocklist ("v"), and no other.
-		want := []string{"s", "v", "l", "c", "f", "n", "k", "b", "i", "w", "g", "r", "e", "m", "d", "t", "u", "o", "y", "a"}
+		// Staff Group's forward blocklist ("v"), the Reactions page ("x"), and no other.
+		want := []string{"s", "v", "l", "c", "f", "n", "k", "b", "i", "w", "g", "r", "e", "x", "m", "d", "t", "u", "z", "o", "y", "a"}
 		if got := slices.Sorted(maps.Keys(seen)); !slices.Equal(got, slices.Sorted(slices.Values(want))) {
 			t.Errorf("registered pages = %v, want %v", got, slices.Sorted(slices.Values(want)))
 		}
@@ -402,8 +402,8 @@ func TestSettingsPhase18Cost(t *testing.T) {
 	t.Run("Main makes no Telegram call of its own", func(t *testing.T) {
 		before := settingsPhase18Calls(env.settingsEnv)
 		entries := settingsMainEntries(env.bot, i18n.MustNewTranslator("en"), &env.chat, true, true)
-		if len(entries) != 19 {
-			t.Fatalf("Main has %d entries, want 19", len(entries))
+		if len(entries) != len(settingsMainTitleKeys) {
+			t.Fatalf("Main has %d entries, want %d", len(entries), len(settingsMainTitleKeys))
 		}
 		if delta := settingsPhase18CallsSince(env.settingsEnv, before); len(delta) != 0 {
 			t.Errorf("the Main states made Telegram calls %v, want none", delta)

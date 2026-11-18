@@ -350,7 +350,7 @@ warns_user_warnings_no_reasons: "L'utilisateur a %d/%d avertissements, mais aucu
 warns_user_no_warnings: Cet utilisateur n'a aucun avertissement !
 warns_removed_by: "Avertissement supprimé par %s."
 warns_no_warns_to_remove: L'utilisateur n'a déjà aucun avertissement !
-warns_limit_set_help: "Veuillez spécifier combien d'avertissements un utilisateur doit recevoir avant d'être sanctionné. Ex. `/setwarnlimit 5`"
+warns_limit_set_help: "Veuillez spécifier combien d'avertissements un utilisateur doit recevoir avant d'être sanctionné. Ex. <code>/setwarnlimit 5</code>"
 warns_invalid_number: "%s n'est pas un entier valide."
 warns_limit_range_error: La limite d'avertissements doit être définie entre 1 et 100.
 warns_limit_updated: "Les paramètres de limite d'avertissements de ce chat ont été mis à jour à %d."
@@ -411,8 +411,8 @@ blacklists_rm_all_bl_button_handler_no: |
   Suppression de la liste noire de ce chat annulée
   ❌
 blacklists_rm_all_bl_button_handler_yes: Tous les mots de la liste noire ont été supprimés de ce chat ✅
-blacklists_set_bl_action_changed_mode: "Mode de liste noire changé avec succès : *%s*"
-blacklists_set_bl_action_choose_correct_option: Veuillez choisir une option parmi <mute/kick/ban/warn/none>
+blacklists_set_bl_action_changed_mode: "Mode de liste noire changé avec succès : <b>%s</b>"
+blacklists_set_bl_action_choose_correct_option: "Veuillez choisir une option parmi &lt;mute/kick/ban/warn/none&gt;"
 blacklists_set_bl_action_current_mode: |
   Le mode de liste noire actuel pour ce chat est :
   %s
@@ -770,7 +770,7 @@ notes_not_exists: "La note n'existe pas !"
 notes_removed_success: "Note <b>%s</b> supprimée."
 notes_private_enabled: "Notes privées activées.\nLes utilisateurs recevront les notes en message privé."
 notes_private_disabled: "Notes privées désactivées.\nToutes les notes seront envoyées dans le chat du groupe."
-notes_private_invalid_option: "Je comprends uniquement une option parmi <on/off/yes/no>"
+notes_private_invalid_option: "Je comprends uniquement une option parmi &lt;on/off/yes/no&gt;"
 notes_private_status_on: "Les notes privées sont actuellement activées !"
 notes_private_status_off: "Les notes privées sont actuellement désactivées !"
 notes_none_in_chat: "Il n'y a pas de notes dans ce chat !"
@@ -787,7 +787,7 @@ notes_clear_all_success: "Toutes les notes ont été supprimées de ce chat ✅"
 notes_clear_all_cancelled: "Suppression de toutes les notes de ce chat annulée ❌"
 notes_parsing_error: "Il y a une erreur d'analyse de la note, veuillez le signaler dans le chat de support."
 notes_admin_only: "Cette note ne peut être consultée que par un admin !"
-notes_click_for_private: "Cliquez sur le bouton ci-dessous pour obtenir la note *%s*"
+notes_click_for_private: "Cliquez sur le bouton ci-dessous pour obtenir la note <b>%s</b>"
 notes_get_insufficient_args: "Pas assez d'arguments."
 notes_does_not_exist: "La note n'existe pas !"
 notes_parsing_error_support: "Il y a une erreur d'analyse de la note, veuillez le signaler au chat de support."
@@ -973,12 +973,12 @@ disabling_no_disabled_commands: Il n'y a pas de commandes désactivées dans ce 
 disabling_disabled_commands: "Les commandes suivantes sont désactivées dans ce chat :"
 disabling_delete_enabled: Les messages de commandes désactivées seront maintenant supprimés.
 disabling_delete_disabled: Les messages de commandes désactivées ne seront plus supprimés.
-disabling_delete_current_enabled: La suppression des commandes désactivées est *activée*, les commandes désactivées des utilisateurs seront supprimées !
-disabling_delete_current_disabled: La suppression des commandes désactivées est *désactivée*, les commandes désactivées des utilisateurs ne seront *pas* supprimées !
+disabling_delete_current_enabled: "La suppression des commandes désactivées est <b>activée</b>, les commandes désactivées des utilisateurs seront supprimées !"
+disabling_delete_current_disabled: "La suppression des commandes désactivées est <b>désactivée</b>, les commandes désactivées des utilisateurs ne seront <b>pas</b> supprimées !"
 disabling_enabled_successfully: "L'utilisation des commandes suivantes a été réactivée dans ce chat :%s"
 disabling_unknown_reenable: "Commande inconnue à réactiver :\n-%s\nVérifiez /disableable !"
 disabling_no_command_reenable: "Vous n'avez pas spécifié de commande à réactiver."
-disabling_invalid_option: "Je comprends uniquement une option parmi : `yes`/`no`/`on`/`off`"
+disabling_invalid_option: "Je comprends uniquement une option parmi : <code>yes</code>/<code>no</code>/<code>on</code>/<code>off</code>"
 
 # Locks module strings
 locks_help_msg: "*Admin uniquement* :
@@ -1003,14 +1003,11 @@ locks_help_msg: "*Admin uniquement* :
   **Exemple :**
 
   `/lock media` : cela verrouille tous les messages média dans le chat."
-locks_locktypes_header: "Verrous :
-  - "
+locks_locktypes_header: "Verrous :"
 locks_what_to_lock: Que voulez-vous verrouiller ? Vérifiez /locktypes pour les options disponibles.
-locks_invalid_lock_type: "`%s` n'est pas un type de verrou correct, vérifiez /locktypes."
-locks_locked_successfully: "Les éléments suivants ont été verrouillés dans ce groupe :
-  - %s"
-locks_unlocked_successfully: "Les éléments suivants ont été déverrouillés dans ce groupe :
-  - %s"
+locks_invalid_lock_type: "<code>%s</code> n'est pas un type de verrou correct, vérifiez /locktypes."
+locks_locked_successfully: "Les éléments suivants ont été verrouillés dans ce groupe :\n• %s"
+locks_unlocked_successfully: "Les éléments suivants ont été déverrouillés dans ce groupe :\n• %s"
 locks_lock_failed: "Échec du verrouillage : %s. Veuillez réessayer plus tard."
 locks_unlock_failed: "Échec du déverrouillage : %s. Veuillez réessayer plus tard."
 locks_what_to_unlock: Que voulez-vous déverrouiller ? Vérifiez /locktypes pour les options disponibles.
@@ -1241,7 +1238,7 @@ purges_help_msg: "*Admin uniquement :*
   × /del : Supprime le message auquel vous avez répondu."
 purges_cannot_delete_old: Vous ne pouvez pas supprimer des messages de plus de deux jours. Veuillez choisir un message plus récent.
 purges_purged_messages: "%d messages supprimés."
-purges_purged_with_reason: "%d messages supprimés.\n*Raison* :\n%s"
+purges_purged_with_reason: "%d messages supprimés.\n<b>Raison</b> :\n%s"
 purges_reply_to_purge: Répondez à un message pour sélectionner où commencer la suppression.
 purges_reply_to_delete: Répondez à un message pour le supprimer !
 purges_message_marked: Ce message est déjà marqué pour la suppression !
@@ -1390,6 +1387,36 @@ content_need_content: "Vous devez me donner du contenu pour %s les utilisateurs 
 content_text_too_long: "Votre texte de message fait %d caractères. La longueur maximale pour le texte est de 4096 ; veuillez le réduire. Notez que les caractères markdown peuvent prendre plus d'espace que prévu."
 content_caption_too_long: "Votre légende de message fait %d caractères. La longueur maximale de la légende est de 1024 ; veuillez la réduire. Notez que les caractères markdown peuvent prendre plus d'espace que prévu."
 helpers_module_help_header: "Voici l'aide pour le module *%s* :\n\n"
+help_module_name_admin: "Admins"
+help_module_name_aispam: "Spam IA"
+help_module_name_antiflood: "Antiflood"
+help_module_name_antiraid: "Anti-raid"
+help_module_name_approvals: "Approbations"
+help_module_name_backup: "Sauvegarde"
+help_module_name_bans: "Bannissements"
+help_module_name_blacklists: "Liste noire"
+help_module_name_captcha: "Captcha"
+help_module_name_connections: "Connexions"
+help_module_name_disabling: "Désactivation"
+help_module_name_federations: "Fédérations"
+help_module_name_filters: "Filtres"
+help_module_name_formatting: "Mise en forme"
+help_module_name_greetings: "Accueil"
+help_module_name_languages: "Langue"
+help_module_name_lockdown: "Verrouillage"
+help_module_name_locks: "Verrous"
+help_module_name_logchannels: "Canal de logs"
+help_module_name_misc: "Divers"
+help_module_name_mutes: "Sourdines"
+help_module_name_notes: "Notes"
+help_module_name_pins: "Épingles"
+help_module_name_purges: "Purges"
+help_module_name_reactions: "Réactions"
+help_module_name_reports: "Signalements"
+help_module_name_rules: "Règles"
+help_module_name_settings: "Paramètres"
+help_module_name_staff: "Groupe Staff"
+help_module_name_warns: "Avertissements"
 helpers_invalid_deep_link: "Lien profond invalide ou mal formé. Veuillez vérifier l'URL et réessayer."
 helpers_chat_not_found: "Impossible de trouver le chat associé à ce lien. Le chat n'existe peut-être plus ou je n'y ai pas accès."
 helpers_back_button: "« Retour"
@@ -1926,19 +1953,15 @@ antiflood_errors_invalid_int: |
   Ce n'est pas un entier valide. Veuillez me donner un entier valide,
   ou `off`.
 antiflood_errors_set_in_limit: La limite antiflood doit être définie entre 3 et 100.
-antiflood_flood_deleter_already_disabled: |
-  La suppression des messages antiflood est actuellement
-  *désactivée* dans ce chat, les messages causant l'antiflood seront ignorés !
-antiflood_flood_deleter_already_enabled: |
-  La suppression des messages antiflood est actuellement *activée*
-  dans ce chat, les messages causant l'antiflood seront supprimés !
+antiflood_flood_deleter_already_disabled: "La suppression des messages antiflood est actuellement\n<b>désactivée</b> dans ce chat, les messages causant l'antiflood seront ignorés !\n"
+antiflood_flood_deleter_already_enabled: "La suppression des messages antiflood est actuellement <b>activée</b>\ndans ce chat, les messages causant l'antiflood seront supprimés !\n"
 antiflood_flood_deleter_disabled: |
   Désactivation de la suppression des messages antiflood. Les messages
   causant l'antiflood seront ignorés !
 antiflood_flood_deleter_enabled: |
   Activation de la suppression des messages antiflood. Les messages causant
   l'antiflood seront supprimés !
-antiflood_flood_deleter_invalid_option: "Je ne comprends qu'une option parmi : `yes`/`no`/`on`/`off`"
+antiflood_flood_deleter_invalid_option: "Je ne comprends qu'une option parmi : <code>yes</code>/<code>no</code>/<code>on</code>/<code>off</code>"
 antiflood_flood_disabled: Ce chat n'applique actuellement pas le contrôle d'inondation.
 antiflood_flood_show_settings: |
   Ce chat applique actuellement le contrôle d'inondation après
@@ -1947,9 +1970,7 @@ antiflood_setflood_disabled: |
   D'accord.
   Je n'avertirai pas les utilisateurs pour inondation.
 antiflood_setflood_success: La limite d'inondation a été définie à <b>%d</b> messages.
-antiflood_setfloodmode_specify_action: |
-  Vous devez spécifier une action à prendre en cas
-  d'inondation. Les modes actuels sont : `ban`/`kick`/`mute`
+antiflood_setfloodmode_specify_action: "Vous devez spécifier une action à prendre en cas\nd'inondation. Les modes actuels sont : <code>ban</code>/<code>kick</code>/<code>mute</code>\n"
 antiflood_setfloodmode_success: Le mode d'inondation a été défini sur %s.
 antiflood_setfloodmode_unknown_type: "Type inconnu '%s'. Veuillez utiliser l'un des suivants : ban/kick/mute"
 antiflood_button_unban_admins: "Débannir (Admins uniquement)"
@@ -2046,6 +2067,13 @@ reactions_help_msg: |
 reactions_add_usage: "Utilisation : /addreaction <mot_cle> <emoji>"
 reactions_invalid_emoji: "Veuillez fournir un emoji valide."
 reactions_add_error: "Impossible d'enregistrer la réaction. Veuillez réessayer."
+reactions_limit_reached: "Limite de réactions atteinte : un groupe peut avoir au plus {max} réactions. Supprimez-en une pour en ajouter une autre."
+timezone_current: "Les heures de ce groupe sont affichées en <code>{zone}</code> ({label}). Il est {time} ici."
+timezone_is_default: "C'est la zone par défaut du bot."
+timezone_usage: "Pour la changer : <code>/timezone Europe/Paris</code>, <code>/timezone +2</code> ou <code>/timezone default</code> pour revenir à celle par défaut."
+timezone_set: "C'est fait : les heures du groupe sont maintenant affichées en <code>{zone}</code> ({label}). Il est {time} ici."
+timezone_reset: "C'est fait : le groupe utilise de nouveau la zone par défaut du bot, <code>{zone}</code> ({label})."
+timezone_invalid: "Je ne connais pas cette zone. Écrivez un nom comme <code>Europe/Paris</code> ou un décalage par rapport à UTC comme <code>+2</code>."
 reactions_add_success: "Réaction ajoutée : <code>{keyword}</code> -> {emoji}"
 reactions_remove_usage: "Utilisation : /removereaction <mot_cle>"
 reactions_not_found: "Aucune réaction n'est configurée pour ce chat."
@@ -2200,11 +2228,7 @@ approvals_already_approved: "%s est déjà approuvé dans ce chat."
 approvals_not_approved: "%s n'est pas dans la liste des approuvés."
 approvals_user_unapproved: "Supprimé %s de la liste des approuvés."
 approvals_check_not_approved: "%s n'est actuellement pas approuvé dans ce chat."
-approvals_check_status: |
-  <b>Utilisateur :</b> %s
-  <b>Approuvé le :</b> %s
-  <b>Approuvé par :</b> %s
-  %s
+approvals_check_status: "<b>Utilisateur :</b> %s\n<b>Approuvé le :</b> %s\n<b>Approuvé par :</b> %s"
 approvals_none_approved: "Aucun utilisateur approuvé dans ce chat."
 approvals_approved_list_file_caption: "Liste des utilisateurs approuvés pour %s"
 approvals_list_file_error: "Échec de la génération du fichier des utilisateurs approuvés."
@@ -2505,7 +2529,7 @@ staff_panel_reason_bot_not_admin: "Problème : le bot n'est pas administrateur d
 staff_panel_reason_bot_cannot_restrict: "Problème : le bot ne peut pas restreindre de membres dans ce groupe."
 staff_panel_reason_owner_unknown: "Problème : je n'ai pas pu vérifier à qui appartient ce groupe pour le moment."
 staff_panel_legend: "✅ oui | ❌ non | ❔ vérification impossible"
-staff_panel_updated: "Mis à jour à {time} UTC"
+staff_panel_updated: "Mis à jour à {time}"
 staff_panel_refresh_button: "🔄 Actualiser"
 staff_cb_members_only: "Seuls les membres de ce groupe Staff peuvent faire cela."
 staff_panel_prev: "⬅️ Précédent"
@@ -2598,7 +2622,7 @@ staff_history_unlinked: "n'est plus lié"
 staff_history_undo_running: "↩ annulation en cours"
 staff_history_undo_interrupted: "↩ annulation interrompue, aucun résultat final enregistré"
 staff_history_undo_nothing: "↩ l'annulation n'a rien changé"
-staff_history_undo_by: "↩ Annulation par {name}, {time} UTC"
+staff_history_undo_by: "↩ Annulation par {name}, {time}"
 staff_history_more_groups: "{count} groupe(s) de plus ne sont pas affichés car le message est trop long."
 staff_undo_unbanned: "débanni, la personne peut revenir"
 staff_undo_unmuted: "sourdine levée"
@@ -2960,6 +2984,43 @@ settings_fwd_action_hint: "L'action s'applique au membre qui a transféré le me
 settings_fwd_saved: "Les transferts depuis <code>{source}</code> sont désormais bloqués dans tous les groupes liés."
 settings_fwd_refuse_one: "Envoyez une source à la fois : un seul ID ou @pseudo. Rien n'a été enregistré."
 settings_entries_part_source: "source"
+settings_page_reactions: "Réactions"
+settings_rct_intro: "Quand un message du groupe contient l'un de ces mots, n'importe où et quelle que soit la casse, j'y ajoute la réaction indiquée."
+settings_rct_count: "Réactions : {n} sur {max}"
+settings_rct_empty: "Il n'y a encore aucune réaction."
+settings_btn_rct_add: "➕ Ajouter"
+settings_rct_wait: "Envoyez-moi un mot et un emoji séparés par une espace, par exemple <code>bonjour 👍</code>. Je mettrai cette réaction sur chaque message contenant le mot."
+settings_rct_wait_rules: "Le mot fait au plus {max} caractères, sans espace. L'emoji doit être une des réactions de Telegram."
+settings_rct_refuse_two: "Envoyez exactement deux éléments : le mot et l'emoji, séparés par une espace. Rien n'a été enregistré."
+settings_rct_refuse_long: "Le mot est trop long : {max} caractères au plus. Rien n'a été enregistré."
+settings_rct_refuse_emoji: "Telegram n'accepte pas cet emoji comme réaction. Ceux-ci conviennent, par exemple : {examples}"
+settings_rct_refuse_exists: "Il existe déjà une réaction pour <code>{keyword}</code>. Supprimez-la d'abord de la liste pour la remplacer."
+settings_rct_refuse_cap: "Ce groupe a déjà {max} réactions, le maximum. Supprimez-en une d'abord."
+settings_rct_delete_ask: "Supprimer la réaction pour <code>{keyword}</code> ? Je ne la mettrai plus sur les messages contenant le mot."
+settings_rct_removed: "La réaction pour <code>{keyword}</code> est supprimée."
+settings_rct_saved: "Réaction enregistrée. Je réagis désormais aux messages contenant <code>{keyword}</code>."
+settings_entries_part_reaction: "réaction"
+settings_page_tz: "Fuseau horaire"
+settings_tz_current: "Zone : <code>{zone}</code> ({label})"
+settings_tz_now: "Heure ici : {time}"
+settings_tz_is_default: "C'est la zone par défaut du bot."
+settings_tz_default_is: "La zone par défaut du bot est <code>{zone}</code>."
+settings_tz_hint: "J'affiche dans cette zone les heures concernant ce groupe : verrouillages, historique du groupe Staff, attentes du menu. L'heure d'été suit d'elle-même."
+settings_btn_tz_default: "Par défaut"
+settings_btn_tz_other: "✏️ Autre zone"
+settings_tz_wait: "Envoyez-moi un nom de zone comme <code>Europe/Paris</code>, ou un décalage par rapport à UTC comme <code>+2</code> ou <code>+5:30</code>."
+settings_tz_saved: "Zone enregistrée."
+settings_tz_group_note: "Saisir une autre zone se fait dans mon chat privé. Touchez Ouvrir en privé ci-dessous."
+settings_tz_wait_ended_note: "L'attente de la zone est terminée et rien n'a changé. Appuyez de nouveau sur Autre zone."
+settings_tz_city_kyiv: "Kyiv"
+settings_tz_city_warsaw: "Varsovie"
+settings_tz_city_berlin: "Berlin"
+settings_tz_city_london: "Londres"
+settings_tz_city_lisbon: "Lisbonne"
+settings_tz_city_istanbul: "Istanbul"
+settings_tz_city_tbilisi: "Tbilissi"
+settings_tz_city_newyork: "New York"
+settings_tz_city_utc: "UTC"
 settings_state_default: "Par défaut"
 settings_edit_line_text: "Texte : {state}"
 settings_edit_line_media: "Média : {state}"
@@ -3006,7 +3067,7 @@ settings_edit_wait_text: "Envoyez-moi maintenant le nouveau texte, comme un mess
 settings_edit_wait_text_rules: "Envoyez-moi maintenant le nouveau texte des règles, comme un message normal. Le gras, l'italique, les liens et les autres mises en forme sont conservés. Les variables comme <code>{first}</code> ne fonctionnent pas dans les règles.\n\nJusqu'à {max} caractères."
 settings_edit_wait_media: "Envoyez-moi maintenant une photo, une vidéo, un GIF, un fichier, un sticker, un audio ou un message vocal. Si vous envoyez un album, je n'en garde qu'un élément. Toute légende est ignorée : le texte est une partie à part."
 settings_edit_wait_buttons: "Envoyez-moi maintenant les boutons, un par ligne :\n<code>[Rules](buttonurl://https://example.com/rules)</code>\n<code>[Chat](buttonurl://https://t.me/example:same)</code>\n\nAjoutez <code>:same</code> après un lien pour placer ce bouton sur la ligne du précédent. Ces boutons remplacent les actuels."
-settings_edit_wait_footer: "J'attendrai jusqu'à {time} UTC. Touchez Annuler ou envoyez /cancel pour tout laisser tel quel."
+settings_edit_wait_footer: "J'attendrai jusqu'à {time}. Touchez Annuler ou envoyez /cancel pour tout laisser tel quel."
 settings_edit_replaced_note: "Ceci remplace votre demande précédente, qui est maintenant annulée."
 settings_edit_removed_text_default: "Texte supprimé. Le texte par défaut est de nouveau utilisé."
 settings_edit_removed_text_rules: "Texte des règles supprimé."
@@ -3267,4 +3328,4 @@ settings_lock_media: "Tous les médias"
 settings_lock_other: "Jeu/sticker/GIF"
 settings_lock_previews: "Aperçu des liens"
 settings_lock_all: "Tout"
-settings_help_msg: "Gérez ce groupe depuis un seul menu à boutons.\n\n<b>Commandes admin</b> :\n× /settings : Ouvre le menu des paramètres. Dans le groupe, il s'ouvre ici ou en privé ; dans une discussion privée avec moi, il liste les groupes que vous pouvez gérer.\n\nLe menu a ces pages : groupe Staff, sources bloquées, verrouillage, captcha, antiflood, avertissements, verrous, liste noire, filtres, bienvenue, au revoir, règles, notes, exigences des membres, suppression, interrupteurs, langue, canal de logs, admins anonymes et accès. Les listes et les messages se définissent en me les envoyant en privé. Chaque changement fait dedans équivaut à la commande correspondante : /linkstaff, /unlinkstaff, /unlockdown, /autolockdown, /captcha, /captchamode, /captchatime, /captchaaction, /setflood, /setfloodmode, /delflood, /setwelcome, /setgoodbye et /setrules. Les exigences des membres n'ont pas de commande : le menu est le seul moyen de les définir.\n\nSeul le propriétaire du groupe peut ouvrir le menu, sauf s'il laisse entrer les admins. Les commandes de paramètres fonctionnent pour les admins comme avant. Un menu ouvert dans le groupe ne répond qu'à celui qui l'a ouvert. Chaque appui vérifie que vous y êtes toujours autorisé, et chaque changement demande au moins le droit que demande sa commande.\n"
+settings_help_msg: "Gérez ce groupe depuis un seul menu à boutons.\n\n<b>Commandes admin</b> :\n× /settings : Ouvre le menu des paramètres. Dans le groupe, il s'ouvre ici ou en privé ; dans une discussion privée avec moi, il liste les groupes que vous pouvez gérer.\n× /timezone : Affiche le fuseau horaire du groupe ou le change : /timezone Europe/Paris, /timezone +2 ou /timezone default.\n\nLe menu a ces pages : groupe Staff, sources bloquées, verrouillage, captcha, antiflood, avertissements, verrous, liste noire, filtres, bienvenue, au revoir, règles, notes, réactions, exigences des membres, suppression, interrupteurs, langue, fuseau horaire, canal de logs, admins anonymes et accès. Les listes et les messages se définissent en me les envoyant en privé. Chaque changement fait dedans équivaut à la commande correspondante : /linkstaff, /unlinkstaff, /unlockdown, /autolockdown, /captcha, /captchamode, /captchatime, /captchaaction, /setflood, /setfloodmode, /delflood, /setwelcome, /setgoodbye et /setrules. Les exigences des membres n'ont pas de commande : le menu est le seul moyen de les définir.\n\nSeul le propriétaire du groupe peut ouvrir le menu, sauf s'il laisse entrer les admins. Les commandes de paramètres fonctionnent pour les admins comme avant. Un menu ouvert dans le groupe ne répond qu'à celui qui l'a ouvert. Chaque appui vérifie que vous y êtes toujours autorisé, et chaque changement demande au moins le droit que demande sa commande.\n"

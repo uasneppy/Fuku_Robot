@@ -896,17 +896,11 @@ func (moduleStruct) filtersWatcher(b *gotgbot.Bot, ctx *ext.Context) error {
 func LoadFilters(dispatcher *ext.Dispatcher) {
 	SetModuleEnabled(filtersModule.moduleName, true)
 
-	SetModuleHelp(filtersModule.moduleName, [][]gotgbot.InlineKeyboardButton{
-		{
-			{
-				Text: func() string {
-					tr := i18n.MustNewTranslator("uk")
-					t, _ := tr.GetString("common_formatting_button")
-					return t
-				}(),
-				CallbackData: encodeCallbackData("helpq", map[string]string{"m": "Formatting"}),
-			},
-		},
+	SetModuleHelpFunc(filtersModule.moduleName, func(tr *i18n.Translator) [][]gotgbot.InlineKeyboardButton {
+		return [][]gotgbot.InlineKeyboardButton{{{
+			Text:         trS(tr, "common_formatting_button"),
+			CallbackData: encodeCallbackData("helpq", map[string]string{"m": "Formatting"}),
+		}}}
 	})
 	dispatcher.AddHandler(helpers.NewBotCommand("filter", filtersModule.addFilter))
 	dispatcher.AddHandler(helpers.NewBotCommand("addfilter", filtersModule.addFilter))

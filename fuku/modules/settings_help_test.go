@@ -33,9 +33,10 @@ func TestLoadSettingsRegistersHelp(t *testing.T) {
 	}
 
 	var button bool
-	for _, row := range initHelpButtonsFrom(registry).InlineKeyboard {
+	want := encodeCallbackData("helpq", map[string]string{"m": settingsModule.moduleName})
+	for _, row := range initHelpButtonsFrom(registry, "en").InlineKeyboard {
 		for _, each := range row {
-			button = button || each.Text == settingsModule.moduleName
+			button = button || each.CallbackData == want
 		}
 	}
 	if !button {

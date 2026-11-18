@@ -78,19 +78,15 @@ antiflood_errors_invalid_int: |
   Itu bukan bilangan bulat yang valid. Berikan bilangan bulat yang valid,
   atau `off`.
 antiflood_errors_set_in_limit: Batas antiflood harus diatur antara 3 dan 100.
-antiflood_flood_deleter_already_disabled: |
-  Penghapusan pesan Antiflood saat ini
-  *dinonaktifkan* di obrolan ini, pesan yang menyebabkan antiflood akan diabaikan!
-antiflood_flood_deleter_already_enabled: |
-  Penghapusan pesan Antiflood saat ini *diaktifkan*
-  di obrolan ini, pesan yang menyebabkan antiflood akan dihapus!
+antiflood_flood_deleter_already_disabled: "Penghapusan pesan Antiflood saat ini\n<b>dinonaktifkan</b> di obrolan ini, pesan yang menyebabkan antiflood akan diabaikan!\n"
+antiflood_flood_deleter_already_enabled: "Penghapusan pesan Antiflood saat ini <b>diaktifkan</b>\ndi obrolan ini, pesan yang menyebabkan antiflood akan dihapus!\n"
 antiflood_flood_deleter_disabled: |
   Menonaktifkan Penghapusan Pesan Antiflood. Pesan
   yang menyebabkan antiflood akan diabaikan!
 antiflood_flood_deleter_enabled: |
   Mengaktifkan Penghapusan Pesan Antiflood. Pesan yang menyebabkan
   antiflood akan dihapus!
-antiflood_flood_deleter_invalid_option: "Saya hanya mengerti opsi dari: `yes`/`no`/`on`/`off`"
+antiflood_flood_deleter_invalid_option: "Saya hanya mengerti opsi dari: <code>yes</code>/<code>no</code>/<code>on</code>/<code>off</code>"
 antiflood_flood_disabled: Obrolan ini saat ini tidak menegakkan kontrol flood.
 antiflood_flood_show_settings: |
   Obrolan ini saat ini menegakkan kontrol flood setelah
@@ -119,9 +115,7 @@ antiflood_setflood_disabled: "Oke.
 
   Saya tidak akan memperingatkan pengguna karena flooding."
 antiflood_setflood_success: Batas Flood telah diatur ke <b>%d</b> pesan.
-antiflood_setfloodmode_specify_action: |
-  "Anda perlu menentukan tindakan yang akan diambil saat
-  flooding. Mode saat ini adalah: `ban`/`kick`/`mute`"
+antiflood_setfloodmode_specify_action: "\"Anda perlu menentukan tindakan yang akan diambil saat\nflooding. Mode saat ini adalah: <code>ban</code>/<code>kick</code>/<code>mute</code>\"\n"
 antiflood_setfloodmode_success: Mode flood telah diatur ke %s.
 antiflood_setfloodmode_unknown_type: "Tipe tidak dikenal '%s'. Silakan gunakan salah satu dari: ban/kick/mute"
 bans_ban_ban_reason: <b>Alasan:</b> %s
@@ -199,8 +193,8 @@ blacklists_rm_all_bl_button_handler_no: |
   Dibatalkan menghapus semua Daftar Hitam dari Obrolan Ini
   ❌
 blacklists_rm_all_bl_button_handler_yes: Menghapus semua Daftar Hitam dari Obrolan Ini ✅
-blacklists_set_bl_action_changed_mode: "Berhasil mengubah mode daftar hitam ke: *%s*"
-blacklists_set_bl_action_choose_correct_option: Silakan pilih opsi dari <mute/kick/ban/warn/none>
+blacklists_set_bl_action_changed_mode: "Berhasil mengubah mode daftar hitam ke: <b>%s</b>"
+blacklists_set_bl_action_choose_correct_option: "Silakan pilih opsi dari &lt;mute/kick/ban/warn/none&gt;"
 blacklists_set_bl_action_current_mode: |
   "Mode daftar hitam saat ini untuk obrolan ini adalah:
   %s"
@@ -993,7 +987,7 @@ warns_user_warnings_no_reasons: "Pengguna punya %d/%d peringatan, tetapi tidak a
 warns_user_no_warnings: Pengguna ini tidak punya peringatan apa pun!
 warns_removed_by: "Peringatan dihapus oleh %s."
 warns_no_warns_to_remove: Pengguna sudah tidak punya peringatan!
-warns_limit_set_help: "Silakan tentukan berapa banyak peringatan yang harus diizinkan untuk pengguna sebelum tindakan diambil. Mis. `/setwarnlimit 5`"
+warns_limit_set_help: "Silakan tentukan berapa banyak peringatan yang harus diizinkan untuk pengguna sebelum tindakan diambil. Mis. <code>/setwarnlimit 5</code>"
 warns_invalid_number: "%s bukan bilangan bulat yang valid."
 warns_limit_range_error: Batas peringatan harus diatur antara 1 dan 100.
 warns_limit_updated: "Pengaturan batas peringatan untuk obrolan ini telah diperbarui ke %d."
@@ -1005,11 +999,11 @@ warns_reset_all_cancelled: Membatalkan penghapusan semua peringatan semua penggu
 warns_reset_all_final: Menghapus semua peringatan semua pengguna di obrolan ini.
 
 # Locks module strings
-locks_locktypes_header: "Kunci:\n  - "
+locks_locktypes_header: "Kunci:"
 locks_what_to_lock: Apa yang ingin Anda kunci? Periksa /locktypes untuk opsi yang tersedia.
-locks_invalid_lock_type: "`%s` bukan tipe kunci yang benar, periksa /locktypes."
-locks_locked_successfully: "Berhasil mengunci berikut di grup ini:\n  - %s"
-locks_unlocked_successfully: "Berhasil membuka kunci berikut di grup ini:\n  - %s"
+locks_invalid_lock_type: "<code>%s</code> bukan tipe kunci yang benar, periksa /locktypes."
+locks_locked_successfully: "Berhasil mengunci berikut di grup ini:\n• %s"
+locks_unlocked_successfully: "Berhasil membuka kunci berikut di grup ini:\n• %s"
 locks_lock_failed: "Gagal mengunci: %s. Silakan coba lagi nanti."
 locks_unlock_failed: "Gagal membuka kunci: %s. Silakan coba lagi nanti."
 locks_what_to_unlock: Apa yang ingin Anda buka kuncinya? Periksa /locktypes untuk opsi yang tersedia.
@@ -1046,7 +1040,7 @@ pins_input_not_recognized: "Masukan Anda tidak dikenali sebagai salah satu dari:
 # Purges module strings
 purges_cannot_delete_old: Anda tidak dapat menghapus pesan yang lebih dari dua hari. Silakan pilih pesan yang lebih baru.
 purges_purged_messages: Membersihkan %d pesan.
-purges_purged_with_reason: "Membersihkan %d pesan.\n*Alasan*:\n%s"
+purges_purged_with_reason: "Membersihkan %d pesan.\n<b>Alasan</b>:\n%s"
 purges_reply_to_purge: Balas ke pesan untuk memilih dari mana mulai membersihkan.
 purges_reply_to_delete: Balas ke pesan untuk menghapusnya!
 purges_message_marked: Pesan ini sudah ditandai untuk pembersihan!
@@ -1085,12 +1079,12 @@ disabling_no_disabled_commands: Tidak ada perintah yang dinonaktifkan di obrolan
 disabling_disabled_commands: "Perintah berikut dinonaktifkan di obrolan ini:"
 disabling_delete_enabled: Pesan yang dinonaktifkan sekarang akan dihapus.
 disabling_delete_disabled: Pesan yang dinonaktifkan tidak akan lagi dihapus.
-disabling_delete_current_enabled: Penghapusan Perintah yang Dinonaktifkan *diaktifkan*, perintah yang dinonaktifkan dari pengguna akan dihapus!
-disabling_delete_current_disabled: Penghapusan Perintah yang Dinonaktifkan *dinonaktifkan*, perintah yang dinonaktifkan dari pengguna *tidak* akan dihapus!
+disabling_delete_current_enabled: "Penghapusan Perintah yang Dinonaktifkan <b>diaktifkan</b>, perintah yang dinonaktifkan dari pengguna akan dihapus!"
+disabling_delete_current_disabled: "Penghapusan Perintah yang Dinonaktifkan <b>dinonaktifkan</b>, perintah yang dinonaktifkan dari pengguna <b>tidak</b> akan dihapus!"
 disabling_enabled_successfully: "Mengaktifkan kembali penggunaan berikut di obrolan ini:%s"
 disabling_unknown_reenable: "Perintah tidak dikenal untuk Diaktifkan Kembali:\n-%s\nPeriksa /disableable!"
 disabling_no_command_reenable: "Anda belum menentukan perintah untuk diaktifkan kembali."
-disabling_invalid_option: "Saya hanya mengerti opsi dari: `yes`/`no`/`on`/`off`"
+disabling_invalid_option: "Saya hanya mengerti opsi dari: <code>yes</code>/<code>no</code>/<code>on</code>/<code>off</code>"
 
 # Misc module strings
 misc_reply_to_someone: Balas ke seseorang.
@@ -1261,7 +1255,7 @@ notes_not_exists: "Catatan tidak ada!"
 notes_removed_success: "Catatan <b>%s</b> dihapus."
 notes_private_enabled: "Private Notes diaktifkan.\nSekarang pengguna akan mendapatkan catatan sebagai pesan pribadi."
 notes_private_disabled: "Private Notes dimatikan.\nSekarang semua catatan akan dikirim ke Grup Obrolan."
-notes_private_invalid_option: "Saya hanya mengerti opsi dari <on/off/yes/no>"
+notes_private_invalid_option: "Saya hanya mengerti opsi dari &lt;on/off/yes/no&gt;"
 notes_private_status_on: "Private Notes saat ini diaktifkan!"
 notes_private_status_off: "Private Notes saat ini dimatikan!"
 notes_none_in_chat: "Tidak ada catatan di obrolan ini!"
@@ -1278,7 +1272,7 @@ notes_clear_all_success: "Menghapus semua Catatan dari Obrolan Ini ✅"
 notes_clear_all_cancelled: "Dibatalkan menghapus semua catatan dari Obrolan Ini ❌"
 notes_parsing_error: "Ada kesalahan saat menguraikan catatan, silakan laporkan ini di obrolan dukungan."
 notes_admin_only: "Catatan ini hanya dapat diakses oleh admin!"
-notes_click_for_private: "Klik tombol di bawah untuk mendapatkan catatan *%s*"
+notes_click_for_private: "Klik tombol di bawah untuk mendapatkan catatan <b>%s</b>"
 notes_get_insufficient_args: "Argumen tidak cukup."
 notes_does_not_exist: "Catatan tidak ada!"
 notes_parsing_error_support: "Ada kesalahan saat menguraikan catatan, silakan laporkan ini ke obrolan dukungan."
@@ -1431,6 +1425,36 @@ content_need_content: "Anda perlu memberikan konten untuk %s pengguna!"
 content_text_too_long: "Teks pesan Anda %d karakter. Panjang maksimum untuk teks adalah 4096; silakan pangkas ke ukuran yang lebih kecil. Perhatikan bahwa karakter markdown mungkin membutuhkan lebih banyak ruang dari yang diharapkan."
 content_caption_too_long: "Keterangan pesan Anda %d karakter. Panjang maksimum keterangan adalah 1024; silakan pangkas ke ukuran yang lebih kecil. Perhatikan bahwa karakter markdown mungkin membutuhkan lebih banyak ruang dari yang diharapkan."
 helpers_module_help_header: "Berikut adalah bantuan untuk modul *%s*:\n\n"
+help_module_name_admin: "Admin"
+help_module_name_aispam: "Spam AI"
+help_module_name_antiflood: "Antiflood"
+help_module_name_antiraid: "Anti-raid"
+help_module_name_approvals: "Persetujuan"
+help_module_name_backup: "Cadangan"
+help_module_name_bans: "Ban"
+help_module_name_blacklists: "Daftar hitam"
+help_module_name_captcha: "Captcha"
+help_module_name_connections: "Koneksi"
+help_module_name_disabling: "Nonaktifkan"
+help_module_name_federations: "Federasi"
+help_module_name_filters: "Filter"
+help_module_name_formatting: "Format"
+help_module_name_greetings: "Sambutan"
+help_module_name_languages: "Bahasa"
+help_module_name_lockdown: "Lockdown"
+help_module_name_locks: "Kunci"
+help_module_name_logchannels: "Kanal log"
+help_module_name_misc: "Lain-lain"
+help_module_name_mutes: "Bisu"
+help_module_name_notes: "Catatan"
+help_module_name_pins: "Sematan"
+help_module_name_purges: "Pembersihan"
+help_module_name_reactions: "Reaksi"
+help_module_name_reports: "Laporan"
+help_module_name_rules: "Aturan"
+help_module_name_settings: "Pengaturan"
+help_module_name_staff: "Grup Staf"
+help_module_name_warns: "Peringatan"
 helpers_invalid_deep_link: "Deep link tidak valid atau salah format. Silakan periksa URL dan coba lagi."
 helpers_chat_not_found: "Tidak dapat menemukan obrolan yang terkait dengan tautan ini. Obrolan mungkin sudah tidak ada atau saya mungkin tidak memiliki akses ke sana."
 
@@ -2100,6 +2124,13 @@ reactions_help_msg: |
 reactions_add_usage: "Penggunaan: /addreaction <kata_kunci> <emoji>"
 reactions_invalid_emoji: "Silakan berikan emoji yang valid."
 reactions_add_error: "Gagal menyimpan reaksi. Silakan coba lagi."
+reactions_limit_reached: "Batas reaksi tercapai: grup dapat memiliki paling banyak {max} reaksi. Hapus satu untuk menambah yang baru."
+timezone_current: "Waktu di grup ini ditampilkan dalam <code>{zone}</code> ({label}). Sekarang pukul {time} di sini."
+timezone_is_default: "Ini zona bawaan bot."
+timezone_usage: "Untuk mengubahnya: <code>/timezone Asia/Jakarta</code>, <code>/timezone +7</code>, atau <code>/timezone default</code> untuk kembali ke bawaan."
+timezone_set: "Selesai: waktu di grup ini kini ditampilkan dalam <code>{zone}</code> ({label}). Sekarang pukul {time} di sini."
+timezone_reset: "Selesai: grup ini kembali memakai zona bawaan bot, <code>{zone}</code> ({label})."
+timezone_invalid: "Saya tidak mengenal zona itu. Tulis nama seperti <code>Asia/Jakarta</code> atau selisih dari UTC seperti <code>+7</code>."
 reactions_add_success: "Reaksi ditambahkan: <code>{keyword}</code> -> {emoji}"
 reactions_remove_usage: "Penggunaan: /removereaction <kata_kunci>"
 reactions_not_found: "Tidak ada reaksi yang dikonfigurasi untuk chat ini."
@@ -2254,11 +2285,7 @@ approvals_already_approved: "%s sudah disetujui di chat ini."
 approvals_not_approved: "%s tidak ada dalam daftar yang disetujui."
 approvals_user_unapproved: "%s dihapus dari daftar yang disetujui."
 approvals_check_not_approved: "%s saat ini tidak disetujui di chat ini."
-approvals_check_status: |
-  <b>Pengguna:</b> %s
-  <b>Disetujui Pada:</b> %s
-  <b>Disetujui Oleh:</b> %s
-  %s
+approvals_check_status: "<b>Pengguna:</b> %s\n<b>Disetujui Pada:</b> %s\n<b>Disetujui Oleh:</b> %s"
 approvals_none_approved: "Tidak ada pengguna yang disetujui di chat ini."
 approvals_approved_list_file_caption: "Daftar pengguna yang disetujui untuk %s"
 approvals_list_file_error: "Gagal membuat file pengguna yang disetujui."
@@ -2559,7 +2586,7 @@ staff_panel_reason_bot_not_admin: "Masalah: bot bukan admin di grup ini."
 staff_panel_reason_bot_cannot_restrict: "Masalah: bot tidak dapat membatasi anggota di grup ini."
 staff_panel_reason_owner_unknown: "Masalah: saya belum bisa memeriksa siapa pemilik grup ini saat ini."
 staff_panel_legend: "✅ ya | ❌ tidak | ❔ tidak dapat diperiksa"
-staff_panel_updated: "Diperbarui {time} UTC"
+staff_panel_updated: "Diperbarui {time}"
 staff_panel_refresh_button: "🔄 Segarkan"
 staff_cb_members_only: "Hanya anggota Grup Staf ini yang dapat melakukan ini."
 staff_panel_prev: "⬅️ Sebelumnya"
@@ -2652,7 +2679,7 @@ staff_history_unlinked: "tidak lagi terhubung"
 staff_history_undo_running: "↩ pembatalan berjalan"
 staff_history_undo_interrupted: "↩ pembatalan terhenti, tidak ada hasil akhir yang tercatat"
 staff_history_undo_nothing: "↩ pembatalan tidak mengubah apa pun"
-staff_history_undo_by: "↩ Pembatalan oleh {name}, {time} UTC"
+staff_history_undo_by: "↩ Pembatalan oleh {name}, {time}"
 staff_history_more_groups: "{count} grup lagi tidak ditampilkan karena pesannya terlalu panjang."
 staff_undo_unbanned: "blokir dibuka, mereka bisa bergabung lagi"
 staff_undo_unmuted: "bisu dibuka"
@@ -3014,6 +3041,43 @@ settings_fwd_action_hint: "Tindakan diterapkan pada anggota yang me-forward pesa
 settings_fwd_saved: "Forward dari <code>{source}</code> kini diblokir di semua grup terhubung."
 settings_fwd_refuse_one: "Kirim satu sumber sekali kirim: satu ID atau @username. Tidak ada yang disimpan."
 settings_entries_part_source: "sumber"
+settings_page_reactions: "Reaksi"
+settings_rct_intro: "Saat pesan di grup berisi salah satu kata ini, di mana saja dan dengan huruf apa pun, saya memberi reaksi yang ditentukan."
+settings_rct_count: "Reaksi: {n} dari {max}"
+settings_rct_empty: "Belum ada reaksi."
+settings_btn_rct_add: "➕ Tambah reaksi"
+settings_rct_wait: "Kirimkan satu kata dan satu emoji dipisahkan spasi, misalnya <code>halo 👍</code>. Saya akan memberi reaksi itu pada setiap pesan berisi kata tersebut."
+settings_rct_wait_rules: "Kata maksimal {max} karakter tanpa spasi. Emoji harus salah satu reaksi Telegram."
+settings_rct_refuse_two: "Kirim tepat dua hal: kata dan emoji, dipisahkan spasi. Tidak ada yang disimpan."
+settings_rct_refuse_long: "Kata terlalu panjang: maksimal {max} karakter. Tidak ada yang disimpan."
+settings_rct_refuse_emoji: "Telegram tidak mengizinkan emoji itu sebagai reaksi. Contoh yang bisa dipakai: {examples}"
+settings_rct_refuse_exists: "Sudah ada reaksi untuk <code>{keyword}</code>. Hapus dulu dari daftar untuk menggantinya."
+settings_rct_refuse_cap: "Grup ini sudah punya {max} reaksi, batas maksimal. Hapus satu dulu."
+settings_rct_delete_ask: "Hapus reaksi untuk <code>{keyword}</code>? Saya akan berhenti memberinya pada pesan dengan kata itu."
+settings_rct_removed: "Reaksi untuk <code>{keyword}</code> dihapus."
+settings_rct_saved: "Reaksi disimpan. Sekarang saya bereaksi pada pesan yang berisi <code>{keyword}</code>."
+settings_entries_part_reaction: "reaksi"
+settings_page_tz: "Zona waktu"
+settings_tz_current: "Zona: <code>{zone}</code> ({label})"
+settings_tz_now: "Waktu di sini: {time}"
+settings_tz_is_default: "Ini zona bawaan bot."
+settings_tz_default_is: "Zona bawaan bot adalah <code>{zone}</code>."
+settings_tz_hint: "Saya menampilkan waktu tentang grup ini dalam zona ini: lockdown, riwayat Grup Staf, dan waktu tunggu menu. Waktu musim panas mengikuti sendiri."
+settings_btn_tz_default: "Pakai bawaan"
+settings_btn_tz_other: "✏️ Ketik lainnya"
+settings_tz_wait: "Kirimkan nama zona seperti <code>Asia/Jakarta</code>, atau selisih dari UTC seperti <code>+7</code> atau <code>+5:30</code>."
+settings_tz_saved: "Zona disimpan."
+settings_tz_group_note: "Mengetik zona lain bisa di obrolan pribadi saya. Ketuk Buka secara pribadi di bawah."
+settings_tz_wait_ended_note: "Waktu tunggu zona berakhir dan tidak ada yang berubah. Tekan Ketik lainnya lagi."
+settings_tz_city_kyiv: "Kyiv"
+settings_tz_city_warsaw: "Warsawa"
+settings_tz_city_berlin: "Berlin"
+settings_tz_city_london: "London"
+settings_tz_city_lisbon: "Lisbon"
+settings_tz_city_istanbul: "Istanbul"
+settings_tz_city_tbilisi: "Tbilisi"
+settings_tz_city_newyork: "New York"
+settings_tz_city_utc: "UTC"
 settings_state_default: "Bawaan"
 settings_edit_line_text: "Teks: {state}"
 settings_edit_line_media: "Media: {state}"
@@ -3060,7 +3124,7 @@ settings_edit_wait_text: "Kirim teks baru sekarang, sebagai pesan biasa. Tebal, 
 settings_edit_wait_text_rules: "Kirim teks aturan baru sekarang, sebagai pesan biasa. Tebal, miring, tautan, dan format lain dipertahankan. Placeholder seperti <code>{first}</code> tidak berfungsi di aturan.\n\nMaksimal {max} karakter."
 settings_edit_wait_media: "Kirim satu foto, video, GIF, file, stiker, audio, atau pesan suara sekarang. Jika Anda mengirim album, saya hanya menyimpan satu item. Keterangan apa pun diabaikan: teks adalah bagian tersendiri."
 settings_edit_wait_buttons: "Kirim tombolnya sekarang, satu per baris:\n<code>[Rules](buttonurl://https://example.com/rules)</code>\n<code>[Chat](buttonurl://https://t.me/example:same)</code>\n\nTambahkan <code>:same</code> setelah tautan untuk menaruh tombol itu di baris yang sama dengan sebelumnya. Tombol ini menggantikan yang sekarang."
-settings_edit_wait_footer: "Saya akan menunggu sampai {time} UTC. Ketuk Batal atau kirim /cancel agar semuanya tetap seperti semula."
+settings_edit_wait_footer: "Saya akan menunggu sampai {time}. Ketuk Batal atau kirim /cancel agar semuanya tetap seperti semula."
 settings_edit_replaced_note: "Ini menggantikan permintaan Anda sebelumnya, yang kini dibatalkan."
 settings_edit_removed_text_default: "Teks dihapus. Teks bawaan dipakai lagi."
 settings_edit_removed_text_rules: "Teks aturan dihapus."
@@ -3321,4 +3385,4 @@ settings_lock_media: "Semua media"
 settings_lock_other: "Gim/stiker/GIF"
 settings_lock_previews: "Pratinjau tautan"
 settings_lock_all: "Semuanya"
-settings_help_msg: "Kelola grup ini dari satu menu tombol.\n\n<b>Perintah admin</b>:\n× /settings: Buka menu pengaturan. Di grup, menu terbuka di sini atau secara pribadi; di chat pribadi dengan saya, menu menampilkan grup yang bisa Anda kelola.\n\nMenu ini punya halaman: Grup Staf, sumber diblokir, lockdown, captcha, antiflood, peringatan, kunci, daftar hitam, filter, sambutan, perpisahan, aturan, catatan, persyaratan anggota, penghapusan, sakelar, bahasa, kanal log, admin anonim, dan akses. Daftar dan pesan diatur dengan mengirimkannya kepada saya secara pribadi. Setiap perubahan di dalamnya sama dengan perintah yang sesuai: /linkstaff, /unlinkstaff, /unlockdown, /autolockdown, /captcha, /captchamode, /captchatime, /captchaaction, /setflood, /setfloodmode, /delflood, /setwelcome, /setgoodbye, dan /setrules. Persyaratan anggota tidak punya perintah: menu adalah satu-satunya cara untuk mengaturnya.\n\nHanya pemilik grup yang bisa membuka menu, kecuali pemilik mengizinkan admin. Perintah pengaturan sendiri tetap berfungsi untuk admin seperti sebelumnya. Menu yang dibuka di grup hanya menjawab orang yang membukanya. Setiap penekanan memeriksa bahwa Anda masih diizinkan, dan setiap perubahan butuh minimal hak yang dibutuhkan perintahnya.\n"
+settings_help_msg: "Kelola grup ini dari satu menu tombol.\n\n<b>Perintah admin</b>:\n× /settings: Buka menu pengaturan. Di grup, menu terbuka di sini atau secara pribadi; di chat pribadi dengan saya, menu menampilkan grup yang bisa Anda kelola.\n× /timezone: Tampilkan zona waktu grup atau ubah: /timezone Asia/Jakarta, /timezone +7, atau /timezone default.\n\nMenu ini punya halaman: Grup Staf, sumber diblokir, lockdown, captcha, antiflood, peringatan, kunci, daftar hitam, filter, sambutan, perpisahan, aturan, catatan, reaksi, persyaratan anggota, penghapusan, sakelar, bahasa, zona waktu, kanal log, admin anonim, dan akses. Daftar dan pesan diatur dengan mengirimkannya kepada saya secara pribadi. Setiap perubahan di dalamnya sama dengan perintah yang sesuai: /linkstaff, /unlinkstaff, /unlockdown, /autolockdown, /captcha, /captchamode, /captchatime, /captchaaction, /setflood, /setfloodmode, /delflood, /setwelcome, /setgoodbye, dan /setrules. Persyaratan anggota tidak punya perintah: menu adalah satu-satunya cara untuk mengaturnya.\n\nHanya pemilik grup yang bisa membuka menu, kecuali pemilik mengizinkan admin. Perintah pengaturan sendiri tetap berfungsi untuk admin seperti sebelumnya. Menu yang dibuka di grup hanya menjawab orang yang membukanya. Setiap penekanan memeriksa bahwa Anda masih diizinkan, dan setiap perubahan butuh minimal hak yang dibutuhkan perintahnya.\n"

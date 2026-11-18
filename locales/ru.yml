@@ -50,17 +50,15 @@ antiflood_errors_invalid_int: |
   или `off`.
 
 antiflood_errors_set_in_limit: Лимит антифлуда должен быть установлен между 3 и 100.
-antiflood_flood_deleter_already_disabled: |
-  Удаление сообщений при флуде в данный момент *отключено* в этом чате, сообщения, вызывающие флуд, будут игнорироваться!
-antiflood_flood_deleter_already_enabled: |
-  Удаление сообщений при флуде в данный момент *включено* в этом чате, сообщения, вызывающие флуд, будут удалены!
+antiflood_flood_deleter_already_disabled: "Удаление сообщений при флуде в данный момент <b>отключено</b> в этом чате, сообщения, вызывающие флуд, будут игнорироваться!\n"
+antiflood_flood_deleter_already_enabled: "Удаление сообщений при флуде в данный момент <b>включено</b> в этом чате, сообщения, вызывающие флуд, будут удалены!\n"
 antiflood_flood_deleter_disabled: |
   Отключено удаление сообщений при флуде. Сообщения,
   вызывающие флуд, будут игнорироваться!
 antiflood_flood_deleter_enabled: |
   Включено удаление сообщений при флуде. Сообщения, вызывающие
   флуд, будут удалены!
-antiflood_flood_deleter_invalid_option: "Я понимаю только вариант из: `yes`/`no`/`on`/`off`"
+antiflood_flood_deleter_invalid_option: "Я понимаю только вариант из: <code>yes</code>/<code>no</code>/<code>on</code>/<code>off</code>"
 antiflood_flood_disabled: В этом чате в данный момент не применяется контроль флуда.
 antiflood_flood_show_settings: |
   В этом чате в данный момент применяется контроль флуда после %d сообщений. Любые пользователи, отправляющие больше этого количества сообщений, будут %s.
@@ -83,8 +81,7 @@ antiflood_help_msg: |
     × /delflood `<yes/no/on/off>`: Если вы хотите, чтобы бот удалял сообщения, создаваемые пользователем при флуде."
 antiflood_setflood_disabled: "Хорошо.\n\n  Я не буду предупреждать пользователей за флуд."
 antiflood_setflood_success: Лимит флуда установлен на <b>%d</b> сообщений.
-antiflood_setfloodmode_specify_action: |
-  "Вам нужно указать действие для применения при флуде. Текущие режимы: `ban`/`kick`/`mute`"
+antiflood_setfloodmode_specify_action: "\"Вам нужно указать действие для применения при флуде. Текущие режимы: <code>ban</code>/<code>kick</code>/<code>mute</code>\"\n"
 antiflood_setfloodmode_success: Режим флуда установлен на %s.
 antiflood_setfloodmode_unknown_type: "Неизвестный тип '%s'. Пожалуйста, используйте один из: ban/kick/mute"
 bans_ban_ban_reason: "<b>Причина:</b> %s"
@@ -152,8 +149,8 @@ blacklists_rm_all_bl_ask: |
 blacklists_rm_all_bl_button_handler_no: |
   Отменено удаление всех чёрных списков этого чата ❌
 blacklists_rm_all_bl_button_handler_yes: Удалены все чёрные списки из этого чата ✅
-blacklists_set_bl_action_changed_mode: "Успешно изменён режим чёрного списка на: *%s*"
-blacklists_set_bl_action_choose_correct_option: Пожалуйста, выберите вариант из <mute/kick/ban/warn/none>
+blacklists_set_bl_action_changed_mode: "Успешно изменён режим чёрного списка на: <b>%s</b>"
+blacklists_set_bl_action_choose_correct_option: "Пожалуйста, выберите вариант из &lt;mute/kick/ban/warn/none&gt;"
 blacklists_set_bl_action_current_mode: |
   "Текущий режим чёрного списка для этого чата:
     %s"
@@ -827,7 +824,7 @@ warns_user_warnings_no_reasons: "У пользователя %d/%d предуп�
 warns_user_no_warnings: У этого пользователя нет предупреждений!
 warns_removed_by: "Предупреждение удалено %s."
 warns_no_warns_to_remove: У пользователя уже нет предупреждений!
-warns_limit_set_help: "Пожалуйста, укажите, сколько предупреждений должен получить пользователь до применения действия. Например, `/setwarnlimit 5`"
+warns_limit_set_help: "Пожалуйста, укажите, сколько предупреждений должен получить пользователь до применения действия. Например, <code>/setwarnlimit 5</code>"
 warns_invalid_number: "%s не является правильным целым числом."
 warns_limit_range_error: Лимит предупреждений должен быть установлен между 1 и 100.
 warns_limit_updated: "Настройки лимита предупреждений для этого чата обновлены на %d."
@@ -839,11 +836,11 @@ warns_reset_all_cancelled: Отменено удаление всех преду
 warns_reset_all_final: Удалены все предупреждения всех пользователей в этом чате.
 
 # Locks module strings
-locks_locktypes_header: "Блокировки:\n  - "
+locks_locktypes_header: "Блокировки:"
 locks_what_to_lock: Что вы хотите заблокировать? Проверьте /locktypes для доступных вариантов.
-locks_invalid_lock_type: "`%s` не является правильным типом блокировки, проверьте /locktypes."
-locks_locked_successfully: "Заблокировано следующее в этой группе:\n  - %s"
-locks_unlocked_successfully: "Разблокировано следующее в этой группе:\n  - %s"
+locks_invalid_lock_type: "<code>%s</code> не является правильным типом блокировки, проверьте /locktypes."
+locks_locked_successfully: "Заблокировано следующее в этой группе:\n• %s"
+locks_unlocked_successfully: "Разблокировано следующее в этой группе:\n• %s"
 locks_lock_failed: "Не удалось заблокировать: %s. Пожалуйста, попробуйте позже."
 locks_unlock_failed: "Не удалось разблокировать: %s. Пожалуйста, попробуйте позже."
 locks_what_to_unlock: Что вы хотите разблокировать? Проверьте /locktypes для доступных вариантов.
@@ -880,7 +877,7 @@ pins_input_not_recognized: "Ваш ввод не был распознан ка�
 # Purges module strings
 purges_cannot_delete_old: Вы не можете удалять сообщения старше двух дней. Пожалуйста, выберите более свежее сообщение.
 purges_purged_messages: Удалено %d сообщений.
-purges_purged_with_reason: "Удалено %d сообщений.\n*Причина*:\n%s"
+purges_purged_with_reason: "Удалено %d сообщений.\n<b>Причина</b>:\n%s"
 purges_reply_to_purge: Ответьте на сообщение, чтобы выбрать, откуда начать удаление.
 purges_reply_to_delete: Ответьте на сообщение, чтобы удалить его!
 purges_message_marked: Это сообщение уже отмечено для удаления!
@@ -918,12 +915,12 @@ disabling_no_disabled_commands: В этом чате нет отключённы
 disabling_disabled_commands: "Следующие команды отключены в этом чате:"
 disabling_delete_enabled: Отключённые сообщения теперь будут удаляться.
 disabling_delete_disabled: Отключённые сообщения больше не будут удаляться.
-disabling_delete_current_enabled: Удаление отключённых команд *включено*, отключённые команды от пользователей будут удалены!
-disabling_delete_current_disabled: Удаление отключённых команд *отключено*, отключённые команды от пользователей *не будут* удалены!
+disabling_delete_current_enabled: "Удаление отключённых команд <b>включено</b>, отключённые команды от пользователей будут удалены!"
+disabling_delete_current_disabled: "Удаление отключённых команд <b>отключено</b>, отключённые команды от пользователей <b>не будут</b> удалены!"
 disabling_enabled_successfully: "Повторно включено использование следующего в этом чате:%s"
 disabling_unknown_reenable: "Неизвестная команда для повторного включения:\n-%s\nПроверьте /disableable!"
 disabling_no_command_reenable: "Вы не указали команду для повторного включения."
-disabling_invalid_option: "Я понимаю только вариант из: `yes`/`no`/`on`/`off`"
+disabling_invalid_option: "Я понимаю только вариант из: <code>yes</code>/<code>no</code>/<code>on</code>/<code>off</code>"
 
 # Misc module strings
 misc_reply_to_someone: Ответьте кому-то.
@@ -1093,7 +1090,7 @@ notes_not_exists: "Заметка не существует!"
 notes_removed_success: "Удалена заметка <b>%s</b>."
 notes_private_enabled: "Включены приватные заметки.\nТеперь пользователи будут получать заметки как личное сообщение."
 notes_private_disabled: "Отключены приватные заметки.\nТеперь все заметки будут отправляться в групповой чат."
-notes_private_invalid_option: "Я понимаю только вариант из <on/off/yes/no>"
+notes_private_invalid_option: "Я понимаю только вариант из &lt;on/off/yes/no&gt;"
 notes_private_status_on: "Приватные заметки в данный момент включены!"
 notes_private_status_off: "Приватные заметки в данный момент отключены!"
 notes_none_in_chat: "В этом чате нет заметок!"
@@ -1110,7 +1107,7 @@ notes_clear_all_success: "Удалены все заметки из этого �
 notes_clear_all_cancelled: "Отменено удаление всех заметок из этого чата ❌"
 notes_parsing_error: "Произошла ошибка при разборе заметки, пожалуйста, сообщите об этом в чате поддержки."
 notes_admin_only: "Эта заметка доступна только администраторам!"
-notes_click_for_private: "Нажмите на кнопку ниже, чтобы получить заметку *%s*"
+notes_click_for_private: "Нажмите на кнопку ниже, чтобы получить заметку <b>%s</b>"
 notes_get_insufficient_args: "Недостаточно аргументов."
 notes_does_not_exist: "Заметка не существует!"
 notes_parsing_error_support: "Произошла ошибка при разборе заметки, пожалуйста, сообщите об этом в чат поддержки."
@@ -1245,6 +1242,36 @@ content_need_content: "Вам нужно дать мне содержимое д
 content_text_too_long: "Текст вашего сообщения составляет %d символов. Максимальная длина текста — 4096; пожалуйста, сократите его до меньшего размера. Обратите внимание, что символы разметки могут занимать больше места, чем ожидается."
 content_caption_too_long: "Подпись вашего сообщения составляет %d символов. Максимальная длина подписи — 1024; пожалуйста, сократите её до меньшего размера. Обратите внимание, что символы разметки могут занимать больше места, чем ожидается."
 helpers_module_help_header: "Вот справка для модуля *%s*:\n\n"
+help_module_name_admin: "Админы"
+help_module_name_aispam: "ИИ-антиспам"
+help_module_name_antiflood: "Антифлуд"
+help_module_name_antiraid: "Антирейд"
+help_module_name_approvals: "Одобрения"
+help_module_name_backup: "Бэкап"
+help_module_name_bans: "Баны"
+help_module_name_blacklists: "Чёрный список"
+help_module_name_captcha: "Капча"
+help_module_name_connections: "Подключения"
+help_module_name_disabling: "Отключение"
+help_module_name_federations: "Федерации"
+help_module_name_filters: "Фильтры"
+help_module_name_formatting: "Форматирование"
+help_module_name_greetings: "Приветствия"
+help_module_name_languages: "Язык"
+help_module_name_lockdown: "Блокировка"
+help_module_name_locks: "Замки"
+help_module_name_logchannels: "Канал логов"
+help_module_name_misc: "Разное"
+help_module_name_mutes: "Муты"
+help_module_name_notes: "Заметки"
+help_module_name_pins: "Закрепы"
+help_module_name_purges: "Очистка"
+help_module_name_reactions: "Реакции"
+help_module_name_reports: "Жалобы"
+help_module_name_rules: "Правила"
+help_module_name_settings: "Настройки"
+help_module_name_staff: "Штаб-группа"
+help_module_name_warns: "Предупреждения"
 helpers_invalid_deep_link: "Неверная или некорректная прямая ссылка. Пожалуйста, проверьте URL и попробуйте снова."
 helpers_chat_not_found: "Не удалось найти чат, связанный с этой ссылкой. Чат может больше не существовать или у меня нет к нему доступа."
 
@@ -1912,6 +1939,13 @@ reactions_help_msg: |
 reactions_add_usage: "Использование: /addreaction <ключевое_слово> <эмодзи>"
 reactions_invalid_emoji: "Пожалуйста, укажите корректный эмодзи."
 reactions_add_error: "Не удалось сохранить реакцию. Пожалуйста, попробуйте снова."
+reactions_limit_reached: "Лимит реакций исчерпан: в группе может быть не больше {max} реакций. Удалите одну, чтобы добавить новую."
+timezone_current: "Время в этой группе показывается по зоне <code>{zone}</code> ({label}). Сейчас здесь {time}."
+timezone_is_default: "Это зона бота по умолчанию."
+timezone_usage: "Изменить: <code>/timezone Europe/Moscow</code>, <code>/timezone +3</code> или <code>/timezone default</code>, чтобы вернуть зону по умолчанию."
+timezone_set: "Готово: теперь время в группе показывается по зоне <code>{zone}</code> ({label}). Сейчас здесь {time}."
+timezone_reset: "Готово: группа снова использует зону бота по умолчанию, <code>{zone}</code> ({label})."
+timezone_invalid: "Не знаю такой зоны. Напишите название вроде <code>Europe/Moscow</code> или сдвиг от UTC вроде <code>+3</code>."
 reactions_add_success: "Реакция добавлена: <code>{keyword}</code> -> {emoji}"
 reactions_remove_usage: "Использование: /removereaction <ключевое_слово>"
 reactions_not_found: "Для этого чата не настроено ни одной реакции."
@@ -2066,11 +2100,7 @@ approvals_already_approved: "%s уже одобрен в этом чате."
 approvals_not_approved: "%s нет в списке одобренных."
 approvals_user_unapproved: "%s удалён из списка одобренных."
 approvals_check_not_approved: "%s не одобрен в этом чате."
-approvals_check_status: |
-  <b>Пользователь:</b> %s
-  <b>Одобрен:</b> %s
-  <b>Одобрил:</b> %s
-  %s
+approvals_check_status: "<b>Пользователь:</b> %s\n<b>Одобрен:</b> %s\n<b>Одобрил:</b> %s"
 approvals_none_approved: "В этом чате нет одобренных пользователей."
 approvals_approved_list_file_caption: "Список одобренных пользователей для %s"
 approvals_list_file_error: "Не удалось сформировать файл со списком одобренных пользователей."
@@ -2371,7 +2401,7 @@ staff_panel_reason_bot_not_admin: "Проблема: бот не являетс�
 staff_panel_reason_bot_cannot_restrict: "Проблема: бот не может ограничивать участников в этой группе."
 staff_panel_reason_owner_unknown: "Проблема: сейчас не удалось проверить, кто владелец этой группы."
 staff_panel_legend: "✅ да | ❌ нет | ❔ не удалось проверить"
-staff_panel_updated: "Обновлено в {time} UTC"
+staff_panel_updated: "Обновлено в {time}"
 staff_panel_refresh_button: "🔄 Обновить"
 staff_cb_members_only: "Это могут делать только участники этой Staff-группы."
 staff_panel_prev: "⬅️ Назад"
@@ -2464,7 +2494,7 @@ staff_history_unlinked: "больше не связана"
 staff_history_undo_running: "↩ отмена выполняется"
 staff_history_undo_interrupted: "↩ отмена прервана, итоговый результат не записан"
 staff_history_undo_nothing: "↩ отмена ничего не изменила"
-staff_history_undo_by: "↩ Отмена: {name}, {time} UTC"
+staff_history_undo_by: "↩ Отмена: {name}, {time}"
 staff_history_more_groups: "Ещё групп не показано: {count}, так как сообщение слишком длинное."
 staff_undo_unbanned: "разбанен, может вернуться"
 staff_undo_unmuted: "мут снят"
@@ -2826,6 +2856,43 @@ settings_fwd_action_hint: "Действие применяется к участ
 settings_fwd_saved: "Пересылки из <code>{source}</code> теперь блокируются во всех связанных группах."
 settings_fwd_refuse_one: "Присылайте по одному источнику: один ID или @username. Ничего не сохранено."
 settings_entries_part_source: "источник"
+settings_page_reactions: "Реакции"
+settings_rct_intro: "Когда сообщение в группе содержит одно из этих слов, где угодно и в любом регистре, я ставлю на него указанную реакцию."
+settings_rct_count: "Реакций: {n} из {max}"
+settings_rct_empty: "Реакций пока нет."
+settings_btn_rct_add: "➕ Добавить"
+settings_rct_wait: "Отправьте мне слово и эмодзи через пробел, например <code>привет 👍</code>. Я буду ставить эту реакцию на каждое сообщение с этим словом."
+settings_rct_wait_rules: "Слово — до {max} символов, без пробелов. Эмодзи — одна из реакций Telegram."
+settings_rct_refuse_two: "Отправьте ровно два элемента: слово и эмодзи через пробел. Ничего не сохранено."
+settings_rct_refuse_long: "Слово слишком длинное: не больше {max} символов. Ничего не сохранено."
+settings_rct_refuse_emoji: "Telegram не разрешает эту эмодзи как реакцию. Подойдут, например: {examples}"
+settings_rct_refuse_exists: "Для <code>{keyword}</code> реакция уже есть. Сначала удалите её из списка, чтобы заменить."
+settings_rct_refuse_cap: "В этой группе уже {max} реакций, это максимум. Сначала удалите одну."
+settings_rct_delete_ask: "Удалить реакцию для <code>{keyword}</code>? Я перестану ставить её на сообщения с этим словом."
+settings_rct_removed: "Реакция для <code>{keyword}</code> удалена."
+settings_rct_saved: "Реакция сохранена. Теперь я реагирую на сообщения со словом <code>{keyword}</code>."
+settings_entries_part_reaction: "реакция"
+settings_page_tz: "Часовой пояс"
+settings_tz_current: "Зона: <code>{zone}</code> ({label})"
+settings_tz_now: "Сейчас здесь: {time}"
+settings_tz_is_default: "Это зона бота по умолчанию."
+settings_tz_default_is: "Зона бота по умолчанию: <code>{zone}</code>."
+settings_tz_hint: "В этой зоне я показываю время в сообщениях о группе: блокировки, история штаб-группы, ожидания в меню. Летнее время учитывается само."
+settings_btn_tz_default: "По умолчанию"
+settings_btn_tz_other: "✏️ Другая зона"
+settings_tz_wait: "Отправьте мне название зоны, например <code>Europe/Moscow</code>, или сдвиг от UTC, например <code>+3</code> или <code>+5:30</code>."
+settings_tz_saved: "Зона сохранена."
+settings_tz_group_note: "Ввести другую зону можно в моём личном чате. Нажмите «Открыть в личке» ниже."
+settings_tz_wait_ended_note: "Ожидание зоны закончилось, ничего не изменено. Нажмите «Другая зона» ещё раз."
+settings_tz_city_kyiv: "Киев"
+settings_tz_city_warsaw: "Варшава"
+settings_tz_city_berlin: "Берлин"
+settings_tz_city_london: "Лондон"
+settings_tz_city_lisbon: "Лиссабон"
+settings_tz_city_istanbul: "Стамбул"
+settings_tz_city_tbilisi: "Тбилиси"
+settings_tz_city_newyork: "Нью-Йорк"
+settings_tz_city_utc: "UTC"
 settings_state_default: "По умолчанию"
 settings_edit_line_text: "Текст: {state}"
 settings_edit_line_media: "Медиа: {state}"
@@ -2872,7 +2939,7 @@ settings_edit_wait_text: "Отправьте мне новый текст сей
 settings_edit_wait_text_rules: "Отправьте мне новый текст правил сейчас, обычным сообщением. Жирный, курсив, ссылки и другое форматирование сохраняются. Подстановки вроде <code>{first}</code> в правилах не работают.\n\nДо {max} символов."
 settings_edit_wait_media: "Отправьте мне сейчас одно фото, видео, GIF, файл, стикер, аудио или голосовое сообщение. Если вы отправите альбом, я оставлю только один его элемент. Подпись игнорируется: текст — отдельная часть."
 settings_edit_wait_buttons: "Отправьте мне кнопки сейчас, по одной в строке:\n<code>[Rules](buttonurl://https://example.com/rules)</code>\n<code>[Chat](buttonurl://https://t.me/example:same)</code>\n\nДобавьте <code>:same</code> после ссылки, чтобы поставить эту кнопку в ряд предыдущей. Эти кнопки заменят текущие."
-settings_edit_wait_footer: "Я буду ждать до {time} UTC. Нажмите «Отмена» или отправьте /cancel, чтобы ничего не менять."
+settings_edit_wait_footer: "Я буду ждать до {time}. Нажмите «Отмена» или отправьте /cancel, чтобы ничего не менять."
 settings_edit_replaced_note: "Это заменило ваш прежний запрос, который теперь отменён."
 settings_edit_removed_text_default: "Текст удалён. Снова используется текст по умолчанию."
 settings_edit_removed_text_rules: "Текст правил удалён."
@@ -3133,4 +3200,4 @@ settings_lock_media: "Все медиа"
 settings_lock_other: "Игры/стикеры/GIF"
 settings_lock_previews: "Превью ссылок"
 settings_lock_all: "Всё"
-settings_help_msg: "Управляйте этой группой из одного меню с кнопками.\n\n<b>Команды админов</b>:\n× /settings: Открыть меню настроек. В группе оно открывается здесь или в личке; в личном чате со мной показывает группы, которыми вы можете управлять.\n\nВ меню есть страницы: штаб-группа, блок-источники, блокировка, капча, антифлуд, предупреждения, замки, чёрный список, фильтры, приветствие, прощание, правила, заметки, требования к участникам, удаление, переключатели, язык, канал логов, анонимные админы и доступ. Списки и сообщения задаются, когда вы отправляете их мне в личку. Каждое изменение в нём равносильно соответствующей команде: /linkstaff, /unlinkstaff, /unlockdown, /autolockdown, /captcha, /captchamode, /captchatime, /captchaaction, /setflood, /setfloodmode, /delflood, /setwelcome, /setgoodbye и /setrules. У требований к участникам нет команды: настроить их можно только в меню.\n\nОткрыть меню может только владелец группы, если он не пустил админов. Сами команды настроек работают для админов как раньше. Меню, открытое в группе, отвечает только тому, кто его открыл. Каждое нажатие проверяет, что вам всё ещё можно, а каждое изменение требует как минимум того права, что нужно его команде.\n"
+settings_help_msg: "Управляйте этой группой из одного меню с кнопками.\n\n<b>Команды админов</b>:\n× /settings: Открыть меню настроек. В группе оно открывается здесь или в личке; в личном чате со мной показывает группы, которыми вы можете управлять.\n× /timezone: Показать часовой пояс группы или изменить его: /timezone Europe/Moscow, /timezone +3 или /timezone default.\n\nВ меню есть страницы: штаб-группа, блок-источники, блокировка, капча, антифлуд, предупреждения, замки, чёрный список, фильтры, приветствие, прощание, правила, заметки, реакции, требования к участникам, удаление, переключатели, язык, часовой пояс, канал логов, анонимные админы и доступ. Списки и сообщения задаются, когда вы отправляете их мне в личку. Каждое изменение в нём равносильно соответствующей команде: /linkstaff, /unlinkstaff, /unlockdown, /autolockdown, /captcha, /captchamode, /captchatime, /captchaaction, /setflood, /setfloodmode, /delflood, /setwelcome, /setgoodbye и /setrules. У требований к участникам нет команды: настроить их можно только в меню.\n\nОткрыть меню может только владелец группы, если он не пустил админов. Сами команды настроек работают для админов как раньше. Меню, открытое в группе, отвечает только тому, кто его открыл. Каждое нажатие проверяет, что вам всё ещё можно, а каждое изменение требует как минимум того права, что нужно его команде.\n"

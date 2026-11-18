@@ -158,15 +158,13 @@ Automatically react to messages with specific keywords!
 <b>Example:</b>
 • /addreaction hello 👋`
 
+	// A page that opens with its own bold title line gets no generic header, so the title is shown once.
 	got := renderModuleHelp(header, "Reactions", body)
-	if strings.Contains(got, "&lt;b&gt;") || strings.Contains(got, "*Reactions*") {
-		t.Fatalf("renderModuleHelp() escaped HTML or left markdown: %q", got)
+	if strings.Contains(got, "&lt;b&gt;") || strings.Contains(got, "*Reactions*") || strings.Contains(got, "module:") {
+		t.Fatalf("renderModuleHelp() escaped HTML, left markdown or added the header: %q", got)
 	}
-	if !strings.Contains(got, "<b>Reactions</b>") {
-		t.Fatalf("renderModuleHelp() missing converted header bold: %q", got)
-	}
-	if !strings.Contains(got, "<b>🎭 Auto-Reactions</b>") {
-		t.Fatalf("renderModuleHelp() missing body heading: %q", got)
+	if !strings.HasPrefix(got, "<b>🎭 Auto-Reactions</b>\n\n") {
+		t.Fatalf("renderModuleHelp() does not open with the page's own title: %q", got)
 	}
 	if !strings.Contains(got, "<b>Admin Commands:</b>") {
 		t.Fatalf("renderModuleHelp() missing Admin Commands heading: %q", got)
@@ -174,9 +172,11 @@ Automatically react to messages with specific keywords!
 	if !strings.Contains(got, "<b>Example:</b>") {
 		t.Fatalf("renderModuleHelp() missing Example heading: %q", got)
 	}
-	if !strings.Contains(got, "module:</b>\n\n<b>🎭 Auto-Reactions</b>") &&
-		!strings.Contains(got, "module:\n\n<b>🎭 Auto-Reactions</b>") {
-		t.Fatalf("renderModuleHelp() missing blank line between header and body: %q", got)
+	// A page without its own title still gets the header, with a blank line before the body.
+	untitled := renderModuleHelp(header, "Reactions", strings.SplitN(body, "\n\n", 2)[1])
+	if !strings.Contains(untitled, "<b>Reactions</b>") || !strings.Contains(untitled, "module:\n\nAutomatically react") &&
+		!strings.Contains(untitled, "module:</b>\n\nAutomatically react") {
+		t.Fatalf("renderModuleHelp() of an untitled page = %q, want the header and a blank line", untitled)
 	}
 	if !strings.Contains(got, "&lt;keyword&gt;") || !strings.Contains(got, "&lt;emoji&gt;") {
 		t.Fatalf("renderModuleHelp() did not escape placeholders: %q", got)

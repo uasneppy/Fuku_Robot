@@ -537,7 +537,7 @@ func (m moduleStruct) setBlacklistAction(b *gotgbot.Bot, ctx *ext.Context) error
 	if len(args) == 0 {
 		currAction := blacklists.GetBlacklistSettingsContext(tracing.UpdateContext(ctx), chat.Id).Action()
 		temp, _ := tr.GetString(strings.ToLower(m.moduleName) + "_set_bl_action_current_mode")
-		rMsg = fmt.Sprintf(temp, currAction)
+		rMsg = fmt.Sprintf(temp, html.EscapeString(currAction))
 	} else if len(args) == 1 {
 		action := strings.ToLower(args[0])
 		result := applyBlacklistAction(tracing.UpdateContext(ctx), chat.Id, action)
@@ -548,12 +548,12 @@ func (m moduleStruct) setBlacklistAction(b *gotgbot.Bot, ctx *ext.Context) error
 			rMsg, _ = tr.GetString("blacklists_set_bl_action_update_failed")
 		default:
 			temp, _ := tr.GetString(strings.ToLower(m.moduleName) + "_set_bl_action_changed_mode")
-			rMsg = fmt.Sprintf(temp, action)
+			rMsg = fmt.Sprintf(temp, html.EscapeString(action))
 		}
 	} else {
 		rMsg, _ = tr.GetString(strings.ToLower(m.moduleName) + "_set_bl_action_choose_correct_option")
 	}
-	_, err := msg.Reply(b, rMsg, formatting.Smarkdown())
+	_, err := msg.Reply(b, rMsg, formatting.Shtml())
 	if err != nil {
 		log.Error(err)
 		return err

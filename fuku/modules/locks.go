@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html"
 	"regexp"
 	"slices"
 	"strings"
@@ -153,7 +154,7 @@ func (m moduleStruct) locktypes(b *gotgbot.Bot, ctx *ext.Context) error {
 
 	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 	header, _ := tr.GetString("locks_locktypes_header")
-	_, err := msg.Reply(b, header+strings.Join(_locktypes, "\n - "), formatting.Shtml())
+	_, err := msg.Reply(b, strings.TrimRight(header, " -\n")+"\n• "+strings.Join(_locktypes, "\n• "), formatting.Shtml())
 	if err != nil {
 		log.Error(err)
 		return err
@@ -311,7 +312,7 @@ func (m moduleStruct) lockPerm(b *gotgbot.Bot, ctx *ext.Context) error {
 		if !slices.Contains(m.getLockMapAsArray(), perm) {
 			tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 			temp, _ := tr.GetString("locks_invalid_lock_type")
-			text := fmt.Sprintf(temp, perm)
+			text := fmt.Sprintf(temp, html.EscapeString(perm))
 			_, err := msg.Reply(b, text, formatting.Shtml())
 			if err != nil {
 				log.Error(err)
@@ -334,7 +335,7 @@ func (m moduleStruct) lockPerm(b *gotgbot.Bot, ctx *ext.Context) error {
 		}
 	} else {
 		temp, _ := tr.GetString("locks_locked_successfully")
-		text := fmt.Sprintf(temp, strings.Join(toLock, "\n - "))
+		text := fmt.Sprintf(temp, strings.Join(toLock, "\n• "))
 		_, err := msg.Reply(b, text, formatting.Shtml())
 		if err != nil {
 			log.Error(err)
@@ -385,7 +386,7 @@ func (m moduleStruct) unlockPerm(b *gotgbot.Bot, ctx *ext.Context) error {
 		if !slices.Contains(m.getLockMapAsArray(), perm) {
 			tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 			temp, _ := tr.GetString("locks_invalid_lock_type")
-			text := fmt.Sprintf(temp, perm)
+			text := fmt.Sprintf(temp, html.EscapeString(perm))
 			_, err := msg.Reply(b, text, formatting.Shtml())
 			if err != nil {
 				log.Error(err)
@@ -408,7 +409,7 @@ func (m moduleStruct) unlockPerm(b *gotgbot.Bot, ctx *ext.Context) error {
 		}
 	} else {
 		temp, _ := tr.GetString("locks_unlocked_successfully")
-		text := fmt.Sprintf(temp, strings.Join(toUnlock, "\n - "))
+		text := fmt.Sprintf(temp, strings.Join(toUnlock, "\n• "))
 		_, err := msg.Reply(b, text, formatting.Shtml())
 		if err != nil {
 			log.Error(err)

@@ -427,7 +427,7 @@ func TestBuildExportCaption(t *testing.T) {
 	caption := buildExportCaption(tr, backup)
 	assert.Contains(t, caption, "Test Chat")
 	assert.Contains(t, caption, "2")
-	assert.Contains(t, caption, backup.ExportedAt.Format("2006-01-02 15:04:05"))
+	assert.Contains(t, caption, formatChatTime(backup.ExportedAt, chatClockOf(backup.ChatID), "2006-01-02 15:04:05"))
 	assert.Contains(t, caption, "notes")
 	assert.Contains(t, caption, "filters")
 }

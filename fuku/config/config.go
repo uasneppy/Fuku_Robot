@@ -11,6 +11,11 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
+	// The zone database is embedded, so a zone name resolves in every build: the Windows and macOS
+	// release binaries may have no system zone database. It is imported here, not in main, so it is
+	// initialised before this package reads DEFAULT_TIMEZONE.
+	_ "time/tzdata"
 	"unicode/utf8"
 
 	"github.com/joho/godotenv"
@@ -212,6 +217,12 @@ type Config struct {
 	AnthropicAPIKey string
 	AnthropicModel  string
 
+	// DefaultTimezone is the zone every group without a choice of its own shows times in
+	// (DEFAULT_TIMEZONE, an IANA name, default Europe/Kyiv). DefaultLocation is it loaded; an
+	// invalid name stops startup.
+	DefaultTimezone string
+	DefaultLocation *time.Location
+
 	// Web captcha (Cloudflare Turnstile in a Telegram Mini App). It is on only when
 	// all four of CAPTCHA_WEB_BASE_URL, TELEGRAM_MINI_APP_SHORT_NAME,
 	// TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY are set; a partial set stops
@@ -328,7 +339,27 @@ func validCaptchaWebProxies(list string) bool {
 	return true
 }
 
+// DefaultTimezoneName is the zone used when DEFAULT_TIMEZONE is unset.
+const DefaultTimezoneName = "Europe/Kyiv"
+
+// LoadDefaultLocation loads the zone DEFAULT_TIMEZONE names (an empty value is DefaultTimezoneName).
+func LoadDefaultLocation(name string) (*time.Location, error) {
+	if name == "" {
+		name = DefaultTimezoneName
+	}
+	loc, err := time.LoadLocation(name)
+	if err != nil || name == "Local" {
+		return nil, fmt.Errorf("DEFAULT_TIMEZONE %q is not a timezone name such as Europe/Kyiv or UTC", name)
+	}
+	return loc, nil
+}
+
 func ValidateConfig(cfg *Config) error {
+	loc, err := LoadDefaultLocation(cfg.DefaultTimezone)
+	if err != nil {
+		return err
+	}
+	cfg.DefaultLocation = loc
 	if cfg.BotToken == "" {
 		return fmt.Errorf("BOT_TOKEN is required")
 	}
@@ -462,6 +493,8 @@ func LoadConfig() (*Config, error) {
 
 		AnthropicAPIKey: os.Getenv("ANTHROPIC_API_KEY"),
 		AnthropicModel:  os.Getenv("ANTHROPIC_MODEL"),
+
+		DefaultTimezone: strings.TrimSpace(os.Getenv("DEFAULT_TIMEZONE")),
 
 		CaptchaWebBaseURL:        strings.TrimSpace(os.Getenv("CAPTCHA_WEB_BASE_URL")),
 		TelegramMiniAppShortName: strings.TrimSpace(os.Getenv("TELEGRAM_MINI_APP_SHORT_NAME")),

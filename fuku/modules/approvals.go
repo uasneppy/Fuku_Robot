@@ -239,7 +239,7 @@ func (m moduleStruct) checkApprovalStatus(b *gotgbot.Bot, ctx *ext.Context) erro
 	}
 
 	text, _ := tr.GetString(strings.ToLower(m.moduleName) + "_check_status")
-	dateStr := foundUser.CreatedAt.Format("2006-01-02")
+	dateStr := formatChatDate(foundUser.CreatedAt, chatClockOf(chat.Id))
 	baseStr := fmt.Sprintf(text,
 		html.EscapeString(targetName),
 		html.EscapeString(dateStr),
@@ -290,8 +290,9 @@ func (m moduleStruct) listApprovedUsers(b *gotgbot.Bot, ctx *ext.Context) error 
 		listHeader, _ := tr.GetString(strings.ToLower(m.moduleName) + "_list_header")
 		listItem, _ := tr.GetString(strings.ToLower(m.moduleName) + "_list_item")
 		listReason, _ := tr.GetString(strings.ToLower(m.moduleName) + "_list_reason")
+		listReason = " " + strings.TrimLeft(listReason, " ")
 		var sb strings.Builder
-		sb.WriteString(listHeader)
+		sb.WriteString(strings.TrimRight(listHeader, "\n") + "\n")
 		for _, a := range approvedUsers {
 			_, name, found := extraction.GetUserInfo(a.UserID)
 			if !found {
@@ -324,8 +325,9 @@ func (m moduleStruct) listApprovedUsers(b *gotgbot.Bot, ctx *ext.Context) error 
 	fileHeader, _ := tr.GetString(strings.ToLower(m.moduleName) + "_list_file_header")
 	fileItem, _ := tr.GetString(strings.ToLower(m.moduleName) + "_list_file_item")
 	fileReason, _ := tr.GetString(strings.ToLower(m.moduleName) + "_list_reason")
+	fileReason = " " + strings.TrimLeft(fileReason, " ")
 	var fileSb strings.Builder
-	fmt.Fprintf(&fileSb, fileHeader, chat.Id)
+	fmt.Fprintf(&fileSb, strings.TrimRight(fileHeader, "\n")+"\n", chat.Id)
 	fmt.Fprintf(&fileSb, "%s\n\n", time.Now().Format(time.RFC3339))
 	for i, a := range approvedUsers {
 		_, name, found := extraction.GetUserInfo(a.UserID)

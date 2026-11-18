@@ -219,9 +219,9 @@ func lockdownCommandArgs(ctx *ext.Context) []string {
 	return args[1:]
 }
 
-// lockdownTime renders a moment the way the staff history does, in UTC.
-func lockdownTime(t time.Time) string {
-	return t.UTC().Format("2 Jan 15:04") + " UTC"
+// lockdownTime renders a moment the way the staff history does, in loc with its short label.
+func lockdownTime(t time.Time, loc *time.Location) string {
+	return formatChatTime(t, loc, "2 Jan 15:04")
 }
 
 // lockdownSplice replaces each token of text with its value, in token, value order.
@@ -284,18 +284,18 @@ func lockdownReasonLine(tr *i18n.Translator, reason string) string {
 // lockdownAlreadyActiveText tells the existing lockdown: since when, who started it
 // and the reason. An automatic lockdown says the bot locked it on its own and names the
 // trigger with its numbers instead.
-func lockdownAlreadyActiveText(tr *i18n.Translator, row *models.ChatLockdown) string {
+func lockdownAlreadyActiveText(tr *i18n.Translator, row *models.ChatLockdown, loc *time.Location) string {
 	since := row.CreatedAt
 	if row.LockedAt != nil {
 		since = *row.LockedAt
 	}
 	if lockdownStartedAutomatically(row) {
-		text := lockdownText(tr, "lockdown_already_active_auto", i18n.TranslationParams{"since": lockdownTime(since)})
+		text := lockdownText(tr, "lockdown_already_active_auto", i18n.TranslationParams{"since": lockdownTime(since, loc)})
 		sentence := lockdownTriggerSentence(tr, row.TriggerKind, row.TriggerCount, row.TriggerWindow, row.TriggerPercent)
 		return strings.TrimSpace(text + "\n" + sentence)
 	}
 	text := lockdownText(tr, "lockdown_already_active", i18n.TranslationParams{
-		"since": lockdownTime(since),
+		"since": lockdownTime(since, loc),
 		"name":  lockdownNameToken,
 	})
 	text = lockdownSplice(text, lockdownNameToken, lockdownMention(row.StartedBy, row.StartedByName))
@@ -351,7 +351,7 @@ func (m moduleStruct) lockdown(b *gotgbot.Bot, ctx *ext.Context) error {
 		}
 	}
 	if active != nil {
-		return reply(lockdownAlreadyActiveText(tr, active))
+		return reply(lockdownAlreadyActiveText(tr, active, chatClockOf(active.ChatID)))
 	}
 
 	name := lockdownCapRunes(staffFullName(actor), lockdownNameMaxRunes)
@@ -374,7 +374,7 @@ func (m moduleStruct) lockdown(b *gotgbot.Bot, ctx *ext.Context) error {
 	case lockdownStartStateFailed:
 		return failed()
 	case lockdownStartAlreadyActive:
-		return reply(lockdownAlreadyActiveText(tr, res.Row))
+		return reply(lockdownAlreadyActiveText(tr, res.Row, chatClockOf(res.Row.ChatID)))
 	case lockdownStartLockUnknown:
 		return refuse("lockdown_lock_unknown")
 	case lockdownStartLockFailed:

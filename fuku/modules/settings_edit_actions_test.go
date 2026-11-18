@@ -114,7 +114,7 @@ func TestSettingsEditSetWritesWait(t *testing.T) {
 	text, keyboard := env.lastEdit(owner.Id, menuID)
 	for _, want := range []string{
 		staffMarker("settings_edit_wait_text"),
-		" " + strconv.Itoa(settingsEditTextMax) + "\n\n" + staffMarker("settings_edit_wait_footer") + " " + until.UTC().Format("15:04"),
+		" " + strconv.Itoa(settingsEditTextMax) + "\n\n" + staffMarker("settings_edit_wait_footer") + " " + formatChatTime(until, defaultChatLocation(), "15:04"),
 		strconv.FormatInt(env.chat.Id, 10),
 	} {
 		if !strings.Contains(text, want) {

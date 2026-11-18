@@ -25,10 +25,11 @@ import (
 // settingsPhase19Pages are the three list pages Phase 19 registered, in grid order.
 var settingsPhase19Pages = []string{settingsPageBlacklist, settingsPageFilters, settingsPageNotes}
 
-// settingsPhase19ListPages are the four tables of the list engine: the three Phase 19 pages and the Blocked sources page
-// of a Staff Group's forward blocklist, which is hidden outside a Staff Group. The code, key and part tests below range
-// over all four; the Main, cost and privacy tests keep the three, because the fourth is not on a non-Staff-Group Main.
-var settingsPhase19ListPages = append(slices.Clone(settingsPhase19Pages), settingsPageFwdBlock)
+// settingsPhase19ListPages are the five tables of the list engine: the three Phase 19 pages, the Blocked sources page
+// of a Staff Group's forward blocklist, which is hidden outside a Staff Group, and the Reactions page. The code, key and
+// part tests below range over all five; the Main, cost and privacy tests keep the three (the Reactions page has its own
+// tests in settings_reactions_test.go).
+var settingsPhase19ListPages = append(slices.Clone(settingsPhase19Pages), settingsPageFwdBlock, settingsPageReactions)
 
 // settingsPhase19Code is one action code of a list page with the fields of a valid press of a private menu (the owner
 // field c is added by the test).
@@ -66,6 +67,11 @@ func settingsPhase19Codes(minute string) []settingsPhase19Code {
 		{"vc", settingsPageFwdBlock, map[string]string{"t": "s"}},
 		{"ve", settingsPageFwdBlock, map[string]string{}},
 		{"vs", settingsPageFwdBlock, map[string]string{"v": "warn"}},
+		{"xg", settingsPageReactions, map[string]string{"v": "1"}},
+		{"xx", settingsPageReactions, map[string]string{"r": "5", "v": "1"}},
+		{"xy", settingsPageReactions, map[string]string{"r": "5", "e": minute}},
+		{"xa", settingsPageReactions, map[string]string{}},
+		{"xc", settingsPageReactions, map[string]string{"t": "r"}},
 	}
 }
 
@@ -80,7 +86,7 @@ func TestSettingsPhase19Codes(t *testing.T) {
 			}
 			seen[pg.Key] = true
 		}
-		want := []string{"s", "v", "l", "c", "f", "n", "k", "b", "i", "w", "g", "r", "e", "m", "d", "t", "u", "o", "y", "a"}
+		want := []string{"s", "v", "l", "c", "f", "n", "k", "b", "i", "w", "g", "r", "e", "x", "m", "d", "t", "u", "z", "o", "y", "a"}
 		if got := slices.Sorted(maps.Keys(seen)); !slices.Equal(got, slices.Sorted(slices.Values(want))) {
 			t.Errorf("registered pages = %v, want %v", got, slices.Sorted(slices.Values(want)))
 		}
@@ -170,7 +176,7 @@ func TestSettingsPhase19Codes(t *testing.T) {
 		for _, p := range settingsListParts {
 			got = append(got, part{p.Page, p.Code, p.Step})
 		}
-		want := []part{{"b", "w", 1}, {"i", "k", 1}, {"i", "y", 2}, {"e", "n", 1}, {"e", "c", 2}, {"v", "s", 1}}
+		want := []part{{"b", "w", 1}, {"i", "k", 1}, {"i", "y", 2}, {"e", "n", 1}, {"e", "c", 2}, {"v", "s", 1}, {"x", "r", 1}}
 		if !slices.Equal(got, want) {
 			t.Errorf("settingsListParts = %v, want %v", got, want)
 		}
@@ -362,7 +368,7 @@ func TestSettingsMainPhase19(t *testing.T) {
 		if n := calls.Load(); n != 0 {
 			t.Errorf("a group Main called the lists' seams %d times, want none", n)
 		}
-		// An allowed administrator's Main has no Access row: ten rows, eighteen lines.
+		// An allowed administrator's Main has no Access row: one row fewer than the owner's.
 		admin := env.groupMenuOf(env.admin)
 		if rows := len(admin.mainKeyboard); rows != settingsMainOwnerRows-1 {
 			t.Errorf("the administrator's Main has %d rows, want %d", rows, settingsMainOwnerRows-1)

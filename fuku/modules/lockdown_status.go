@@ -23,7 +23,7 @@ var lockdownStatusDesc = helpers.CommandDescriptor{
 	RequiredChecks: []helpers.CheckFunc{requireLockdownGroup(), requireLockdownAuthority(false)},
 }
 
-// lockdownStatus tells an admin whether the group is locked, since when (UTC), by
+// lockdownStatus tells an admin whether the group is locked, since when (the group's zone), by
 // whom, why, how many joiners were removed so far and whether someone changed the
 // group's permissions by hand. A lockdown that is being lifted shows who lifted it
 // and how far the unbanning is. It only reads: the database rows, and the group's
@@ -87,6 +87,7 @@ func (m moduleStruct) lockdownStatus(b *gotgbot.Bot, ctx *ext.Context) error {
 // for a menu page with a tight text budget; 0 leaves the reason whole, as /lockdownstatus
 // shows it.
 func lockdownStatusHead(tr *i18n.Translator, row *models.ChatLockdown, reasonMaxRunes int) []string {
+	loc := chatClockOf(row.ChatID)
 	since := row.CreatedAt
 	if row.LockedAt != nil {
 		since = *row.LockedAt
@@ -97,12 +98,12 @@ func lockdownStatusHead(tr *i18n.Translator, row *models.ChatLockdown, reasonMax
 		// names the trigger, rendered from the row's trigger columns in the reader's
 		// language, instead of "started by" the bot; it has no reason.
 		parts = []string{
-			lockdownText(tr, "lockdown_status_active_auto", i18n.TranslationParams{"since": lockdownTime(since)}),
+			lockdownText(tr, "lockdown_status_active_auto", i18n.TranslationParams{"since": lockdownTime(since, loc)}),
 			lockdownTriggerSentence(tr, row.TriggerKind, row.TriggerCount, row.TriggerWindow, row.TriggerPercent),
 		}
 	} else {
 		active := lockdownText(tr, "lockdown_status_active", i18n.TranslationParams{
-			"since": lockdownTime(since),
+			"since": lockdownTime(since, loc),
 			"name":  lockdownNameToken,
 		})
 		parts = []string{lockdownSplice(active, lockdownNameToken, lockdownMention(row.StartedBy, row.StartedByName))}

@@ -495,7 +495,7 @@ func (moduleStruct) reports(b *gotgbot.Bot, ctx *ext.Context) error {
 			}
 		}
 		hintText, _ := tr.GetString("reports_change_settings_hint")
-		replyText += hintText
+		replyText += "\n\n" + strings.TrimLeft(hintText, "\n")
 	}
 
 	_, err = msg.Reply(b, replyText, formatting.Shtml())

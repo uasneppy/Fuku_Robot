@@ -104,7 +104,7 @@ func TestLockdownStatusCommand(t *testing.T) {
 
 		env.wantReplyHas(
 			staffMarker("lockdown_status_active"),
-			lockdownTime(*row.LockedAt),
+			lockdownTime(*row.LockedAt, defaultChatLocation()),
 			"Ad&lt;b&gt;min",
 			staffMarker("lockdown_reason_line"),
 			"spam wave",
@@ -202,7 +202,7 @@ func TestLockdownStatusCommand(t *testing.T) {
 
 		env.wantReplyHas(
 			staffMarker("lockdown_status_active"),
-			lockdownTime(row.CreatedAt),
+			lockdownTime(row.CreatedAt, defaultChatLocation()),
 			staffMarker("lockdown_status_unconfirmed"),
 		)
 	})

@@ -157,3 +157,11 @@ func extractOrderedValues(params TranslationParams) []any {
 
 	return values
 }
+
+// LangCode is the language code the translator was made for.
+func (t *Translator) LangCode() string {
+	if t == nil {
+		return ""
+	}
+	return t.langCode
+}

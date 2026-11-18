@@ -186,7 +186,9 @@ func (m moduleStruct) formattingHandler(b *gotgbot.Bot, ctx *ext.Context) error 
 
 func LoadMkdCmd(dispatcher *ext.Dispatcher) {
 	SetModuleEnabled(formattingModule.moduleName, true)
-	SetModuleHelp(formattingModule.moduleName, formattingModule.genFormattingKb("uk"))
+	SetModuleHelpFunc(formattingModule.moduleName, func(tr *i18n.Translator) [][]gotgbot.InlineKeyboardButton {
+		return formattingModule.genFormattingKb(tr.LangCode())
+	})
 	helpers.MultiCommand(dispatcher, []string{"markdownhelp", "formatting"}, formattingModule.markdownHelp)
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("formatting"), formattingModule.formattingHandler))
 }

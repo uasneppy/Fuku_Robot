@@ -33,7 +33,7 @@ type settingsListPart struct {
 }
 
 // settingsListParts is the static part table of the list pages (UI-SPEC section 1): the blacklist's words, the
-// filter's keyword and reply, the note's name and content and the Blocked sources page's source. It is static so the wait store can validate a part
+// filter's keyword and reply, the note's name and content, the Blocked sources page's source and the Reactions page's reaction. It is static so the wait store can validate a part
 // without a registered page.
 var settingsListParts = []settingsListPart{
 	{Page: settingsPageBlacklist, Code: "w", Step: 1, WordKey: "settings_entries_part_words"},
@@ -42,6 +42,7 @@ var settingsListParts = []settingsListPart{
 	{Page: "e", Code: "n", Step: 1, Next: "c", WordKey: "settings_entries_part_name"},
 	{Page: "e", Code: "c", Step: 2, WordKey: "settings_entries_part_content"},
 	{Page: settingsPageFwdBlock, Code: "s", Step: 1, WordKey: "settings_entries_part_source"},
+	{Page: settingsPageReactions, Code: "r", Step: 1, WordKey: "settings_entries_part_reaction"},
 }
 
 // settingsListPartByCode finds a part of a list page by its t value, nil when the page has no such part.
@@ -118,7 +119,7 @@ func renderSettingsListPrompt(v settingsView, def settingsListDef, part string, 
 		body = append(body, "", settingsText(v.Tr, "settings_entries_step", i18n.TranslationParams{"n": step, "total": settingsListTwoSteps}))
 	}
 	body = append(body, "", settingsText(v.Tr, "settings_edit_wait_footer", i18n.TranslationParams{
-		"time": until.UTC().Format("15:04"),
+		"time": formatChatTime(until, chatClockOf(v.GroupID), "15:04"),
 	}))
 	if replaced {
 		body = append(body, "", settingsText(v.Tr, "settings_edit_replaced_note"))

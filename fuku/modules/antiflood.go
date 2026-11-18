@@ -633,7 +633,7 @@ func (m *moduleStruct) setFloodMode(b *gotgbot.Bot, ctx *ext.Context) error {
 		}
 	} else {
 		text, _ := tr.GetString(strings.ToLower(m.moduleName) + "_setfloodmode_specify_action")
-		_, err := msg.Reply(b, text, formatting.Smarkdown())
+		_, err := msg.Reply(b, text, formatting.Shtml())
 		if err != nil {
 			return err
 		}
@@ -680,7 +680,7 @@ func (m *moduleStruct) setFloodDeleter(b *gotgbot.Bot, ctx *ext.Context) error {
 			text, _ = tr.GetString(strings.ToLower(m.moduleName) + "_flood_deleter_already_disabled")
 		}
 	}
-	_, err := msg.Reply(b, text, formatting.Smarkdown())
+	_, err := msg.Reply(b, text, formatting.Shtml())
 	if err != nil {
 		return err
 	}

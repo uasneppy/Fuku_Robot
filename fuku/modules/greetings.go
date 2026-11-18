@@ -739,16 +739,15 @@ func (m moduleStruct) resetGoodbye(bot *gotgbot.Bot, ctx *ext.Context) error {
 }
 
 type greetingToggleConfig struct {
-	getPref              func(chatID int64) bool
-	setPref              func(chatID int64, val bool) error
-	saveErrLog           string
-	connectBotAdmin      bool
-	showEnabled          string
-	showDisabled         string
-	setEnabled           string
-	setDisabled          string
-	invalid              string
-	useMarkdownOnEnabled bool
+	getPref         func(chatID int64) bool
+	setPref         func(chatID int64, val bool) error
+	saveErrLog      string
+	connectBotAdmin bool
+	showEnabled     string
+	showDisabled    string
+	setEnabled      string
+	setDisabled     string
+	invalid         string
 }
 
 var cleanWelcomeToggleConfig = greetingToggleConfig{
@@ -765,14 +764,13 @@ var cleanWelcomeToggleConfig = greetingToggleConfig{
 		defer cancel()
 		return applyCleanWelcome(ctx, chatID, val).Err
 	},
-	saveErrLog:           "SetCleanWelcomeSetting",
-	connectBotAdmin:      false,
-	showEnabled:          "greetings_clean_welcome_not",
-	showDisabled:         "greetings_clean_welcome_should",
-	setEnabled:           "greetings_clean_welcome_enable",
-	setDisabled:          "greetings_clean_welcome_disable",
-	invalid:              "greetings_clean_welcome_invalid_option",
-	useMarkdownOnEnabled: false,
+	saveErrLog:      "SetCleanWelcomeSetting",
+	connectBotAdmin: false,
+	showEnabled:     "greetings_clean_welcome_not",
+	showDisabled:    "greetings_clean_welcome_should",
+	setEnabled:      "greetings_clean_welcome_enable",
+	setDisabled:     "greetings_clean_welcome_disable",
+	invalid:         "greetings_clean_welcome_invalid_option",
 }
 
 var cleanGoodbyeToggleConfig = greetingToggleConfig{
@@ -789,14 +787,13 @@ var cleanGoodbyeToggleConfig = greetingToggleConfig{
 		defer cancel()
 		return applyCleanGoodbye(ctx, chatID, val).Err
 	},
-	saveErrLog:           "SetCleanGoodbyeSetting",
-	connectBotAdmin:      false,
-	showEnabled:          "greetings_clean_goodbye_not",
-	showDisabled:         "greetings_clean_goodbye_should",
-	setEnabled:           "greetings_clean_goodbye_enable",
-	setDisabled:          "greetings_clean_goodbye_disable",
-	invalid:              "greetings_clean_goodbye_invalid_option",
-	useMarkdownOnEnabled: false,
+	saveErrLog:      "SetCleanGoodbyeSetting",
+	connectBotAdmin: false,
+	showEnabled:     "greetings_clean_goodbye_not",
+	showDisabled:    "greetings_clean_goodbye_should",
+	setEnabled:      "greetings_clean_goodbye_enable",
+	setDisabled:     "greetings_clean_goodbye_disable",
+	invalid:         "greetings_clean_goodbye_invalid_option",
 }
 
 var delJoinedToggleConfig = greetingToggleConfig{
@@ -808,14 +805,13 @@ var delJoinedToggleConfig = greetingToggleConfig{
 		defer cancel()
 		return applyCleanService(ctx, chatID, val).Err
 	},
-	saveErrLog:           "ApplyCleanServiceFlag",
-	connectBotAdmin:      true,
-	showEnabled:          "greetings_clean_service_should",
-	showDisabled:         "greetings_clean_service_not",
-	setEnabled:           "greetings_clean_service_enable",
-	setDisabled:          "greetings_clean_service_disable",
-	invalid:              "greetings_clean_service_invalid_option",
-	useMarkdownOnEnabled: true,
+	saveErrLog:      "ApplyCleanServiceFlag",
+	connectBotAdmin: true,
+	showEnabled:     "greetings_clean_service_should",
+	showDisabled:    "greetings_clean_service_not",
+	setEnabled:      "greetings_clean_service_enable",
+	setDisabled:     "greetings_clean_service_disable",
+	invalid:         "greetings_clean_service_invalid_option",
 }
 
 var autoApproveToggleConfig = greetingToggleConfig{
@@ -827,14 +823,13 @@ var autoApproveToggleConfig = greetingToggleConfig{
 		defer cancel()
 		return applyAutoApprove(ctx, chatID, val).Err
 	},
-	saveErrLog:           "SetShouldAutoApprove",
-	connectBotAdmin:      true,
-	showEnabled:          "greetings_auto_approve_enabled",
-	showDisabled:         "greetings_auto_approve_disabled",
-	setEnabled:           "greetings_auto_approve_enable",
-	setDisabled:          "greetings_auto_approve_disable",
-	invalid:              "greetings_auto_approve_invalid_option",
-	useMarkdownOnEnabled: true,
+	saveErrLog:      "SetShouldAutoApprove",
+	connectBotAdmin: true,
+	showEnabled:     "greetings_auto_approve_enabled",
+	showDisabled:    "greetings_auto_approve_disabled",
+	setEnabled:      "greetings_auto_approve_enable",
+	setDisabled:     "greetings_auto_approve_disable",
+	invalid:         "greetings_auto_approve_invalid_option",
 }
 
 func (moduleStruct) greetingToggle(bot *gotgbot.Bot, ctx *ext.Context, cfg greetingToggleConfig) error {
@@ -861,11 +856,7 @@ func (moduleStruct) greetingToggle(bot *gotgbot.Bot, ctx *ext.Context, cfg greet
 	if len(args) == 0 {
 		if cfg.getPref(chat.Id) {
 			text, _ := tr.GetString(cfg.showEnabled)
-			if cfg.useMarkdownOnEnabled {
-				_, err = msg.Reply(bot, text, formatting.Smarkdown())
-			} else {
-				_, err = msg.Reply(bot, text, formatting.Shtml())
-			}
+			_, err = msg.Reply(bot, text, formatting.Shtml())
 		} else {
 			text, _ := tr.GetString(cfg.showDisabled)
 			_, err = msg.Reply(bot, text, formatting.Shtml())
@@ -1459,13 +1450,11 @@ func (moduleStruct) clearPendingJoins(chatId, userId int64) {
 func LoadGreetings(dispatcher *ext.Dispatcher) {
 	SetModuleEnabled(greetingsModule.moduleName, true)
 
-	SetModuleHelp(greetingsModule.moduleName, [][]gotgbot.InlineKeyboardButton{
-		{
-			{
-				Text:         trS(i18n.MustNewTranslator("uk"), "button_formatting"),
-				CallbackData: encodeCallbackData("helpq", map[string]string{"m": "Formatting"}),
-			},
-		},
+	SetModuleHelpFunc(greetingsModule.moduleName, func(tr *i18n.Translator) [][]gotgbot.InlineKeyboardButton {
+		return [][]gotgbot.InlineKeyboardButton{{{
+			Text:         trS(tr, "button_formatting"),
+			CallbackData: encodeCallbackData("helpq", map[string]string{"m": "Formatting"}),
+		}}}
 	})
 
 	dispatcher.AddHandler(

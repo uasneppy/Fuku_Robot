@@ -1,6 +1,7 @@
 package modules
 
 import (
+	"context"
 	"fmt"
 	"html"
 	"slices"
@@ -14,6 +15,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/uasneppy/fuku_robot/fuku/db/lang"
+	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/db/reactions"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
 	"github.com/uasneppy/fuku_robot/fuku/utils/chat_status"
@@ -49,18 +51,7 @@ func LoadReactions(dispatcher *ext.Dispatcher) {
 	SetModuleEnabled(reactionsModule.moduleName, true)
 
 	DefaultHelpRegistry().AltHelpOptions["Reactions"] = []string{"reaction"}
-	DefaultHelpRegistry().helpableKb["Reactions"] = [][]gotgbot.InlineKeyboardButton{
-		{
-			{
-				Text:         "Додати реакцію",
-				CallbackData: encodeCallbackData("reactions_help", map[string]string{"action": "add"}),
-			},
-			{
-				Text:         "Видалити реакцію",
-				CallbackData: encodeCallbackData("reactions_help", map[string]string{"action": "remove"}),
-			},
-		},
-	}
+	SetModuleHelpFunc(reactionsModule.moduleName, reactionsHelpKb)
 
 	log.Info("[Modules] Reactions module loaded")
 }
@@ -156,11 +147,11 @@ func (m moduleStruct) addReaction(b *gotgbot.Bot, ctx *ext.Context) error {
 	}
 
 	keyword := strings.ToLower(strings.TrimSpace(args[1]))
-	emoji := strings.ReplaceAll(strings.TrimSpace(args[2]), "\ufe0f", "")
-
-	// ReactionTypeEmoji accepts only Telegram's documented reaction set.
-	if !slices.Contains(supportedReactionEmoji, emoji) {
-		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
+	result := applyReactionAdd(tracing.UpdateContext(ctx), chat.Id, keyword, args[2], true)
+	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
+	switch result.Outcome {
+	case reactionBadEmoji:
+		// ReactionTypeEmoji accepts only Telegram's documented reaction set.
 		text, _ := tr.GetString("reactions_invalid_emoji")
 		_, err := msg.Reply(b, text, formatting.Shtml())
 		if err != nil {
@@ -168,20 +159,21 @@ func (m moduleStruct) addReaction(b *gotgbot.Bot, ctx *ext.Context) error {
 			return err
 		}
 		return ext.EndGroups
-	}
-
-	if err := reactions.AddReaction(chat.Id, keyword, emoji); err != nil {
-		log.Errorf("[Reactions] Failed to save reaction: %v", err)
-		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
+	case reactionCapReached:
+		text, _ := tr.GetString("reactions_limit_reached", i18n.TranslationParams{"max": reactionsCapMax})
+		_, _ = msg.Reply(b, text, formatting.Shtml())
+		return ext.EndGroups
+	case reactionAdded:
+	default:
+		log.Errorf("[Reactions] Failed to save reaction: %v", result.Err)
 		text, _ := tr.GetString("reactions_add_error")
 		_, _ = msg.Reply(b, text, formatting.Shtml())
 		return ext.EndGroups
 	}
 
-	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 	text, _ := tr.GetString("reactions_add_success", i18n.TranslationParams{
 		"keyword": html.EscapeString(keyword),
-		"emoji":   html.EscapeString(emoji),
+		"emoji":   html.EscapeString(result.Emoji),
 	})
 	_, err := msg.Reply(b, text, formatting.Shtml())
 	if err != nil {
@@ -224,27 +216,22 @@ func (m moduleStruct) removeReaction(b *gotgbot.Bot, ctx *ext.Context) error {
 	}
 
 	keyword := strings.ToLower(strings.TrimSpace(args[1]))
-
-	reactionsMap := reactions.GetReactionsContext(tracing.UpdateContext(ctx), chat.Id)
-
-	if _, exists := reactionsMap[keyword]; !exists {
-		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
+	result := applyReactionRemove(tracing.UpdateContext(ctx), chat.Id, keyword)
+	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
+	switch result.Outcome {
+	case reactionRemoveAbsent:
 		text, _ := tr.GetString("reactions_keyword_not_found", i18n.TranslationParams{
 			"keyword": html.EscapeString(keyword),
 		})
 		_, _ = msg.Reply(b, text, formatting.Shtml())
 		return ext.EndGroups
-	}
-
-	if err := reactions.RemoveReaction(chat.Id, keyword); err != nil {
-		log.Errorf("[Reactions] Failed to update reactions: %v", err)
-		tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
+	case reactionRemoveFailed:
+		log.Errorf("[Reactions] Failed to update reactions: %v", result.Err)
 		text, _ := tr.GetString("reactions_remove_error")
 		_, _ = msg.Reply(b, text, formatting.Shtml())
 		return ext.EndGroups
 	}
 
-	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 	text, _ := tr.GetString("reactions_remove_success", i18n.TranslationParams{
 		"keyword": html.EscapeString(keyword),
 	})
@@ -386,4 +373,150 @@ func (m moduleStruct) checkReactions(b *gotgbot.Bot, ctx *ext.Context) error {
 
 func init() {
 	RegisterLegacyModule("Reactions", 250, LoadReactions)
+}
+
+// reactionsHelpKb is the Reactions help keyboard in the reader's language.
+func reactionsHelpKb(tr *i18n.Translator) [][]gotgbot.InlineKeyboardButton {
+	return [][]gotgbot.InlineKeyboardButton{{
+		{
+			Text:         trS(tr, "reactions_button_add"),
+			CallbackData: encodeCallbackData("reactions_help", map[string]string{"action": "add"}),
+		},
+		{
+			Text:         trS(tr, "reactions_button_remove"),
+			CallbackData: encodeCallbackData("reactions_help", map[string]string{"action": "remove"}),
+		},
+	}}
+}
+
+// reactionWrites is the write and read seam of the reaction apply functions, a variable only so a test can fail it.
+var reactionWrites = struct {
+	Add        func(ctx context.Context, chatID int64, keyword, emoji string, overwrite bool) (bool, error)
+	Remove     func(chatID int64, keyword string) error
+	RemoveByID func(ctx context.Context, chatID, id int64) (*models.Reactions, error)
+	Lookup     func(ctx context.Context, chatID int64) map[string]string
+	Exists     func(ctx context.Context, chatID int64, keyword string) (bool, error)
+	Count      func(ctx context.Context, chatID int64) (int64, error)
+}{
+	Add:        reactions.AddReactionContext,
+	Remove:     reactions.RemoveReaction,
+	RemoveByID: reactions.RemoveReactionByID,
+	Lookup:     reactions.GetReactionsContext,
+	Exists:     reactions.ReactionExistsFresh,
+	Count:      reactions.CountReactionsFresh,
+}
+
+// reactionAddOutcome is what applyReactionAdd did; its zero value is added.
+type reactionAddOutcome int
+
+const (
+	// reactionAdded means the reaction was stored.
+	reactionAdded reactionAddOutcome = iota
+	// reactionBadEmoji means the emoji is not one of Telegram's reactions; nothing was written.
+	reactionBadEmoji
+	// reactionExists means the keyword already has a reaction and the caller asked not to overwrite it.
+	reactionExists
+	// reactionCapReached means the keyword is new and the chat already has reactionsCapMax reactions.
+	reactionCapReached
+	// reactionSaveFailed means a read or the write failed; nothing is known to be stored.
+	reactionSaveFailed
+)
+
+// reactionAddResult is the typed result of applyReactionAdd: the outcome, the stored emoji (U+FE0F stripped)
+// and the error of a failed save.
+type reactionAddResult struct {
+	Outcome reactionAddOutcome
+	Emoji   string
+	Err     error
+}
+
+// normaliseReactionEmoji is the emoji as the reaction is stored: trimmed, with every U+FE0F stripped.
+func normaliseReactionEmoji(raw string) string {
+	return strings.ReplaceAll(strings.TrimSpace(raw), "\ufe0f", "")
+}
+
+// reactionsCapMax is the most reactions one chat can have. It is a soft cap read before the insert, so two
+// concurrent adds can pass it by one. Replacing the emoji of an existing keyword is allowed at the cap.
+const reactionsCapMax = 100
+
+// applyReactionAdd stores one reaction of a chat: the one write path of /addreaction and of the Reactions page.
+// The emoji must be one of Telegram's reactions (supportedReactionEmoji, after U+FE0F is stripped). With
+// overwrite (the command) an existing keyword gets the new emoji; without it (the page) an existing keyword is
+// refused and never overwritten. It judges no person's rights and sends nothing.
+func applyReactionAdd(ctx context.Context, chatID int64, keyword, rawEmoji string, overwrite bool) reactionAddResult {
+	emoji := normaliseReactionEmoji(rawEmoji)
+	if !slices.Contains(supportedReactionEmoji, emoji) {
+		return reactionAddResult{Outcome: reactionBadEmoji}
+	}
+	exists, err := reactionWrites.Exists(ctx, chatID, keyword)
+	if err != nil {
+		return reactionAddResult{Outcome: reactionSaveFailed, Emoji: emoji, Err: err}
+	}
+	if exists && !overwrite {
+		return reactionAddResult{Outcome: reactionExists, Emoji: emoji}
+	}
+	if !exists {
+		n, err := reactionWrites.Count(ctx, chatID)
+		if err != nil {
+			return reactionAddResult{Outcome: reactionSaveFailed, Emoji: emoji, Err: err}
+		}
+		if n >= reactionsCapMax {
+			return reactionAddResult{Outcome: reactionCapReached, Emoji: emoji}
+		}
+	}
+	added, err := reactionWrites.Add(ctx, chatID, keyword, emoji, overwrite)
+	if err != nil {
+		return reactionAddResult{Outcome: reactionSaveFailed, Emoji: emoji, Err: err}
+	}
+	if !added {
+		return reactionAddResult{Outcome: reactionExists, Emoji: emoji}
+	}
+	return reactionAddResult{Outcome: reactionAdded, Emoji: emoji}
+}
+
+// reactionRemoveOutcome is what applyReactionRemove and applyReactionRemoveByID did; its zero value is removed.
+type reactionRemoveOutcome int
+
+const (
+	// reactionRemoved means the chat's row was deleted.
+	reactionRemoved reactionRemoveOutcome = iota
+	// reactionRemoveAbsent means the chat has no such reaction; nothing was written.
+	reactionRemoveAbsent
+	// reactionRemoveFailed means the delete failed.
+	reactionRemoveFailed
+)
+
+// reactionRemoveResult is the typed result of a reaction removal: the outcome, the removed row's keyword and
+// emoji (by ID only) and the error of a failed delete.
+type reactionRemoveResult struct {
+	Outcome reactionRemoveOutcome
+	Keyword string
+	Emoji   string
+	Err     error
+}
+
+// applyReactionRemove removes a chat's reaction by keyword, the write /removereaction makes: an absent keyword
+// (read through the cached map, as the command always has) writes nothing.
+func applyReactionRemove(ctx context.Context, chatID int64, keyword string) reactionRemoveResult {
+	if _, exists := reactionWrites.Lookup(ctx, chatID)[keyword]; !exists {
+		return reactionRemoveResult{Outcome: reactionRemoveAbsent, Keyword: keyword}
+	}
+	if err := reactionWrites.Remove(chatID, keyword); err != nil {
+		return reactionRemoveResult{Outcome: reactionRemoveFailed, Keyword: keyword, Err: err}
+	}
+	return reactionRemoveResult{Outcome: reactionRemoved, Keyword: keyword}
+}
+
+// applyReactionRemoveByID removes one reaction by its row ID, only when it belongs to the chat (the page's
+// delete): one conditional DELETE and the cache drop when a row went.
+func applyReactionRemoveByID(ctx context.Context, chatID, id int64) reactionRemoveResult {
+	row, err := reactionWrites.RemoveByID(ctx, chatID, id)
+	if err != nil {
+		log.Errorf("[Reactions] Failed to delete a reaction of chat %d: %v", chatID, err)
+		return reactionRemoveResult{Outcome: reactionRemoveFailed, Err: err}
+	}
+	if row == nil {
+		return reactionRemoveResult{Outcome: reactionRemoveAbsent}
+	}
+	return reactionRemoveResult{Outcome: reactionRemoved, Keyword: row.Keyword, Emoji: row.Emoji}
 }

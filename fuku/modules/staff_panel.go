@@ -170,9 +170,9 @@ func renderStaffRowHead(row staffLinkRow) string {
 // renderStaffRowStatus renders the health of a linked group's row without ever
 // naming the group: its status line, a reason line when it is broken, and one
 // lockdown line when the group is locked. It holds only icons, locale text and a
-// UTC time, never the group's title or chat ID, so a group's own menu can print
+// time in the Staff Group's zone, never the group's title or chat ID, so a group's own menu can print
 // it under its own header (D-21, D-29). The lockdown line shows only when it began
-// (UTC), never why or who started it (D-17), and it is independent of the reason
+// (in the Staff Group's zone), never why or who started it (D-17), and it is independent of the reason
 // line, so a locked group the bot left shows both (D-22).
 func renderStaffRowStatus(tr *i18n.Translator, row staffLinkRow) string {
 	bot, restrict, owner := staffRowStatuses(row)
@@ -189,7 +189,7 @@ func renderStaffRowStatus(tr *i18n.Translator, row staffLinkRow) string {
 	}
 	if !row.LockedSince.IsZero() {
 		locked, _ := tr.GetString("staff_panel_row_lockdown", i18n.TranslationParams{
-			"since": row.LockedSince.UTC().Format("2 Jan 15:04"),
+			"since": formatChatTime(row.LockedSince, chatClockOf(row.Link.StaffChatID), "2 Jan 15:04"),
 		})
 		sb.WriteString("\n")
 		sb.WriteString(locked)
@@ -279,7 +279,7 @@ func composeStaffPanelText(tr *i18n.Translator, v staffPanelView) string {
 		sb.WriteString(legend)
 	}
 	updated, _ := tr.GetString("staff_panel_updated", i18n.TranslationParams{
-		"time": v.updatedAt.UTC().Format("15:04:05"),
+		"time": formatChatTime(v.updatedAt, chatClockOf(v.staffGroup.ChatID), "15:04:05"),
 	})
 	sb.WriteString("\n")
 	sb.WriteString(updated)

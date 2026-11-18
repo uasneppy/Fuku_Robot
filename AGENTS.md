@@ -739,6 +739,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   a wide margin. Neither fallback hub the UI-SPECs kept is built, because nothing forced one: the Phase 18 "More" hub (A18-A1,
   D-23) and the Phase 19 `📚 Lists` hub that would put the three list pages under one cell (A19-A1); the owner's phone check of
   Main at 11 rows is a live check in `19-SPIKE.md`.
+  The Reactions page (key `x`, `Order` 73, right after Notes; plan of 2026-11-18, Part 2) adds a nineteenth cell, so Main is now
+  `s|l / c|f / n|k / b|i / w|g / r|e / x|m / d|t / u|o / y` (nine full rows and Anonymous admins alone on the tenth), then Access
+  and the navigation row: twelve rows for the owner and eleven for an administrator, and twenty state lines; a Staff Group's Main is
+  `s|v / l|c / f|n / k|b / i|w / g|r / e|x / m|t / u|o / y` with the same row counts. The numbers in the sentences above are the
+  history and the constants of `settings_main_test.go` are the current shape.
   The Blocked sources page (key `v`, `Order` 11, quick task 261113-tjj) is the one page that exists for a Staff Group only (its `Hidden`
   hook, below), so every other chat's Main keeps the eighteen cells, the constants `settingsMainShapeGroup`, `settingsMainShapePrivate`
   and `settingsMainOwnerRows` and the nineteen state lines above. A Staff Group's Main hides Deletion (`d`) and shows Blocked sources, so
@@ -1446,6 +1451,45 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `TestSettingsDriftFwdBlock`, `TestSettingsListFwdBlockCallbackBytes`, `TestSettingsListFwdBlockPageFitsEveryLocale`,
   `TestSettingsFwdBlockReadsCreateNothing` and `TestSettingsFwdBlockPageKeys` hold it (`settings_fwdblock_test.go`,
   `settings_fwdblock_screens_test.go`, toolkit `newSettingsFwdEnv`).
+- The Reactions page (`settings_reactions.go`, page `x`, `Order` 73, icon 👍 (🎭 is the Anonymous admins page's), `settings_page_reactions`,
+  plan of 2026-11-18, Part 2) is the fifth table of the list engine. It registers through `registerSettingsList`, is `PrivateOnly`
+  and declares `settingsRightChangeInfo` for every write (the right `/addreaction` and `/removereaction` ask); viewing, paging and
+  Cancel need only `settingsRightAdmin`. Its codes are `xg` (pager), `xx` (delete ask), `xy` (delete Yes), `xa` (Add) and `xc`
+  (Cancel, `t` = `r`), and the static part table gains `(x,r)`. It reads through the fresh, chat-scoped, non-creating readers of the
+  reactions repository (`ListReactionEntriesFresh`, `GetReactionEntryFresh`, `CountReactionsFresh`), never the cached
+  `reactions:<chat>` map the watcher reads. Each line is `N. <code>keyword</code> → emoji`: the engine's entry has an optional
+  `Detail`, escaped like the text and drawn after ` → ` (`settingsListDetailSep`). Main reads `n/100` (`reactionsCapMax`). The add
+  is one typed message (`settingsReactionsTyped`): exactly two tokens (else `settings_rct_refuse_two`), a keyword of at most 100 code
+  points (`settings_rct_refuse_long`, a page-only limit), then the wait is claimed and `applyReactionAdd` stores it without overwrite;
+  an emoji outside `supportedReactionEmoji` (`settings_rct_refuse_emoji`, naming a few valid ones), a keyword the chat already has
+  (`settings_rct_refuse_exists`, never overwritten) and the cap (`settings_rct_refuse_cap`) give the claim back and keep the wait,
+  and a failed read or write keeps it with `common_settings_save_failed`. Add is refused before any wait at the cap (`AddGate`).
+  The delete is the engine's two-tap card over `applyReactionRemoveByID` (one conditional `DELETE ... WHERE id = ? AND chat_id = ?`,
+  the cache key dropped only when a row went). The reactions writes are `applyReactionAdd` (with `overwrite` true for
+  `/addreaction`, which keeps its upsert, false for the page), `applyReactionRemove` and `applyReactionRemoveByID` in `reactions.go`,
+  through the `reactionWrites` seam; `TestLegacyReactionRequests` was recorded before that extraction and is never re-recorded. A
+  group has at most 100 reactions (`reactionsCapMax`, a soft cap read before the insert; giving an existing keyword a new emoji is
+  allowed at the cap): `/addreaction` of a new keyword at the cap answers `reactions_limit_reached` and stores nothing. The
+  `reactions` table keeps what backup does with it today. `TestSettingsReactions*`, `TestSettingsParityReactionAdd` (the page and
+  `/addreaction` store the same row, and the page draws what the commands wrote), `TestSettingsAuthorityParityReactions`,
+  `TestSettingsListReactionsFits` and `TestReactionCap` hold it.
+- The Timezone page (`settings_timezone.go`, page `z`, `Order` 87 with key `z`, so it sorts right after Language; icon 🕒,
+  `settings_page_tz`; plan of 2026-11-18, Part 3) and `/timezone` (`timezone.go`, `helpers.WrapCommand` with `RequireGroup`
+  and `RequireUserAdmin`, anonymous-admin re-entry, not `Disableable`) write through one apply function, `applyTimezone`
+  (`timezoneWrites` seam): an IANA name in any letter case (stored as the database spells it; an old alias such as
+  `Europe/Kiev` resolves), an offset `+3`, `-5`, `+5:30` or `UTC+2` (stored as `UTC+hh:mm`, hours to 14, minutes 00, 15, 30
+  or 45), `utc`, or `default` (removes the row); anything else is `timezone_invalid` with nothing written. Any administrator
+  may view (`/timezone` alone); changing needs `can_change_info` (the command's `CanUserChangeInfo`, the page's
+  `settingsRightChangeInfo`). The page draws the zone, the time there now and whether it is the default, a grid of nine
+  presets (control `z`, `st` only, `v` a two-letter preset code or `d` for Use default, never a zone name, so a button stays
+  far inside 64 bytes), Use default and Type another (`zo`), the Open in private row in a group menu and Back and Close; Main
+  shows the zone's label (`UTC+2`). Type another writes the settings wait (page `z`, part `z`) in a private menu and draws a
+  prompt with Cancel (`zk`, `t` = `z`); in a group menu it writes nothing and redraws with `settings_tz_group_note`. The
+  typed reply is run by the door's third branch, `settingsTypedPages` (`settings_input.go`): a single-value page registers its
+  part, its prompt's Cancel code, its right and its handler, `settingsInputValidPart` accepts the part, the door runs the same
+  `authorize` and slash refusal first, and a reply after the wait ended answers `settings_tz_wait_ended_note`. Main grows to
+  twenty cells (`... d|t / u|z / o|y`), still twelve rows for the owner. `TestChatClock*`, `TestApplyTimezone`,
+  `TestSettingsTimezone*`, `TestSettingsParityTimezone`, `TestSettingsAuthorityParityTimezone` and `TestDefaultTimezone` hold it.
 - The message editor's pages (`settings_edit.go`, pages `w` Welcome, `g` Goodbye and `r` Rules, orders 50, 60 and 70, each
   registered from that file's `init` through `registerSettingsPage` so `settings_pages.go` is never edited) show which
   parts of a message are set, one line per part from one parts table (`settingsEditPageDef.Parts`): Welcome and Goodbye
@@ -2439,6 +2483,20 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   adds `backup_import_skipped_entries` and `backup_import_log_skipped` to its success message
   (`TestGreetingsBackupDropsLastMessageIDs`, `TestImportNeverTakesTheLogChannel`, `TestImportSkipsInvalidListEntries`,
   `TestBackupConfirmImportReportsWhatItLeftOut`).
+- `chat_timezones` (migration 20261118120000) is one chat's choice of zone for the times the bot shows: `chat_id` primary
+  key, `tz` (an IANA name such as `Europe/Kyiv`, or a fixed offset stored as `UTC+hh:mm`, `chk_chat_timezones_tz` 1..64
+  characters), `updated_by`, `updated_at`. A chat without a row uses the bot-wide default (`DEFAULT_TIMEZONE`, default
+  `Europe/Kyiv`; an invalid name stops startup). It is read through `cache.GetFromCacheOrLoad` under
+  `cache.CacheKey("chat_tz", chat)` (`timezone.Get`, which creates nothing and returns its error; `GetFresh` is the same
+  query without the cache), and `timezone.Set` (one column-targeted upsert) and `timezone.Remove` drop the key. The key is
+  not in `skipLocal`: another replica showing the old zone for up to `CACHE_LOCAL_TTL` is accepted. It is never part of
+  backup, export, import or reset. `chatClock(ctx, chat)` (`chat_clock.go`) is the one reader (the row, else the default; a
+  failed read falls back to the default and logs once per process) and `formatChatTime(t, loc, layout)` the one formatter,
+  which appends the zone's short label (`14:05 (UTC+2)`, following daylight saving time). Which zone: a message about a
+  group in that group, its log channel or its settings menu uses the group's; the Staff Group panel, history and action
+  cards use the Staff Group's; a lockdown alert copy uses its destination's (`lockdownSlotClock`: the Staff Group's for a
+  Staff Group copy, the locked group's for the log channel copy), and the stored `body` keeps the time it was posted
+  with. Log lines, file names, Redis hour stamps, stored values and the fban export's RFC 3339 dates stay UTC.
 - `UpdateRecord` skips zero values. Use `UpdateRecordWithZeroValues` to write `false`/`0`/`""`. Both return
   `gorm.ErrRecordNotFound` when no row matched.
 - Check `TableName()` before raw SQL: `ConnectionSettings→connection` (per user), `ConnectionChatSettings→
@@ -4232,12 +4290,38 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `TestCanonVerdictKey` pin one vector each for that reason.
 - A missing i18n key returns `""` with an error callers ignore; a typo'd key in Go ships an empty message. Copy key
   names from `locales/en.yml`. `locales/config.yml` is the help alt-name pseudo-locale, not a language.
+- Ukrainian and English texts follow the style guide and glossary in `docs/src/content/docs/contributing/locale-style.md`
+  (HTML only, a bold title line on every help page, `•` bullets, ` — ` after a command, one fixed set of section
+  headings). `TestLocaleStyle` (`fuku/i18n/locale_style_test.go`) checks what a program can check for `uk` and `en`; its
+  allow-list (`locale_style_allowlist_test.go`) is empty since every Ukrainian and English text was converted on 2026-11-18
+  (the owner approved the guide that day), and stays empty: a new text follows the guide from its first commit. Two
+  guards hold the facts through any rewrite (`locale_rewrite_guard_test.go`): `TestLocalePlaceholdersMatchOtherLanguages`
+  (the fmt verbs and `{name}` placeholders of every Ukrainian and English text equal those of the six other languages) and `TestHelpPagesKeepTheirCommands` (every `/command` a help page named before
+  the rewrite, recorded in the test). Every Ukrainian and English help page opens with its own bold title line followed by
+  a blank line, so it gets no generic header (`helpHasOwnTitle`); a page without one (the other six languages) gets
+  `helpers_module_help_header` (one line, the module's icon from `helpModuleIcons` and its translated name), and
+  `renderModuleHelp` adds the blank line after it.
+- Every reply is sent with HTML parse mode; nothing sends Telegram's legacy Markdown any more (plan of 2026-11-18, Part 4
+  step 4: `/purge`, `/privatenotes`, a private note's button message, `/disable`, `/enable`, `/disableable`, `/disabled`,
+  `/disabledel`, `/cleanservice`, `/autoapprove`, `/setwarnlimit`, `/setfloodmode`, `/delflood` and `/blacklistaction`
+  moved, their texts converted in all 8 languages). A value a user typed or a stored value spliced into a text is
+  `html.EscapeString`-ed at the site (`purgeDoneText`, `noteClickForPrivateText`, `disablingCommandList`, the
+  `/setwarnlimit` argument, the blacklist action; `TestMarkdownSitesEscapeSplicedValues`,
+  `TestSetWarnLimitEscapesItsArgument`). A new text uses HTML, never Markdown.
 - A string filled with `i18n.TranslationParams` uses `{name}` placeholders equal to the param names. A `%s` or `%d`
   verb is filled only from the keys `0` to `9` or the fixed common names of `extractOrderedValues`, and prints raw
   for any other name (`modules`, `list`, `chat`, `time`, `types`, `attempts` did). `TestRawPlaceholderKeysRender`
   (`fuku/i18n`) renders the backup and captcha keys that once printed raw verbs through the real locale files. Both kinds
   are filled in one pass over the raw template, the verbs counted on the template alone, so a value a user typed that
   holds a verb or a `{name}` is printed as typed (`TestInterpolateParamsIgnoresVerbsInValues`).
+- The `/help` keyboard is built per reader language on request (`initHelpButtonsFrom(registry, lang)`; there is no
+  startup-time keyboard): every module enabled with `SetModuleEnabled` is labelled with its `help_module_name_<module>`
+  key (lower-cased internal name, all 8 locale files, at most 14 code points so three fit a row) and sorted by that label
+  with the language's collation; a missing key shows the internal name, and `TestHelpModuleNamesExist` loads every module
+  and fails on a help module without a key in any language. Callback data and the `help_` deep link keep the internal
+  name. `/help <name>` also takes the translated name of the reader's language (`findHelpModule`). A module's own help
+  buttons are registered with `SetModuleHelpFunc` (a builder called with the reader's translator); `SetModuleHelp` is
+  only for rows whose labels need no translation (the language flags).
 - The docs generator finds raw commands in the module source by the shim's call, `helpers.NewBotCommand("name", ...)`
   (`scripts/generate_docs/parsers.go`); a command registered another way is not listed, and the guard test rejects it.
 - The docs generator reads only `locales/en.yml`. Pages marked `<!-- MANUALLY MAINTAINED: do not regenerate -->` in
@@ -4252,7 +4336,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Version strings are shape-locked (`BotVersion:` with two spaces in `fuku/config/config.go`, `version =` in
   `main.go`). Run `make bump-version` on a PR branch, merge, then tag. Tags match `^v\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$`.
 - `.env` in cwd auto-loads without overriding real env. Run `--version` smoke checks from `/tmp`.
-- Defaults that surprise: `REDIS_DB=1`; `ENABLE_AISPAM=true` (the global AI kill switch, text, images and the AI spam-name rule; the text checks are inert without `TYPESAFE_API_KEY`); `ANTHROPIC_API_KEY` empty
+- Defaults that surprise: `DEFAULT_TIMEZONE=Europe/Kyiv` (the zone every group without a choice shows times in; an invalid
+  name stops startup; the zone database is embedded through `time/tzdata`, imported in `fuku/config` so it is ready before
+  the config reads the variable); `REDIS_DB=1`; `ENABLE_AISPAM=true` (the global AI kill switch, text, images and the AI spam-name rule; the text checks are inert without `TYPESAFE_API_KEY`); `ANTHROPIC_API_KEY` empty
   means no raid image check, no AI name check and no image or name leaves the server, and `ANTHROPIC_MODEL` must be a model that
   accepts a forced tool call (a Haiku-class model: the names request and the image request both force the call) and falls back to `claude.DefaultModel`
   (with a warning) when empty or not a valid model name; because the bot reads the standard `ANTHROPIC_API_KEY` name, a
@@ -4331,7 +4417,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   the 2026-11-17 review, `TestGreetingDisplayRepliesToCommand`); the join and leave cases are unchanged. Phase 18's goldens follow the same rule: `TestLegacyWarnSettingsRequests`
   (`warns_legacy_request_test.go`, every request and stored row of `/setwarnlimit` and `/setwarnmode`, committed before the
   extraction into `applyWarnLimit` and `applyWarnMode`) is never re-recorded, and every `TestLegacy*Requests` golden of Phase 18
-  joins that rule as its plan records it. The other Phase 12 families are `TestGreetOnce*` (`greet_once_test.go`),
+  joins that rule as its plan records it. One exception, dated 2026-11-18: the owner allowed the `TestLegacy*Requests`
+  goldens to be re-recorded once, text only, for the formatting cleanup (plan of 2026-11-18, decision D6). 39 literals of
+  eight files (aispam, autoapprove, blacklists, filters, locks, notes, reports, warns) were re-recorded in their own
+  commit after the text changes, and `.planning/quick/261118-p4r-formatting-rest/golden_text_only.py <base>` proves
+  that against the commit before it every request kept its method, chat, reply parameters, keyboard callback data and
+  every other field, only the message text and button labels changed and `parse_mode` changed only from Markdown to
+  HTML; the stored-row assertions of those tests were not touched. The rule stands again from that commit on. The other
+  Phase 12 families are `TestGreetOnce*` (`greet_once_test.go`),
   `TestGreetingsMediaBelow*` (`greetings_media_below_test.go`), `TestRules*` in `rules_media_send_test.go`,
   `TestSettingsEditMediaBelow*`, `TestSettings*MediaBelow`, `TestSettings*Once`, `TestSettingsEditSwitchGrid` and
   `TestSettingsEditRules*` (`settings_edit_switch_test.go`, `settings_edit_rules_test.go`, `settings_input_rules_test.go`),

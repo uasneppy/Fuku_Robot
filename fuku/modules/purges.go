@@ -2,6 +2,7 @@ package modules
 
 import (
 	"fmt"
+	"html"
 	"strconv"
 	"strings"
 	"sync"
@@ -189,15 +190,8 @@ func (m moduleStruct) purge(bot *gotgbot.Bot, ctx *ext.Context) error {
 
 		if purge {
 			tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-			var Text string
-			if len(args) >= 1 {
-				temp, _ := tr.GetString("purges_purged_with_reason")
-				Text = fmt.Sprintf(temp, totalMsgs, strings.Join(args, " "))
-			} else {
-				temp, _ := tr.GetString("purges_purged_messages")
-				Text = fmt.Sprintf(temp, totalMsgs)
-			}
-			pMsg, err := bot.SendMessage(chat.Id, Text, formatting.Smarkdown())
+			Text := purgeDoneText(tr, totalMsgs, args)
+			pMsg, err := bot.SendMessage(chat.Id, Text, formatting.Shtml())
 			if err != nil {
 				log.Error(err)
 			} else {
@@ -445,16 +439,9 @@ func (m moduleStruct) purgeTo(bot *gotgbot.Bot, ctx *ext.Context) error {
 			log.Error(err)
 		}
 		if purge {
-			var Text string
 			tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
-			if len(args) >= 1 {
-				temp, _ := tr.GetString("purges_purged_with_reason")
-				Text = fmt.Sprintf(temp, totalMsgs, strings.Join(args, " "))
-			} else {
-				temp, _ := tr.GetString("purges_purged_messages")
-				Text = fmt.Sprintf(temp, totalMsgs)
-			}
-			pMsg, err := bot.SendMessage(chat.Id, Text, formatting.Smarkdown())
+			Text := purgeDoneText(tr, totalMsgs, args)
+			pMsg, err := bot.SendMessage(chat.Id, Text, formatting.Shtml())
 			if err != nil {
 				log.Error(err)
 			} else {
@@ -520,4 +507,14 @@ func init() {
 	RegisterAnonymousAdminHandler("del", anonPipelineHandler(delDesc, purgesModule.delCmd))
 	RegisterAnonymousAdminHandler("purgefrom", anonPipelineHandler(purgeFromDesc, purgesModule.purgeFrom))
 	RegisterAnonymousAdminHandler("purgeto", anonPipelineHandler(purgeToDesc, purgesModule.purgeTo))
+}
+
+// purgeDoneText is the HTML notice after a purge: the count, and the reason the admin typed, escaped.
+func purgeDoneText(tr *i18n.Translator, total int64, args []string) string {
+	if len(args) >= 1 {
+		temp, _ := tr.GetString("purges_purged_with_reason")
+		return fmt.Sprintf(temp, total, html.EscapeString(strings.Join(args, " ")))
+	}
+	temp, _ := tr.GetString("purges_purged_messages")
+	return fmt.Sprintf(temp, total)
 }

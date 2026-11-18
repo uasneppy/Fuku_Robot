@@ -86,7 +86,7 @@ func TestDisableableListsRegisteredCommands(t *testing.T) {
 		t.Fatalf("sendMessage calls = %d, want 1", len(calls))
 	}
 	text := calls[0].Params["text"].(string)
-	if !strings.Contains(text, "`rules`") || !strings.Contains(text, "`stat`") {
+	if !strings.Contains(text, "<code>rules</code>") || !strings.Contains(text, "<code>stat</code>") {
 		t.Fatalf("disableable text = %q, want registered commands", text)
 	}
 }
@@ -116,7 +116,7 @@ func TestDisabledListsCurrentCommandsOrEmptyState(t *testing.T) {
 		t.Fatalf("sendMessage calls = %d, want 2", len(calls))
 	}
 	text := calls[1].Params["text"].(string)
-	if !strings.Contains(text, "`rules`") {
+	if !strings.Contains(text, "<code>rules</code>") {
 		t.Fatalf("disabled text = %q, want rules", text)
 	}
 }

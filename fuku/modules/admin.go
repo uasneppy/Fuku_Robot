@@ -60,10 +60,10 @@ func (m moduleStruct) adminlist(c *helpers.CommandContext) error {
 	}
 	if !cached {
 		noteText, _ := tr.GetString("admin_adminlist_note_fresh")
-		text += noteText
+		text += "\n\n" + strings.TrimLeft(noteText, "\n")
 	} else {
 		noteText, _ := tr.GetString("admin_adminlist_note_cached")
-		text += noteText
+		text += "\n\n" + strings.TrimLeft(noteText, "\n")
 	}
 	_, err := msg.Reply(c.Bot, text, formatting.Shtml())
 	if err != nil {

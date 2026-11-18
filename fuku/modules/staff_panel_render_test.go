@@ -250,23 +250,24 @@ func TestRenderStaffRowLockdownMarker(t *testing.T) {
 	marker := staffMarker("staff_panel_row_lockdown")
 	since := time.Date(2026, time.October, 5, 12, 4, 33, 0, time.UTC)
 
-	t.Run("a locked row carries one lockdown line with the UTC time", func(t *testing.T) {
+	// The Staff Group has no zone of its own here, so the bot's default (Kyiv, UTC+3 in October) applies.
+	t.Run("a locked row carries one lockdown line with the Staff Group's time", func(t *testing.T) {
 		row := panelRows(1, func(int) string { return "Alpha" })[0]
 		row.LockedSince = since
 		text := renderStaffRow(tr, row)
 		if strings.Count(text, marker) != 1 {
 			t.Fatalf("row %q must carry the lockdown line exactly once", text)
 		}
-		if !strings.Contains(text, "5 Oct 12:04") {
-			t.Errorf("row %q must show the confirmation time as 5 Oct 12:04", text)
+		if !strings.Contains(text, "5 Oct 15:04 (UTC+3)") {
+			t.Errorf("row %q must show the confirmation time as 5 Oct 15:04 (UTC+3)", text)
 		}
 	})
 
 	t.Run("a row's local zone does not change the printed time", func(t *testing.T) {
 		row := panelRows(1, func(int) string { return "Alpha" })[0]
 		row.LockedSince = since.In(time.FixedZone("UTC+9", 9*60*60))
-		if text := renderStaffRow(tr, row); !strings.Contains(text, "5 Oct 12:04") {
-			t.Errorf("row %q must print the UTC time 5 Oct 12:04", text)
+		if text := renderStaffRow(tr, row); !strings.Contains(text, "5 Oct 15:04 (UTC+3)") {
+			t.Errorf("row %q must print the Staff Group's time 5 Oct 15:04 (UTC+3)", text)
 		}
 	})
 

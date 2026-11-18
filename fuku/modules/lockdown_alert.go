@@ -474,6 +474,16 @@ func lockdownPlanReminders(ctx context.Context, _ *gotgbot.Bot) bool {
 
 // lockdownSlotTranslator is the translator of the chat a copy is posted in: the Staff
 // Group for a staff copy, the locked group (whose log channel gets it) for a log copy.
+// lockdownSlotClock is the zone a copy shows its times in: the Staff Group's for a Staff Group copy, the
+// locked group's for the log channel copy.
+func lockdownSlotClock(slot *models.ChatLockdownAlert) *time.Location {
+	if slot.Dest == models.AlertDestLog {
+		return chatClockOf(slot.ChatID)
+	}
+	return chatClockOf(slot.DestChatID)
+}
+
+// lockdownSlotTranslator is the language of a copy's destination.
 func lockdownSlotTranslator(slot *models.ChatLockdownAlert) *i18n.Translator {
 	if slot.Dest == models.AlertDestLog {
 		return staffChatTranslator(slot.ChatID)
@@ -594,7 +604,7 @@ func lockdownRenderLinkLine(tr *i18n.Translator, links []lockdown.InviteLinkCoun
 // each destination reads them in its own language. They are passed as strings built with
 // strconv and by name only, so the translator's legacy printf pass never meets the
 // percent sign. The starter's name is user-controlled and goes in after translation.
-func lockdownAlertTriggerLine(tr *i18n.Translator, ld *models.ChatLockdown, lockedAt time.Time) string {
+func lockdownAlertTriggerLine(tr *i18n.Translator, ld *models.ChatLockdown, lockedAt time.Time, loc *time.Location) string {
 	count := strconv.Itoa(ld.TriggerCount)
 	window := strconv.Itoa(ld.TriggerWindow)
 	switch ld.TriggerKind {
@@ -602,26 +612,26 @@ func lockdownAlertTriggerLine(tr *i18n.Translator, ld *models.ChatLockdown, lock
 		return lockdownText(tr, "lockdown_alert_trigger_join_surge", i18n.TranslationParams{
 			"count":  count,
 			"window": window,
-			"time":   lockdownTime(lockedAt),
+			"time":   lockdownTime(lockedAt, loc),
 		})
 	case models.LockdownTriggerFlood:
 		return lockdownText(tr, "lockdown_alert_trigger_flood", i18n.TranslationParams{
 			"count":   count,
 			"window":  window,
 			"percent": strconv.Itoa(ld.TriggerPercent),
-			"time":    lockdownTime(lockedAt),
+			"time":    lockdownTime(lockedAt, loc),
 		})
 	case models.LockdownTriggerAIBurst:
 		return lockdownText(tr, "lockdown_alert_trigger_ai_burst", i18n.TranslationParams{
 			"count":  count,
 			"window": window,
-			"time":   lockdownTime(lockedAt),
+			"time":   lockdownTime(lockedAt, loc),
 		})
 	}
 	return lockdownSplice(
 		lockdownText(tr, "lockdown_alert_trigger_manual", i18n.TranslationParams{
 			"name": lockdownNameToken,
-			"time": lockdownTime(lockedAt),
+			"time": lockdownTime(lockedAt, loc),
 		}),
 		lockdownNameToken, lockdownMention(ld.StartedBy, ld.StartedByName),
 	)
@@ -634,7 +644,7 @@ func lockdownAlertTriggerLine(tr *i18n.Translator, ld *models.ChatLockdown, lock
 // the name, the reason and the link are user-controlled, so they go in after
 // translation, in place of their tokens. It also returns the link the alert shows, to
 // be stored on the copy, empty when none is shown.
-func lockdownRenderAlert(tr *i18n.Translator, ld *models.ChatLockdown) (text, link string) {
+func lockdownRenderAlert(tr *i18n.Translator, ld *models.ChatLockdown, loc *time.Location) (text, link string) {
 	lockedAt := ld.CreatedAt
 	if ld.LockedAt != nil {
 		lockedAt = *ld.LockedAt
@@ -643,7 +653,7 @@ func lockdownRenderAlert(tr *i18n.Translator, ld *models.ChatLockdown) (text, li
 		lockdownText(tr, "lockdown_alert_title", i18n.TranslationParams{"group": lockdownGroupToken}),
 		lockdownGroupToken, lockdownGroupLabel(ld),
 	)
-	lines := []string{title, lockdownAlertTriggerLine(tr, ld, lockedAt), lockdownReasonLine(tr, ld.Reason)}
+	lines := []string{title, lockdownAlertTriggerLine(tr, ld, lockedAt, loc), lockdownReasonLine(tr, ld.Reason)}
 	accounts, counts, err := lockdown.BurstSampleFresh(ld.ID, lockdownAlertSampleMax)
 	if err != nil {
 		log.Warnf("[Lockdown] the burst of lockdown %d could not be read for its alert: %v", ld.ID, err)
@@ -671,7 +681,7 @@ func lockdownRenderAlert(tr *i18n.Translator, ld *models.ChatLockdown) (text, li
 // translation, in place of their tokens. A failed read leaves that line out and the
 // reminder still posts. The footers for what happened since (a revoked link) are not part
 // of it: the post adds them to what it sends, as a refresh does.
-func lockdownRenderReminder(tr *i18n.Translator, ld *models.ChatLockdown) (text, link string) {
+func lockdownRenderReminder(tr *i18n.Translator, ld *models.ChatLockdown, loc *time.Location) (text, link string) {
 	lockedAt := ld.CreatedAt
 	if ld.LockedAt != nil {
 		lockedAt = *ld.LockedAt
@@ -679,7 +689,7 @@ func lockdownRenderReminder(tr *i18n.Translator, ld *models.ChatLockdown) (text,
 	title := lockdownSplice(
 		lockdownText(tr, "lockdown_reminder_title", i18n.TranslationParams{
 			"group": lockdownGroupToken,
-			"since": lockdownTime(lockedAt),
+			"since": lockdownTime(lockedAt, loc),
 		}),
 		lockdownGroupToken, lockdownGroupLabel(ld),
 	)
@@ -770,9 +780,9 @@ func lockdownPostAlertSlot(ctx context.Context, b *gotgbot.Bot, slot *models.Cha
 			}
 			return true
 		}
-		text, link = lockdownRenderReminder(tr, ld)
+		text, link = lockdownRenderReminder(tr, ld, lockdownSlotClock(slot))
 	} else {
-		text, link = lockdownRenderAlert(tr, ld)
+		text, link = lockdownRenderAlert(tr, ld, lockdownSlotClock(slot))
 	}
 	if slot.Dest == models.AlertDestLog {
 		// The log channel's owner chose which categories it receives, and may have
@@ -871,7 +881,7 @@ func lockdownPostAlertSlot(ctx context.Context, b *gotgbot.Bot, slot *models.Cha
 // lockdownLiftedFooter is the line added under an alert's stored text once its lockdown
 // is lifting or lifted: who lifted it and when, read from the lockdown row. The name is
 // user-controlled, so it goes in after translation, escaped.
-func lockdownLiftedFooter(tr *i18n.Translator, ld *models.ChatLockdown) string {
+func lockdownLiftedFooter(tr *i18n.Translator, ld *models.ChatLockdown, loc *time.Location) string {
 	when := ld.UpdatedAt
 	if ld.LiftStartedAt != nil {
 		when = *ld.LiftStartedAt
@@ -882,7 +892,7 @@ func lockdownLiftedFooter(tr *i18n.Translator, ld *models.ChatLockdown) string {
 	}
 	text := lockdownText(tr, "lockdown_alert_lifted_footer", i18n.TranslationParams{
 		"name": lockdownNameToken,
-		"time": lockdownTime(when),
+		"time": lockdownTime(when, loc),
 	})
 	return lockdownSplice(text, lockdownNameToken, lifter)
 }
@@ -892,7 +902,7 @@ func lockdownLiftedFooter(tr *i18n.Translator, ld *models.ChatLockdown) string {
 // invite link, with who and when. The name is user-controlled, so it goes in after
 // translation, escaped. The lifted footer is separate (lockdownLiftedFooter) and always
 // comes last.
-func lockdownAlertFooters(tr *i18n.Translator, ld *models.ChatLockdown) []string {
+func lockdownAlertFooters(tr *i18n.Translator, ld *models.ChatLockdown, loc *time.Location) []string {
 	var footers []string
 	if ld.LinkRevokedAt != nil {
 		reviser := html.EscapeString(ld.LinkRevokedByName)
@@ -901,7 +911,7 @@ func lockdownAlertFooters(tr *i18n.Translator, ld *models.ChatLockdown) []string
 		}
 		text := lockdownText(tr, "lockdown_alert_link_revoked", i18n.TranslationParams{
 			"name": lockdownNameToken,
-			"time": lockdownTime(*ld.LinkRevokedAt),
+			"time": lockdownTime(*ld.LinkRevokedAt, loc),
 		})
 		footers = append(footers, lockdownSplice(text, lockdownNameToken, reviser))
 	}
@@ -912,9 +922,10 @@ func lockdownAlertFooters(tr *i18n.Translator, ld *models.ChatLockdown) []string
 // that was posted, then the footers for what happened since and, once its lockdown is
 // lifting or lifted, the lifted footer.
 func lockdownCopyText(tr *i18n.Translator, slot *models.ChatLockdownAlert, ld *models.ChatLockdown, lifted bool) string {
-	parts := append([]string{slot.Body}, lockdownAlertFooters(tr, ld)...)
+	loc := lockdownSlotClock(slot)
+	parts := append([]string{slot.Body}, lockdownAlertFooters(tr, ld, loc)...)
 	if lifted {
-		parts = append(parts, lockdownLiftedFooter(tr, ld))
+		parts = append(parts, lockdownLiftedFooter(tr, ld, loc))
 	}
 	return strings.Join(parts, "\n\n")
 }

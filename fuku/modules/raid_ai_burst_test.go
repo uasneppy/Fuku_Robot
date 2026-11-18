@@ -986,7 +986,7 @@ func TestLockdownTriggerKindsAllSurfaces(t *testing.T) {
 			}
 
 			sentence := lockdownTriggerSentence(tr, kind, 7, 120, 40)
-			line := lockdownAlertTriggerLine(tr, ld, time.Now())
+			line := lockdownAlertTriggerLine(tr, ld, time.Now(), defaultChatLocation())
 			if want.automatic {
 				if !strings.Contains(sentence, staffMarker("lockdown_trigger_"+kind)) {
 					t.Errorf("trigger sentence %q does not carry %q", sentence, staffMarker("lockdown_trigger_"+kind))

@@ -73,7 +73,7 @@ func TestStaffPanelShowsLockedGroup(t *testing.T) {
 	if err != nil || fresh == nil || fresh.LockedAt == nil {
 		t.Fatalf("GetFresh = %v, %v, want a confirmed row", fresh, err)
 	}
-	wantSince := fresh.LockedAt.UTC().Format("2 Jan 15:04")
+	wantSince := formatChatTime(*fresh.LockedAt, defaultChatLocation(), "2 Jan 15:04")
 
 	alphaBlock := panelRowBlock(panel, "Alpha")
 	if !strings.Contains(alphaBlock, marker) || !strings.Contains(alphaBlock, wantSince) {

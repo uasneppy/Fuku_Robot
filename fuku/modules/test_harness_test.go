@@ -376,6 +376,7 @@ func TestMain(m *testing.M) {
 		&models.ChatLockdownBanRun{},
 		&models.ChatRaidDetection{},
 		&models.ChatSettingsAccess{},
+		&models.ChatTimezone{},
 		&models.GreetedMember{},
 		&models.ChatRequirements{},
 		&models.ChatRequirementHold{},

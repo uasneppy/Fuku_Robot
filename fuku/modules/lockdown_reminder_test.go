@@ -345,7 +345,7 @@ func TestLockdownReminderContent(t *testing.T) {
 		text := fmt.Sprint(reminder.Params["text"])
 		for _, want := range []string{
 			staffMarker("lockdown_reminder_title"),
-			lockdownTime(*row.LockedAt),
+			lockdownTime(*row.LockedAt, defaultChatLocation()),
 			staffMarker("lockdown_reason_line"),
 			"spam &lt;wave&gt;",
 			staffMarker("lockdown_reminder_counts") + " 5 1",
