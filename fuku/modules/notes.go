@@ -339,7 +339,7 @@ func (m moduleStruct) addNote(b *gotgbot.Bot, ctx *ext.Context) error {
 	pvtOnly, grpOnly, conflict = resolveNotePrivateConflict(pvtOnly, grpOnly)
 	if conflict {
 		noteConflictText, _ := tr.GetString("notes_private_conflict_warning")
-		noteString += noteConflictText
+		noteString += "\n\n" + strings.TrimLeft(noteConflictText, "\n")
 	}
 
 	noteWord = strings.ToLower(noteWord)
@@ -594,10 +594,10 @@ func (moduleStruct) notesList(b *gotgbot.Bot, ctx *ext.Context) error {
 		}
 	} else {
 		currentNotesText, _ := tr.GetString("notes_current_in_chat")
-		info = currentNotesText
+		info = strings.TrimRight(currentNotesText, "\n") + "\n"
 		var sb strings.Builder
 		for _, note := range noteKeys {
-			fmt.Fprintf(&sb, " - <code>#%s</code>\n", html.EscapeString(note))
+			fmt.Fprintf(&sb, "• <code>#%s</code>\n", html.EscapeString(note))
 		}
 		info += sb.String()
 		instructionText, _ := tr.GetString("notes_get_instruction")
@@ -1234,10 +1234,11 @@ func notesListDeepLinkHandler(b *gotgbot.Bot, ctx *ext.Context, user *gotgbot.Us
 	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 	info, _ := tr.GetString("notes_none_in_chat")
 	if len(noteEntries) > 0 {
-		info, _ = tr.GetString("helpers_notes_current_header")
+		header, _ := tr.GetString("helpers_notes_current_header")
+		info = strings.TrimRight(header, "\n") + "\n"
 		var sb strings.Builder
 		for _, note := range noteEntries {
-			fmt.Fprintf(&sb, " - <a href='%s'>%s</a>\n",
+			fmt.Fprintf(&sb, "• <a href='%s'>%s</a>\n",
 				html.EscapeString(noteDeepLinkURL(b.Username, chatinfo.Id, note.ID, note.Name)), html.EscapeString(note.Name))
 		}
 		info += sb.String()

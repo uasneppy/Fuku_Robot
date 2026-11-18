@@ -623,13 +623,17 @@ func (m moduleStruct) handleConfirmImport(b *gotgbot.Bot, ctx *ext.Context, tr *
 		"modules": fmt.Sprintf("%d", len(modules)),
 		"list":    buildModuleList(modules),
 	})
+	var hints []string
 	if report.Skipped > 0 {
 		skipped, _ := tr.GetString("backup_import_skipped_entries", i18n.TranslationParams{"count": report.Skipped})
-		text += "\n" + skipped
+		hints = append(hints, skipped)
 	}
 	if report.LogChannelSkipped {
 		logSkipped, _ := tr.GetString("backup_import_log_skipped")
-		text += "\n" + logSkipped
+		hints = append(hints, logSkipped)
+	}
+	if len(hints) > 0 {
+		text = strings.TrimRight(text, "\n") + "\n\n" + strings.Join(hints, "\n")
 	}
 	_, err = b.SendMessage(chat.Id, text, formatting.Shtml())
 	if err != nil {

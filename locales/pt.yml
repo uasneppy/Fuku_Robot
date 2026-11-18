@@ -989,11 +989,11 @@ warns_reset_all_cancelled: Cancelada a remoção de todos os avisos de todos os 
 warns_reset_all_final: Removidos todos os avisos de todos os usuários neste chat.
 
 # Locks module strings
-locks_locktypes_header: "Locks:\n  - "
+locks_locktypes_header: "Locks:"
 locks_what_to_lock: O que você quer bloquear? Verifique /locktypes para opções disponíveis.
-locks_invalid_lock_type: "`%s` não é um tipo de bloqueio correto, verifique /locktypes."
-locks_locked_successfully: "Bloqueado o seguinte neste grupo:\n  - %s"
-locks_unlocked_successfully: "Desbloqueado o seguinte neste grupo:\n  - %s"
+locks_invalid_lock_type: "<code>%s</code> não é um tipo de bloqueio correto, verifique /locktypes."
+locks_locked_successfully: "Bloqueado o seguinte neste grupo:\n• %s"
+locks_unlocked_successfully: "Desbloqueado o seguinte neste grupo:\n• %s"
 locks_lock_failed: "Falha ao bloquear: %s. Por favor tente novamente mais tarde."
 locks_unlock_failed: "Falha ao desbloquear: %s. Por favor tente novamente mais tarde."
 locks_what_to_unlock: O que você quer desbloquear? Verifique /locktypes para opções disponíveis.
@@ -2276,11 +2276,7 @@ approvals_already_approved: "%s já está aprovado neste chat."
 approvals_not_approved: "%s não está na lista de aprovados."
 approvals_user_unapproved: "%s removido da lista de aprovados."
 approvals_check_not_approved: "%s não está atualmente aprovado neste chat."
-approvals_check_status: |
-  <b>Usuário:</b> %s
-  <b>Aprovado em:</b> %s
-  <b>Aprovado por:</b> %s
-  %s
+approvals_check_status: "<b>Usuário:</b> %s\n<b>Aprovado em:</b> %s\n<b>Aprovado por:</b> %s"
 approvals_none_approved: "Nenhum usuário aprovado neste chat."
 approvals_approved_list_file_caption: "Lista de usuários aprovados para %s"
 approvals_list_file_error: "Falha ao gerar o arquivo de usuários aprovados."

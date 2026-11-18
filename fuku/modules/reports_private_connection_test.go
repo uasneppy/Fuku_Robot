@@ -104,7 +104,7 @@ func TestReportsPrivateConnection(t *testing.T) {
 		}
 
 		env.sendPrivate(user, "/reports")
-		want := reportsPMText(t, env, user, "reports_preference_disabled_private") + reportsPMText(t, env, user, "reports_change_settings_hint")
+		want := reportsPMText(t, env, user, "reports_preference_disabled_private") + "\n\n" + reportsPMText(t, env, user, "reports_change_settings_hint")
 		if got := reportsLastText(t, env, user.Id); got != want {
 			t.Fatalf("/reports replied %q, want %q", got, want)
 		}

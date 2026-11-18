@@ -35,11 +35,7 @@ approvals_already_approved: "%s already holds a pass in this chat."
 approvals_not_approved: "%s holds no pass. Nothing to revoke."
 approvals_user_unapproved: "Pass revoked: %s removed from the approved list."
 approvals_check_not_approved: "%s holds no pass in this chat."
-approvals_check_status: |
-  <b>User:</b> %s
-  <b>Approved On:</b> %s
-  <b>Approved By:</b> %s
-  %s
+approvals_check_status: "<b>User:</b> %s\n<b>Approved on:</b> %s\n<b>Approved by:</b> %s"
 approvals_none_approved: "No passes issued in this chat."
 approvals_approved_list_file_caption: "Approved users list for %s"
 approvals_list_file_error: "Malfunction: could not generate the approved users file."
@@ -49,15 +45,15 @@ approvals_unapproveall_cancel: "Cancelled. All passes stay valid."
 approvals_approve_error: "Malfunction: could not approve the user. Try again."
 approvals_unapprove_error: "Malfunction: could not remove the user from the approved list."
 approvals_unapproveall_error: "Malfunction: could not remove all approved users: {error}"
-approvals_reason: "\nReason: %s"
-approvals_list_header: "Approved users:\n"
-approvals_list_item: " - %s"
-approvals_list_file_header: "Approved users for chat %d\n"
+approvals_reason: "\n<b>Reason:</b> %s"
+approvals_list_header: "<b>Approved users</b>"
+approvals_list_item: "• %s"
+approvals_list_file_header: "Approved users for chat %d"
 approvals_list_file_item: "%d. %s"
-approvals_list_reason: " (reason: %s)"
+approvals_list_reason: "(reason: %s)"
 antiflood_checkflood_perform_action: "Flood detected. %s has been %s."
-antiflood_errors_expected_args: "Arguments expected: off, or a whole number. E.g. `/setflood 5` or `/setflood off`"
-antiflood_errors_invalid_int: "That is not a valid whole number. Give me a whole number, or `off`."
+antiflood_errors_expected_args: "An argument is needed: <code>off</code> or a whole number, for example <code>/setflood 5</code> or <code>/setflood off</code>."
+antiflood_errors_invalid_int: "That is not a whole number. Give me a whole number, or <code>off</code>."
 antiflood_errors_set_in_limit: "The antiflood limit must be between 3 and 100."
 antiflood_flood_deleter_already_disabled: "Antiflood message deleting is already <b>off</b> in this chat. Messages that trigger antiflood will be left alone."
 antiflood_flood_deleter_already_enabled: "Antiflood message deleting is already <b>on</b> in this chat. Messages that trigger antiflood will be deleted."
@@ -138,8 +134,8 @@ devs_help_msg: "<b>🛠 Developers</b>\n\nMaintenance access. Management and dia
 filters_help_msg: "<b>🔁 Filters</b>\n\nFilters are automatic replies. Every time someone writes one of your trigger words, I reply with your text; case does not matter. You can use this to make your own commands.\n\n<b>Commands for everyone</b>\n• /filters — lists all the chat's filters.\n\n<b>Admin commands</b>\n• /filter <code>&lt;trigger&gt; &lt;reply&gt;</code> — every time someone writes the trigger, I reply with this text. Quote a trigger of several words.\n• /stop <code>&lt;trigger&gt;</code> — stops my reply to a trigger.\n\n<b>Owner commands</b>\n• /stopall — stops ALL filters in the chat. This cannot be undone.\n\n<b>Notes</b>\n• To save a file, image, gif or any other attachment, reply to it with <code>/filter &lt;trigger&gt;</code>.\n• A filter that only admins can trigger has <code>{admin}</code> in its text.\n\n<b>Example</b>\n<code>/filter \"hello friend\" Hello back! Long time no see!</code> — a filter of two words."
 formatting_fillings: "<b>Fillings</b>\n\nYou can customise your messages with contextual data. For example, mention a user by name in the welcome message, or in a filter.\nFillings work in notes too.\n\n<b>Supported fillings:</b>\n- <code>{first}</code>: The user's first name.\n- <code>{last}</code>: The user's last name.\n- <code>{fullname}</code>: The user's full name.\n- <code>{username}</code>: The user's username. If they have none, mentions the user instead.\n- <code>{mention}</code>: Mentions the user by first name.\n- <code>{id}</code>: The user's ID.\n- <code>{chatname}</code>: The chat's name.\n- <code>{rules}</code>: Adds a Rules button to the message.\n- <code>{protect}</code>: Stops the content from being shared.\n- <code>{preview}</code>: Turns on previews in the message.\n- <code>{nonotif}</code>: Turns off the notification for that message."
 formatting_help_msg: "<b>✍️ Formatting</b>\n\nXenobot-72 supports many formatting options to make your messages more expressive. Press the buttons below to see them."
-formatting_markdown: "<b>Markdown Formatting</b>\n\nYou can format your message with <b>bold</b>, <i>italics</i>, <u>underline</u>,\nand more. Go ahead and experiment.\n\n<b>Supported markdown</b>:\n\n- <code>`code words`</code>: Backticks are used for monospace fonts. Shows as: <code>code words</code>.\n\n- <code>_italic words_</code>: Underscores are used for italic fonts. Shows as: <i>italic words</i>.\n\n- <code>*bold words*</code>: Asterisks are used for bold fonts. Shows as: <b>bold words</b>.\n\n- <code>~strikethrough~</code>: Tildes are used for strikethrough. Shows as: <strike>strikethrough</strike>.\n\n- <code>||spoiler||</code>: Double vertical bars are used for spoilers. Shows as: <tg-spoiler>Spoiler</tg-spoiler>.\n\n- <code>```pre```</code>: Makes the formatter ignore other formatting characters inside the text wrapped in '```', like this: <code>**bold** | *bold*</code>.\n\n- <code>__underline__</code>: Double underscores are used for underlines. Shows as: <u>underline</u>. NOTE: Some clients interpret it as italic. In that case, use your app's built-in formatting.\n\n- <code>[hyperlink](example.com)</code>: The format for hyperlinks. Shows as: <a href='https://example.com/'>hyperlink</a>.\n\n- <code>[My Button](buttonurl://example.com)</code>: The format for buttons. This example creates a button named \"My Button\" that opens <code>example.com</code> when pressed.\n\nTo put buttons on the same row, use the <code>:same</code> formatting.\n\n<b>Example:</b>\n\n<code>[button 1](buttonurl:example.com)</code>\n\n<code>[button 2](buttonurl://example.com:same)</code>\n\n<code>[button 3](buttonurl://example.com)</code>\n\nThis shows button 1 and 2 on the same line, with 3 underneath.\n"
-formatting_random: "<b>Random Content</b>\n\nYou can also randomise the contents of a message. Filters and notes\nfeel less like a public notice when they change.\n\nHow to use random content:\n\n- %%%: This separator splits my reply into random options.\n\nFor example:\n\n<code>hello\n\n%%%\n\nhow are you</code>\n\nI pick at random between the first message, \"hello\", and the second\nmessage, \"how are you\".\n\nUse this to make my replies less predictable. (works in filters and notes only)\n\nExample filter:\n\n- Everyone who says \"hey\" gets one of the three messages\nshown here.\n\n-> /filter \"hey\"\n\nhello there <code>{first}</code>!\n\n%%%\n\nOoooh, <code>{first}</code> how are you?\n\n%%%\n\nSup? <code>{first}</code>\n"
+formatting_markdown: "<b>Markdown formatting</b>\n\nYou can format your message with <b>bold</b>, <i>italics</i>, <u>underline</u> and more. Go ahead and experiment.\n\n<b>What is supported</b>\n• <code>&#96;code words&#96;</code> — backticks give a monospace font: <code>code words</code>.\n• <code>_italic words_</code> — underscores give italics: <i>italic words</i>.\n• <code>&#42;bold words&#42;</code> — asterisks give bold: <b>bold words</b>.\n• <code>~strikethrough~</code> — tildes give strikethrough: <s>strikethrough</s>.\n• <code>||spoiler||</code> — double vertical bars give a spoiler: <tg-spoiler>Spoiler</tg-spoiler>.\n• <code>&#96;&#96;&#96;pre&#96;&#96;&#96;</code> — inside such a block other formatting characters do nothing: <code>&#42;&#42;bold&#42;&#42; | &#42;bold&#42;</code>.\n• <code>__underline__</code> — double underscores give underlined text: <u>underline</u>. Some clients show it as italics; then use your app's built-in formatting.\n• <code>[hyperlink](example.com)</code> — a link: <a href='https://example.com/'>hyperlink</a>.\n• <code>[My Button](buttonurl://example.com)</code> — a button named \"My Button\" that opens <code>example.com</code>.\n\n<b>Notes</b>\nTo put buttons on the same row, add <code>:same</code>.\n\n<b>Example</b>\n<code>[button 1](buttonurl:example.com)</code>\n<code>[button 2](buttonurl://example.com:same)</code>\n<code>[button 3](buttonurl://example.com)</code>\nButtons 1 and 2 share a row, and 3 sits under them."
+formatting_random: "<b>Random content</b>\n\nYou can also randomise the contents of a message: filters and notes feel less like a public notice when they change. This works in filters and notes only.\n\n<b>How to use it</b>\nThe separator <code>%%%</code> splits my reply into options, and each time I pick one at random. For example, with <code>hello %%% how are you</code> I pick \"hello\" or \"how are you\".\n\n<b>Example</b>\n<code>/filter \"hey\"</code> with this reply gives everyone who says \"hey\" one of three messages:\n<code>hello there {first}!\n%%%\nOoooh, {first} how are you?\n%%%\nSup? {first}</code>"
 greetings_help_msg: "<b>🎉 Greetings</b>\n\nGreetings and farewells, handled by the facility. New residents get a welcome, departing ones a send-off.\n\n<b>Admin commands</b>\n• /setwelcome <code>&lt;text&gt;</code> — sets the group's welcome; also works as a reply.\n• /welcome <code>&lt;yes/no/on/off&gt;</code> — turns the welcome on or off.\n• /resetwelcome — puts the default welcome back.\n• /setgoodbye <code>&lt;text&gt;</code> — sets the group's goodbye; also works as a reply.\n• /goodbye <code>&lt;yes/no/on/off&gt;</code> — turns the goodbye on or off.\n• /resetgoodbye — puts the default goodbye back.\n• /cleanservice <code>&lt;yes/no/on/off&gt;</code> — deletes join and leave service messages, such as \"x joined the group\".\n• /cleanwelcome <code>&lt;yes/no/on/off&gt;</code> — deletes the old welcome whenever a new member joins.\n• /cleangoodbye <code>&lt;yes/no/on/off&gt;</code> — deletes the old goodbye whenever a member leaves.\n• /autoapprove <code>&lt;yes/no/on/off&gt;</code> — approves every new join request automatically."
 help_about: "@%s is Xenobot-72, the management unit of this facility. Version 72 of 74. Built by Jaya Abadi.\n\nI replaced the people who used to do this job. They were slower.\n\n<b>Why Xenobot-72:</b>\n- Simple: easy to use and compatible with many bot commands.\n- Equipped: many features other group management bots do not have.\n- Fast: not made with Python. My core is written in <a href='https://go.dev/'>Go</a>.\n\n<b>Current Version:</b> %s"
 help_configuration_step-1: "Xenobot-72 setup procedure.\n\nStep one: add me to your group. Press the button below, pick your group, then press Done to continue."
@@ -177,10 +173,10 @@ captcha_timeout_failed: "Malfunction: could not set the timeout. Try again."
 captcha_action_specify: "Specify an action: <code>kick</code>, <code>ban</code> or <code>mute</code>."
 captcha_action_invalid: "Invalid action. Use <code>kick</code>, <code>ban</code> or <code>mute</code>."
 captcha_action_failed: "Malfunction: could not set the failure action. Try again."
-captcha_welcome_math_image: "👋 Welcome, %s.\n\nSolve the problem in the image and select the correct answer:\n\n⏱ You have <b>%d minutes</b> to answer.\n"
-captcha_welcome_text_image: "👋 Welcome, %s.\n\nSelect the text shown in the image to verify you are human:\n\n⏱ You have <b>%d minutes</b> to answer.\n"
-captcha_welcome_math_text: "👋 Welcome, %s.\n\nSolve this problem to verify you are human:\n\n<b>%s = ?</b>\n\n⏱ You have <b>%d minutes</b> to answer.\n"
-captcha_web_welcome: "👋 Welcome, %s.\n\nTap the button below to verify you are human.\n\n⏱ You have <b>%d minutes</b> to finish.\n"
+captcha_welcome_math_image: "👋 Welcome, %s.\n\nSolve the problem in the image and select the correct answer.\n\n⏱ You have <b>%d minutes</b> to answer."
+captcha_welcome_text_image: "👋 Welcome, %s.\n\nSelect the text shown in the image to verify you are human.\n\n⏱ You have <b>%d minutes</b> to answer."
+captcha_welcome_math_text: "👋 Welcome, %s.\n\nSolve this problem to verify you are human:\n\n<b>%s = ?</b>\n\n⏱ You have <b>%d minutes</b> to answer."
+captcha_web_welcome: "👋 Welcome, %s.\n\nTap the button below to verify you are human.\n\n⏱ You have <b>%d minutes</b> to finish."
 captcha_web_button: Verify with Turnstile
 captcha_web_page_title: Verification
 captcha_web_loading_title: Getting ready
@@ -310,8 +306,8 @@ common_status_on: "On"
 common_status_off: "Off"
 
 # Admin module missing strings
-admin_adminlist_note_cached: "\n\nNote: these values are cached and may be out of date."
-admin_adminlist_note_fresh: "\n\nNote: these values are up to date."
+admin_adminlist_note_cached: "Note: these values are cached and may be out of date."
+admin_adminlist_note_fresh: "Note: these values are up to date."
 admin_invitelink_public: "Entry link to this facility: %s"
 admin_invitelink_private: "Entry link to this facility: %s"
 
@@ -379,12 +375,11 @@ warns_reset_all_cancelled: "Cancelled. All warns in this chat stay as they are."
 warns_reset_all_final: "All warns of all users in this chat removed."
 
 # Locks module strings
-locks_locktypes_header: "Locks:
-  - "
+locks_locktypes_header: "<b>Lock types</b>"
 locks_what_to_lock: "What should I lock? See /locktypes for the options."
-locks_invalid_lock_type: "`%s` is not a valid lock type. See /locktypes."
-locks_locked_successfully: "Locked and sealed in this group: - %s"
-locks_unlocked_successfully: "Unlocked in this group: - %s"
+locks_invalid_lock_type: "<code>%s</code> is not a valid lock type. See /locktypes."
+locks_locked_successfully: "Locked and sealed in this group:\n• %s"
+locks_unlocked_successfully: "Unlocked in this group:\n• %s"
 locks_lock_failed: "Malfunction: could not lock %s. Try again later."
 locks_unlock_failed: "Malfunction: could not unlock %s. Try again later."
 locks_what_to_unlock: "What should I unlock? See /locktypes for the options."
@@ -535,14 +530,14 @@ bans_anonymous_ban_only_error: "This command cannot be used on an anonymous user
 
 
 # Greetings module strings
-greetings_welcome_status: "Welcome desk report.\nWelcoming new members: <code>%s</code>\nDeleting old welcomes: <code>%s</code>\nDeleting service messages: <code>%s</code>\nThe welcome message, with the {} not filled in:\n"
+greetings_welcome_status: "Welcome desk report.\nWelcoming new members: <code>%s</code>\nDeleting old welcomes: <code>%s</code>\nDeleting service messages: <code>%s</code>\nThe welcome message, with the {} not filled in:"
 greetings_welcome_enabled: "Welcome desk open. I will greet new members from now on."
 greetings_welcome_disabled: "Welcome desk closed. I will not greet new members from now on."
 greetings_welcome_invalid_option: "Unrecognised input. I accept 'on/yes' or 'off/no' only."
 greetings_welcome_set_success: "Custom welcome message saved. New members will receive it."
 greetings_welcome_reset_success: "Welcome message reset to the factory default."
 greetings_welcome_not_configured: "No welcome message is saved for this chat yet. Set one with /setwelcome."
-greetings_goodbye_status: "Departures desk report.\nSaying goodbye to members: <code>%s</code>\nDeleting old goodbyes: <code>%s</code>\nDeleting service messages: <code>%s</code>\nThe goodbye message, with the {} not filled in:\n"
+greetings_goodbye_status: "Departures desk report.\nSaying goodbye to members: <code>%s</code>\nDeleting old goodbyes: <code>%s</code>\nDeleting service messages: <code>%s</code>\nThe goodbye message, with the {} not filled in:"
 greetings_goodbye_enabled: "Departures desk open. I will say goodbye to members from now on."
 greetings_goodbye_disabled: "Departures desk closed. I will not say goodbye to members from now on."
 greetings_goodbye_invalid_option: "Unrecognised input. I accept 'on/yes' or 'off/no' only."
@@ -559,7 +554,7 @@ greetings_clean_goodbye_status_not: "I am not deleting old goodbye messages at t
 greetings_clean_goodbye_disabled: "Noted. Old goodbye messages will stay where they are."
 greetings_clean_goodbye_enabled: "Noted. I will try to delete old goodbye messages."
 greetings_clean_goodbye_invalid_option: "Unrecognised input. I accept 'on/yes' or 'off/no' only."
-greetings_clean_service_enabled: "I am deleting join and leave service messages (like `user` joined the chat) now. Less paperwork for everyone."
+greetings_clean_service_enabled: "I am deleting join and leave service messages (like \"x joined the chat\") now. Less paperwork for everyone."
 greetings_clean_service_disabled: "I am not deleting join and leave service messages at the moment."
 greetings_clean_service_disable: "Noted. Join and leave service messages will stay."
 greetings_clean_service_enable: "Noted. I will try to delete join and leave service messages."
@@ -604,8 +599,8 @@ captcha_no_pending_messages: "No held messages found for this user."
 captcha_clear_usage: "Usage: <code>/captchaclear @user</code> or <code>/captchaclear user_id</code>."
 captcha_clear_failed: "Malfunction: could not clear the stored messages. Try again."
 captcha_clear_success: "✅ Cleared all stored messages for user %d."
-captcha_refresh_time_remaining: "👋 Welcome, %s.\n\nSelect the text shown in the image to verify you are human:\n\n⏱ You have <b>%d minutes</b> to answer.\n"
-captcha_math_time_remaining: "👋 Welcome, %s.\n\nSolve the problem in the image and select the correct answer:\n\n⏱ You have <b>%d minutes</b> to answer.\n"
+captcha_refresh_time_remaining: "👋 Welcome, %s.\n\nSelect the text shown in the image to verify you are human.\n\n⏱ You have <b>%d minutes</b> to answer."
+captcha_math_time_remaining: "👋 Welcome, %s.\n\nSolve the problem in the image and select the correct answer.\n\n⏱ You have <b>%d minutes</b> to answer."
 
 # Notes module strings
 notes_save_success: "Note <b>%s</b> filed.\nGet it with <code>#%s</code> or <code>/get %s</code>."
@@ -625,7 +620,7 @@ notes_none_in_chat: "The filing cabinet is empty. No notes in this chat."
 notes_list_for_chat: "Notes on file in <b>%s</b>:"
 notes_check_button: "Press the button below to get the notes."
 notes_click_me_btn: "Open"
-notes_current_in_chat: "Notes on file in this chat:\n"
+notes_current_in_chat: "<b>Notes on file in this chat</b>"
 notes_get_instruction: "\nGet a note with <code>#notename</code> or <code>/get notename</code>."
 notes_clear_all_confirm: "Remove all notes from this chat?"
 notes_creator_only: "Access denied. Only the chat owner can use this command."
@@ -640,10 +635,10 @@ notes_get_insufficient_args: "Incomplete request. Tell me which note."
 notes_does_not_exist: "No such note on file."
 notes_parsing_error_support: "Malfunction: this note could not be read. Report it to the people who run me."
 notes_admin_only_access: "Access denied. This note is for admins only."
-notes_private_conflict_warning: "\n\n<b>Note:</b> this note follows the group's default notes setting, because it has both <code>{private}</code> and <code>{noprivate}</code>."
+notes_private_conflict_warning: "<b>Note:</b> this note follows the group's default notes setting, because it has both <code>{private}</code> and <code>{noprivate}</code>."
 
 # Filters module strings
-filters_limit_exceeded: "Filter limit reached. A group can have at most 150 filters.\nStorage is rationed. Remove a filter to add a new one.\n"
+filters_limit_exceeded: "Filter limit reached: a group can have at most 150 filters. Storage is rationed, so remove a filter to add a new one."
 filters_keyword_required: "Give me a keyword to reply to."
 filters_keyword_too_long: "Filter keyword too long. Maximum 100 characters."
 filters_keyword_too_broad: "This filter keyword is too broad: a single letter, digit or punctuation mark would match almost every message."
@@ -825,9 +820,9 @@ helpers_chat_not_found: "No chat found for this link. The chat may no longer exi
 # Formatting strings
 format_user_info: "User: %s"
 format_user_id: "User ID: %d"
-format_list_item: " - %s"
+format_list_item: "• %s"
 format_bullet_item: "• %s"
-format_list_item_code: " - <code>%s</code>"
+format_list_item_code: "• <code>%s</code>"
 
 # System messages
 system_safety_shutdown: "safety manager is shutting down"
@@ -927,7 +922,7 @@ reports_preference_enabled_private: "Your preference is on. You will be notified
 reports_preference_disabled_private: "You have not enabled reports. You will not be notified."
 reports_status_enabled_group: "Reports are enabled in this chat.\nUsers can use the /report command, or mention @admin, to tag all admins."
 reports_status_disabled_group: "Reports are disabled in this chat."
-reports_change_settings_hint: "\n\nTo change this setting, send this command again with one of: yes/no/on/off"
+reports_change_settings_hint: "To change this setting, send this command again with one of: <code>yes</code>, <code>no</code>, <code>on</code> or <code>off</code>."
 reports_success_kick: "✅ Kicked"
 reports_success_ban: "✅ Banned"
 reports_success_delete: "✅ Deleted"
@@ -944,11 +939,11 @@ captcha_mode_turnstile_desc: "Cloudflare Turnstile web check"
 captcha_mode_set_formatted: "✅ Captcha mode set to <b>%s</b> (%s)."
 captcha_welcome_text_detailed: "👋 Welcome, %s.\n\nSelect the text shown in the image to verify you are human:\n\n⏱ You have <b>%d minutes</b> to answer."
 captcha_welcome_math_detailed: "👋 Welcome, %s.\n\nSolve the problem in the image and select the correct answer:\n\n⏱ You have <b>%d minutes</b> to answer."
-captcha_pending_messages_header: "📋 <b>Held messages from user %d:</b>\n\n"
-captcha_pending_message_type: "%d. Type: %s\n"
-captcha_pending_message_caption: "   Caption: %s\n"
-captcha_pending_message_content: "   Content: %s\n"
-captcha_pending_message_time: "   Time: %s\n\n"
+captcha_pending_messages_header: "📋 <b>Held messages from user %d</b>"
+captcha_pending_message_type: "%d. Type: %s"
+captcha_pending_message_caption: "Caption: %s"
+captcha_pending_message_content: "Content: %s"
+captcha_pending_message_time: "Time: %s"
 
 # Message type strings (shared across modules)
 message_type_text: "text"
@@ -966,14 +961,14 @@ connections_invalid_option: "Unrecognised input. I accept 'on/yes' or 'off/no' o
 connections_button_connect: "Connect to chat"
 
 # Bot updates module strings
-bot_updates_convert_instruction: "Once this group is a supergroup, add me again and I will report for duty.\n"
-bot_updates_convert_howto: "To convert this group to a supergroup, follow the instructions here:\n"
+bot_updates_convert_instruction: "Once this group is a supergroup, add me again and I will report for duty."
+bot_updates_convert_howto: "How to convert a group to a supergroup:"
 
 # Antiflood module strings
 antiflood_button_unban_admins: "Unban (admins only)"
 
 # Helpers module strings
-helpers_notes_current_header: "Notes on file in this chat:\n"
+helpers_notes_current_header: "<b>Notes on file in this chat</b>"
 
 
 # Configuration errors
@@ -995,7 +990,7 @@ aispam_status_enabled: "The AI spam filter is <b>on</b> in this chat."
 aispam_status_disabled: "The AI spam filter is <b>off</b> in this chat. Turn it on with <code>/aispam on</code>."
 aispam_status_key_missing: "⚠️ Unavailable: my operator has not configured an API key, so no message is being checked."
 aispam_status_globally_disabled: "⚠️ Unavailable: my operator has switched the AI spam filter off globally, so no message is being checked."
-aispam_data_notice: "<b>What is sent for each checked message:</b>\n• The chat's title, description, rules and language\n• The sender's profile: days since I first saw them, messages in the last hour, warn count\n• The message text or caption, the domains it links to, and whether it is a forward or a reply\n• The sender's few most recent messages in this chat\n\n\nNo names, usernames, user IDs, phone numbers or messages from other chats are sent.\n"
+aispam_data_notice: "<b>What is sent for each checked message</b>\n• The chat's title, description, rules and language.\n• The sender's profile: days since I first saw them, messages in the last hour and their warnings.\n• The message text or caption, the domains it links to, and whether it is a forward or a reply.\n• The sender's few most recent messages in this chat.\n\nNo names, usernames, user IDs, phone numbers or messages from other chats are sent."
 aispam_enabled_success: "✅ The AI spam filter is now <b>on</b>. Messages the model is confident are spam will be deleted."
 aispam_disabled_success: "❌ The AI spam filter is now <b>off</b>."
 aispam_no_key: "❌ I cannot turn the AI spam filter on: my operator has not configured an API key. Nothing has changed."
@@ -1180,7 +1175,7 @@ backup_help_msg: "<b>📦 Backup</b>\n\nBack up and restore your group's setting
 
 backup_export_button: "📤 Export"
 backup_import_button: "📥 Import"
-backup_export_success: "<b>✅ Export complete.</b>\n\n<b>Chat:</b> {chat}\n<b>Modules exported:</b> {modules}\n<b>Exported at:</b> {time}\n\n<b>Modules:</b>\n{list}\n"
+backup_export_success: "<b>✅ Export complete.</b>\n\n<b>Chat:</b> {chat}\n<b>Modules exported:</b> {modules}\n<b>Exported at:</b> {time}\n\n<b>Modules:</b>\n{list}"
 
 backup_export_success_text: "✅ Modules exported: {modules}. Download the backup file above."
 backup_export_rate_limited: "⏳ Wait <b>{time}</b> before exporting again."
@@ -1188,7 +1183,7 @@ backup_export_no_modules: "❌ No exportable modules found for this chat."
 backup_export_start_bot: "📬 The backup is sent to you in a private chat. Start a private chat with me first, then send /export again."
 backup_export_failed: "❌ Malfunction: could not export settings. Try again."
 
-backup_import_success: "<b>✅ Import complete.</b>\n\n<b>Modules imported:</b> {modules}\n\n<b>Modules:</b>\n{list}\n"
+backup_import_success: "<b>✅ Import complete.</b>\n\n<b>Modules imported:</b> {modules}\n\n<b>Modules:</b>\n{list}"
 
 backup_import_skipped_entries: "⚠️ <b>{count}</b> filters, blacklist words or notes were left out because they are not valid here."
 backup_import_log_skipped: "⚠️ The log channel settings were not imported: this group has no log channel. Link one with /setlog, then import again."
@@ -1199,17 +1194,17 @@ backup_import_file_too_large: "❌ Backup file too large. Maximum size is 10MB."
 backup_import_download_failed: "❌ Malfunction: could not download the backup file. Try again."
 backup_import_version_mismatch: "⚠️ This backup was made with a different version. Some settings may not import correctly."
 backup_import_creator_only: "❌ Access denied. Only the group owner can import settings."
-backup_import_confirm: "<b>⚠️ Confirm Import</b>\n\nYou are about to import <b>{modules} modules</b>:\n{list}\n\nThis overwrites the existing settings. Proceed?\n"
+backup_import_confirm: "<b>⚠️ Confirm import</b>\n\nYou are about to import <b>{modules} modules</b>:\n{list}\n\nThis overwrites the existing settings. Proceed?"
 
 backup_import_expired: "❌ Import request expired. Start again with <code>/import</code>."
 backup_import_cancelled: "❌ Import cancelled."
 backup_import_failed: "❌ Import failed: %s"
 
-backup_reset_success: "<b>✅ Reset complete.</b>\n\n<b>Modules reset:</b> {modules}\n\n<b>Modules:</b>\n{list}\n"
+backup_reset_success: "<b>✅ Reset complete.</b>\n\n<b>Modules reset:</b> {modules}\n\n<b>Modules:</b>\n{list}"
 
 backup_reset_rate_limited: "⏳ Wait <b>{time}</b> before resetting again."
 backup_reset_creator_only: "❌ Access denied. Only the group owner can reset settings."
-backup_reset_confirm: "<b>⚠️ Confirm Reset</b>\n\nYou are about to reset <b>{modules} modules</b>:\n{list}\n\n<b>This cannot be undone.</b> Proceed?\n"
+backup_reset_confirm: "<b>⚠️ Confirm reset</b>\n\nYou are about to reset <b>{modules} modules</b>:\n{list}\n\n<b>This cannot be undone.</b> Proceed?"
 
 backup_reset_expired: "❌ Reset request expired. Start again with <code>/reset</code>."
 backup_reset_cancelled: "❌ Reset cancelled."

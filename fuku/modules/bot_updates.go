@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
@@ -42,12 +43,12 @@ func botJoinedGroup(b *gotgbot.Bot, ctx *ext.Context) error {
 			convertHowto, _ := tr.GetString("bot_updates_convert_howto")
 			_, err := b.SendMessage(
 				chat.Id,
-				fmt.Sprint(
-					text,
-					convertInstr,
-					convertHowto,
+				strings.Join([]string{
+					strings.TrimRight(text, "\n"),
+					strings.TrimRight(convertInstr, "\n"),
+					strings.TrimRight(convertHowto, "\n"),
 					"https://telegra.ph/Convert-group-to-Supergroup-07-29",
-				),
+				}, "\n"),
 				formatting.Shtml(),
 			)
 			if err != nil {

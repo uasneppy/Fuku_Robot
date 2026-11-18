@@ -384,14 +384,14 @@ func (moduleStruct) viewPendingMessages(bot *gotgbot.Bot, ctx *ext.Context) erro
 	tr := i18n.MustNewTranslator(lang.GetLanguage(ctx))
 	var response strings.Builder
 	headerText, _ := tr.GetString("captcha_pending_messages_header")
-	fmt.Fprintf(&response, headerText, targetUserID)
+	fmt.Fprintf(&response, captchaHeldLine(headerText, "", "\n\n"), targetUserID)
 
 	for i, msg := range messages {
 		typeText, _ := tr.GetString("captcha_pending_message_type")
-		fmt.Fprintf(&response, typeText, i+1, messageTypeToString(tr, msg.MessageType))
+		fmt.Fprintf(&response, captchaHeldLine(typeText, "", "\n"), i+1, messageTypeToString(tr, msg.MessageType))
 		if msg.Caption != "" {
 			captionText, _ := tr.GetString("captcha_pending_message_caption")
-			fmt.Fprintf(&response, captionText, html.EscapeString(msg.Caption))
+			fmt.Fprintf(&response, captchaHeldLine(captionText, "   ", "\n"), html.EscapeString(msg.Caption))
 		}
 		if msg.Content != "" && msg.MessageType == db.TEXT {
 			preview := msg.Content
@@ -399,10 +399,10 @@ func (moduleStruct) viewPendingMessages(bot *gotgbot.Bot, ctx *ext.Context) erro
 				preview = string(runes[:100]) + "..."
 			}
 			contentText, _ := tr.GetString("captcha_pending_message_content")
-			fmt.Fprintf(&response, contentText, html.EscapeString(preview))
+			fmt.Fprintf(&response, captchaHeldLine(contentText, "   ", "\n"), html.EscapeString(preview))
 		}
 		timeText, _ := tr.GetString("captcha_pending_message_time")
-		fmt.Fprintf(&response, timeText, formatChatTime(msg.CreatedAt, chatClockOf(chat.Id), "15:04:05"))
+		fmt.Fprintf(&response, captchaHeldLine(timeText, "   ", "\n\n"), formatChatTime(msg.CreatedAt, chatClockOf(chat.Id), "15:04:05"))
 	}
 
 	_, err = msg.Reply(bot, response.String(), formatting.Shtml())
@@ -2494,4 +2494,10 @@ func LoadCaptcha(dispatcher *ext.Dispatcher) {
 
 func init() {
 	RegisterLegacyModule("Captcha", 220, LoadCaptcha)
+}
+
+// captchaHeldLine is one line of the held-messages list: the template without its own surrounding whitespace, with
+// the indent before it and the line break after it, so every translation lays the list out the same way.
+func captchaHeldLine(template, indent, end string) string {
+	return indent + strings.Trim(template, " \n") + end
 }
