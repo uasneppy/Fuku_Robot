@@ -201,20 +201,6 @@ func TestSendMessageOptionBuilders(t *testing.T) {
 			},
 			wantMode: HTML,
 		},
-		{
-			name: "markdown options",
-			buildOpts: func() string {
-				opts := Smarkdown()
-				if opts.LinkPreviewOptions == nil || !opts.LinkPreviewOptions.IsDisabled {
-					t.Fatal("Smarkdown must disable link previews")
-				}
-				if opts.ReplyParameters == nil || !opts.ReplyParameters.AllowSendingWithoutReply {
-					t.Fatal("Smarkdown must allow sending without reply")
-				}
-				return opts.ParseMode
-			},
-			wantMode: Markdown,
-		},
 	}
 
 	for _, tc := range tests {

@@ -63,7 +63,7 @@ antiflood_flood_deleter_invalid_option: "Unrecognised input. I accept <code>yes<
 antiflood_flood_disabled: "Flood control is off in this chat."
 antiflood_flood_show_settings: "Flood control is active in this chat after %d messages. Anyone sending more than that will be %s."
 antiflood_help_msg: "<b>🌊 Antiflood</b>\n\nSomeone joins, sends 100 messages and ruins the chat. With antiflood, that stops here: I act on anyone who sends too many messages in a row.\n\n<b>Admin commands</b>\n• /flood — shows the antiflood settings.\n• /setflood <code>&lt;number/off/no&gt;</code> — sets after how many messages in a row I act; <code>0</code>, <code>off</code> or <code>no</code> turn antiflood off.\n• /setfloodmode <code>&lt;action&gt;</code> — sets the action for a flooder: <code>ban</code>, <code>kick</code> or <code>mute</code>.\n• /delflood <code>&lt;yes/no/on/off&gt;</code> — turns deleting the flood messages on or off.\n\n<b>Example</b>\n<code>/setflood 5</code> — act after five messages in a row."
-antiflood_setflood_disabled: "Noted.\nI will not act on users for flooding."
+antiflood_setflood_disabled: "Noted: I will not act on users for flooding."
 antiflood_setflood_success: "Flood limit set to <b>%d</b> messages."
 antiflood_setfloodmode_specify_action: "Name the action to take on flooding: <code>ban</code>, <code>kick</code> or <code>mute</code>."
 antiflood_setfloodmode_success: "Flood mode set to %s."
@@ -84,7 +84,7 @@ bans_kickme_is_admin: "Request denied. You are an admin. You stay at your post w
 bans_kickme_ok_out: "Request granted. Exit the facility."
 bans_unban_is_admin: "Admins are not banned, so there is nothing to unban."
 bans_unban_is_bot_itself: "Request denied. I am already here. I am always here."
-bans_unban_unbanned_user: "Access restored.\nUnbanned %s."
+bans_unban_unbanned_user: "Access restored: %s is unbanned."
 blacklists_bl_watcher_banned_user: "Banned %s. Reason: %s."
 blacklists_bl_watcher_kicked_user: "Kicked %s. Reason: %s."
 blacklists_bl_watcher_muted_user: "Muted %s. Reason: %s."
@@ -256,7 +256,7 @@ bot_updates_need_admin: "Access denied. You need to be an admin to do this."
 
 # Rules module strings
 rules_reply_needs_text: "That message has no text or caption to use as the rules. Reply to a message with text, or put the rules after the command."
-rules_need_text: "Give me the regulations to file.\nReply to a message, or put them after the command."
+rules_need_text: "Give me the regulations to file: reply to a message, or put them after the command."
 
 # Notes module strings
 notes_invalid: "Note rejected. It is not valid."
@@ -341,7 +341,7 @@ mutes_unmute_button: Unmute (Admin Only)
 mutes_mute_admin_error: "Request denied. I do not mute admins."
 mutes_mute_admin_polite_error: "Request denied. Muting an admin is not something I do."
 mutes_restrict_self_error: "Request denied. I do not restrict myself."
-mutes_unmute_message: "Silence order lifted.\n%s may talk again."
+mutes_unmute_message: "Silence order lifted: %s may talk again."
 mutes_unmute_lockdown_note: "This group is in lockdown, so they can talk once an admin runs /unlockdown."
 
 # Warns module missing strings
@@ -611,8 +611,8 @@ notes_overwrite_confirm: "Note already exists.\nOverwrite it?"
 notes_remove_keyword_required: "Give me a keyword to remove."
 notes_not_exists: "No such note on file."
 notes_removed_success: "Note <b>%s</b> removed from the files."
-notes_private_enabled: "Private notes on.\nUsers now get notes as a private message."
-notes_private_disabled: "Private notes off.\nAll notes are now sent to the group chat."
+notes_private_enabled: "Private notes on: users now get notes as a private message."
+notes_private_disabled: "Private notes off: all notes are now sent to the group chat."
 notes_private_invalid_option: "Unrecognised input. I accept <code>on</code>, <code>off</code>, <code>yes</code> or <code>no</code> only."
 notes_private_status_on: "Private notes are currently on."
 notes_private_status_off: "Private notes are currently off."

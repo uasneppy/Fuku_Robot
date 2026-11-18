@@ -3,6 +3,7 @@
 package modules
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -155,6 +156,29 @@ func TestDisabledelShowsAndTogglesDeletePreference(t *testing.T) {
 	}
 	if disabling.ShouldDel(chatID) {
 		t.Fatal("delete preference stayed enabled")
+	}
+}
+
+// TestDisabledelSaveFailureIsTranslated: a failed write of the delete preference answers the
+// translated save-failure text, never a hard-coded English sentence.
+func TestDisabledelSaveFailureIsTranslated(t *testing.T) {
+	client := newModuleBotClient()
+	bot := newModuleTestBot(client)
+	chat := gotgbot.Chat{Id: uniqueModuleChatID(), Type: "supergroup", Title: "Disable Chat"}
+	user := gotgbot.User{Id: 777000, FirstName: "Telegram"}
+
+	withStaffLocale(t)
+	floodApplyBrokenDB(t)
+	ctx := newModuleMessageContext(bot, chat, user, "/disabledel on")
+	if err := disablingModule.disabledel(bot, ctx); err != ext.EndGroups {
+		t.Fatalf("disabledel on error = %v, want EndGroups", err)
+	}
+	calls := client.callsFor("sendMessage")
+	if len(calls) != 1 {
+		t.Fatalf("sendMessage calls = %d, want 1", len(calls))
+	}
+	if got := fmt.Sprint(calls[0].Params["text"]); !strings.Contains(got, staffMarker("common_settings_save_failed")) {
+		t.Fatalf("reply = %q, want the translated common_settings_save_failed", got)
 	}
 }
 
