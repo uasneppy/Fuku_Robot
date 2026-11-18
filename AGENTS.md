@@ -739,6 +739,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   a wide margin. Neither fallback hub the UI-SPECs kept is built, because nothing forced one: the Phase 18 "More" hub (A18-A1,
   D-23) and the Phase 19 `📚 Lists` hub that would put the three list pages under one cell (A19-A1); the owner's phone check of
   Main at 11 rows is a live check in `19-SPIKE.md`.
+  The Reactions page (key `x`, `Order` 73, right after Notes; plan of 2026-11-18, Part 2) adds a nineteenth cell, so Main is now
+  `s|l / c|f / n|k / b|i / w|g / r|e / x|m / d|t / u|o / y` (nine full rows and Anonymous admins alone on the tenth), then Access
+  and the navigation row: twelve rows for the owner and eleven for an administrator, and twenty state lines; a Staff Group's Main is
+  `s|v / l|c / f|n / k|b / i|w / g|r / e|x / m|t / u|o / y` with the same row counts. The numbers in the sentences above are the
+  history and the constants of `settings_main_test.go` are the current shape.
   The Blocked sources page (key `v`, `Order` 11, quick task 261113-tjj) is the one page that exists for a Staff Group only (its `Hidden`
   hook, below), so every other chat's Main keeps the eighteen cells, the constants `settingsMainShapeGroup`, `settingsMainShapePrivate`
   and `settingsMainOwnerRows` and the nineteen state lines above. A Staff Group's Main hides Deletion (`d`) and shows Blocked sources, so
@@ -1446,6 +1451,28 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `TestSettingsDriftFwdBlock`, `TestSettingsListFwdBlockCallbackBytes`, `TestSettingsListFwdBlockPageFitsEveryLocale`,
   `TestSettingsFwdBlockReadsCreateNothing` and `TestSettingsFwdBlockPageKeys` hold it (`settings_fwdblock_test.go`,
   `settings_fwdblock_screens_test.go`, toolkit `newSettingsFwdEnv`).
+- The Reactions page (`settings_reactions.go`, page `x`, `Order` 73, icon 👍 (🎭 is the Anonymous admins page's), `settings_page_reactions`,
+  plan of 2026-11-18, Part 2) is the fifth table of the list engine. It registers through `registerSettingsList`, is `PrivateOnly`
+  and declares `settingsRightChangeInfo` for every write (the right `/addreaction` and `/removereaction` ask); viewing, paging and
+  Cancel need only `settingsRightAdmin`. Its codes are `xg` (pager), `xx` (delete ask), `xy` (delete Yes), `xa` (Add) and `xc`
+  (Cancel, `t` = `r`), and the static part table gains `(x,r)`. It reads through the fresh, chat-scoped, non-creating readers of the
+  reactions repository (`ListReactionEntriesFresh`, `GetReactionEntryFresh`, `CountReactionsFresh`), never the cached
+  `reactions:<chat>` map the watcher reads. Each line is `N. <code>keyword</code> → emoji`: the engine's entry has an optional
+  `Detail`, escaped like the text and drawn after ` → ` (`settingsListDetailSep`). Main reads `n/100` (`reactionsCapMax`). The add
+  is one typed message (`settingsReactionsTyped`): exactly two tokens (else `settings_rct_refuse_two`), a keyword of at most 100 code
+  points (`settings_rct_refuse_long`, a page-only limit), then the wait is claimed and `applyReactionAdd` stores it without overwrite;
+  an emoji outside `supportedReactionEmoji` (`settings_rct_refuse_emoji`, naming a few valid ones), a keyword the chat already has
+  (`settings_rct_refuse_exists`, never overwritten) and the cap (`settings_rct_refuse_cap`) give the claim back and keep the wait,
+  and a failed read or write keeps it with `common_settings_save_failed`. Add is refused before any wait at the cap (`AddGate`).
+  The delete is the engine's two-tap card over `applyReactionRemoveByID` (one conditional `DELETE ... WHERE id = ? AND chat_id = ?`,
+  the cache key dropped only when a row went). The reactions writes are `applyReactionAdd` (with `overwrite` true for
+  `/addreaction`, which keeps its upsert, false for the page), `applyReactionRemove` and `applyReactionRemoveByID` in `reactions.go`,
+  through the `reactionWrites` seam; `TestLegacyReactionRequests` was recorded before that extraction and is never re-recorded. A
+  group has at most 100 reactions (`reactionsCapMax`, a soft cap read before the insert; giving an existing keyword a new emoji is
+  allowed at the cap): `/addreaction` of a new keyword at the cap answers `reactions_limit_reached` and stores nothing. The
+  `reactions` table keeps what backup does with it today. `TestSettingsReactions*`, `TestSettingsParityReactionAdd` (the page and
+  `/addreaction` store the same row, and the page draws what the commands wrote), `TestSettingsAuthorityParityReactions`,
+  `TestSettingsListReactionsFits` and `TestReactionCap` hold it.
 - The message editor's pages (`settings_edit.go`, pages `w` Welcome, `g` Goodbye and `r` Rules, orders 50, 60 and 70, each
   registered from that file's `init` through `registerSettingsPage` so `settings_pages.go` is never edited) show which
   parts of a message are set, one line per part from one parts table (`settingsEditPageDef.Parts`): Welcome and Goodbye

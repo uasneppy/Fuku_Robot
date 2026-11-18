@@ -371,7 +371,8 @@ None yet.
 | 261117-w8s | Review wave 8: Staff Group | 2026-11-17 | d586acd | [261117-w8s-staff](./quick/261117-w8s-staff/) |
 | 261117-w9i | Review wave 9: deletion and infrastructure | 2026-11-17 | cef33c2 | [261117-w9i-infra](./quick/261117-w9i-infra/) |
 | 261117-w10t | Review wave 10: settings menu | 2026-11-17 | a9c457d | [261117-w10t-settings](./quick/261117-w10t-settings/) |
-| 261118-p1h | Translated /help module buttons, per-language help keyboard | 2026-11-18 | (this commit) | .planning/quick/261118-p1h-translated-help-module-buttons |
+| 261118-p1h | Translated /help module buttons, per-language help keyboard | 2026-11-18 | 38bf67c | .planning/quick/261118-p1h-translated-help-module-buttons |
+| 261118-p2r | Reactions page in /settings, reaction cap of 100 | 2026-11-18 | (this commit) | .planning/quick/261118-p2r-reactions-settings-page |
 
 ## Deferred Items
 

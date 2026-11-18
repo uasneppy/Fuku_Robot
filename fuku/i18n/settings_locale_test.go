@@ -567,6 +567,25 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_fwd_saved":           {90, 140},
 	"settings_fwd_refuse_one":      {80, 120},
 	"settings_entries_part_source": {16, 24},
+
+	// The Reactions page (plan of 2026-11-18, Part 2): its name, list page, count, Add button, prompt, refusals,
+	// delete card, notices and the part word of the typed add.
+	"settings_page_reactions":        {18, 18},
+	"settings_rct_intro":             {140, 200},
+	"settings_rct_count":             {28, 38},
+	"settings_rct_empty":             {40, 64},
+	"settings_btn_rct_add":           {20, 20},
+	"settings_rct_wait":              {170, 250},
+	"settings_rct_wait_rules":        {110, 160},
+	"settings_rct_refuse_two":        {100, 150},
+	"settings_rct_refuse_long":       {80, 120},
+	"settings_rct_refuse_emoji":      {100, 150},
+	"settings_rct_refuse_exists":     {110, 170},
+	"settings_rct_refuse_cap":        {90, 130},
+	"settings_rct_delete_ask":        {110, 170},
+	"settings_rct_removed":           {56, 90},
+	"settings_rct_saved":             {90, 140},
+	"settings_entries_part_reaction": {16, 24},
 }
 
 // settingsAlertKeys are shown as answerCallbackQuery alerts: plain text, no tag, at most
@@ -793,6 +812,7 @@ func TestSettingsLabelLengths(t *testing.T) {
 		{"🔁", "settings_page_filters"},
 		{"📝", "settings_page_notes"},
 		{"🚷", "settings_page_fwdblock"},
+		{"👍", "settings_page_reactions"},
 	}
 	options := []string{
 		"settings_opt_math", "settings_opt_text", "settings_opt_turnstile",

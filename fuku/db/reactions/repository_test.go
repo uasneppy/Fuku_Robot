@@ -1,6 +1,7 @@
 package reactions
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -59,5 +60,67 @@ func TestReactionsRoundTrip(t *testing.T) {
 	}
 	if got := GetReactions(chatID); len(got) != 0 {
 		t.Fatalf("GetReactions after reset = %v, want empty", got)
+	}
+}
+
+func TestReactionFreshReadersAndRemoveByID(t *testing.T) {
+	skipIfNoDb(t)
+	ctx := context.Background()
+	chatID, other := -time.Now().UnixNano(), -time.Now().UnixNano()-1
+	t.Cleanup(func() {
+		_ = ResetReactions(chatID)
+		_ = ResetReactions(other)
+	})
+
+	if rows, err := ListReactionEntriesFresh(ctx, chatID); err != nil || len(rows) != 0 {
+		t.Fatalf("fresh list of an empty chat = %v, %v", rows, err)
+	}
+	if added, err := AddReactionContext(ctx, chatID, "hello", "👍", false); err != nil || !added {
+		t.Fatalf("first add = %v, %v", added, err)
+	}
+	if added, err := AddReactionContext(ctx, chatID, "hello", "🔥", false); err != nil || added {
+		t.Fatalf("add without overwrite of an existing keyword = %v, %v, want not added", added, err)
+	}
+	if got := GetReactions(chatID)["hello"]; got != "👍" {
+		t.Fatalf("emoji after a refused overwrite = %q", got)
+	}
+	if added, err := AddReactionContext(ctx, chatID, "hello", "🔥", true); err != nil || !added {
+		t.Fatalf("overwrite = %v, %v", added, err)
+	}
+	if got := GetReactions(chatID)["hello"]; got != "🔥" {
+		t.Fatalf("emoji after overwrite = %q, want the cache dropped and the new emoji", got)
+	}
+	if _, err := AddReactionContext(ctx, other, "foreign", "👍", false); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := ListReactionEntriesFresh(ctx, chatID)
+	if err != nil || len(rows) != 1 || rows[0].Keyword != "hello" || rows[0].Emoji != "🔥" {
+		t.Fatalf("fresh list = %+v, %v", rows, err)
+	}
+	if n, err := CountReactionsFresh(ctx, chatID); err != nil || n != 1 {
+		t.Fatalf("count = %d, %v", n, err)
+	}
+	if ok, err := ReactionExistsFresh(ctx, chatID, "hello"); err != nil || !ok {
+		t.Fatalf("exists = %v, %v", ok, err)
+	}
+	foreign, err := ListReactionEntriesFresh(ctx, other)
+	if err != nil || len(foreign) != 1 {
+		t.Fatal(foreign, err)
+	}
+	if row, err := GetReactionEntryFresh(ctx, chatID, int64(foreign[0].ID)); err != nil || row != nil {
+		t.Fatalf("another chat's ID read %+v, %v, want nil", row, err)
+	}
+	if row, err := RemoveReactionByID(ctx, chatID, int64(foreign[0].ID)); err != nil || row != nil {
+		t.Fatalf("another chat's ID removed %+v, %v", row, err)
+	}
+	row, err := RemoveReactionByID(ctx, chatID, int64(rows[0].ID))
+	if err != nil || row == nil || row.Keyword != "hello" {
+		t.Fatalf("remove by ID = %+v, %v", row, err)
+	}
+	if n, _ := CountReactionsFresh(ctx, chatID); n != 0 {
+		t.Fatalf("count after remove = %d", n)
+	}
+	if n, _ := CountReactionsFresh(ctx, other); n != 1 {
+		t.Fatalf("the other chat lost its reaction")
 	}
 }

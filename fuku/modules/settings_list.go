@@ -54,6 +54,9 @@ type settingsListEntry struct {
 	Text      string
 	AdminOnly bool
 	Action    string
+	// Detail, when set, follows the entry's text on its line after an arrow (the Reactions page's emoji). It is
+	// escaped like the text and never reaches a button, callback data or a log line.
+	Detail string
 }
 
 // settingsListRemoveOutcome is what a table's Remove did; its zero value is removed.
@@ -331,10 +334,16 @@ func renderSettingsList(v settingsView, def settingsListDef, entries []settingsL
 	return k.screen(settingsCompose(v, def.TitleKey, body, notice, false))
 }
 
+// settingsListDetailSep joins an entry's text and its Detail on the entry's line.
+const settingsListDetailSep = " → "
+
 // settingsListLine is one entry's body line: its global number, its escaped text in code and, for an
 // admin-only entry of a table that tags them, the tag.
 func settingsListLine(v settingsView, def settingsListDef, number int, e settingsListEntry) string {
 	line := strconv.Itoa(number) + ". <code>" + settingsListLabel(e.Text, settingsListLineMax) + "</code>"
+	if e.Detail != "" {
+		line += settingsListDetailSep + settingsListLabel(e.Detail, settingsListLineMax)
+	}
 	if e.AdminOnly && def.AdminTagKey != "" {
 		line += settingsListAdminTagSep + settingsText(v.Tr, def.AdminTagKey)
 	}
@@ -610,4 +619,27 @@ func settingsListPage(def settingsListDef) settingsPage {
 		Open:        settingsListOpen(def),
 		Actions:     settingsListActions(def),
 	}
+}
+
+// settingsListCapGate is the AddGate of a capped list page: below max (a fresh count) Add may go on and it returns
+// nil; at the cap page 1 is redrawn with the cap notice and no wait is created; a count that cannot be read is the
+// cannot-open edit. count is called through the page's variable, so a test that swaps the seam is seen.
+func settingsListCapGate(p *settingsPress, page string, count func(context.Context, int64) (int, error), maxEntries int, capText func(*i18n.Translator) string) *settingsScreen {
+	ctx, cancel := context.WithTimeout(context.Background(), settingsReadTimeout)
+	defer cancel()
+	n, err := count(ctx, p.group.Id)
+	if err == nil && n < maxEntries {
+		return nil
+	}
+	def, _ := settingsListByPage(page)
+	var screen settingsScreen
+	if err == nil {
+		screen, err = settingsListDraw(p, def, 1, settingsNoticeWarn(capText(p.tr)))
+	}
+	if err != nil {
+		log.Warnf("[Settings] the %s list of chat %d could not be counted for Add: %v", page, p.group.Id, err)
+		p.answer(settingsText(p.tr, "settings_cannot_open_alert"), true)
+		return &settingsScreen{Text: settingsText(p.tr, "settings_cannot_open")}
+	}
+	return &screen
 }

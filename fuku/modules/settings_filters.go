@@ -5,8 +5,6 @@ import (
 	"errors"
 	"strings"
 
-	log "github.com/sirupsen/logrus"
-
 	db_filters "github.com/uasneppy/fuku_robot/fuku/db/filters"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
@@ -139,23 +137,7 @@ func settingsFiltersRemove(ctx context.Context, chatID, id int64) settingsListRe
 // count) page 1 is redrawn with the cap notice and no wait is created. A count that cannot be read is the cannot-open
 // edit. It returns nil when Add may go on.
 func settingsFiltersAddGate(p *settingsPress) *settingsScreen {
-	ctx, cancel := context.WithTimeout(context.Background(), settingsReadTimeout)
-	defer cancel()
-	n, err := settingsFiltersCount(ctx, p.group.Id)
-	if err == nil && n < filtersCapMax {
-		return nil
-	}
-	def, _ := settingsListByPage(settingsPageFilters)
-	var screen settingsScreen
-	if err == nil {
-		screen, err = settingsListDraw(p, def, 1, settingsNoticeWarn(settingsFiltersCapText(p.tr)))
-	}
-	if err != nil {
-		log.Warnf("[Settings] the filters of chat %d could not be counted for Add: %v", p.group.Id, err)
-		p.answer(settingsText(p.tr, "settings_cannot_open_alert"), true)
-		return &settingsScreen{Text: settingsText(p.tr, "settings_cannot_open")}
-	}
-	return &screen
+	return settingsListCapGate(p, settingsPageFilters, settingsFiltersCount, filtersCapMax, settingsFiltersCapText)
 }
 
 // settingsFiltersDef is the table of the Filters page.
