@@ -296,8 +296,8 @@ func settingsInputValidPart(page, part string) bool {
 // door runs after the authority and slash checks.
 type settingsTypedPage struct {
 	Part, CancelCode string
-	Right                     settingsRight
-	Typed                     func(r *settingsInputReply)
+	Right            settingsRight
+	Typed            func(r *settingsInputReply)
 }
 
 // settingsTypedPages records the single-value pages by page key; each registers from its own init.
