@@ -299,3 +299,46 @@ func settingsEditActions(def settingsEditPageDef) map[string]settingsPageAction 
 		def.FullCode:    {Right: settingsRightAdmin, Run: settingsEditFullPreview(def)},
 	}
 }
+
+// settingsEditResolvedActions are Set, Remove, Cancel, Preview and Full preview of a page that edits many
+// messages with one set of action codes and names the message by callback fields (the Messages page's k).
+// The codes and the right of Set and Remove come from codes; fields are the extra callback keys the actions
+// allow besides t (Full preview allows only fields). resolve turns a press's fields into the definition of
+// the message it names, and is where the page requires its owner field (the Messages page requires c, so a
+// group menu's press is refused in step 1). Validate refuses, before any I/O, a press that does not resolve
+// and, for the four part actions, a t that is not a part of the resolved definition; Run resolves again and
+// answers common_callback_invalid_request when the press no longer resolves.
+func settingsEditResolvedActions(
+	codes settingsEditPageDef, fields []string, resolve func(map[string]string) (settingsEditPageDef, bool),
+) map[string]settingsPageAction {
+	partFields := append([]string{"t"}, fields...)
+	validatePart := func(f map[string]string) bool {
+		def, ok := resolve(f)
+		if !ok {
+			return false
+		}
+		part, present := f["t"]
+		return present && settingsEditPartByCode(def, part) != nil
+	}
+	validateWhole := func(f map[string]string) bool {
+		_, ok := resolve(f)
+		return ok
+	}
+	run := func(serve func(settingsEditPageDef) func(*settingsPress) *settingsScreen) func(*settingsPress) *settingsScreen {
+		return func(p *settingsPress) *settingsScreen {
+			def, ok := resolve(p.fields)
+			if !ok {
+				p.answer(settingsText(p.tr, "common_callback_invalid_request"), true)
+				return nil
+			}
+			return serve(def)(p)
+		}
+	}
+	return map[string]settingsPageAction{
+		codes.SetCode:     {Fields: partFields, Right: codes.EditRight, Validate: validatePart, Run: run(settingsEditSet)},
+		codes.RemoveCode:  {Fields: partFields, Right: codes.EditRight, Validate: validatePart, Run: run(settingsEditRemove)},
+		codes.CancelCode:  {Fields: partFields, Right: settingsRightAdmin, Validate: validatePart, Run: run(settingsEditCancel)},
+		codes.PreviewCode: {Fields: partFields, Right: settingsRightAdmin, Validate: validatePart, Run: run(settingsEditPreview)},
+		codes.FullCode:    {Fields: slices.Clone(fields), Right: settingsRightAdmin, Validate: validateWhole, Run: run(settingsEditFullPreview)},
+	}
+}
