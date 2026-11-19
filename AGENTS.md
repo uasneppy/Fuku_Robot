@@ -4288,6 +4288,26 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   A change to the canonical form bumps `mrn1` and `mrv1`, and a change to `claude.NamesInstruction` bumps `mrv1`, in the
   same commit, so no old baseline or cached verdict is read under a new meaning; `TestCanonHash` and
   `TestCanonVerdictKey` pin one vector each for that reason.
+- The conversation feature's provider clients (Phase 20). `claude.Client.Converse` (`fuku/utils/claude/converse.go`) sends
+  `system` as two text blocks, the static persona and archive first with `cache_control` ephemeral and the dynamic block
+  after it unmarked, one user message, `output_config.effort` `low`, and no `thinking`, sampling, `tools` or prefill; it
+  uses its own transport (`ConverseTimeout` 40 s, no redirect) and the package's one retry (a retryable error whose wait
+  is at most 2 s). `"fallbacks": "default"` and `anthropic-beta: server-side-fallback-2026-07-01` are sent only for a
+  model `claude.ServerFallback` accepts (`claude-opus-5`, `claude-sonnet-5-5`, `claude-fable-5` prefixes), never for a
+  Haiku model. The stop reason is read before the content: `end_turn` joins the text blocks (thinking and fallback blocks
+  skipped), `max_tokens` keeps non-blank text (`OutcomeTruncated`), `refusal` is `OutcomeRefused` with no error, and
+  anything else or a blank answer wraps `claude.ErrNoReply`. `fuku/utils/gemini` (standard library only,
+  `TestGeminiPackageIsLeaf`) is built the same way: `POST /v1beta/models/{model}:generateContent`, the key in the
+  `x-goog-api-key` header only and never `?key=`, no redirect, the body read capped at 1 MiB, camelCase
+  `systemInstruction` (static then dynamic, two parts), one user content, `generationConfig` with `maxOutputTokens` and
+  `thinkingConfig.thinkingLevel` `low` and nothing else, and the four classic `safetySettings` at `BLOCK_ONLY_HIGH`. Its
+  parser accepts enum values in any case and both blocked-prompt shapes (no candidates or an empty list with
+  `promptFeedback.blockReason`, refused); `STOP` joins non-thought parts, `MAX_TOKENS` keeps non-blank text, `SAFETY`,
+  `PROHIBITED_CONTENT`, `BLOCKLIST`, `SPII` and `RECITATION` are refused, anything else wraps `gemini.ErrNoReply`. Its
+  `HTTPError` is retryable for 408, 5xx and a 429 that names no per-day quota, reads `RetryInfo.retryDelay` (or a
+  `retry-after` header) when present and never relies on it, and reports a rejected key for 401, 402, 403 and an
+  `API_KEY_INVALID` 400. Neither package logs; no error carries the key or the URL. Both are tested only against
+  `httptest` servers.
 - `fuku/utils/xenopersona` (Phase 20, standard library only, `TestXenopersonaPackageIsLeaf`) embeds `persona.md` and
   `archive.md` and returns the static system text of the conversation feature (`StaticSystemText`: the persona, a fixed
   separator, the archive without its leading source comment), the same bytes for every chat and user so a provider can
