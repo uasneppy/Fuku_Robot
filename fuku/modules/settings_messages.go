@@ -9,6 +9,7 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/db"
 	"github.com/uasneppy/fuku_robot/fuku/db/eventmsg"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
+	"github.com/uasneppy/fuku_robot/fuku/db/staff"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
 )
 
@@ -93,6 +94,11 @@ var settingsMsgParts = []settingsEditPart{settingsEditTextPart, settingsEditMedi
 // never shows a value another replica has just changed as stale, and it creates nothing. It is a variable
 // only so a test can make it fail or count its calls.
 var settingsMsgRead = eventmsg.GetFresh
+
+// settingsMsgStaffLookup reads a chat's Staff Group row fresh for the page's Hidden. It is the page's own seam
+// (not the Deletion page's deletionStaffLookup, whose reads that page's tests count) and a variable only so a test
+// can make it fail.
+var settingsMsgStaffLookup = staff.GetStaffGroupFresh
 
 func init() {
 	registerSettingsPage(settingsPage{
@@ -267,11 +273,10 @@ func settingsMsgMainState(_ *gotgbot.Bot, tr *i18n.Translator, group *gotgbot.Ch
 	return settingsText(tr, "settings_state_default"), true
 }
 
-// settingsMsgHidden is the page's Hidden: true only for a definite Staff Group row, read fresh through the
-// Deletion page's seam. An unreadable row shows the page, which only edits messages a Staff Group never
-// posts.
+// settingsMsgHidden is the page's Hidden: true only for a definite Staff Group row, read fresh. An unreadable
+// row shows the page, which only edits messages a Staff Group never posts.
 func settingsMsgHidden(group *gotgbot.Chat) bool {
-	staffRow, err := deletionStaffLookup(group.Id)
+	staffRow, err := settingsMsgStaffLookup(group.Id)
 	return err == nil && staffRow != nil
 }
 

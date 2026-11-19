@@ -672,8 +672,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   outcome, and a log line carries chat, user and hold IDs only.
 - The `settings|v1` namespace is the settings menu (`settings_menu.go`, `settings_pages.go`). Fields: `a` action, `c` the
   group's chat ID (a menu opened in private), `u` the opener's user ID (a menu opened in the group), `p` page (`s` staff,
-  `l` lockdown, `c` captcha, `f` antiflood, `w` welcome, `g` goodbye, `r` rules, `m` member requirements, `d` deletion, `n` warnings, `t` switches, `u` language, `o` log channel, `y` anonymous admins, `k` locks, `b` blacklist, `i` filters, `e` notes, `a` access), `t` control, `v` the absolute target value (the Locks page's pager is its own
-  action code `kg`, with `v` the absolute page, and the Blacklist page's is `bp` (not `bg`, which is the Deletion page's Bot goodbye row code and is held apart by `TestSettingsDeletionMemberCodesUnique`; the Deletion page's bot row codes `bw bg br ba bm` also rule out `ba` for the Blacklist's Add), with `v` the absolute page of at most four digits, `bx` its delete ask with `r` the row ID of 1 to 17 digits and `v` the page, and `by` the delete Yes with `r` and `e`, exactly 64 bytes at a 14-character chat ID and a 17-digit row ID, which is why `r` is bounded at 17 digits, U-5; Add is `bn` and Cancel `bc` with `t`, the action screen `bo` and `bs`, so the Blacklist page has the seven codes `bp bx by bo bs bn bc`; the Filters page has `ig ix iy ia ic` and the Notes page `eg ex ey ea ec` with the same fields, 17 list codes in all, every one with the owner field `c`); `e` (confirm expiry), `r`
+  `l` lockdown, `c` captcha, `f` antiflood, `w` welcome, `g` goodbye, `r` rules, `m` member requirements, `d` deletion, `n` warnings, `t` switches, `u` language, `o` log channel, `y` anonymous admins, `k` locks, `b` blacklist, `i` filters, `e` notes, `x` reactions, `z` timezone, `h` messages, `v` blocked sources, `a` access), `t` control, `v` the absolute target value (the Locks page's pager is its own
+  action code `kg`, with `v` the absolute page, and the Blacklist page's is `bp` (not `bg`, which is the Deletion page's Bot goodbye row code and is held apart by `TestSettingsDeletionMemberCodesUnique`; the Deletion page's bot row codes `bw bg br ba bm` also rule out `ba` for the Blacklist's Add), with `v` the absolute page of at most four digits, `bx` its delete ask with `r` the row ID of 1 to 17 digits and `v` the page, and `by` the delete Yes with `r` and `e`, exactly 64 bytes at a 14-character chat ID and a 17-digit row ID, which is why `r` is bounded at 17 digits, U-5; Add is `bn` and Cancel `bc` with `t`, the action screen `bo` and `bs`, so the Blacklist page has the seven codes `bp bx by bo bs bn bc`; the Filters page has `ig ix iy ia ic` and the Notes page `eg ex ey ea ec` with the same fields, 17 list codes in all, every one with the owner field `c`; the Messages page has `hl` (a family's list, `t`), `he` (an event's screen) and the editor codes `hs hr hc hv hf` and `hq`, each with the field `k`, the event code, and the owner field `c`); `e` (confirm expiry), `r`
   (the lockdown row ID of a Lift card), `l` (the link row ID of an Unlink card) and `s` (Staff Group row ID) arrive with
   the confirm cards and the Link pick. Core action codes: `oh` open here (the choice
   message becomes the Main page), `op` open page `p` (also Refresh and a stepper's value button), `bk` Back to Main, `cl`
@@ -744,6 +744,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   and the navigation row: twelve rows for the owner and eleven for an administrator, and twenty state lines; a Staff Group's Main is
   `s|v / l|c / f|n / k|b / i|w / g|r / e|x / m|t / u|o / y` with the same row counts. The numbers in the sentences above are the
   history and the constants of `settings_main_test.go` are the current shape.
+  The Messages page (key `h`, `Order` 74, right after Reactions; Phase 20, plan 20-06) adds the twenty-first cell for every chat that is
+  not a Staff Group, so Main is now `s|l / c|f / n|k / b|i / w|g / r|e / x|h / m|d / t|u / z|o / y` (ten full rows and Anonymous admins
+  alone on the eleventh), then Access and the navigation row: thirteen rows for the owner and twelve for an administrator, private and
+  group alike (`settingsMainOwnerRows` 13). The page is `Hidden` in a Staff Group, so a Staff Group's Main is unchanged:
+  `s|v / l|c / f|n / k|b / i|w / g|r / e|x / m|t / u|z / o|y`, twelve rows for the owner and eleven for an administrator, one row
+  fewer than another chat's (`TestSettingsFwdBlockMainShape`, whose row count is `settingsMainOwnerRows - 1`).
   The Blocked sources page (key `v`, `Order` 11, quick task 261113-tjj) is the one page that exists for a Staff Group only (its `Hidden`
   hook, below), so every other chat's Main keeps the eighteen cells, the constants `settingsMainShapeGroup`, `settingsMainShapePrivate`
   and `settingsMainOwnerRows` and the nineteen state lines above. A Staff Group's Main hides Deletion (`d`) and shows Blocked sources, so
@@ -989,7 +995,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `settings_entries_group_note`, the Open in private URL row of `settingsEditOpenPrivateRow`, left out and logged without a bot
   username, and Back and Close) without calling `Open`, so no page code and no database read runs in a group menu and no entry,
   count or word of a list can reach it. A private menu calls `MainState` and `Open` as for every page. The note is drawn after the
-  `OwnerOnly` and `Hidden` guards, whichever route reached the page (open, Back, a forged Refresh). `TestSettingsPrivateOnlyPage`
+  `OwnerOnly` and `Hidden` guards, whichever route reached the page (open, Back, a forged Refresh). A page may name its own note line
+  with the optional `PrivateNoteKey` (Phase 20, plan 20-06): `openPage` then draws `renderSettingsPrivateOnlyNoteWith` with that key
+  (the Messages page's `settings_msg_group_note`), and an empty key keeps `settings_entries_group_note`. `TestSettingsPrivateOnlyPage`
   proves it through a page the test registers (counting `MainState` and `Open`, zero calls in a group menu).
 - The Deletion page (`settings_deletion.go`, page `d`, `Order` 85, icon 🧹, `settings_page_del`, between Member requirements and
   Access, Phase 16) registers from its own file. Its one framework hook is the optional `settingsPage.Hidden func(group
@@ -1490,6 +1498,40 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `authorize` and slash refusal first, and a reply after the wait ended answers `settings_tz_wait_ended_note`. Main grows to
   twenty cells (`... d|t / u|z / o|y`), still twelve rows for the owner. `TestChatClock*`, `TestApplyTimezone`,
   `TestSettingsTimezone*`, `TestSettingsParityTimezone`, `TestSettingsAuthorityParityTimezone` and `TestDefaultTimezone` hold it.
+- The Messages page (`settings_messages.go`, page `h`, `Order` 74, icon 📨, `settings_page_msgs`, right after Reactions; Phase 20, plan
+  20-06, D-18, D-19) lists a group's custom event messages, the texts the bot posts in the group when someone is punished. It is
+  `PrivateOnly` with `PrivateNoteKey` `settings_msg_group_note` (a group menu's Main line reads `In private`, and opening the page draws
+  that note with the Open in private row, Back and Close, with no page code and no read) and `Hidden` in a Staff Group
+  (`settingsMsgHidden`: a definite Staff Group row read fresh through the page's own seam `settingsMsgStaffLookup`, never the Deletion page's `deletionStaffLookup`, whose reads `TestSettingsDeletionHidden` counts; an unreadable row shows the page), because
+  nothing is set at Staff Group level (D-01). It is drawn from one table, `settingsMsgFamilies` (`settingsMsgFamily{Code, Icon, NameKey,
+  IntroKey, Events}`, a variable only so a test can draw more families), whose events are `settingsMsgEvent{Key, Code, Icon, NameKey,
+  DescKey, ReservedButtons}`; only the manual family (`m`, 🔨, Admin actions) has events now, `settingsMsgManualEvents`: ban `bn` 🚫
+  (reserved 1, the Unban row), tban `tb` ⏳, kick `kk` 👢, mute `mu` 🔇 (reserved 1, the Unmute row), tmute `tm` 🔕, unban `ub` 🔓, unmute
+  `um` 🔊. A family with no events is not drawn anywhere and no renderer branches on a family's or an event's code. Screens: the hub
+  (`a=op&p=h`: the intro, then for each family a blank line, its icon and bold name and one `settings_main_state_line` per event with
+  its state word; one cell per family, two to a row, then Back to Main and Close, rows `[1] [2]`), a family's list (`a=hl&t=<family>`:
+  its intro, the event lines and `settings_msg_list_hint`; one cell per event, two to a row, then Back to the hub and Close, rows
+  `[2 2 2 1 2]`) and an event's screen (`a=he&k=<code>`: the event's icon and bold name, its description, then the editor's part lines
+  `settings_edit_line_text`, `_media` and `_buttons` with `settingsEditStateWord`, and the no-caption note for a sticker or a video
+  note; Back to the family and Close). An event's state (`settingsMsgStateOf`) is Silent when its Silent switch is on, Custom when it
+  has a text, a media or a button, else Default (no row, or a row with nothing left, reads as the send path reads it); Main reads
+  `settings_state_default` when every event is Default and `settings_state_msg_n` (`{n} custom`) for the n events that are not
+  (`settingsMsgCountChanged`), the unknown mark when the read failed. Every read is `settingsMsgRead` (= `eventmsg.GetFresh`, never the
+  cache), creates nothing and returns its error: a failed read is the cannot-open edit on the hub, a family and an event screen and the
+  unknown mark on Main. `hl` and `he` take exactly `t` and `k`, require the private owner field `c` in their `Validate` (so a group
+  menu's press is an invalid request in step 1, before any `getChatMember`) and a family with events or a known event, and need
+  `settingsRightAdmin`; viewing needs only the live admin check and the owner gate (MSG-08). Each event is one message editor definition
+  registered with `registerSettingsEditDef(settingsMsgEditDef(fam, ev))`: kind `settingsEditEvent`, key `settingsMsgWaitPage(ev)` = `h` +
+  the event code + `g` (`hbng` for the group's ban message, the wait's `p`), the editor codes `hs hr hc hv hf`, `EditRight`
+  `settingsRightChangeInfo` (D-22), the text, media and buttons parts (the Welcome text part stands in until plan 20-08 gives the events
+  their own wait text), `Fields` `{"k": <code>}`, `ReservedButtons` from the table and the hooks `Load` (`settingsMsgLoad(ev)`: the row of
+  `(event, group)`, `TextIsDefault` when there is no text, `Silent` from the row) and `Draw` (`renderSettingsMsgEvent`); `he` redraws
+  through `settingsEditRedraw` of that definition. `settingsMsgDefByFields` resolves a press's `k` to its definition and is false without
+  `c`, so plan 20-08's `settingsEditResolvedActions(…, []string{"k"}, settingsMsgDefByFields)` refuses a group menu's press in step 1. Plan
+  20-07 adds the Silent switch (`hq`), 20-08 Set, Remove and the typed reply, 20-09 the previews. `TestSettingsMessagesOpens`,
+  `TestSettingsMessagesMainState`, `TestSettingsMessagesGroupMenu` and `TestSettingsMessagesStaffGroup` hold it
+  (`settings_messages_test.go`, toolkit `settings_messages_env_test.go`: `newSettingsMsgEnv`, `settingsMsgCleanup`, `settingsMsgSeed`,
+  `settingsMsgOpenPrivate`, `settingsMsgPrivateMenu`).
 - The message editor's pages (`settings_edit.go`, pages `w` Welcome, `g` Goodbye and `r` Rules, orders 50, 60 and 70, each
   registered from that file's `init` through `registerSettingsPage` so `settings_pages.go` is never edited) show which
   parts of a message are set, one line per part from one parts table (`settingsEditPageDef.Parts`): Welcome and Goodbye
@@ -4287,6 +4329,23 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   and its `settings_edit_refuse_too_long_filled` wording without media (so removing the media keeps a long text up to 3800), and counts no `{rules}`
   token of its stored text as a button, because `/rules` adds none (`TestSettingsRulesCaptionParity` holds the Rules and Welcome boundaries
   together for every media kind).
+  Hooked definitions (Phase 20, plan 20-03; first production user the Messages page of plan 20-06, D-25): besides the three built-in
+  pages the editor serves messages another page defines, kind `settingsEditEvent`, registered from that page's `init` with
+  `registerSettingsEditDef` (it panics on an empty key, a built-in page's key, a duplicate and nil hooks, `Load` or `Draw`) into
+  `settingsEditExtraDefs`, which `settingsEditPageByKey` searches after the three pages, so the wait store and the typed-reply door
+  find a definition by its key exactly as they find Welcome. A definition carries `settingsEditHooks`: `Load` (required: the stored
+  message, creating nothing, a read error returned unchanged; it sets `Kind` and `TextIsDefault` = no text, and `settingsEditState.Silent`
+  carries an event's Silent switch), `Draw` (required, pure: the definition's screen, which `settingsEditDraw` uses in place of
+  `renderSettingsEditor`), `Remove` and `Write` (nil makes every Remove or typed reply a failed save), `Preview` (nil makes every preview
+  a failed one) and `PreviewHeaderKey`. `Fields` are extra callback fields every editor action button of the definition carries (Set,
+  Remove, Preview, Full preview and the Cancel of the prompt and of a refusal, never Back, Close or the navigation row;
+  `settingsEditFields`), so one set of action codes edits many messages; `ReservedButtons` counts the buttons the bot adds itself (the
+  Unban row) against Telegram's 100. `settingsEditResolvedActions(codes, fields, resolve)` builds Set, Remove, Cancel, Preview and Full
+  preview of such a page: `resolve` turns a press's fields into the definition it names and is where the page requires its owner field,
+  so a group menu's press is refused in step 1; the built-in pages build their actions through it with a resolve that answers the page
+  itself. A hooked definition's typed reply runs the editor branch of the typed-reply door (no new door): the same `authorize`, the
+  greeting text check, the claim and the definition's `Write`, and the saved page and a refusal come from its hooks
+  (`renderSettingsInputRefusalWith`).
 - The log channel link (`/setlog`, `logchannels.go`) is a two-step proof. Step 1: `/setlog` posted in the channel stores a
   one-hour marker `fuku:setlog:<channel>:<message>` (outside the `fuku:cache:` prefix, `storePendingMarker`) and asks for
   the forward; the post needs no sender, because only a channel administrator can post there. Step 2: that post forwarded
