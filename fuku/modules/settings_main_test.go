@@ -33,9 +33,12 @@ func settingsMainStateLine(text, titleKey string) (string, bool) {
 // private shape ends with the Groups and Close row; the hand-built subtests of
 // TestSettingsMainGrid keep their own literals.
 const (
-	settingsMainShapeGroup   = "s|l / c|f / n|k / b|i / w|g / r|e / x|m / d|t / u|z / o|y / a / close"
-	settingsMainShapePrivate = "s|l / c|f / n|k / b|i / w|g / r|e / x|m / d|t / u|z / o|y / a / groups|close"
-	settingsMainOwnerRows    = 12
+	settingsMainShapeGroup   = "s|l / c|f / n|k / b|i / w|g / r|e / x|m / d|t / u|z / o|y / p / a / close"
+	settingsMainShapePrivate = "s|l / c|f / n|k / b|i / w|g / r|e / x|m / d|t / u|z / o|y / p / a / groups|close"
+	settingsMainOwnerRows    = 13
+	// settingsMainOwnerOnlyRows is the number of owner-only rows (Conversations and Access) an
+	// administrator's Main lacks.
+	settingsMainOwnerOnlyRows = 2
 )
 
 // settingsMainShape writes a Main keyboard as its rows of short names: a page button is its p
@@ -560,7 +563,7 @@ var settingsMainTitleKeys = []string{
 	"settings_page_staff", "settings_page_lockdown", "settings_page_captcha", "settings_page_antiflood",
 	"settings_page_warns", "settings_page_locks", "settings_page_blacklist", "settings_page_filters", "settings_page_welcome", "settings_page_goodbye",
 	"settings_page_rules", "settings_page_notes", "settings_page_reactions", "settings_page_mreq", "settings_page_del", "settings_page_switches",
-	"settings_page_lang", "settings_page_tz", "settings_page_log", "settings_page_anon", "settings_page_access",
+	"settings_page_lang", "settings_page_tz", "settings_page_log", "settings_page_anon", "settings_page_chat", "settings_page_access",
 }
 
 func TestSettingsMainPhase18(t *testing.T) {
@@ -638,15 +641,15 @@ func TestSettingsMainPhase18(t *testing.T) {
 	t.Run("an allowed administrator's Main has nine rows and no Access line", func(t *testing.T) {
 		env := newSettingsDelEnv(t)
 		m := env.groupMenuOf(env.admin)
-		want := strings.TrimSuffix(settingsMainShapeGroup, " / a / close") + " / close"
+		want := strings.TrimSuffix(settingsMainShapeGroup, " / p / a / close") + " / close"
 		if got := settingsMainShape(t, m.mainKeyboard); got != want {
 			t.Errorf("admin Main = %q, want %q", got, want)
 		}
-		if rows := len(m.mainKeyboard); rows != settingsMainOwnerRows-1 {
-			t.Errorf("admin Main has %d rows, want %d", rows, settingsMainOwnerRows-1)
+		if rows := len(m.mainKeyboard); rows != settingsMainOwnerRows-settingsMainOwnerOnlyRows {
+			t.Errorf("admin Main has %d rows, want %d", rows, settingsMainOwnerRows-settingsMainOwnerOnlyRows)
 		}
-		if lines := settingsMainLines(m.mainText); len(lines) != len(settingsMainTitleKeys)-1 {
-			t.Errorf("admin Main has %d state lines, want %d", len(lines), len(settingsMainTitleKeys)-1)
+		if lines := settingsMainLines(m.mainText); len(lines) != len(settingsMainTitleKeys)-settingsMainOwnerOnlyRows {
+			t.Errorf("admin Main has %d state lines, want %d", len(lines), len(settingsMainTitleKeys)-settingsMainOwnerOnlyRows)
 		}
 		if _, ok := settingsMainStateLine(m.mainText, "settings_page_access"); ok {
 			t.Errorf("the admin's Main has an Access line: %q", m.mainText)

@@ -50,6 +50,7 @@ var (
 	deleteRulesPrefix        = CacheKey("delete_rules") + ":"
 
 	staffForwardBlockPrefix = CacheKey("staff_forward_block") + ":"
+	chatConvPrefix          = CacheKey("chat_conv") + ":"
 )
 
 // skipLocal reports whether key must never be served from process memory.
@@ -81,13 +82,18 @@ func skipLocal(key string) bool {
 	// The staff_forward_block key (a Staff Group's forward source list and its action) is read
 	// by the forward watcher on every forward from a listed source: a removed source must stop
 	// acting on every replica at the next message, not after CACHE_LOCAL_TTL seconds.
+	//
+	// The chat_conv key (a group's conversation setting) is read on every message addressed to
+	// the bot: an owner who switches conversations off must stop replies on every replica at the
+	// next message, not after CACHE_LOCAL_TTL seconds.
 	return strings.HasPrefix(key, captchaPendingPrefix) ||
 		strings.HasPrefix(key, staffGroupPrefix) ||
 		strings.HasPrefix(key, staffLinkOfPrefix) ||
 		strings.HasPrefix(key, raidDetectionPrefix) ||
 		strings.HasPrefix(key, memberRequirementsPrefix) ||
 		strings.HasPrefix(key, deleteRulesPrefix) ||
-		strings.HasPrefix(key, staffForwardBlockPrefix)
+		strings.HasPrefix(key, staffForwardBlockPrefix) ||
+		strings.HasPrefix(key, chatConvPrefix)
 }
 
 func localSettings() (ttl, size int) {

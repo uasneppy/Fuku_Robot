@@ -18,6 +18,7 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/db"
 	"github.com/uasneppy/fuku_robot/fuku/db/adminindex"
 	dbcache "github.com/uasneppy/fuku_robot/fuku/db/cache"
+	"github.com/uasneppy/fuku_robot/fuku/db/chatconv"
 	"github.com/uasneppy/fuku_robot/fuku/db/deletion"
 	"github.com/uasneppy/fuku_robot/fuku/db/logchannels"
 	"github.com/uasneppy/fuku_robot/fuku/db/memberreq"
@@ -346,6 +347,18 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 				// private menu), once per language with the worst entry and the longest two notices.
 				for name, screen := range settingsPrivacyPhase19Screens(tr, map[string]settingsView{"group": groupView, "private admin": privateAdminView}) {
 					screens[name] = screen
+				}
+				// The Conversations page (Phase 20): every state, the card and the refusal notices,
+				// drawn for the private menu the page exists in; none may name the Staff Group.
+				for _, on := range []bool{false, true} {
+					for _, provider := range chatProviders {
+						for audience := 0; audience <= 1; audience++ {
+							stored := chatconv.Settings{Enabled: on, Provider: provider, Audience: audience}
+							screens[fmt.Sprintf("conversations %t %s %d", on, provider, audience)] = renderSettingsChat(privateView, stored,
+								settingsNoticeWarn(settingsText(tr, "common_settings_save_failed")))
+						}
+					}
+					screens[fmt.Sprintf("conversations card %t", on)] = renderSettingsChatCard(privateView, chatconv.ProviderGoogle)
 				}
 
 				for name, screen := range screens {

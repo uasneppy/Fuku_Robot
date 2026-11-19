@@ -86,7 +86,7 @@ func TestSettingsPhase19Codes(t *testing.T) {
 			}
 			seen[pg.Key] = true
 		}
-		want := []string{"s", "v", "l", "c", "f", "n", "k", "b", "i", "w", "g", "r", "e", "x", "m", "d", "t", "u", "z", "o", "y", "a"}
+		want := []string{"s", "v", "l", "c", "f", "n", "k", "b", "i", "w", "g", "r", "e", "x", "m", "d", "t", "u", "z", "o", "y", "p", "a"}
 		if got := slices.Sorted(maps.Keys(seen)); !slices.Equal(got, slices.Sorted(slices.Values(want))) {
 			t.Errorf("registered pages = %v, want %v", got, slices.Sorted(slices.Values(want)))
 		}
@@ -370,8 +370,8 @@ func TestSettingsMainPhase19(t *testing.T) {
 		}
 		// An allowed administrator's Main has no Access row: one row fewer than the owner's.
 		admin := env.groupMenuOf(env.admin)
-		if rows := len(admin.mainKeyboard); rows != settingsMainOwnerRows-1 {
-			t.Errorf("the administrator's Main has %d rows, want %d", rows, settingsMainOwnerRows-1)
+		if rows := len(admin.mainKeyboard); rows != settingsMainOwnerRows-settingsMainOwnerOnlyRows {
+			t.Errorf("the administrator's Main has %d rows, want %d", rows, settingsMainOwnerRows-settingsMainOwnerOnlyRows)
 		}
 		if n := calls.Load(); n != 0 {
 			t.Errorf("an administrator's group Main called the lists' seams %d times, want none", n)
