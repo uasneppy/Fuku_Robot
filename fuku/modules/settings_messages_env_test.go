@@ -48,6 +48,7 @@ func settingsMsgCleanup(t *testing.T, chatIDs ...int64) {
 			return
 		}
 		db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.ChatEventMessage{})
+		db.DB.Where("chat_id IN ?", chatIDs).Delete(&models.ChatEventMessageOptions{})
 		for _, id := range chatIDs {
 			dbcache.DeleteCache(eventmsg.CacheKey(id))
 		}

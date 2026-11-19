@@ -50,6 +50,7 @@ func TestMain(m *testing.M) {
 			&models.DeleteRule{},
 			&models.ScheduledDeletion{},
 			&models.ChatEventMessage{},
+			&models.ChatEventMessageOptions{},
 			&models.ChatFilters{},
 			&models.AdminSettings{},
 			&models.BlacklistSettings{},

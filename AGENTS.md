@@ -4743,6 +4743,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   without error, a row with only its key reads every zero default, a second row of the key fails with SQLSTATE 23505;
   PostgreSQL only, it skips locally; `TestChatEventMessagesMigrationStatements` is its database-free half and runs in
   `make test`).
+  The private copies guarantees (Phase 21) are two subtests of `TestEventMessagesUpsert` (`pm default under concurrent
+  writers`: concurrent text, media and buttons writes of one fresh `pm` key leave one row with every part and `silent`
+  true; `options writers never clobber`: concurrent `SetPMDetails` and `SetPMLog` leave one options row with both on) and
+  `TestEventMessageOptionsMigrationDefaults` (`./fuku/db/migrations`: the statement runs twice without error, a row with
+  only its chat reads both options false, `updated_by` 0 and a time, a second row of the chat fails with SQLSTATE 23505
+  naming `pk_chat_event_message_options`; PostgreSQL only, it skips locally;
+  `TestEventMessageOptionsMigrationStatements` is its database-free half and runs in `make test`). `TestEventMessagesPM`
+  (`./fuku/db/eventmsg`, SQLite in `make test`) holds the rest of the storage: `pm` is a destination, `Resolve` with no row
+  reads a private copy off and a group message not silent, a part written alone never switches a copy on, the options are
+  read with the messages under one key that both option writers drop, and a failed options read is an error.
   The pattern is anchored with `$`, so list the real top-level test function names and add the test's package to the
   target. Add a test there when a new guarantee rests on a partial unique index, a `CHECK` or a conditional update.
 - In CI, keep the migration-chain step before `make test-rest`; its `schema_migrations` rows back the checksum test.
@@ -5199,9 +5209,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   after that replica had cached the custom text). The `refused` and `remove` subtests use the real locales because they compare with the
   Ukrainian goldens; the others use the marker locale.
   Hygiene: fresh chat and user IDs (`uniqueModuleChatID`, `uniqueLinkOwnerID`, or the settings environment's), `eventMsgCleanup` or
-  `settingsMsgCleanup` for the rows and the `event_messages` key, every swapped seam (`settingsMsgRead`, `eventMsgWrites`,
-  `eventMessagesLookup`) restored through `mreqSwap`, no `t.Skip`, and light tests: the language sweeps run over pure renders, a dispatcher
-  test uses one environment and the worst state.
+  `settingsMsgCleanup` for the rows (the `chat_event_message_options` row included, since Phase 21) and the `event_messages` key, every
+  swapped seam (`settingsMsgRead`, `eventMsgWrites`, `eventMessagesLookup`) restored through `mreqSwap`, no `t.Skip`, and light tests: the
+  language sweeps run over pure renders, a dispatcher test uses one environment and the worst state.
 
 ## Commits
 

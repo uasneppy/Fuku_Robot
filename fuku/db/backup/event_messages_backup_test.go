@@ -9,14 +9,17 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
+	"github.com/uasneppy/fuku_robot/fuku/db/cache"
 	"github.com/uasneppy/fuku_robot/fuku/db/chats"
 	"github.com/uasneppy/fuku_robot/fuku/db/eventmsg"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 )
 
-// TestEventMessagesStayOutOfBackup proves D-07: a group's custom event messages are not a backup
-// module, so an export carries none of them, an import writes none into the destination chat and
-// a reset leaves the source chat's rows alone. A later phase adds them to backups on purpose.
+// TestEventMessagesStayOutOfBackup proves D-07 of Phase 20 and D-10 of Phase 21: a group's custom
+// event messages, their private copies (dest pm) and the group's private copy options are not a
+// backup module, so an export carries none of them, an import writes none into the destination
+// chat and a reset leaves the source chat's rows alone. A later phase adds them to backups on
+// purpose.
 func TestEventMessagesStayOutOfBackup(t *testing.T) {
 	skipIfNoDb(t)
 
@@ -29,12 +32,19 @@ func TestEventMessagesStayOutOfBackup(t *testing.T) {
 		cleanupBackupChat(t, srcChat)
 		cleanupBackupChat(t, dstChat)
 		require.NoError(t, db.DB.Where("chat_id IN ?", []int64{srcChat, dstChat}).Delete(&models.ChatEventMessage{}).Error)
+		require.NoError(t, db.DB.Where("chat_id IN ?", []int64{srcChat, dstChat}).Delete(&models.ChatEventMessageOptions{}).Error)
+		cache.DeleteCache(eventmsg.CacheKey(srcChat))
+		cache.DeleteCache(eventmsg.CacheKey(dstChat))
 	})
 
 	require.NoError(t, eventmsg.SetText(ctx, srcChat, eventmsg.EventBan, eventmsg.DestGroup, "CUSTOM-EVENT-TEXT", 42))
 	require.NoError(t, eventmsg.SetMedia(ctx, srcChat, eventmsg.EventBan, eventmsg.DestGroup, "CUSTOM-FILE-ID", 2, 42))
 	require.NoError(t, eventmsg.SetButtons(ctx, srcChat, eventmsg.EventBan, eventmsg.DestGroup,
 		[]models.Button{{Name: "CUSTOM-BUTTON", Url: "https://example.org/custom"}}, 42))
+	require.NoError(t, eventmsg.SetText(ctx, srcChat, eventmsg.EventBan, eventmsg.DestPM, "CUSTOM-PM-TEXT", 42))
+	require.NoError(t, eventmsg.SetSilent(ctx, srcChat, eventmsg.EventBan, eventmsg.DestPM, false, 42))
+	require.NoError(t, eventmsg.SetPMDetails(ctx, srcChat, true, 42))
+	require.NoError(t, eventmsg.SetPMLog(ctx, srcChat, true, 42))
 
 	countRows := func(chatID int64) int64 {
 		t.Helper()
@@ -42,7 +52,14 @@ func TestEventMessagesStayOutOfBackup(t *testing.T) {
 		require.NoError(t, db.DB.Model(&models.ChatEventMessage{}).Where("chat_id = ?", chatID).Count(&n).Error)
 		return n
 	}
-	require.EqualValues(t, 1, countRows(srcChat))
+	countOptions := func(chatID int64) int64 {
+		t.Helper()
+		var n int64
+		require.NoError(t, db.DB.Model(&models.ChatEventMessageOptions{}).Where("chat_id = ?", chatID).Count(&n).Error)
+		return n
+	}
+	require.EqualValues(t, 2, countRows(srcChat))
+	require.EqualValues(t, 1, countOptions(srcChat))
 
 	exported, err := ExportChatData(srcChat, "source", 42, nil)
 	require.NoError(t, err)
@@ -50,7 +67,7 @@ func TestEventMessagesStayOutOfBackup(t *testing.T) {
 	for module := range exported.Data {
 		assert.True(t, IsValidModule(module), "export holds only backup modules, got %q", module)
 	}
-	for _, name := range []string{"chat_event_messages", "event_messages"} {
+	for _, name := range []string{"chat_event_messages", "event_messages", "chat_event_message_options", "event_message_options"} {
 		_, err = ExportChatData(srcChat, "source", 42, []string{name})
 		assert.Error(t, err, "%s is not a backup module", name)
 		_, named := exported.Data[name]
@@ -59,16 +76,19 @@ func TestEventMessagesStayOutOfBackup(t *testing.T) {
 
 	raw, err := exported.ToJSON()
 	require.NoError(t, err)
-	for _, needle := range []string{"chat_event_messages", "CUSTOM-EVENT-TEXT", "CUSTOM-FILE-ID", "CUSTOM-BUTTON"} {
+	for _, needle := range []string{"chat_event_messages", "CUSTOM-EVENT-TEXT", "CUSTOM-FILE-ID", "CUSTOM-BUTTON",
+		"CUSTOM-PM-TEXT", "chat_event_message_options", "pm_details", "pm_log"} {
 		assert.NotContains(t, string(raw), needle, "the export file carries no event message (%s)", needle)
 	}
 	decoded, err := BackupFormatFromJSON(raw)
 	require.NoError(t, err)
 	require.NoError(t, ImportChatData(dstChat, decoded, nil))
-	assert.Zero(t, countRows(dstChat), "an import creates no chat_event_messages row")
+	assert.Zero(t, countRows(dstChat), "an import creates no chat_event_messages row, pm rows included")
+	assert.Zero(t, countOptions(dstChat), "an import creates no chat_event_message_options row")
 
 	require.NoError(t, ClearChatData(srcChat, nil))
-	assert.EqualValues(t, 1, countRows(srcChat), "a reset leaves the event messages in place")
+	assert.EqualValues(t, 2, countRows(srcChat), "a reset leaves the event messages in place, the pm row included")
+	assert.EqualValues(t, 1, countOptions(srcChat), "a reset leaves the options row in place")
 	kept, err := eventmsg.GetFresh(ctx, srcChat)
 	require.NoError(t, err)
 	msg, ok := kept.Lookup(eventmsg.EventBan, eventmsg.DestGroup)
@@ -76,4 +96,9 @@ func TestEventMessagesStayOutOfBackup(t *testing.T) {
 	assert.Equal(t, "CUSTOM-EVENT-TEXT", msg.Text, "a reset leaves the text as it was")
 	assert.Equal(t, "CUSTOM-FILE-ID", msg.FileID, "a reset leaves the media as it was")
 	assert.Len(t, msg.Buttons, 1, "a reset leaves the buttons as they were")
+	pm, ok := kept.Lookup(eventmsg.EventBan, eventmsg.DestPM)
+	require.True(t, ok)
+	assert.Equal(t, "CUSTOM-PM-TEXT", pm.Text, "a reset leaves the private copy's text as it was")
+	assert.False(t, pm.Silent, "a reset leaves the private copy's switch as it was")
+	assert.Equal(t, eventmsg.Options{PMDetails: true, PMLog: true}, kept.Options, "a reset leaves the options as they were")
 }
