@@ -1,0 +1,38 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-11-19T05:32:34Z",
+  "phase": "21",
+  "phase_name": "PM Copies",
+  "phase_dir": ".planning/phases/21-pm-copies",
+  "plan": 6,
+  "task": 2,
+  "total_tasks": 3,
+  "status": "paused",
+  "completed_tasks": [
+    {"id": 1, "name": "Details record, paced edit and pmcopy_ deep link", "status": "done", "commit": "4cf6afb"},
+    {"id": 2, "name": "Hub private copies block and Details toggle (ho)", "status": "in_progress", "commit": "fabf813", "progress": "production code, strings in 8 languages and widened row/byte expectations are committed; the three new tests and the task's AGENTS.md text are not written"}
+  ],
+  "remaining_tasks": [
+    {"id": 2, "name": "settings_messages_pm_options_test.go (TestSettingsMessagesPMOptions, TestSettingsDriftMessagesPMOptions, TestSettingsAuthorityMessagesPMOptions) and AGENTS.md text for ho and the hub block", "status": "in_progress"},
+    {"id": 3, "name": "Final checks (both golangci-lint runs, check-translations, check-docs, unchanged-files check, TestSettingsMain.* and TestMessagesEndToEnd) and 21-06-SUMMARY.md", "status": "not_started"}
+  ],
+  "remaining_plans": ["21-07", "21-08", "21-09"],
+  "blockers": [
+    {"description": "Phase 20 cannot be marked complete in STATE/ROADMAP until the owner does the six live Telegram checks listed in 20-VERIFICATION.md", "type": "human_action", "workaround": "Phase 21 proceeds without it; do not bypass the gate"}
+  ],
+  "async_jobs": [],
+  "human_actions_pending": [
+    {"action": "Do the six live Telegram checks of Phase 20 (20-VERIFICATION.md)", "context": "The verifier found no gaps; only live behaviour is unchecked", "blocking": false},
+    {"action": "Say whether the co-author trailer should be made uniform across the branch", "context": "Commits from plan 20-08 on carry the executors' own line; unifying needs a history rewrite and force-push", "blocking": false},
+    {"action": "Confirm or change the Phase 21 defaults (group language for the copy, copies for unban/unmute, copy sent when the group message is Silent, 48 h Details, cap 10 per group per minute for automatic events)", "context": "Planner defaults reported to the owner; none objected to yet", "blocking": false}
+  ],
+  "decisions": [
+    {"decision": "Everything is set group by group in the bot's private chat; no Staff Group defaults or inheritance", "rationale": "Owner decision", "phase": "all"},
+    {"decision": "Private copy on/off is the pm row's silent column with a destination-dependent default (off)", "rationale": "No new column; storing a part never turns a copy on", "phase": "21"},
+    {"decision": "No new shutdown drain for private copies", "rationale": "Best effort; a restart cuts off copies in flight, like the federation fan-out", "phase": "21"},
+    {"decision": "Phase 20 not marked complete by bypass", "rationale": "The workflow requires human verification; the gate was left in place", "phase": "20"}
+  ],
+  "uncommitted_files": [],
+  "next_action": "Spawn an Opus gsd-executor to finish plan 21-06 from commit fabf813 using the remaining-work list in .planning/phases/21-pm-copies/.continue-here.md, push, then run plans 21-07, 21-08 and 21-09 one at a time.",
+  "context_notes": "21-06 executor deviations to record in its SUMMARY: pmCopyAddDetails takes the copy actually attempted as a third argument; the Details label is translated in the handler (DetailsLabel on the offer), not by the job; eventMsgOptionsResult carries the fresh Messages; TestEventMsgLocaleKeys gained an exception list for keys that do not name the group; 'no username' is tested through the variable pmCopyBotUsername. Test helpers: eventPMDetailsTokens, eventPMDetailsRecord, eventPMDetailsTokenOf (event_message_pm_env_test.go), eventPMDetailsOn, eventPMDetailsEdits, eventPMKeyboardRows (event_message_pm_details_test.go). Read chat_id from raw recorded parameters, not after a JSON round trip. For 21-07: hook the log line beside the Details call at the end of runEventPM; the log option is row 'l' in settingsMsgPMOptions via a new applyEventPMLog; hub becomes [1 1 1 2]; add the log line to settings_msg_hint_pm_options and settings_msg_hint_pm. Orchestration: project-local gsd-tools is broken, use /root/.claude/gsd-core/bin/gsd-tools.cjs; lint with a go-installed golangci-lint v2.13.1 using --new-from-rev=9940d97; judge CI only on the branch head because a push cancels the previous run."
+}
