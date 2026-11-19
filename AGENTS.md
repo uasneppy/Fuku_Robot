@@ -1601,7 +1601,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   writes nothing) and `TestSettingsAuthorityMessagesSilent` (with and without `can_change_info`, a demotion between two presses, a plain
   member, an administrator the owner gate refuses and the live creator) stand in for a parity test (D-23). The other tests are in
   `settings_messages_test.go`, on the toolkit `settings_messages_env_test.go` (`newSettingsMsgEnv`, `settingsMsgCleanup`, `settingsMsgSeed`,
-  `settingsMsgOpenPrivate`, `settingsMsgPrivateMenu`).
+  `settingsMsgOpenPrivate`, `settingsMsgPrivateMenu`). The page's limits are measured (plan 20-10, D-23): at a 14-character chat ID the hub's
+  family cell and the family list's Back are 37 bytes, an event cell 38, Set, Remove, Preview, Cancel and Silent 42, Full preview 38, Back to
+  Main and Close 33, Main's cell 37 private and 33 group, with no field outside `a c u p t k v` (`TestSettingsMessagesCallbackBytes`); every
+  screen fits 3800 UTF-16 units in 8 languages with a 64-rune title, cells 20 code points, in the rows hub `[1 2]`, family list
+  `[2 2 2 1 2]`, event screen `[1 1 1 1 1 2]` empty and `[2 2 2 2 2 1 2]` full, group note `[1 2]` (`[2]` without a bot username)
+  (`TestSettingsMessagesPageFitsEveryLocale`, over `settingsMsgScreens` in `settings_messages_screens_test.go`); every forged press of the
+  eight codes is refused in step 1, no draw creates a row or a cache key, a draw costs the pipeline's calls and one read, and no log line
+  carries content (`TestSettingsMessagesForged`, `TestSettingsMessagesReadsCreateNothing`, `TestSettingsMessagesCost`,
+  `TestSettingsMessagesLogsCarryIDsOnly`, `settings_messages_safety_test.go`). A refused preview's 403 logs nothing (the presser never
+  started the bot); any other refused preview logs the user and chat with Telegram's error only.
 - The message editor's pages (`settings_edit.go`, pages `w` Welcome, `g` Goodbye and `r` Rules, orders 50, 60 and 70, each
   registered from that file's `init` through `registerSettingsPage` so `settings_pages.go` is never edited) show which
   parts of a message are set, one line per part from one parts table (`settingsEditPageDef.Parts`): Welcome and Goodbye
@@ -5134,6 +5143,24 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   codes and the sixth part, the rights tables of `TestSettingsRightBotHalves` and `TestSettingsRightRefusalForParity` gain the tenth right,
   `TestSettingsMainGrid`'s end-to-end subtest leaves out a page whose `Hidden` says so for its chat, and `TestSettingsPhase18InStaffGroup` counts
   nineteen state lines for a Staff Group (Deletion hidden, Blocked sources shown).
+- Phase 20 test families (the event messages: the send path, the editor's hooked definitions and the Messages page `h`). The golden
+  `TestLegacyModerationRequests` (`moderation_legacy_request_test.go`, toolkit `newModerationGoldenSite` and `moderationTargetClient`) was
+  recorded alone before any send site changed and is never re-recorded. The engine's `TestEventMessage*` (`TestEventMessageBanEndToEnd`,
+  `TestRenderEventText`, `TestEventMessageCompose`, `TestEventMessageFallback`, `TestEventMessageAnonymousAdmin`,
+  `TestEventMessageLogsCarryIDsOnly`, `TestEventMessageSites`, `TestEventMessageAfterAnonymousProof`, `TestEventMessageSilentVariants`) are in
+  `event_message_test.go` and `event_message_sites_test.go` on the toolkit `event_message_env_test.go`. The editor's hooked definitions have
+  `TestSettingsEditResolvedDefs` and `TestSettingsEditReservedButtons` (`settings_edit_resolved_test.go`, on the test page `qt` with codes
+  `qs qr qc qv qf`). The page has `TestSettingsMessages*` (opens, Main state, group menu, Staff Group, Set, Remove, typed, Silent, previews,
+  and plan 20-10's safeguards `TestSettingsMessagesCallbackBytes`, `TestSettingsMessagesPageFitsEveryLocale`, `TestSettingsMessagesForged`,
+  `TestSettingsMessagesReadsCreateNothing`, `TestSettingsMessagesCost`, `TestSettingsMessagesLogsCarryIDsOnly`), and, because nothing on it
+  has a command, `TestSettingsDriftMessages*` and `TestSettingsAuthorityMessages*` stand in for parity tests (toolkit
+  `settings_messages_env_test.go`); `TestSettingsStaffPrivacy` renders every Messages screen in 8 languages through
+  `settingsPrivacyPhase20Screens`. The repository has `TestEventMessages` and `TestEventMessagesUpsert` (`fuku/db/eventmsg`), the migration
+  `TestChatEventMessagesMigrationStatements` and `TestChatEventMessagesMigrationDefaults`, and backup `TestEventMessagesStayOutOfBackup`.
+  Hygiene: fresh chat and user IDs (`uniqueModuleChatID`, `uniqueLinkOwnerID`, or the settings environment's), `eventMsgCleanup` or
+  `settingsMsgCleanup` for the rows and the `event_messages` key, every swapped seam (`settingsMsgRead`, `eventMsgWrites`,
+  `eventMessagesLookup`) restored through `mreqSwap`, no `t.Skip`, and light tests: the language sweeps run over pure renders, a dispatcher
+  test uses one environment and the worst state.
 
 ## Commits
 
