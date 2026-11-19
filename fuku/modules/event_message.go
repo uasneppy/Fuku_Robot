@@ -2,11 +2,13 @@ package modules
 
 import (
 	"context"
+	"errors"
 	"html"
 	"strings"
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
+	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
@@ -14,6 +16,7 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/db/eventmsg"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
 	"github.com/uasneppy/fuku_robot/fuku/utils/formatting"
+	"github.com/uasneppy/fuku_robot/fuku/utils/keyboard"
 	"github.com/uasneppy/fuku_robot/fuku/utils/media"
 )
 
@@ -99,12 +102,48 @@ func eventPlaceholderValues(tr *i18n.Translator, chatID int64, actor eventActor,
 	return values
 }
 
-// eventAdminName is the escaped full name of the acting admin.
-func eventAdminName(_ *i18n.Translator, actor eventActor) string {
-	if actor.User == nil {
-		return ""
+// eventAdminName is the escaped full name of the acting admin, or the translated "an admin"
+// (eventmsg_admin_anon, the translator's language: the group's) for an anonymous admin or an actor
+// the reply cannot name. It never names the Staff Group (D-12).
+func eventAdminName(tr *i18n.Translator, actor eventActor) string {
+	if actor.Anonymous || actor.User == nil {
+		word, _ := tr.GetString("eventmsg_admin_anon")
+		return html.EscapeString(word)
 	}
 	return html.EscapeString(formatting.GetFullName(actor.User.FirstName, actor.User.LastName))
+}
+
+// eventAnonActorKey is the ctx.Data key that marks the command's issuer as an anonymous admin. The
+// anonymous admin's proof tap re-enters the command with the tapper as the sender, so the mark is
+// carried from the original update to the reply in the update's data.
+const eventAnonActorKey = "event_message_anonymous_actor"
+
+// markAnonymousActor marks the update's issuer as an anonymous admin, so the event reply reads
+// {admin} as "an admin" although the re-entered command's sender is the tapper.
+//
+//nolint:unused // first production caller arrives in plan 20-05 (the anonymous admin's proof tap)
+func markAnonymousActor(ctx *ext.Context) {
+	if ctx == nil {
+		return
+	}
+	if ctx.Data == nil {
+		ctx.Data = make(map[string]any)
+	}
+	ctx.Data[eventAnonActorKey] = true
+}
+
+// actorIsAnonymous reports whether the command's issuer is an anonymous admin: the update carries
+// the proof tap's mark, or the sender is the group itself (an anonymous admin in a group whose
+// AnonAdmin mode lets the command run at once, where the moderation context's user is the Group
+// Anonymous Bot).
+func actorIsAnonymous(ctx *ext.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	if marked, _ := ctx.Data[eventAnonActorKey].(bool); marked {
+		return true
+	}
+	return ctx.EffectiveSender != nil && ctx.EffectiveSender.IsAnonymousAdmin()
 }
 
 // renderEventText fills a stored text for one reply. Each event placeholder is first turned into
@@ -141,19 +180,39 @@ func eventBotRows(opts *gotgbot.SendMessageOpts) [][]gotgbot.InlineKeyboardButto
 	return nil
 }
 
-// composeEventMessage builds the custom message of one reply from the stored row: the filled custom
-// text and the bot's own rows. The caller sets the reply target and the topic.
+// composeEventMessage builds the custom message of one reply from the stored row. With a custom text
+// the text is filled (renderEventText, which also adds the {rules} button) and followed by r.Note on
+// a new line; with none the text is r.Default, the default reply's own text with its reason line (and
+// its note, which the site already appended). The media is the row's file and type (text when there
+// is no file). The keyboard is the bot's own rows (the Unban row of a ban) followed by the custom and
+// rules buttons; with neither there is no keyboard. The caller sets the reply target and the topic.
 func composeEventMessage(b *gotgbot.Bot, chat *gotgbot.Chat, tr *i18n.Translator, r eventReply, row eventmsg.Message, actor eventActor) media.GreetingMessage {
 	text := r.Default
+	buttons := row.Buttons
 	if row.Text != "" {
 		target := r.Target
-		text, _ = renderEventText(b, chat, &target, row.Text, nil, eventPlaceholderValues(tr, chat.Id, actor, r.Values))
+		text, buttons = renderEventText(b, chat, &target, row.Text, row.Buttons, eventPlaceholderValues(tr, chat.Id, actor, r.Values))
+		if r.Note != "" {
+			text += "\n" + r.Note
+		}
 	}
-	msg := media.GreetingMessage{Text: text, MsgType: db.TEXT}
-	if rows := eventBotRows(r.Opts); len(rows) > 0 {
+	msg := media.GreetingMessage{Text: text, FileID: row.FileID, MsgType: row.MediaType}
+	if row.FileID == "" || row.MediaType == 0 {
+		msg.FileID, msg.MsgType = "", db.TEXT
+	}
+	// A fresh slice: the default's options are reused by the refusal fallback and must not change.
+	rows := append(append([][]gotgbot.InlineKeyboardButton(nil), eventBotRows(r.Opts)...), keyboard.BuildKeyboard(buttons)...)
+	if len(rows) > 0 {
 		msg.Keyboard = &gotgbot.InlineKeyboardMarkup{InlineKeyboard: rows}
 	}
 	return msg
+}
+
+// eventMessageRefused reports whether Telegram definitely refused a custom message: a 4xx other than
+// 429, or the media sender's ErrNoPermission (it turns a permission refusal into that error). The
+// default reply is then sent once (D-13). A 429, a 5xx or a transport error is not a refusal.
+func eventMessageRefused(err error) bool {
+	return isTelegramClientError(err) || errors.Is(err, media.ErrNoPermission)
 }
 
 // eventTargetOf is the punished member as a user, from the getChat answer a send site already read.
@@ -168,7 +227,9 @@ func eventTargetOf(info *gotgbot.ChatFullInfo) gotgbot.User {
 // It reads the group's stored messages once (bounded by eventMessageReadTimeout): a read error is
 // one Warn and the default; no row, or a row with no content and Silent off, is the default through
 // replySuccess (today's call); Silent posts and schedules nothing; otherwise the custom message is
-// sent as a reply to the command and queued under bot:punish_manual, the default's kind (D-15).
+// sent as a reply to the command and queued under bot:punish_manual, the default's kind (D-15). A
+// custom message Telegram definitely refuses (eventMessageRefused) is replaced by the default, sent
+// once; any other send error is returned, as the default's send error always was.
 func (c *moderationCtx) replyEvent(r eventReply) error {
 	readCtx, cancel := context.WithTimeout(context.Background(), eventMessageReadTimeout)
 	msgs, err := eventMessagesLookup(readCtx, c.Chat.Id)
@@ -186,13 +247,18 @@ func (c *moderationCtx) replyEvent(r eventReply) error {
 		return c.replySuccess(r.Default, r.Opts)
 	}
 
-	msg := composeEventMessage(c.Bot, c.Chat, c.Tr, r, row, eventActor{User: c.User})
+	actor := eventActor{User: c.User, Anonymous: actorIsAnonymous(c.Ctx)}
+	msg := composeEventMessage(c.Bot, c.Chat, c.Tr, r, row, actor)
 	msg.ReplyMsgID = c.Msg.MessageId
 	if c.Msg.IsTopicMessage {
 		msg.ThreadID = c.Msg.MessageThreadId
 	}
 	sent, err := media.SendGreetingMessage(c.Bot, c.Chat.Id, msg)
 	if err != nil {
+		if eventMessageRefused(err) {
+			log.Warnf("[EventMessage] the custom %s message of chat %d was refused, the default was sent", r.Event, c.Chat.Id)
+			return c.replySuccess(r.Default, r.Opts)
+		}
 		return err
 	}
 	scheduleBotMessage(sent, deletion.KindBotManual)
