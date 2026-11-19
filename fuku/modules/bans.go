@@ -13,6 +13,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/uasneppy/fuku_robot/fuku/db/chats"
+	"github.com/uasneppy/fuku_robot/fuku/db/eventmsg"
 	"github.com/uasneppy/fuku_robot/fuku/db/lang"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
 	"github.com/uasneppy/fuku_robot/fuku/utils/chat_status"
@@ -126,6 +127,33 @@ func moderationTban(m *moduleStruct) *moderationCommand {
 	}
 }
 
+// banDefaultReply is the ban event's default reply (an eventDefaultReply): the text and the Unban
+// keyboard /ban and /dban sent before Phase 20, byte for byte (TestLegacyModerationRequests).
+func banDefaultReply(tr *i18n.Translator, in eventDefaultInput) (string, *gotgbot.SendMessageOpts) {
+	prefix := strings.ToLower(bansModule.moduleName)
+	baseStr, _ := tr.GetString(prefix + "_ban_normal_ban")
+	text := fmt.Sprintf(baseStr, formatting.MentionHtml(in.Target.Id, in.Target.FirstName)) +
+		moderationReasonLine(tr, prefix+"_ban_ban_reason", in.Reason)
+	return text, &gotgbot.SendMessageOpts{
+		ParseMode: formatting.HTML,
+		ReplyMarkup: gotgbot.InlineKeyboardMarkup{
+			InlineKeyboard: [][]gotgbot.InlineKeyboardButton{
+				{
+					{
+						Text:         trS(tr, "bans_unban_button"),
+						CallbackData: encodeCallbackData("unrestrict", map[string]string{"a": "unban", "u": fmt.Sprint(in.Target.Id)}),
+					},
+				},
+			},
+		},
+	}
+}
+
+// banDefaultReply is held to the eventDefaultReply shape at compile time.
+var _ eventDefaultReply = banDefaultReply
+
+// banReplyWithButton is the success reply of /ban and /dban, the ban event: the default reply built
+// by banDefaultReply, or the group's stored ban message, through replyEvent after the ban (D-03).
 func banReplyWithButton(c *moderationCtx, t *target) error {
 	banUser, err := c.Bot.GetChat(t.userID, nil)
 	if err != nil {
@@ -133,26 +161,9 @@ func banReplyWithButton(c *moderationCtx, t *target) error {
 		return err
 	}
 
-	prefix := strings.ToLower(c.Module.moduleName)
-	baseStr, _ := c.Tr.GetString(prefix + "_ban_normal_ban")
-	text := fmt.Sprintf(baseStr, formatting.MentionHtml(banUser.Id, banUser.FirstName)) +
-		moderationReasonSuffix(c, prefix+"_ban_ban_reason", t.reason)
-
-	err = c.replySuccess(text,
-		&gotgbot.SendMessageOpts{
-			ParseMode: formatting.HTML,
-			ReplyMarkup: gotgbot.InlineKeyboardMarkup{
-				InlineKeyboard: [][]gotgbot.InlineKeyboardButton{
-					{
-						{
-							Text:         trS(c.Tr, "bans_unban_button"),
-							CallbackData: encodeCallbackData("unrestrict", map[string]string{"a": "unban", "u": fmt.Sprint(t.userID)}),
-						},
-					},
-				},
-			},
-		},
-	)
+	member := eventTargetOf(banUser)
+	text, opts := banDefaultReply(c.Tr, eventDefaultInput{Target: member, Reason: t.reason, TimeVal: t.timeVal})
+	err = c.replyEvent(eventReply{Event: eventmsg.EventBan, Target: member, Values: eventValues{Reason: t.reason}, Default: text, Opts: opts})
 	if err != nil {
 		log.Error(err)
 		return err

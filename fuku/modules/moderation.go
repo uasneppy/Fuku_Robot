@@ -35,10 +35,17 @@ type moderationCtx struct {
 // part of a format string, so a '%' in it is printed as typed and a '<' cannot make
 // Telegram reject the reply after the punishment already happened.
 func moderationReasonSuffix(c *moderationCtx, key, reason string) string {
+	return moderationReasonLine(c.Tr, key, reason)
+}
+
+// moderationReasonLine is moderationReasonSuffix for a translator alone, so a default reply
+// builder (an eventDefaultReply) can render the reason line without a moderation context. The
+// output is exactly moderationReasonSuffix's.
+func moderationReasonLine(tr *i18n.Translator, key, reason string) string {
 	if reason == "" {
 		return ""
 	}
-	temp, _ := c.Tr.GetString(key)
+	temp, _ := tr.GetString(key)
 	if temp == "" {
 		return ""
 	}
@@ -118,6 +125,7 @@ type target struct {
 	reason    string
 	timeVal   string // used by time-based commands (e.g., tban)
 	isChannel bool   // true if original target was a channel ID
+	untilDate int64  // the Telegram until_date a time-based command computed; 0 for a permanent one
 }
 
 // extractFromArgs resolves the target from command arguments using ExtractUserAndText.
@@ -457,6 +465,7 @@ func extractTemporalTarget(c *moderationCtx, t *target) int64 {
 	}
 	t.timeVal = timeVal
 	t.reason = reason
+	t.untilDate = _time
 	return _time
 }
 
