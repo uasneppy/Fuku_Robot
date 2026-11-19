@@ -35,7 +35,7 @@ const (
 	DefaultThinkingLevel = "low"
 
 	maxResponseBytes = 1 << 20
-	apiKeyHeader     = "x-goog-api-key"
+	authHeaderName     = "x-goog-api-key"
 
 	// retryWait is the wait before the one retry when the server names none.
 	retryWait = 500 * time.Millisecond
@@ -176,7 +176,7 @@ func (c *Client) send(ctx context.Context, target string, payload []byte) ([]byt
 	if err != nil {
 		return nil, errors.New("gemini: build request")
 	}
-	req.Header.Set(apiKeyHeader, c.APIKey)
+	req.Header.Set(authHeaderName, c.APIKey)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient().Do(req)
