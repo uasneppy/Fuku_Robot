@@ -5,6 +5,7 @@ package modules
 import (
 	"context"
 	"errors"
+	"fmt"
 	"maps"
 	"strconv"
 	"strings"
@@ -280,6 +281,291 @@ func TestSettingsMessagesPMSwitch(t *testing.T) {
 		}
 		if row, _ := settingsMsgStoredPM(t, env.chat.Id, eventmsg.EventBan); !row.Silent {
 			t.Error("the failed press turned the copy on")
+		}
+	})
+}
+
+// settingsMsgSetPMWait opens the private copy screen of the event code in a fresh private menu of user and presses
+// Set of part; the menu message is then the waiting prompt, returned with the menu.
+func settingsMsgSetPMWait(t *testing.T, env *settingsMsgEnv, user gotgbot.User, code, part string) (*settingsMsgMenu, string, [][]gotgbot.InlineKeyboardButton) {
+	t.Helper()
+	m := settingsMsgPrivateMenu(env, env.chat, user)
+	_, keyboard := settingsMsgOpenPM(t, m, code)
+	text, prompt := m.pressButton(settingsMsgPartButton(t, keyboard, settingsActMsgSet, part))
+	if !env.redis.Exists(settingsInputKey(user.Id)) {
+		t.Fatalf("Set of the %s private copy's %s left user %d with no wait", code, part, user.Id)
+	}
+	return m, text, prompt
+}
+
+func TestSettingsMessagesPMTyped(t *testing.T) {
+	env := newSettingsMsgEnv(t)
+	listEditAdmin(env.settingsEnv, env.chat, env.admin, true)
+	user := env.admin
+	group := strconv.FormatInt(env.chat.Id, 10)
+	settingsMsgSeed(t, env.chat.Id, eventmsg.EventBan, "Group text", false)
+	groupRow, _ := settingsMsgStored(t, env.chat.Id, eventmsg.EventBan)
+
+	t.Run("a typed text is stored on the pm row and the copy stays off", func(t *testing.T) {
+		m, prompt, keyboard := settingsMsgSetPMWait(t, env, user, "bn", settingsEditPartText)
+		if wait := settingsEditWaitOf(env.settingsEnv, user); wait["p"] != "hbnp" || wait["t"] != settingsEditPartText || wait["c"] != group {
+			t.Fatalf("wait = %v, want the group, page hbnp and part x", wait)
+		}
+		if !containsMarker(prompt, "settings_msg_pm_title") || !containsMarker(prompt, "settings_msg_wait_text_manual") ||
+			!settingsEditPromptHas(prompt, settingsEditTextMax) {
+			t.Errorf("the prompt %q lacks the private copy's title, the family's prompt or the limit %d", prompt, settingsEditTextMax)
+		}
+		cancel := settingsButtonFields(t, keyboard[0][0])
+		if cancel["a"] != settingsActMsgCancel || cancel[settingsMsgEventField] != "bn" || cancel[settingsMsgDestField] != settingsMsgDestPMCode {
+			t.Errorf("the prompt's Cancel carries %v, want a=hc, k=bn and d=p", cancel)
+		}
+		before := settingsEditSentCount(env.settingsEnv, user)
+		sendPrivateMessage(env.settingsEnv, user, gotgbot.Message{
+			Text: "{first}, {reason}", Entities: []gotgbot.MessageEntity{{Type: "bold", Offset: 0, Length: 7}},
+		})
+		const want = "<b>{first}</b>, {reason}"
+		if row, _ := settingsMsgStoredPM(t, env.chat.Id, eventmsg.EventBan); row.Text != want || !row.Silent || row.UpdatedBy != user.Id {
+			t.Errorf("the pm row is %+v, want the text %q, the copy still off, written by %d", row, want, user.Id)
+		}
+		settingsEditWantReply(t, env.settingsEnv, user, before, "settings_edit_saved_text", "settings_msg_pm_title", "settings_msg_pm_intro")
+		page, pageKeyboard := settingsMsgLastSent(t, env, user)
+		if line := staffMarker("settings_edit_line_text") + " " + staffMarker("settings_edit_state_text_len"); !strings.Contains(page, line) {
+			t.Errorf("the saved page %q does not read the text as Set", page)
+		}
+		if !strings.Contains(page, settingsMsgPMLine(false)) {
+			t.Errorf("the saved page %q does not read the copy Off", page)
+		}
+		if _, ok := settingsMsgButtonWith(t, pageKeyboard, "a", settingsActMsgRemove, "t", settingsEditPartText, settingsMsgDestField, settingsMsgDestPMCode); !ok {
+			t.Errorf("the saved page does not offer Remove for the private copy's text: %+v", pageKeyboard)
+		}
+		if closed, _ := env.lastEdit(user.Id, m.msgID); !containsMarker(closed, "settings_edit_prompt_closed") {
+			t.Errorf("the prompt was edited to %q, want the closed line", closed)
+		}
+		settingsEditWaitGone(t, env.settingsEnv, user)
+		if pm := settingsMsgSendPathPM(t, env.chat.Id, eventmsg.EventBan); pm.Text != want || !pm.Silent {
+			t.Errorf("the send path reads the private copy %+v, want the text and the copy off", pm)
+		}
+	})
+
+	t.Run("a typed photo and typed buttons are stored on the pm row", func(t *testing.T) {
+		settingsMsgSetPMWait(t, env, user, "bn", settingsEditPartMedia)
+		sendPrivateMessage(env.settingsEnv, user, settingsMediaItemID("photo", "pm-photo"))
+		settingsMsgSetPMWait(t, env, user, "bn", settingsEditPartButtons)
+		sendPrivateMessage(env.settingsEnv, user, gotgbot.Message{Text: "[Rules](buttonurl://https://example.com/rules)"})
+		row, _ := settingsMsgStoredPM(t, env.chat.Id, eventmsg.EventBan)
+		if row.FileID != "pm-photo" || len(row.Buttons) != 1 || row.Buttons[0].Url != "https://example.com/rules" || !row.Silent {
+			t.Errorf("the pm row is %+v, want the photo, one Rules button and the copy off", row)
+		}
+	})
+
+	for _, tc := range []struct {
+		name, part, key string
+		msg             gotgbot.Message
+	}{
+		{"a javascript link", settingsEditPartButtons, "settings_edit_refuse_button_url", gotgbot.Message{Text: "[a](buttonurl://javascript:alert)"}},
+		{"a text over 4096", settingsEditPartText, "content_text_too_long", gotgbot.Message{Text: strings.Repeat("x", 4097)}},
+		{"a slash text", settingsEditPartText, "settings_edit_refuse_slash", gotgbot.Message{Text: "/notacommandzz now"}},
+	} {
+		t.Run("refused: "+tc.name, func(t *testing.T) {
+			settingsMsgSetPMWait(t, env, user, "kk", tc.part)
+			before := settingsEditSentCount(env.settingsEnv, user)
+			sendPrivateMessage(env.settingsEnv, user, tc.msg)
+			settingsEditWantReply(t, env.settingsEnv, user, before, tc.key, "settings_edit_still_waiting")
+			_, keyboard := settingsMsgLastSent(t, env, user)
+			if _, ok := settingsMsgButtonWith(t, keyboard, "a", settingsActMsgCancel, settingsMsgEventField, "kk", settingsMsgDestField, settingsMsgDestPMCode); !ok {
+				t.Errorf("the refusal carries no Cancel with k=kk and d=p: %+v", keyboard)
+			}
+			settingsEditWaitKept(t, env.settingsEnv, user)
+			if _, ok := settingsMsgStoredPM(t, env.chat.Id, eventmsg.EventKick); ok {
+				t.Error("the refused message wrote the kick's pm row")
+			}
+		})
+	}
+
+	t.Run("Remove clears one part of the pm row and never the group row", func(t *testing.T) {
+		m := settingsMsgPrivateMenu(env, env.chat, user)
+		for _, part := range []string{settingsEditPartText, settingsEditPartMedia, settingsEditPartButtons} {
+			_, keyboard := settingsMsgOpenPM(t, m, "bn")
+			text, _ := m.pressButton(settingsMsgPartButton(t, keyboard, settingsActMsgRemove, part))
+			if !containsMarker(text, "settings_msg_pm_title") {
+				t.Errorf("the redraw after Remove %s %q is not the private copy screen", part, text)
+			}
+		}
+		row, ok := settingsMsgStoredPM(t, env.chat.Id, eventmsg.EventBan)
+		if !ok || row.Text != "" || row.FileID != "" || len(row.Buttons) != 0 || !row.Silent {
+			t.Errorf("after the three Removes the pm row is %+v (row %v), want an empty row with the copy off", row, ok)
+		}
+		if after, _ := settingsMsgStored(t, env.chat.Id, eventmsg.EventBan); after.Text != "Group text" || !after.UpdatedAt.Equal(groupRow.UpdatedAt) {
+			t.Errorf("the private copy's Removes touched the group row: %+v", after)
+		}
+	})
+}
+
+func TestSettingsDriftMessagesPM(t *testing.T) {
+	t.Run("the page draws what the repository stored", func(t *testing.T) {
+		env := newSettingsMsgEnv(t)
+		listEditAdmin(env.settingsEnv, env.chat, env.admin, true)
+		ctx := context.Background()
+		if err := eventmsg.SetText(ctx, env.chat.Id, eventmsg.EventKick, eventmsg.DestPM, "You were kicked", 1); err != nil {
+			t.Fatalf("seed the kick's private copy: %v", err)
+		}
+		m := settingsMsgPrivateMenu(env, env.chat, env.admin)
+		text, _ := settingsMsgOpenPM(t, m, "kk")
+		if line := staffMarker("settings_edit_line_text") + " " + staffMarker("settings_edit_state_text_len"); !strings.Contains(text, line) ||
+			!strings.Contains(text, settingsMsgPMLine(false)) {
+			t.Errorf("the private copy screen %q does not read a stored text with the copy Off", text)
+		}
+		if err := eventmsg.SetSilent(ctx, env.chat.Id, eventmsg.EventKick, eventmsg.DestPM, false, 1); err != nil {
+			t.Fatalf("switch the kick's private copy on: %v", err)
+		}
+		if text, _ := settingsMsgOpenPM(t, m, "kk"); !strings.Contains(text, settingsMsgPMLine(true)) {
+			t.Errorf("the private copy screen %q does not read the switch the repository stored", text)
+		}
+		if text, _ := m.press("a", settingsActMsgEvent, settingsMsgEventField, "kk"); !strings.Contains(text, settingsMsgPMLine(true)) {
+			t.Errorf("the kick screen %q does not read the private copy On", text)
+		}
+		// The group row's Silent switch and the private copy's switch are two values: the event screen's two lines
+		// read them apart, and a Silent press keeps the private copy's line.
+		text, _ = m.press("a", settingsActMsgSilent, settingsMsgEventField, "kk", "v", "1")
+		if !strings.Contains(text, settingsMsgPMLine(true)) || !strings.Contains(text, staffMarker("settings_msg_line_silent")+" ✅") {
+			t.Errorf("the kick screen after a Silent press %q does not read Silent On and the private copy On", text)
+		}
+	})
+
+	t.Run("what the page sets is what /ban sends in private", func(t *testing.T) {
+		withFastPMCopyPacer(t)
+		e := newMessagesE2E(t, false)
+		t.Cleanup(pmCopyJobs.wait)
+		member := e.member("Ann")
+
+		// The owner sets the ban's private text and switches the copy on, each a press of a drawn button or a typed
+		// message in private.
+		m := e.openEvent(e.owner, "bn")
+		m.tap("a", settingsActMsgEvent, settingsMsgDestField, settingsMsgDestPMCode)
+		m.tap("a", settingsActMsgSet, "t", settingsEditPartText, settingsMsgDestField, settingsMsgDestPMCode)
+		sendPrivateMessage(e.settingsEnv, e.owner, gotgbot.Message{Text: "You were banned from {chatname}"})
+		m = e.openEvent(e.owner, "bn")
+		m.tap("a", settingsActMsgEvent, settingsMsgDestField, settingsMsgDestPMCode)
+		m.tap("a", settingsActMsgPM, "v", "1")
+		if row, _ := settingsMsgStoredPM(t, e.chat.Id, eventmsg.EventBan); row.Silent || row.Text != "You were banned from {chatname}" {
+			t.Fatalf("the page left the pm row %+v, want the typed text and the copy on", row)
+		}
+
+		e.command(e.settingsEnv, e.admin, "/ban spam", member)
+		waitEventPM(t)
+		private := e.fake.sentTo(member.Id)
+		if len(private) != 1 {
+			t.Fatalf("the member got %d private messages, want the one private copy", len(private))
+		}
+		if text := fmt.Sprint(private[0].Params["text"]); !strings.HasPrefix(text, "You were banned from ") {
+			t.Errorf("the private copy reads %q, want the text the page set, filled", text)
+		}
+		group := e.fake.sentTo(e.chat.Id)
+		if len(group) == 0 || group[len(group)-1].MessageID > private[0].MessageID {
+			t.Errorf("the private copy was not sent after the group reply: group %+v, private %+v", group, private)
+		}
+	})
+}
+
+func TestSettingsAuthorityMessagesPM(t *testing.T) {
+	// refused presses kv (plus the private owner field) as user on a fresh private message and fails the test unless it
+	// is answered the alert key with nothing edited, no wait and the ban's pm row unchanged.
+	refused := func(t *testing.T, env *settingsMsgEnv, user gotgbot.User, key string, kv ...string) {
+		t.Helper()
+		before, existed := settingsMsgStoredPM(t, env.chat.Id, eventmsg.EventBan)
+		msgID := env.updateID()
+		env.pressPrivate(user, msgID, env.privateFields(env.chat.Id, kv...))
+		if answer, alert := env.lastAnswer(); !alert || !containsMarker(answer, key) {
+			t.Errorf("%v answered %q (alert %v), want the alert %s", kv, answer, alert, key)
+		}
+		if got := len(env.edits(user.Id, msgID)); got != 0 {
+			t.Errorf("the refused %v made %d edits, want none", kv, got)
+		}
+		if env.redis.Exists(settingsInputKey(user.Id)) {
+			t.Errorf("the refused %v left a wait", kv)
+		}
+		after, exists := settingsMsgStoredPM(t, env.chat.Id, eventmsg.EventBan)
+		if exists != existed || after.Silent != before.Silent || after.Text != before.Text || !after.UpdatedAt.Equal(before.UpdatedAt) {
+			t.Errorf("the refused %v wrote the pm row: %+v", kv, after)
+		}
+	}
+	set := []string{"a", settingsActMsgSet, settingsMsgEventField, "bn", settingsMsgDestField, settingsMsgDestPMCode, "t", settingsEditPartText}
+	remove := []string{"a", settingsActMsgRemove, settingsMsgEventField, "bn", settingsMsgDestField, settingsMsgDestPMCode, "t", settingsEditPartText}
+	toggle := []string{"a", settingsActMsgPM, settingsMsgEventField, "bn", "v", "1"}
+
+	t.Run("an administrator without can_change_info views but changes nothing", func(t *testing.T) {
+		env := newSettingsMsgEnv(t)
+		listEditAdmin(env.settingsEnv, env.chat, env.admin, false)
+		m := settingsMsgPrivateMenu(env, env.chat, env.admin)
+		if text, _ := settingsMsgOpenPM(t, m, "bn"); !containsMarker(text, "settings_msg_pm_intro") {
+			t.Fatalf("the private copy screen did not open for an administrator without can_change_info: %q", text)
+		}
+		refused(t, env, env.admin, "settings_no_change_info", set...)
+		refused(t, env, env.admin, "settings_no_change_info", toggle...)
+		if err := eventmsg.SetText(context.Background(), env.chat.Id, eventmsg.EventBan, eventmsg.DestPM, "Seeded", 1); err != nil {
+			t.Fatalf("seed the ban's private copy: %v", err)
+		}
+		refused(t, env, env.admin, "settings_no_change_info", remove...)
+	})
+
+	t.Run("a wait whose sender is demoted before the typed message stores nothing", func(t *testing.T) {
+		env := newSettingsMsgEnv(t)
+		listEditAdmin(env.settingsEnv, env.chat, env.admin, true)
+		settingsMsgSetPMWait(t, env, env.admin, "bn", settingsEditPartText)
+		listEditAdmin(env.settingsEnv, env.chat, env.admin, false)
+		before := settingsEditSentCount(env.settingsEnv, env.admin)
+		sendPrivateMessage(env.settingsEnv, env.admin, gotgbot.Message{Text: "Typed after the demotion"})
+		settingsEditWantReply(t, env.settingsEnv, env.admin, before, "settings_no_change_info", "settings_edit_wait_stopped")
+		settingsEditWaitGone(t, env.settingsEnv, env.admin)
+		if row, ok := settingsMsgStoredPM(t, env.chat.Id, eventmsg.EventBan); ok && row.Text != "" {
+			t.Errorf("the typed text was stored on the pm row: %+v", row)
+		}
+	})
+
+	t.Run("an administrator the owner gate refuses changes nothing", func(t *testing.T) {
+		resetSettingsOwnerMemo(t)
+		env := newSettingsMsgEnv(t)
+		env.newOwner(env.chat)
+		listEditAdmin(env.settingsEnv, env.chat, env.admin, true)
+		env.setAdminsAllowed(env.chat.Id, false)
+		refused(t, env, env.admin, "settings_gate_owner_only", toggle...)
+		refused(t, env, env.admin, "settings_gate_owner_only", set...)
+	})
+
+	t.Run("the live creator switches the copy on", func(t *testing.T) {
+		resetSettingsOwnerMemo(t)
+		env := newSettingsMsgEnv(t)
+		owner := env.newOwner(env.chat)
+		env.setAdminsAllowed(env.chat.Id, false)
+		settingsMsgPrivateMenu(env, env.chat, owner).press(toggle...)
+		if row, ok := settingsMsgStoredPM(t, env.chat.Id, eventmsg.EventBan); !ok || row.Silent || row.UpdatedBy != owner.Id {
+			t.Errorf("the creator's press left the pm row %+v (row %v), want the copy on by %d", row, ok, owner.Id)
+		}
+	})
+
+	t.Run("a group menu's presses are refused in step 1", func(t *testing.T) {
+		env := newSettingsMsgEnv(t)
+		listEditAdmin(env.settingsEnv, env.chat, env.admin, true)
+		msgID := env.openMenu(env.admin)
+		for _, kv := range [][]string{
+			toggle,
+			{"a", settingsActMsgEvent, settingsMsgEventField, "bn", settingsMsgDestField, settingsMsgDestPMCode},
+			set,
+		} {
+			lookups, edits := env.memberLookupsOf(env.chat.Id, env.admin.Id), len(env.edits(env.chat.Id, msgID))
+			env.press(env.admin, msgID, env.groupFields(env.admin, kv...))
+			if got := settingsEditLastAnswer(env.settingsEnv); !containsMarker(got, "common_callback_invalid_request") {
+				t.Errorf("a group menu's %v answered %q, want the invalid request", kv, got)
+			}
+			if got := env.memberLookupsOf(env.chat.Id, env.admin.Id); got != lookups {
+				t.Errorf("a group menu's %v made %d member lookups, want none", kv, got-lookups)
+			}
+			if got := len(env.edits(env.chat.Id, msgID)); got != edits {
+				t.Errorf("a group menu's %v edited the menu", kv)
+			}
+		}
+		if n := settingsMsgRows(t, env.chat.Id); n != 0 {
+			t.Errorf("the group menu's presses left %d rows, want none", n)
 		}
 	})
 }

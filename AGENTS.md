@@ -1650,8 +1650,17 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `!on`), redraws from the read-back (`settingsMsgRedrawApplied`, shared with `hq`), reloads when the read-back is missing and redraws the stored
   state with `common_settings_save_failed` after a failed write. Storing a part never turns a private copy on (a new pm row is written with its
   switch off, D-08); every write drops `event_messages:<chat>`, which is in `skipLocal`, so the send path reads the change at the very next
-  command on every replica. A group menu's `hp` or `he&d=p` is an invalid request in step 1 (no `c`). `TestSettingsMessagesPMScreen` and
-  `TestSettingsMessagesPMSwitch` (`settings_messages_pm_test.go`) hold it.
+  command on every replica. A group menu's `hp` or `he&d=p` is an invalid request in step 1 (no `c`). `TestSettingsMessagesPMScreen` (the event screen's
+  line and row, the private copy screen, no `d` on a Phase 20 button, a forged or unknown `d` and an event without a spec refused before any
+  lookup), `TestSettingsMessagesPMSwitch` (the press, Back, a second press, a stale press, a failed write, what the send path's cached read
+  sees) and `TestSettingsMessagesPMTyped` (the typed text, photo and buttons stored on the pm row with the copy still off, the prompt titled
+  `settings_msg_pm_title` with a Cancel carrying `d=p`, the editor's refusals, Remove of each part leaving the group row alone) hold it
+  (`settings_messages_pm_test.go`, toolkit `settingsMsgStoredPM` and `settingsMsgOpenPM` in `settings_messages_env_test.go`); because nothing
+  of it has a command, `TestSettingsDriftMessagesPM` (a pm text and switch written through the repository are drawn by both screens, a Silent
+  press keeps the private copy's line, and a text and the switch set on the page are what `/ban` sends in private after the group reply) and
+  `TestSettingsAuthorityMessagesPM` (without `can_change_info` both screens open but Set, Remove and `hp` are the `settings_no_change_info`
+  alert with nothing written, a wait whose sender is demoted before the typed message stores nothing, the owner gate, the live creator, a group
+  menu's presses refused in step 1) stand in for a parity test.
 - The message editor's pages (`settings_edit.go`, pages `w` Welcome, `g` Goodbye and `r` Rules, orders 50, 60 and 70, each
   registered from that file's `init` through `registerSettingsPage` so `settings_pages.go` is never edited) show which
   parts of a message are set, one line per part from one parts table (`settingsEditPageDef.Parts`): Welcome and Goodbye
@@ -5334,7 +5343,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Phase 21 test families (the private copies of event messages): `TestEventPMEndToEnd`, `TestEventPMSpecs`, `TestEventPMDefaultTexts`
   and `TestEventPMComposition` (`event_message_pm_test.go`), `TestEventPMFailures`, `TestEventPMLimits`, `TestEventPMPacerIndependent`
   and `TestEventPMLogsCarryIDsOnly` (`event_message_pm_failures_test.go`), the guard `TestPMCopyCallers` (`pm_copy_callers_test.go`)
-  and `TestEventMsgLocaleKeys` (`fuku/i18n`), on the toolkit `event_message_pm_env_test.go` (the PM copies bullet under Subsystem traps
+  and `TestEventMsgLocaleKeys` (`fuku/i18n`), and the page's `TestSettingsMessagesPMScreen`, `TestSettingsMessagesPMSwitch`,
+  `TestSettingsMessagesPMTyped`, `TestSettingsDriftMessagesPM` and `TestSettingsAuthorityMessagesPM` (`settings_messages_pm_test.go`, on the
+  Messages page toolkit plus `settingsMsgStoredPM` and `settingsMsgOpenPM`; the `/ban` drift subtest runs on `newMessagesE2E` with
+  `withFastPMCopyPacer` and waits with `waitEventPM`), on the toolkit `event_message_pm_env_test.go` (the PM copies bullet under Subsystem traps
   lists it). Hygiene: `newEventPMSite` registers `pmCopyJobs.wait` as its last cleanup, so a test that swaps a variable a job reads
   (`pmCopyNow`, `pmCopyAutoCapPerMinute`, `pmCopyRedisClient`) after it registers one more `t.Cleanup(pmCopyJobs.wait)` after the swap,
   because cleanups run last in, first out; a held job is released in `t.Cleanup` before that wait; the `fuku:pmcopy:*` keys are removed by
