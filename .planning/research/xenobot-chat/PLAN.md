@@ -1,8 +1,9 @@
 # Xenobot-72 conversations: implementation plan
 
-Instructions for the model that builds this feature (Claude Opus 5.5). Read all of it, then `AGENTS.md`, before changing anything. Two files beside this one are part of the brief:
+Instructions for the model that builds this feature (Claude Opus 5.5). Read all of it, then `AGENTS.md`, before changing anything. Three files beside this one are part of the brief:
 
 - `LORE.md`: the series reference, compiled 2026-11-19 from all 102 wiki articles, the official English comic pages and TV Tropes. Every fact carries a source tag.
+- `COMIC-DIGEST.md`: a page-by-page machine reading of all 327 pages of the official English comic, supplied by the owner. It covers every chapter but misreads names and its Episode 1 section is wrong; read its reliability note first. `LORE.md` wins wherever the two disagree.
 - `GEMINI-API.md`: the Gemini API facts read from Google's docs on 2026-11-19.
 
 ## 1. What the owner asked for
@@ -178,7 +179,7 @@ Chat and user IDs, the provider's HTTP status and error type, counts. Never mess
 |---|---|---|
 | `ENABLE_CHAT` | Server-wide switch for the whole feature | `false` |
 | `ANTHROPIC_API_KEY` | Existing variable, reused | none |
-| `CHAT_ANTHROPIC_MODEL` | Model for conversations | `claude-opus-5-5` |
+| `CHAT_ANTHROPIC_MODEL` | Model for conversations | `claude-haiku-5-5` |
 | `GEMINI_API_KEY` | New | none |
 | `CHAT_GEMINI_MODEL` | Model for conversations | `gemini-4-hydrogen` |
 
@@ -205,9 +206,9 @@ Reuse `exec`, `send`, `HTTPError`. Do not reuse `newRequest`: it forces a tool c
 - `model`, `max_tokens`.
 - `system` as an array of two text blocks. The first is the static persona and lore with `"cache_control": {"type": "ephemeral"}`. The second is the short dynamic block (group title, group language, current date) with no marker. Order matters: anything that varies must come after the cached block, or every request pays a cache write. Never put a timestamp, a name or a chat title in the first block.
 - `messages`: one user message with one text block.
-- `output_config: {"effort": "low"}`. Claude Opus 5.5 always thinks and defaults to medium effort; low is right for chat.
+- `output_config: {"effort": "low"}`. Claude Haiku 5.5, the default, thinks by default at medium effort, and Claude Opus 5.5 always thinks; low is right for chat on both.
 - No `thinking` field. Opus 5.5 rejects `disabled` and budgets. No `temperature`, `top_p` or `top_k` on any model: API version `2026-10-21` rejects them. No assistant prefill. No tools and no `tool_choice`.
-- Refusal fallback: when the model ID starts with `claude-opus-5`, `claude-sonnet-5-5` or `claude-fable-5`, add `"fallbacks": "default"` and the header `anthropic-beta: server-side-fallback-2026-07-01`. Never send it for a Haiku model (Haiku 5.5 has no server-side fallback, and a model list there is a 400). Keep this as one small table with a test.
+- Refusal fallback: when the model ID starts with `claude-opus-5`, `claude-sonnet-5-5` or `claude-fable-5`, add `"fallbacks": "default"` and the header `anthropic-beta: server-side-fallback-2026-07-01`. Never send it for a Haiku model (Haiku 5.5 has no server-side fallback, and a model list there is a 400). Keep this as one small table with a test. With the default model, Claude Haiku 5.5, no fallback is sent, so a refusal goes straight to the canned line.
 
 Reading the response:
 
@@ -288,7 +289,7 @@ Ground the register in the character's real lines from the comic (in `LORE.md` s
 
 ### 7.3 The archive and the canon rules
 
-Build `archive.md` from `LORE.md`, keeping its facts and dropping its source tags (keep a comment at the top naming `LORE.md` as the source of record). Organise by what people ask: the world and The Great Blocking; Jaya Abadi and its products; the megaprojects with their numbers; the Xenobot line and Xenobot-72; the KS project and the five subjects; the other characters; places; technology and food; the story chapter by chapter; the series itself (creator, comic, animation, where to read and watch, related works); Indonesian terms.
+Build `archive.md` from `LORE.md`, keeping its facts and dropping its source tags (keep a comment at the top naming `LORE.md` as the source of record). Use `COMIC-DIGEST.md` to fill in the chapter-by-chapter story, above all chapters 2 and 6 and the late pages of 5 and 9, which `LORE.md` covers only through the wiki's summary. Take event order and unambiguous dialogue from it; take every name, date and number from `LORE.md`; leave out anything the digest marks as unclear or inferred. The official English site is maumakanapa.art; name it among the places to read. Organise by what people ask: the world and The Great Blocking; Jaya Abadi and its products; the megaprojects with their numbers; the Xenobot line and Xenobot-72; the KS project and the five subjects; the other characters; places; technology and food; the story chapter by chapter; the series itself (creator, comic, animation, where to read and watch, related works); Indonesian terms.
 
 Rules the persona must state about canon. These are what keeps a fan from catching the bot out:
 
@@ -345,9 +346,9 @@ A reply sends about 10,000 cached system tokens, about 1,500 fresh input tokens 
 
 | Model | Per reply | 1,000 replies |
 |---|---|---|
-| `claude-opus-5-5` | about $0.014 | about $14 |
+| `claude-haiku-5-5` (default) | about $0.0004 | about $0.40 |
 | `claude-sonnet-5-5` | about $0.007 | about $7 |
-| `claude-haiku-5-5` | about $0.0004 | about $0.40 |
+| `claude-opus-5-5` | about $0.014 | about $14 |
 | `gemini-4-hydrogen` | about $0.005 | about $5 |
 | `gemini-3.5-flash-lite` | about $0.0015 | about $1.50 |
 
@@ -391,7 +392,7 @@ Tell the owner about these when the work is shown. Each is a small change if the
 2. A reply to a moderation notice is not an address.
 3. Only the group's creator can enable it, only in private. Administrators cannot, even with "Admins can change settings" on.
 4. The owner picks the provider per group; the server operator picks the models through two variables.
-5. Default Anthropic model `claude-opus-5-5`. It gives the best character and costs about 35 times what `claude-haiku-5-5` does per reply. The owner may prefer Sonnet or Haiku; it is one variable.
+5. Default Anthropic model `claude-haiku-5-5`, chosen by the owner on 2026-11-19. Sonnet and Opus are one variable away and cost about 18 and 35 times as much per reply. The persona check of 7.5 is what shows whether Haiku holds the character and the canon rules; report the result to the owner rather than changing the default.
 6. Default Gemini model `gemini-4-hydrogen`, Google's recommended default, and a paid-tier key.
 7. `ENABLE_CHAT` is off by default.
 8. A two-hour, twelve-message memory per group, kept in Redis.
@@ -399,7 +400,7 @@ Tell the owner about these when the work is shown. Each is a small change if the
 10. Hourly limits of 12 per user, 80 per group, 800 for the bot.
 11. The bot knows the whole story and gives a spoiler notice before late-story answers.
 12. Asked about its destruction in the comic, the bot confirms the record and stays on duty.
-13. Anthropic refusals fall back to another Claude model server-side (`fallbacks: "default"`, a beta feature) on Opus and Sonnet; if that also refuses, the member gets the canned refusal.
+13. On the default Haiku model an Anthropic refusal gives the member the canned refusal. If the owner switches to Opus or Sonnet, refusals first fall back to another Claude model server-side (`fallbacks: "default"`, a beta feature).
 14. Anonymous admins and channels cannot converse.
 15. New handler group 13, which amends the "group 12 is last" rule.
 
