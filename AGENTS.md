@@ -5157,6 +5157,28 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `settings_messages_env_test.go`); `TestSettingsStaffPrivacy` renders every Messages screen in 8 languages through
   `settingsPrivacyPhase20Screens`. The repository has `TestEventMessages` and `TestEventMessagesUpsert` (`fuku/db/eventmsg`), the migration
   `TestChatEventMessagesMigrationStatements` and `TestChatEventMessagesMigrationDefaults`, and backup `TestEventMessagesStayOutOfBackup`.
+  `TestMessagesEndToEnd` (`messages_e2e_test.go`, plan 20-11, about 7 s) is the phase's end-to-end proof through the real dispatcher with
+  only Telegram faked, one environment per subtest on the toolkit `messagesE2E` (`newMessagesE2E(t, real)`: the settings environment with
+  the Bans and Mutes modules, the bot an administrator, a live creator who works the private menu, the environment's administrator who runs
+  the commands, a 600 s `bot:punish_manual` timer, and the real locale files only when `real` is set; `member`, `openMain` (the
+  `/start settings_<chat>` deep link), `openEvent` (Main, Messages, Admin actions and the event's cell, each a press of the drawn button),
+  `setPart`, `setText`, `setBanMessage`, `command` (a reply to the member's message, on the base dispatcher or a replica's), `groupSends`,
+  `queued`, `wantQueued`, `wantGolden`), whose wrapper `messagesE2EClient` answers a registered member's `getChat` as a private chat and a
+  media send as a message of the chat it went to, so the placeholders have a name and the queue row its chat. Every page step is a press of
+  a button the bot drew and every part a typed private message. Subtests: `owner sets a ban message` (text, photo and buttons from the page;
+  the hub reads Custom; `/ban spam & co` bans, then posts one `sendPhoto` replying to the command with the filled, escaped caption and
+  `{until}` empty, the Unban row then the Rules button, queued at its date plus 600 s), `previews` (Full preview reaches the owner alone,
+  named as the member and the admin, with the sample reason and no Unban row), `timed` (`/tmute 30m` in a group whose zone is Asia/Tokyo
+  fills `30 minutes` and the end in that zone), `refused` (a 400 on the photo: the ban first, then the refused photo, then the default,
+  equal to `goldenModerationBanReason` with the member's ID and the command's message ID put in, and queued), `silent` (Silent on the kick
+  screen; `/kick` acts and posts nothing; `/sban` and `/skick` stay silent), `remove` (the three Removes bring back the golden reply),
+  `anonymous` (a proved anonymous `/ban` fills `{admin}` with `eventmsg_admin_anon` and never names the tapper), `rights` (without
+  `can_change_info` the screen and Full preview work, Set, Remove and Silent are the `settings_no_change_info` alert with no edit, and a
+  wait whose sender is demoted before the typed message stores nothing), `group menu` (In private on Main and the group note alone),
+  `staff group` (no Messages cell, forged presses are the invalid request and write nothing), `no redis` (Set is the alert, the send path
+  reads the stored text, Silent still works) and `two replicas` (a Silent press on one replica makes the other's next `/ban` post nothing,
+  after that replica had cached the custom text). The `refused` and `remove` subtests use the real locales because they compare with the
+  Ukrainian goldens; the others use the marker locale.
   Hygiene: fresh chat and user IDs (`uniqueModuleChatID`, `uniqueLinkOwnerID`, or the settings environment's), `eventMsgCleanup` or
   `settingsMsgCleanup` for the rows and the `event_messages` key, every swapped seam (`settingsMsgRead`, `eventMsgWrites`,
   `eventMessagesLookup`) restored through `mreqSwap`, no `t.Skip`, and light tests: the language sweeps run over pure renders, a dispatcher
