@@ -4288,6 +4288,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   A change to the canonical form bumps `mrn1` and `mrv1`, and a change to `claude.NamesInstruction` bumps `mrv1`, in the
   same commit, so no old baseline or cached verdict is read under a new meaning; `TestCanonHash` and
   `TestCanonVerdictKey` pin one vector each for that reason.
+- `fuku/utils/xenopersona` (Phase 20, standard library only, `TestXenopersonaPackageIsLeaf`) embeds `persona.md` and
+  `archive.md` and returns the static system text of the conversation feature (`StaticSystemText`: the persona, a fixed
+  separator, the archive without its leading source comment), the same bytes for every chat and user so a provider can
+  cache it. Nothing that varies (a date, a chat title, a name, a username) may go into either file; that belongs in the
+  dynamic system text. `archive.md` is distilled from `.planning/research/xenobot-chat/LORE.md`, the source of record
+  for every name, date and number: change a fact there first. The archive writes no web address (it names the places to
+  read and watch), and the content tests hold the text to 6,000 to 12,000 tokens by a runes/4 count, keep the exact
+  canon numbers, the Contradictions and Not on record sections, and no earlier project name.
 - A missing i18n key returns `""` with an error callers ignore; a typo'd key in Go ships an empty message. Copy key
   names from `locales/en.yml`. `locales/config.yml` is the help alt-name pseudo-locale, not a language.
 - Ukrainian and English texts follow the style guide and glossary in `docs/src/content/docs/contributing/locale-style.md`
