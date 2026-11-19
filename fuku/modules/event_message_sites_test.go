@@ -35,6 +35,10 @@ type eventMsgSiteCase struct {
 	lockdown bool
 }
 
+// eventMsgUnmuteLockdownNote is the Ukrainian mutes_unmute_lockdown_note, the line the golden of an
+// unmute during a lockdown ends with.
+const eventMsgUnmuteLockdownNote = "Ця група під локдауном, тож писати можна буде, щойно адмін виконає /unlockdown."
+
 func eventMsgSiteCases() []eventMsgSiteCase {
 	const name = "Ann &amp; &lt;Bo&gt;"
 	return []eventMsgSiteCase{
@@ -46,6 +50,17 @@ func eventMsgSiteCases() []eventMsgSiteCase {
 			method: "unbanChatMember", want: name + "||||Telegram", golden: goldenModerationDkick},
 		{name: "unban", text: "/unban 42", call: bansModule.unban, event: eventmsg.EventUnban,
 			method: "unbanChatMember", want: name + "||||Telegram", golden: goldenModerationUnban},
+		{name: "mute", text: "/mute noise", reply: true, call: mutesModule.mute, event: eventmsg.EventMute,
+			method: "restrictChatMember", want: name + "|noise|||Telegram", golden: goldenModerationMuteReason},
+		{name: "dmute", text: "/dmute", reply: true, call: mutesModule.dMute, event: eventmsg.EventMute,
+			method: "restrictChatMember", want: name + "||||Telegram", golden: goldenModerationDmute},
+		{name: "tmute", text: "/tmute 30m", reply: true, call: mutesModule.tMute, event: eventmsg.EventTimedMute,
+			method: "restrictChatMember", want: name + "||30 minutes|<until>|Telegram", golden: goldenModerationTmute},
+		{name: "unmute", text: "/unmute 42", call: mutesModule.unmute, event: eventmsg.EventUnmute,
+			method: "restrictChatMember", want: name + "||||Telegram", golden: goldenModerationUnmute},
+		{name: "unmute during a lockdown", text: "/unmute 42", call: mutesModule.unmute, event: eventmsg.EventUnmute,
+			method: "restrictChatMember", want: name + "||||Telegram\n" + eventMsgUnmuteLockdownNote,
+			golden: goldenModerationUnmuteLockdown, lockdown: true},
 	}
 }
 

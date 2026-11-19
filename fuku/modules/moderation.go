@@ -30,18 +30,11 @@ type moderationCtx struct {
 	Module *moduleStruct
 }
 
-// moderationReasonSuffix renders the reason line of a punishment reply: the locale
-// template key formatted with the HTML-escaped reason, or "" for an empty reason or a
-// missing template. The template comes from the locale file only; the reason is never
-// part of a format string, so a '%' in it is printed as typed and a '<' cannot make
-// Telegram reject the reply after the punishment already happened.
-func moderationReasonSuffix(c *moderationCtx, key, reason string) string {
-	return moderationReasonLine(c.Tr, key, reason)
-}
-
-// moderationReasonLine is moderationReasonSuffix for a translator alone, so a default reply
-// builder (an eventDefaultReply) can render the reason line without a moderation context. The
-// output is exactly moderationReasonSuffix's.
+// moderationReasonLine renders the reason line of a punishment reply: the locale template key
+// formatted with the HTML-escaped reason, or "" for an empty reason or a missing template. The
+// template comes from the locale file only; the reason is never part of a format string, so a '%'
+// in it is printed as typed and a '<' cannot make Telegram reject the reply after the punishment
+// already happened. The default reply builders (each an eventDefaultReply) call it.
 func moderationReasonLine(tr *i18n.Translator, key, reason string) string {
 	if reason == "" {
 		return ""

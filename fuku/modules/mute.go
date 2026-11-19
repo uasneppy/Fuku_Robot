@@ -7,6 +7,8 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/uasneppy/fuku_robot/fuku/db/eventmsg"
+	"github.com/uasneppy/fuku_robot/fuku/i18n"
 	"github.com/uasneppy/fuku_robot/fuku/utils/chat_status"
 	"github.com/uasneppy/fuku_robot/fuku/utils/extraction"
 	"github.com/uasneppy/fuku_robot/fuku/utils/formatting"
@@ -19,6 +21,45 @@ func muteTargetValidation(c *moderationCtx, t *target) error {
 	return validateTarget(c, t.userID, true, "common_user_not_in_chat", "mutes_mute_admin_error", "mutes_restrict_self_error")
 }
 
+// muteDefaultReply is the mute event's default reply (an eventDefaultReply): the text and the
+// Unmute keyboard /mute and /dmute sent before Phase 20, byte for byte (TestLegacyModerationRequests).
+func muteDefaultReply(tr *i18n.Translator, in eventDefaultInput) (string, *gotgbot.SendMessageOpts) {
+	baseStr, _ := tr.GetString("mutes_mute_message")
+	text := fmt.Sprintf(baseStr, formatting.MentionHtml(in.Target.Id, in.Target.FirstName)) +
+		moderationReasonLine(tr, "mutes_reason_suffix", in.Reason)
+	return text, &gotgbot.SendMessageOpts{
+		ParseMode: formatting.HTML,
+		ReplyMarkup: gotgbot.InlineKeyboardMarkup{
+			InlineKeyboard: [][]gotgbot.InlineKeyboardButton{
+				{
+					{
+						Text:         trS(tr, "mutes_unmute_button"),
+						CallbackData: encodeCallbackData("unrestrict", map[string]string{"a": "unmute", "u": fmt.Sprint(in.Target.Id)}),
+					},
+				},
+			},
+		},
+	}
+}
+
+// tmuteDefaultReply is the timed mute event's default reply (an eventDefaultReply): the text and the
+// options /tmute sent before Phase 20, byte for byte (TestLegacyModerationRequests).
+func tmuteDefaultReply(tr *i18n.Translator, in eventDefaultInput) (string, *gotgbot.SendMessageOpts) {
+	temp, _ := tr.GetString("mutes_tmute_message")
+	text := fmt.Sprintf(temp, formatting.MentionHtml(in.Target.Id, in.Target.FirstName), in.TimeVal) +
+		moderationReasonLine(tr, "mutes_reason_suffix", in.Reason)
+	return text, formatting.Shtml()
+}
+
+// unmuteDefaultReply is the unmute event's default reply (an eventDefaultReply) without the lockdown
+// note, which the site appends: the text and the options /unmute sent before Phase 20.
+func unmuteDefaultReply(tr *i18n.Translator, in eventDefaultInput) (string, *gotgbot.SendMessageOpts) {
+	temp, _ := tr.GetString("mutes_unmute_message")
+	return fmt.Sprintf(temp, formatting.MentionHtml(in.Target.Id, in.Target.FirstName)), formatting.Shtml()
+}
+
+// muteReplyWithButton is the success reply of /mute and /dmute, the mute event: the default reply
+// built by muteDefaultReply, or the group's stored mute message, through replyEvent after the mute.
 func muteReplyWithButton(c *moderationCtx, t *target) error {
 	muteUser, err := c.Bot.GetChat(t.userID, nil)
 	if err != nil {
@@ -26,26 +67,9 @@ func muteReplyWithButton(c *moderationCtx, t *target) error {
 		return err
 	}
 
-	baseStr, _ := c.Tr.GetString("mutes_mute_message")
-	text := fmt.Sprintf(baseStr, formatting.MentionHtml(muteUser.Id, muteUser.FirstName)) +
-		moderationReasonSuffix(c, "mutes_reason_suffix", t.reason)
-
-	err = c.replySuccess(
-		text,
-		&gotgbot.SendMessageOpts{
-			ParseMode: formatting.HTML,
-			ReplyMarkup: gotgbot.InlineKeyboardMarkup{
-				InlineKeyboard: [][]gotgbot.InlineKeyboardButton{
-					{
-						{
-							Text:         trS(c.Tr, "mutes_unmute_button"),
-							CallbackData: encodeCallbackData("unrestrict", map[string]string{"a": "unmute", "u": fmt.Sprint(t.userID)}),
-						},
-					},
-				},
-			},
-		},
-	)
+	member := eventTargetOf(muteUser)
+	text, opts := muteDefaultReply(c.Tr, eventDefaultInput{Target: member, Reason: t.reason, TimeVal: t.timeVal})
+	err = c.replyEvent(eventReply{Event: eventmsg.EventMute, Target: member, Values: eventValues{Reason: t.reason}, Default: text, Opts: opts})
 	if err != nil {
 		log.Error(err)
 		return err
@@ -103,11 +127,15 @@ func moderationTmute(m *moduleStruct) *moderationCommand {
 				return err
 			}
 
-			temp, _ := c.Tr.GetString("mutes_tmute_message")
-			baseStr := fmt.Sprintf(temp, formatting.MentionHtml(muteUser.Id, muteUser.FirstName), t.timeVal) +
-				moderationReasonSuffix(c, "mutes_reason_suffix", t.reason)
-
-			err = c.replySuccess(baseStr, formatting.Shtml())
+			member := eventTargetOf(muteUser)
+			text, opts := tmuteDefaultReply(c.Tr, eventDefaultInput{Target: member, Reason: t.reason, TimeVal: t.timeVal})
+			err = c.replyEvent(eventReply{
+				Event:   eventmsg.EventTimedMute,
+				Target:  member,
+				Values:  eventValues{Reason: t.reason, Duration: t.timeVal, Until: eventUntil(t.untilDate)},
+				Default: text,
+				Opts:    opts,
+			})
 			if err != nil {
 				log.Error(err)
 				return err
@@ -238,18 +266,20 @@ func moderationUnmute(m *moduleStruct) *moderationCommand {
 				return err
 			}
 
-			temp, _ := c.Tr.GetString("mutes_unmute_message")
-			text := fmt.Sprintf(temp, formatting.MentionHtml(muteUser.Id, muteUser.FirstName))
+			member := eventTargetOf(muteUser)
+			text, opts := unmuteDefaultReply(c.Tr, eventDefaultInput{Target: member})
 			// During a lockdown the user is still muted by the locked default
 			// permissions, so say they can talk once it lifts. A failed read only
-			// skips the note: the unmute itself already went through.
+			// skips the note: the unmute itself already went through. A custom
+			// unmute text is followed by the same note (D-11).
+			var note string
 			if active, lookupErr := lockdownSnapshotLookup(c.Chat.Id); lookupErr != nil {
 				log.Errorf("[Mutes] unmute reply: read lockdown of chat %d: %v", c.Chat.Id, lookupErr)
 			} else if active != nil {
-				note, _ := c.Tr.GetString("mutes_unmute_lockdown_note")
+				note, _ = c.Tr.GetString("mutes_unmute_lockdown_note")
 				text += "\n" + note
 			}
-			err = c.replySuccess(text, formatting.Shtml())
+			err = c.replyEvent(eventReply{Event: eventmsg.EventUnmute, Target: member, Default: text, Opts: opts, Note: note})
 			if err != nil {
 				log.Error(err)
 				return err
