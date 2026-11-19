@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-11-13)
 ## Current Position
 
 Phase: 20 (Conversations), milestone v1.2
-Plan: 20-01 done, waiting for the owner's review of persona.md and archive.md
+Plan: 20-01 to 20-03 done (owner approved the persona and archive 2026-11-19); next 20-04 storage
 Status: In progress
 Last activity: 2026-11-17 - Completed quick task 261116-wh2: Fix raw placeholder strings, note deep links, wiki, reports in PM and disable no-ops
 
