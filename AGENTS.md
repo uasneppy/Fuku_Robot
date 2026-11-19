@@ -3134,11 +3134,50 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `TestMemberSelfDestructQueuesMessages`, `TestMemberSelfDestructKeeps`, `TestMemberSelfDestructPinnedStays`,
   `TestMemberSelfDestructOffCancels`, `TestMemberSelfDestructNeverEndsUpdate`, `TestMemberContentMessageExcludesServiceFields`
   and `TestMemberDeletionStaffGroupNeverTouched` (all three member rules, a Staff Group and a failing Staff Group read) hold it.
+- Event messages (`event_message.go`, Phase 20): a group's stored message for a manual punishment (`chat_event_messages`,
+  see Data) replaces the success reply of that event. `(c *moderationCtx) replyEvent(eventReply{...})` runs in the reply
+  step of the moderation pipeline, after `execute` applied the punishment, so a message never delays, undoes or skips a
+  punishment (D-03). It reads `eventmsg.Get` through the seam `eventMessagesLookup` under `eventMessageReadTimeout` (2 s,
+  a variable): a read error is one Warn with the chat ID and the event and the default; no row, and a row with no text,
+  media or buttons and Silent off, send the default through `replySuccess`, literally the call the site made before
+  Phase 20 (`TestLegacyModerationRequests` pins every byte and is never re-recorded); Silent, honoured only from a
+  successful read, posts and schedules nothing. A send site builds its default first (the ban's is `banDefaultReply`, an
+  `eventDefaultReply`: the same `Sprintf`, mention, `moderationReasonLine` and Unban keyboard as before) and hands it to
+  `replyEvent` with the event key, the target (`eventTargetOf` of its `getChat` answer) and the `eventValues` (reason,
+  duration, until). A custom message is built by `composeEventMessage`: with a stored text, `renderEventText` turns every
+  event placeholder (`eventTokenNames`: `reason admin duration until action count limit window`) into a sentinel
+  (`eventTokenSentinel`, `<<fuku-event-NAME>>`, which cannot come from a stored HTML text), lets
+  `formatting.FormattingReplacer` fill the Welcome placeholders for the target and the group and add the `{rules}`
+  button, then puts each escaped value (`eventPlaceholderValues`) in one pass, so a reason holding `{first}` and a name
+  holding `{reason}` stay as typed and an unknown `{word}` stays; a placeholder with no value is empty (D-09), `{until}`
+  is `formatChatTime` in the chat's zone, and `{count}`, `{action}`, `{limit}` and `{window}` are owned by the event and
+  empty for the manual events (never the member count, so no `getChatMemberCount`). The default's separate Reason line
+  is not added to a custom text (D-11); `eventReply.Note` (the `/unmute` lockdown note) follows a custom text on a new
+  line. With no stored text the default text is the text and only the media and buttons are custom. The keyboard is the
+  bot's own rows of the default (`eventBotRows`, the Unban row of a ban) followed by the custom and rules buttons, none
+  when there are neither. It is sent with `media.SendGreetingMessage` as a reply to the command
+  (`allow_sending_without_reply`, link previews off, HTML, the topic of a topic message) and queued with
+  `scheduleBotMessage(sent, deletion.KindBotManual)`, the default's kind (D-15). When Telegram definitely refuses it
+  (`eventMessageRefused`: `isTelegramClientError`, a 4xx other than 429, or `media.ErrNoPermission`), the default is sent
+  once through `replySuccess` with one Warn naming the chat ID and the event; a 429, a 5xx or a transport error is
+  returned as the default's send error always was, with no second send. `{admin}` is the acting admin's escaped full
+  name, and the translated `eventmsg_admin_anon` (the group's language) for an anonymous admin (`actorIsAnonymous`: the
+  update's `eventAnonActorKey` mark set by `markAnonymousActor`, or a sender that is the group itself in AnonAdmin mode);
+  it never names the Staff Group (D-12). A stored text is one text for every language (D-02). No log line carries a
+  stored text, caption, button name, link or file ID (`TestEventMessageLogsCarryIDsOnly`). In plan 20-04 only the ban
+  event goes through it (`/ban` and `/dban`, `eventmsg.EventBan`); the channel `/ban` and `/unban` replies act on a
+  channel, are not events and keep `replySuccess` and today's text whatever is stored, and the silent variants
+  (`/sban` and the like) send nothing as before (D-14). `TestEventMessageBanEndToEnd`, `TestRenderEventText`,
+  `TestEventMessageCompose`, `TestEventMessageFallback` and `TestEventMessageAnonymousAdmin` hold it (toolkit
+  `event_message_env_test.go`: `eventMsgCleanup`, `eventMsgStore`, `eventMsgStoreRow`, `eventMsgFailingClient` with
+  `eventMsgRefuseOnce`, on plan 20-01's `newModerationGoldenSite`).
 - Scheduling the bot's own messages (`deletion_bot.go`): `scheduleBotMessage(sent, kind)` is opt-in at named send sites only
   (D-12): the welcome in `SendWelcomeMessage` (`bot:welcome`), the goodbye in `leftMember` (`bot:goodbye`), the group `/rules`
   reply and the click-to-read message of a group with private rules (`bot:rules`), the success replies of the manual
   punishment commands through `moderationCtx.replySuccess` (`bot:punish_manual`: `/ban`, `/dban`, `/tban`, `/kick`,
-  `/dkick`, `/unban`, `/mute`, `/dmute`, `/tmute`, `/unmute`, five sites in `bans.go` and three in `mute.go`), and the one
+  `/dkick`, `/unban`, `/mute`, `/dmute`, `/tmute`, `/unmute`, five sites in `bans.go` and three in `mute.go`; since plan
+  20-04 the `/ban` and `/dban` success reply reaches `scheduleBotMessage` through `replyEvent`, the default through
+  `replySuccess` and a custom event message directly, under the same kind), and the one
   warn send of `warnThisUser`, whose final `source` argument (`warnSourceManual` for `/warn`, `/dwarn` and `/swarn`,
   `warnSourceAuto` for the blacklist's warn action) picks `bot:punish_manual` or `bot:punish_auto`. Nothing hooks
   `helpers.SendMessageWithErrorHandling`, `media.Send`, `media.SendGreeting` or the bot client, so a captcha challenge, a
