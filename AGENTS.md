@@ -3164,20 +3164,35 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   name, and the translated `eventmsg_admin_anon` (the group's language) for an anonymous admin (`actorIsAnonymous`: the
   update's `eventAnonActorKey` mark set by `markAnonymousActor`, or a sender that is the group itself in AnonAdmin mode);
   it never names the Staff Group (D-12). A stored text is one text for every language (D-02). No log line carries a
-  stored text, caption, button name, link or file ID (`TestEventMessageLogsCarryIDsOnly`). In plan 20-04 only the ban
-  event goes through it (`/ban` and `/dban`, `eventmsg.EventBan`); the channel `/ban` and `/unban` replies act on a
-  channel, are not events and keep `replySuccess` and today's text whatever is stored, and the silent variants
-  (`/sban` and the like) send nothing as before (D-14). `TestEventMessageBanEndToEnd`, `TestRenderEventText`,
-  `TestEventMessageCompose`, `TestEventMessageFallback` and `TestEventMessageAnonymousAdmin` hold it (toolkit
+  stored text, caption, button name, link or file ID (`TestEventMessageLogsCarryIDsOnly`). All seven manual events go
+  through it (plan 20-05, EVT-01, D-16): `ban` (`/ban`, `/dban`), `tban` (`/tban`), `kick` (`/kick`, `/dkick`, both
+  through `kickReply`), `mute` (`/mute`, `/dmute`, both through `muteReplyWithButton`), `tmute` (`/tmute`), `unban`
+  (`/unban` of a member) and `unmute` (`/unmute`), each default built by its own `eventDefaultReply`: `banDefaultReply`,
+  `tbanDefaultReply`, `kickDefaultReply` and `unbanDefaultReply` in `bans.go`, `muteDefaultReply`, `tmuteDefaultReply`
+  and `unmuteDefaultReply` in `mute.go`, each giving exactly the bytes the site sent before (the reason line through
+  `moderationReasonLine`, which replaced `moderationReasonSuffix`). `/tban` and `/tmute` fill `{duration}` (the
+  command's own duration text, `2 hours`) and `{until}` (`eventUntil` of the `until_date` the punishment carried, in the
+  chat's zone); every other event leaves both empty. `/unmute` builds its default without the lockdown note
+  (`unmuteDefaultReply`), appends `"\n" + note` during an active lockdown exactly as before and passes the same note in
+  `eventReply.Note`, so a custom unmute text is followed by it too (a failed lockdown read skips the note for both).
+  `verifyAnonymousAdmin` calls `markAnonymousActor(ctx)` right before `HandleAnonymousAdmin`, after the live admin check
+  of the tap, so a command re-entered after the proof reads `{admin}` as "an admin" although its sender is the tapper
+  (MSG-03); the mark lives in that update's `ctx.Data` alone and nothing else sets it. The channel `/ban` and `/unban`
+  replies act on a channel, are not events and keep `replySuccess` and today's text whatever is stored, and the silent
+  variants (`/sban`, `/skick`, `/smute`) send nothing as before whatever is stored (D-14). `TestEventMessageBanEndToEnd`,
+  `TestRenderEventText`, `TestEventMessageCompose`, `TestEventMessageFallback`, `TestEventMessageAnonymousAdmin`,
+  `TestEventMessageSites` (the six other events, custom and with nothing stored, the lockdown note included),
+  `TestEventMessageSilentVariants` and `TestEventMessageAfterAnonymousProof` (`event_message_sites_test.go`) hold it (toolkit
   `event_message_env_test.go`: `eventMsgCleanup`, `eventMsgStore`, `eventMsgStoreRow`, `eventMsgFailingClient` with
   `eventMsgRefuseOnce`, on plan 20-01's `newModerationGoldenSite`).
 - Scheduling the bot's own messages (`deletion_bot.go`): `scheduleBotMessage(sent, kind)` is opt-in at named send sites only
   (D-12): the welcome in `SendWelcomeMessage` (`bot:welcome`), the goodbye in `leftMember` (`bot:goodbye`), the group `/rules`
   reply and the click-to-read message of a group with private rules (`bot:rules`), the success replies of the manual
   punishment commands through `moderationCtx.replySuccess` (`bot:punish_manual`: `/ban`, `/dban`, `/tban`, `/kick`,
-  `/dkick`, `/unban`, `/mute`, `/dmute`, `/tmute`, `/unmute`, five sites in `bans.go` and three in `mute.go`; since plan
-  20-04 the `/ban` and `/dban` success reply reaches `scheduleBotMessage` through `replyEvent`, the default through
-  `replySuccess` and a custom event message directly, under the same kind), and the one
+  `/dkick`, `/unban`, `/mute`, `/dmute`, `/tmute`, `/unmute`; since plan 20-05 the success replies of all seven manual
+  events reach `scheduleBotMessage` through `replyEvent` under `bot:punish_manual`, the default through `replySuccess`
+  and a custom event message directly, so a custom message is on the same timer as the default (MSG-09), while the
+  channel `/ban` and `/unban` replies still go through `replySuccess` directly), and the one
   warn send of `warnThisUser`, whose final `source` argument (`warnSourceManual` for `/warn`, `/dwarn` and `/swarn`,
   `warnSourceAuto` for the blacklist's warn action) picks `bot:punish_manual` or `bot:punish_auto`. Nothing hooks
   `helpers.SendMessageWithErrorHandling`, `media.Send`, `media.SendGreeting` or the bot client, so a captcha challenge, a

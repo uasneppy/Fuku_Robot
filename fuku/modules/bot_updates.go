@@ -272,6 +272,10 @@ func verifyAnonymousAdmin(b *gotgbot.Bot, ctx *ext.Context) error {
 	if err := answer(nil); err != nil {
 		log.Debugf("[BotUpdates] anon_admin answer failed: %v", err)
 	}
+	// The re-entered command's sender is the tapper, but the admin chose to act anonymously, so
+	// the event message's {admin} reads "an admin" (D-12). The mark lives in this update's data
+	// alone and is set only here, after the live admin check of the tap.
+	markAnonymousActor(ctx)
 	if err := HandleAnonymousAdmin(b, ctx, command); err != nil {
 		return ext.EndGroups
 	}

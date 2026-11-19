@@ -15,6 +15,8 @@ import (
 
 	"github.com/uasneppy/fuku_robot/fuku/db/deletion"
 	"github.com/uasneppy/fuku_robot/fuku/db/eventmsg"
+	"github.com/uasneppy/fuku_robot/fuku/utils/cache"
+	"github.com/uasneppy/fuku_robot/fuku/utils/chat_status"
 )
 
 // eventMsgSiteText is the custom text every site test stores: the target's name and the event's own
@@ -166,4 +168,153 @@ func TestEventMessageSites(t *testing.T) {
 			eventMsgWantSiteGolden(t, s, tc.golden)
 		})
 	}
+}
+
+// eventMsgProofTap stores text as an anonymous admin's cached command in the site's chat and taps
+// its proof button as the site's admin, so verifyAnonymousAdmin re-enters the command.
+func eventMsgProofTap(t *testing.T, s *botSite, text string) {
+	t.Helper()
+	if cache.GetMarshal() == nil {
+		t.Fatal("the cache marshaler is not initialized")
+	}
+	cached := &gotgbot.Message{
+		MessageId: 101, Date: s.now.Unix(), Chat: s.chat, Text: text,
+		From:       &gotgbot.User{Id: 1087968824, IsBot: true, FirstName: "Group", Username: "GroupAnonymousBot"},
+		SenderChat: &gotgbot.Chat{Id: s.chat.Id, Type: s.chat.Type, Title: s.chat.Title},
+		ReplyToMessage: &gotgbot.Message{MessageId: 303, Date: 1, Chat: s.chat, From: &botSiteTarget,
+			Text: "message being moderated"},
+	}
+	if err := chat_status.StoreAnonAdminCommand(s.chat.Id, cached); err != nil {
+		t.Fatalf("store the anonymous admin's command: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = cache.GetMarshal().Delete(cache.Context, fmt.Sprintf("fuku:anonAdmin:%d:%d", s.chat.Id, cached.MessageId))
+	})
+	data := encodeCallbackData("anon_admin", map[string]string{
+		"c": strconv.FormatInt(s.chat.Id, 10),
+		"m": strconv.FormatInt(cached.MessageId, 10),
+	})
+	if err := verifyAnonymousAdmin(s.bot, newModuleCallbackContext(s.bot, s.chat, botSiteAdmin, data)); err != ext.EndGroups {
+		t.Fatalf("verifyAnonymousAdmin() error = %v, want EndGroups", err)
+	}
+}
+
+func TestEventMessageAfterAnonymousProof(t *testing.T) {
+	withModerationGoldenLocales(t)
+	const stored = "{first} is out (by {admin})"
+	cases := []struct {
+		name, text, event, method string
+	}{
+		{name: "ban", text: "/ban spam", event: eventmsg.EventBan, method: "banChatMember"},
+		{name: "mute", text: "/mute noise", event: eventmsg.EventMute, method: "restrictChatMember"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name+" after the proof tap", func(t *testing.T) {
+			s := newModerationGoldenSite(t)
+			eventMsgStore(t, s.chat.Id, tc.event, stored)
+			eventMsgProofTap(t, s, tc.text)
+			if got := len(s.client.callsFor(tc.method)); got != 1 {
+				t.Fatalf("%s calls = %d, want the punishment applied once", tc.method, got)
+			}
+			params := rulesOnlyCall(t, s.client, "sendMessage")
+			if params["text"] != "Ann &amp; &lt;Bo&gt; is out (by адмін)" {
+				t.Fatalf("text = %q, want {admin} as the group language's \"an admin\", not the tapper", params["text"])
+			}
+			s.wantRow(s.chat.Id, 9001, deletion.KindBotManual, 600*time.Second)
+		})
+		t.Run(tc.name+" sent directly", func(t *testing.T) {
+			s := newModerationGoldenSite(t)
+			eventMsgStore(t, s.chat.Id, tc.event, stored)
+			if err := bansModuleOrMutes(tc.event)(s.bot, s.commandCtx(tc.text, true, false)); err != ext.EndGroups {
+				t.Fatalf("%s error = %v, want EndGroups", tc.text, err)
+			}
+			params := rulesOnlyCall(t, s.client, "sendMessage")
+			if params["text"] != "Ann &amp; &lt;Bo&gt; is out (by Telegram)" {
+				t.Fatalf("text = %q, want {admin} naming the admin who sent the command", params["text"])
+			}
+		})
+	}
+}
+
+// bansModuleOrMutes is the handler of the ban or the mute command, by event.
+func bansModuleOrMutes(event string) func(b *gotgbot.Bot, ctx *ext.Context) error {
+	if event == eventmsg.EventMute {
+		return mutesModule.mute
+	}
+	return bansModule.ban
+}
+
+func TestEventMessageSilentVariants(t *testing.T) {
+	withModerationGoldenLocales(t)
+	silentCommands := []struct {
+		name, text, event, method string
+		reply                     bool
+		call                      func(b *gotgbot.Bot, ctx *ext.Context) error
+	}{
+		{name: "sban", text: "/sban 42", event: eventmsg.EventBan, method: "banChatMember", call: bansModule.sBan},
+		{name: "skick", text: "/skick", reply: true, event: eventmsg.EventKick, method: "unbanChatMember", call: bansModule.sKick},
+		{name: "smute", text: "/smute 42", event: eventmsg.EventMute, method: "restrictChatMember", call: mutesModule.sMute},
+	}
+	for _, cmd := range silentCommands {
+		for _, silent := range []bool{false, true} {
+			name := cmd.name + " with a custom text"
+			if silent {
+				name = cmd.name + " with Silent"
+			}
+			t.Run(name, func(t *testing.T) {
+				s := newModerationGoldenSite(t)
+				eventMsgStore(t, s.chat.Id, cmd.event, eventMsgSiteText)
+				if silent {
+					if err := eventmsg.SetSilent(t.Context(), s.chat.Id, cmd.event, eventmsg.DestGroup, true, 1); err != nil {
+						t.Fatalf("SetSilent error = %v", err)
+					}
+				}
+				if err := cmd.call(s.bot, s.commandCtx(cmd.text, cmd.reply, false)); err != ext.EndGroups {
+					t.Fatalf("%s error = %v, want EndGroups", cmd.text, err)
+				}
+				if got := len(s.client.callsFor(cmd.method)); got != 1 {
+					t.Fatalf("%s calls = %d, want the punishment applied once", cmd.method, got)
+				}
+				if got := len(s.client.callsFor("sendMessage")); got != 0 {
+					t.Fatalf("sendMessage calls = %d, want none from a silent command", got)
+				}
+				s.wantNoRows(s.chat.Id)
+			})
+		}
+	}
+
+	t.Run("the channel unban keeps its reply", func(t *testing.T) {
+		s := newModerationGoldenSite(t)
+		eventMsgStore(t, s.chat.Id, eventmsg.EventUnban, eventMsgSiteText)
+		if err := bansModule.unban(s.bot, s.commandCtx("/unban -1001234567890", true, true)); err != ext.EndGroups {
+			t.Fatalf("/unban error = %v, want EndGroups", err)
+		}
+		if got := len(s.client.callsFor("unbanChatSenderChat")); got != 1 {
+			t.Fatalf("unbanChatSenderChat calls = %d, want 1", got)
+		}
+		eventMsgWantSiteGolden(t, s, goldenModerationUnbanChannel)
+	})
+
+	t.Run("unmute with Silent", func(t *testing.T) {
+		s := newModerationGoldenSite(t)
+		eventMsgStore(t, s.chat.Id, eventmsg.EventUnmute, eventMsgSiteText)
+		if err := eventmsg.SetSilent(t.Context(), s.chat.Id, eventmsg.EventUnmute, eventmsg.DestGroup, true, 1); err != nil {
+			t.Fatalf("SetSilent error = %v", err)
+		}
+		if err := mutesModule.unmute(s.bot, s.commandCtx("/unmute 42", false, false)); err != ext.EndGroups {
+			t.Fatalf("/unmute error = %v, want EndGroups", err)
+		}
+		restricts := s.client.callsFor("restrictChatMember")
+		if len(restricts) != 1 {
+			t.Fatalf("restrictChatMember calls = %d, want 1", len(restricts))
+		}
+		permissions, _ := json.Marshal(restricts[0].Params["permissions"])
+		if !strings.Contains(string(permissions), `"can_send_messages":true`) {
+			t.Fatalf("permissions = %s, want the unmute permissions (messages allowed)", permissions)
+		}
+		if got := len(s.client.callsFor("sendMessage")); got != 0 {
+			t.Fatalf("sendMessage calls = %d, want none when silent", got)
+		}
+		s.wantNoRows(s.chat.Id)
+	})
 }

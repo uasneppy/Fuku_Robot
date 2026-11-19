@@ -119,9 +119,8 @@ func eventAdminName(tr *i18n.Translator, actor eventActor) string {
 const eventAnonActorKey = "event_message_anonymous_actor"
 
 // markAnonymousActor marks the update's issuer as an anonymous admin, so the event reply reads
-// {admin} as "an admin" although the re-entered command's sender is the tapper.
-//
-//nolint:unused // first production caller arrives in plan 20-05 (the anonymous admin's proof tap)
+// {admin} as "an admin" although the re-entered command's sender is the tapper. verifyAnonymousAdmin
+// calls it right before the re-entry.
 func markAnonymousActor(ctx *ext.Context) {
 	if ctx == nil {
 		return
