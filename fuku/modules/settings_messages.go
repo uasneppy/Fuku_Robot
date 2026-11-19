@@ -2,6 +2,7 @@ package modules
 
 import (
 	"context"
+	"maps"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	log "github.com/sirupsen/logrus"
@@ -33,7 +34,8 @@ const (
 	settingsActMsgEvent = "he"
 	// settingsActMsgSet, settingsActMsgRemove, settingsActMsgCancel, settingsActMsgPreview and
 	// settingsActMsgFull are the editor codes every event definition carries: Set, Remove, the prompt's
-	// Cancel, Preview of one part and Full preview. Plans 20-08 and 20-09 register them as page actions.
+	// Cancel, Preview of one part and Full preview. Set, Remove and Cancel are page actions; plan 20-09
+	// registers the two previews.
 	settingsActMsgSet     = "hs"
 	settingsActMsgRemove  = "hr"
 	settingsActMsgCancel  = "hc"
@@ -62,13 +64,16 @@ type settingsMsgEvent struct {
 }
 
 // settingsMsgFamily is one family of events (D-19): its code (the t value of hl), icon, name, the intro of
-// its list and its events in page order. A family with no events is not drawn anywhere.
+// its list, the prompt of its events' text part (which lists the placeholders the family's events fill), the
+// hint of its event screens and its events in page order. A family with no events is not drawn anywhere.
 type settingsMsgFamily struct {
-	Code     string
-	Icon     string
-	NameKey  string
-	IntroKey string
-	Events   []settingsMsgEvent
+	Code        string
+	Icon        string
+	NameKey     string
+	IntroKey    string
+	WaitTextKey string
+	HintKey     string
+	Events      []settingsMsgEvent
 }
 
 // settingsMsgManualEvents are the seven manual punishment events, in the order of eventmsg.Events.
@@ -86,12 +91,47 @@ var settingsMsgManualEvents = []settingsMsgEvent{
 // later phases add the automatic, lockdown and requirement families. It is a variable only so a test can
 // draw more families; production code never reassigns it.
 var settingsMsgFamilies = []settingsMsgFamily{
-	{Code: "m", Icon: "🔨", NameKey: "settings_msg_fam_manual", IntroKey: "settings_msg_fam_manual_intro", Events: settingsMsgManualEvents},
+	{
+		Code: "m", Icon: "🔨", NameKey: "settings_msg_fam_manual", IntroKey: "settings_msg_fam_manual_intro",
+		WaitTextKey: "settings_msg_wait_text_manual", HintKey: "settings_msg_hint_manual", Events: settingsMsgManualEvents,
+	},
 }
 
-// settingsMsgParts are the parts of an event message, in the order the event screen lists them. The text
-// part is the Welcome text part as a stand-in until plan 20-08 gives the events their own wait text.
-var settingsMsgParts = []settingsEditPart{settingsEditTextPart, settingsEditMediaPart, settingsEditButtonsPart}
+// settingsMsgTextPart is the text part of a family's event messages: the editor's text part with the
+// family's own prompt, which lists the Welcome placeholders and the family's event placeholders and says
+// that the default's reason line is not added to a custom text (D-11).
+func settingsMsgTextPart(fam settingsMsgFamily) settingsEditPart {
+	part := settingsEditTextPart
+	part.WaitKey = fam.WaitTextKey
+	part.RemovedKey = "settings_edit_removed_text_default"
+	return part
+}
+
+// settingsMsgPartsOf are the parts of a family's event messages, in the order the event screen lists them:
+// the family's text part, then the editor's media and buttons parts.
+func settingsMsgPartsOf(fam settingsMsgFamily) []settingsEditPart {
+	return []settingsEditPart{settingsMsgTextPart(fam), settingsEditMediaPart, settingsEditButtonsPart}
+}
+
+// settingsMsgEditCodes are the editor codes every event definition carries and the right Set and Remove
+// need (can_change_info, D-22). The page's Set, Remove and Cancel actions are built from them, one set of
+// codes for every event, the event named by the field k.
+var settingsMsgEditCodes = settingsEditPageDef{
+	SetCode: settingsActMsgSet, RemoveCode: settingsActMsgRemove, CancelCode: settingsActMsgCancel,
+	PreviewCode: settingsActMsgPreview, FullCode: settingsActMsgFull, EditRight: settingsRightChangeInfo,
+}
+
+// settingsMsgEditActions are the page's Set (hs), Remove (hr) and Cancel (hc) actions: the editor's own,
+// resolved by k to the event's definition (settingsMsgDefByFields, which requires the private owner field c,
+// so a group menu's press is refused in step 1). The two preview codes are not registered yet (plan 20-09).
+func settingsMsgEditActions() map[string]settingsPageAction {
+	all := settingsEditResolvedActions(settingsMsgEditCodes, []string{settingsMsgEventField}, settingsMsgDefByFields)
+	actions := make(map[string]settingsPageAction, 3)
+	for _, code := range []string{settingsActMsgSet, settingsActMsgRemove, settingsActMsgCancel} {
+		actions[code] = all[code]
+	}
+	return actions
+}
 
 // settingsMsgRead reads a group's event messages fresh: the page never reads through the cache, so it
 // never shows a value another replica has just changed as stale, and it creates nothing. It is a variable
@@ -104,6 +144,18 @@ var settingsMsgRead = eventmsg.GetFresh
 var settingsMsgStaffLookup = staff.GetStaffGroupFresh
 
 func init() {
+	actions := map[string]settingsPageAction{
+		settingsActMsgFamily: {
+			Fields: []string{"t"}, Right: settingsRightAdmin, Validate: settingsMsgFamilyFields, Run: settingsMsgRunFamily,
+		},
+		settingsActMsgEvent: {
+			Fields: []string{settingsMsgEventField}, Right: settingsRightAdmin, Validate: settingsMsgEventFields, Run: settingsMsgRunEvent,
+		},
+		settingsActMsgSilent: {
+			Fields: []string{settingsMsgEventField, "v"}, Right: settingsRightChangeInfo, Validate: settingsMsgSilentFields, Run: settingsMsgRunSilent,
+		},
+	}
+	maps.Copy(actions, settingsMsgEditActions())
 	registerSettingsPage(settingsPage{
 		Key:            settingsPageMessages,
 		Order:          74,
@@ -114,17 +166,7 @@ func init() {
 		Hidden:         settingsMsgHidden,
 		PrivateOnly:    true,
 		PrivateNoteKey: "settings_msg_group_note",
-		Actions: map[string]settingsPageAction{
-			settingsActMsgFamily: {
-				Fields: []string{"t"}, Right: settingsRightAdmin, Validate: settingsMsgFamilyFields, Run: settingsMsgRunFamily,
-			},
-			settingsActMsgEvent: {
-				Fields: []string{settingsMsgEventField}, Right: settingsRightAdmin, Validate: settingsMsgEventFields, Run: settingsMsgRunEvent,
-			},
-			settingsActMsgSilent: {
-				Fields: []string{settingsMsgEventField, "v"}, Right: settingsRightChangeInfo, Validate: settingsMsgSilentFields, Run: settingsMsgRunSilent,
-			},
-		},
+		Actions:        actions,
 	})
 	for _, fam := range settingsMsgFamilies {
 		for _, ev := range fam.Events {
@@ -162,18 +204,20 @@ func settingsMsgWaitPage(ev settingsMsgEvent) string {
 }
 
 // settingsMsgEditDef is the message editor definition of one event: the hooked kind, the page's title,
-// the five editor codes, can_change_info to change it (D-22), the three parts, the field k that names the
-// event on every editor button, the bot's own reserved buttons and the hooks that read and draw it.
+// the five editor codes, can_change_info to change it (D-22), the family's three parts, the field k that
+// names the event on every editor button, the bot's own reserved buttons and the hooks that read, draw,
+// remove and write it.
 func settingsMsgEditDef(fam settingsMsgFamily, ev settingsMsgEvent) settingsEditPageDef {
-	return settingsEditPageDef{
-		Key: settingsMsgWaitPage(ev), Kind: settingsEditEvent, Icon: ev.Icon, TitleKey: "settings_page_msgs",
-		SetCode: settingsActMsgSet, RemoveCode: settingsActMsgRemove, CancelCode: settingsActMsgCancel,
-		PreviewCode: settingsActMsgPreview, FullCode: settingsActMsgFull, EditRight: settingsRightChangeInfo,
-		Parts:           append([]settingsEditPart(nil), settingsMsgParts...),
-		Fields:          map[string]string{settingsMsgEventField: ev.Code},
-		ReservedButtons: ev.ReservedButtons,
-		Hooks:           &settingsEditHooks{Load: settingsMsgLoad(ev), Draw: settingsMsgDraw(fam, ev)},
+	def := settingsMsgEditCodes
+	def.Key, def.Kind, def.Icon, def.TitleKey = settingsMsgWaitPage(ev), settingsEditEvent, ev.Icon, "settings_page_msgs"
+	def.Parts = settingsMsgPartsOf(fam)
+	def.Fields = map[string]string{settingsMsgEventField: ev.Code}
+	def.ReservedButtons = ev.ReservedButtons
+	def.Hooks = &settingsEditHooks{
+		Load: settingsMsgLoad(ev), Draw: settingsMsgDraw(fam, ev),
+		Remove: settingsMsgRemove(ev), Write: settingsMsgWrite(ev),
 	}
+	return def
 }
 
 // settingsMsgDefByFields is the definition of the event a press names by k. It is false for a press
@@ -382,8 +426,56 @@ func settingsMsgLoad(ev settingsMsgEvent) func(context.Context, int64) (settings
 
 // settingsMsgDraw is an event definition's Draw hook.
 func settingsMsgDraw(fam settingsMsgFamily, ev settingsMsgEvent) func(settingsView, settingsEditPageDef, settingsEditState, settingsEditScreenOpts) settingsScreen {
-	return func(v settingsView, _ settingsEditPageDef, st settingsEditState, opts settingsEditScreenOpts) settingsScreen {
-		return renderSettingsMsgEvent(v, fam, ev, st, opts)
+	return func(v settingsView, def settingsEditPageDef, st settingsEditState, opts settingsEditScreenOpts) settingsScreen {
+		return renderSettingsMsgEvent(v, fam, ev, def, st, opts)
+	}
+}
+
+// settingsMsgApplied is the outcome and the editor state of an event message apply function's result:
+// nil when the write failed or its read-back did (the caller reloads). A write that left no row is drawn
+// as the default message.
+func settingsMsgApplied(res eventMsgApplyResult) (greetingApplyOutcome, *settingsEditState) {
+	if res.Outcome == greetingSaveFailed || res.Row == nil {
+		return res.Outcome, nil
+	}
+	st := settingsMsgStateFromMessage(*res.Row)
+	return res.Outcome, &st
+}
+
+// settingsMsgRemove is an event definition's Remove hook: it clears one part through its apply function
+// (an empty text, no file and type 0, no buttons) for the presser by and returns the state read back. A
+// row with nothing left and Silent off reads as Default, so the send path sends today's reply.
+func settingsMsgRemove(ev settingsMsgEvent) func(context.Context, int64, string, int64) (greetingApplyOutcome, *settingsEditState) {
+	return func(ctx context.Context, chatID int64, part string, by int64) (greetingApplyOutcome, *settingsEditState) {
+		switch part {
+		case settingsEditPartText:
+			return settingsMsgApplied(applyEventText(ctx, chatID, ev.Key, "", by))
+		case settingsEditPartMedia:
+			return settingsMsgApplied(applyEventMedia(ctx, chatID, ev.Key, "", 0, by))
+		case settingsEditPartButtons:
+			return settingsMsgApplied(applyEventButtons(ctx, chatID, ev.Key, nil, by))
+		}
+		return greetingSaveFailed, nil
+	}
+}
+
+// settingsMsgWrite is an event definition's Write hook: it stores the part the editor's check accepted
+// (the converted text, the media's file ID and type, or the parsed buttons) through the part's apply
+// function, with the person who typed it as the writer, and reports whether it was stored.
+func settingsMsgWrite(ev settingsMsgEvent) func(context.Context, int64, string, settingsEditVerdict, int64) bool {
+	return func(ctx context.Context, chatID int64, part string, verdict settingsEditVerdict, by int64) bool {
+		var res eventMsgApplyResult
+		switch part {
+		case settingsEditPartText:
+			res = applyEventText(ctx, chatID, ev.Key, verdict.Text, by)
+		case settingsEditPartMedia:
+			res = applyEventMedia(ctx, chatID, ev.Key, verdict.FileID, verdict.DataType, by)
+		case settingsEditPartButtons:
+			res = applyEventButtons(ctx, chatID, ev.Key, verdict.Buttons, by)
+		default:
+			return false
+		}
+		return res.Outcome != greetingSaveFailed
 	}
 }
 
@@ -444,13 +536,16 @@ func renderSettingsMsgFamily(v settingsView, fam settingsMsgFamily, msgs *eventm
 // renderSettingsMsgEvent draws an event's screen (the Draw hook of its editor definition): the event's icon
 // and bold name, its description, then the state of each part in words (never the stored text, a button
 // name or a link), the editor's note for a media kind that carries no caption, the Silent line and, after a
-// blank line, the Silent hint; the full-width Silent toggle (the state icon, sending the opposite of the
-// stored state as an absolute target), then Back (the family) and Close. It is pure. Plans 20-08 and 20-09
-// add the part rows and the previews.
-func renderSettingsMsgEvent(v settingsView, fam settingsMsgFamily, ev settingsMsgEvent, st settingsEditState, opts settingsEditScreenOpts) settingsScreen {
+// blank line each, the family's hint and the Silent hint; the keyboard opens with the editor's part rows
+// ([Set] while a part is not set, [Set | Remove] while it is, each button carrying k), then the full-width
+// Silent toggle (the state icon, sending the opposite of the stored state as an absolute target), then Back
+// (the family) and Close. It is pure. Plan 20-09 adds the previews.
+func renderSettingsMsgEvent(
+	v settingsView, fam settingsMsgFamily, ev settingsMsgEvent, def settingsEditPageDef, st settingsEditState, opts settingsEditScreenOpts,
+) settingsScreen {
 	tr := v.Tr
 	body := []string{ev.Icon + " <b>" + settingsText(tr, ev.NameKey) + "</b>", settingsText(tr, ev.DescKey), ""}
-	for _, part := range settingsMsgParts {
+	for _, part := range def.Parts {
 		body = append(body, settingsText(tr, part.LineKey, i18n.TranslationParams{
 			"state": settingsEditStateWord(tr, st, part.Code),
 		}))
@@ -460,8 +555,10 @@ func renderSettingsMsgEvent(v settingsView, fam settingsMsgFamily, ev settingsMs
 	}
 	body = append(body,
 		settingsText(tr, "settings_msg_line_silent", i18n.TranslationParams{"state": settingsStateWord(tr, st.Silent)}),
+		"", settingsText(tr, fam.HintKey),
 		"", settingsText(tr, "settings_msg_hint_silent"))
 	k := newSettingsKeyboard(v)
+	settingsEditPartRows(k, def, st)
 	target := "1"
 	if st.Silent {
 		target = "0"

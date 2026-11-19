@@ -2920,6 +2920,8 @@ settings_msg_group_note: "Сообщения задаются только в м
 settings_msg_line_silent: "Тихий режим: {state}"
 settings_btn_msg_silent: "{state} Тихий режим"
 settings_msg_hint_silent: "Тихий режим: если включено, я всё равно действую, но ничего не публикую в группе для этого события."
+settings_msg_wait_text_manual: "Отправьте мне новый текст сейчас, обычным сообщением. Жирный, курсив, ссылки и другое форматирование сохраняются.\n\nОб участнике: <code>{first}</code> <code>{last}</code> <code>{fullname}</code> <code>{username}</code> <code>{mention}</code> <code>{id}</code>. О группе: <code>{chatname}</code>. О наказании: <code>{admin}</code> <code>{reason}</code>, а для бана или мута на время ещё <code>{duration}</code> <code>{until}</code>. Добавьте <code>{rules}</code> для кнопки «Правила». Строку с причиной я к вашему тексту не добавляю: поставьте <code>{reason}</code> туда, где он нужен.\n\nДо {max} символов."
+settings_msg_hint_manual: "Кнопка «Задать» берёт ваше следующее сообщение в моём личном чате как эту часть. Без вашего текста я публикую свой стандартный текст на языке группы, с вашим медиа и кнопками."
 settings_state_default: "По умолчанию"
 settings_edit_line_text: "Текст: {state}"
 settings_edit_line_media: "Медиа: {state}"

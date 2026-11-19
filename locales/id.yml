@@ -3105,6 +3105,8 @@ settings_msg_group_note: "Pesan hanya diatur di chat pribadi saya, jadi anggota 
 settings_msg_line_silent: "Senyap: {state}"
 settings_btn_msg_silent: "{state} Senyap"
 settings_msg_hint_silent: "Senyap: saat aktif, saya tetap bertindak, tetapi tidak memposting apa pun di grup untuk peristiwa ini."
+settings_msg_wait_text_manual: "Kirim teks baru sekarang, sebagai pesan biasa. Tebal, miring, tautan, dan format lain dipertahankan.\n\nUntuk anggota: <code>{first}</code> <code>{last}</code> <code>{fullname}</code> <code>{username}</code> <code>{mention}</code> <code>{id}</code>. Untuk grup: <code>{chatname}</code>. Untuk hukuman: <code>{admin}</code> <code>{reason}</code>, dan untuk ban atau bisu sementara juga <code>{duration}</code> <code>{until}</code>. Tambahkan <code>{rules}</code> untuk tombol Aturan. Saya tidak menambahkan baris alasan ke teks Anda: letakkan <code>{reason}</code> di tempat yang Anda mau.\n\nMaksimal {max} karakter."
+settings_msg_hint_manual: "Atur mengambil pesan Anda berikutnya di chat pribadi saya sebagai bagian itu. Tanpa teks Anda sendiri, saya memposting teks bawaan saya dalam bahasa grup, dengan media dan tombol Anda."
 settings_state_default: "Bawaan"
 settings_edit_line_text: "Teks: {state}"
 settings_edit_line_media: "Media: {state}"

@@ -1504,7 +1504,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   that note with the Open in private row, Back and Close, with no page code and no read) and `Hidden` in a Staff Group
   (`settingsMsgHidden`: a definite Staff Group row read fresh through the page's own seam `settingsMsgStaffLookup`, never the Deletion page's `deletionStaffLookup`, whose reads `TestSettingsDeletionHidden` counts; an unreadable row shows the page), because
   nothing is set at Staff Group level (D-01). It is drawn from one table, `settingsMsgFamilies` (`settingsMsgFamily{Code, Icon, NameKey,
-  IntroKey, Events}`, a variable only so a test can draw more families), whose events are `settingsMsgEvent{Key, Code, Icon, NameKey,
+  IntroKey, WaitTextKey, HintKey, Events}`, a variable only so a test can draw more families), whose events are `settingsMsgEvent{Key, Code, Icon, NameKey,
   DescKey, ReservedButtons}`; only the manual family (`m`, 🔨, Admin actions) has events now, `settingsMsgManualEvents`: ban `bn` 🚫
   (reserved 1, the Unban row), tban `tb` ⏳, kick `kk` 👢, mute `mu` 🔇 (reserved 1, the Unmute row), tmute `tm` 🔕, unban `ub` 🔓, unmute
   `um` 🔊. A family with no events is not drawn anywhere and no renderer branches on a family's or an event's code. Screens: the hub
@@ -1513,8 +1513,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   its intro, the event lines and `settings_msg_list_hint`; one cell per event, two to a row, then Back to the hub and Close, rows
   `[2 2 2 1 2]`) and an event's screen (`a=he&k=<code>`: the event's icon and bold name, its description, then the editor's part lines
   `settings_edit_line_text`, `_media` and `_buttons` with `settingsEditStateWord`, the no-caption note for a sticker or a video
-  note, then `settings_msg_line_silent` with `settingsStateWord` and, after a blank line, `settings_msg_hint_silent`; the full-width
-  Silent toggle `settings_btn_msg_silent` with `settingsStateIcon`, then Back to the family and Close, rows `[1 2]`). An event's state (`settingsMsgStateOf`) is Silent when its Silent switch is on, Custom when it
+  note, then `settings_msg_line_silent` with `settingsStateWord` and, after a blank line each, the family's hint (`settings_msg_hint_manual`)
+  and `settings_msg_hint_silent`; the keyboard opens with the editor's part rows (`settingsEditPartRows`: `[Set]` while a part is not set,
+  `[Set | Remove]` while it is, text, media and buttons in that order, each button carrying `k`), then the full-width
+  Silent toggle `settings_btn_msg_silent` with `settingsStateIcon`, then Back to the family and Close, rows `[1|2 1|2 1|2 1 2]`). An event's state (`settingsMsgStateOf`) is Silent when its Silent switch is on, Custom when it
   has a text, a media or a button, else Default (no row, or a row with nothing left, reads as the send path reads it); Main reads
   `settings_state_default` when every event is Default and `settings_state_msg_n` (`{n} custom`) for the n events that are not
   (`settingsMsgCountChanged`), the unknown mark when the read failed. Every read is `settingsMsgRead` (= `eventmsg.GetFresh`, never the
@@ -1523,13 +1525,39 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   menu's press is an invalid request in step 1, before any `getChatMember`) and a family with events or a known event, and need
   `settingsRightAdmin`; viewing needs only the live admin check and the owner gate (MSG-08). Each event is one message editor definition
   registered with `registerSettingsEditDef(settingsMsgEditDef(fam, ev))`: kind `settingsEditEvent`, key `settingsMsgWaitPage(ev)` = `h` +
-  the event code + `g` (`hbng` for the group's ban message, the wait's `p`), the editor codes `hs hr hc hv hf`, `EditRight`
-  `settingsRightChangeInfo` (D-22), the text, media and buttons parts (the Welcome text part stands in until plan 20-08 gives the events
-  their own wait text), `Fields` `{"k": <code>}`, `ReservedButtons` from the table and the hooks `Load` (`settingsMsgLoad(ev)`: the row of
-  `(event, group)`, `TextIsDefault` when there is no text, `Silent` from the row) and `Draw` (`renderSettingsMsgEvent`); `he` redraws
+  the event code + `g` (`hbng` for the group's ban message, the wait's `p`), the editor codes and right of `settingsMsgEditCodes`
+  (`hs hr hc hv hf`, `EditRight` `settingsRightChangeInfo`, D-22), the parts `settingsMsgPartsOf(fam)` (the family's own text part
+  `settingsMsgTextPart(fam)`: the editor's text part with the family's prompt `WaitTextKey` and the removed notice
+  `settings_edit_removed_text_default`, then the editor's media and buttons parts, `x m b`), `Fields` `{"k": <code>}`, `ReservedButtons`
+  from the table and the hooks `Load` (`settingsMsgLoad(ev)`: the row of `(event, group)`, `TextIsDefault` when there is no text, `Silent`
+  from the row), `Draw` (`renderSettingsMsgEvent`), `Remove` (`settingsMsgRemove(ev)`) and `Write` (`settingsMsgWrite(ev)`); `he` redraws
   through `settingsEditRedraw` of that definition. `settingsMsgDefByFields` resolves a press's `k` to its definition and is false without
-  `c`, so plan 20-08's `settingsEditResolvedActions(…, []string{"k"}, settingsMsgDefByFields)` refuses a group menu's press in step 1. Plan
-  20-08 adds Set, Remove and the typed reply, 20-09 the previews. The Silent switch (plan 20-07, MSG-07, D-14: on, the bot still acts and
+  `c`. The editor on an event screen (plan 20-08, MSG-06, D-20 to D-22): the page actions `hs` (Set), `hr` (Remove) and `hc` (Cancel)
+  are the editor's own, taken from `settingsEditResolvedActions(settingsMsgEditCodes, []string{"k"}, settingsMsgDefByFields)`
+  (`settingsMsgEditActions`; the preview codes `hv` and `hf` are not registered until plan 20-09), so their fields are exactly `t` (a part
+  of the resolved definition) and `k`, a group menu's press (`u` in place of `c`) or an unknown `k` or `t` is an invalid request in step 1
+  before any lookup, and each button is 42 bytes at a 14-character chat ID (`a=hs&c=<chat>&k=bn&t=x`). Set and Remove need
+  `settingsRightChangeInfo`, Cancel only `settingsRightAdmin`. Set writes the owner's one wait (page `h` + code + `g`, part `x`, `m` or
+  `b`) and edits the message into the part's prompt: the text part's is the family's (`settings_msg_wait_text_manual`, which lists the
+  Welcome placeholders the event fills for the punished member and the group, the event's `{admin}`, `{reason}`, `{duration}` and `{until}`,
+  and says the default's reason line is not added to a custom text, D-11) with "Up to" 4096, or 1024 while a media is stored; media and
+  buttons show the editor's own prompts. Cancel ends that wait as on Welcome. Remove clears its part at once with no card through the part's
+  apply function (an empty text, no file and type 0, or no buttons); a row with nothing left and Silent off reads Default and the send path
+  sends today's reply. The typed reply runs the editor branch of the typed-reply door (no new door, D-23): `authorize(def.EditRight)` (the
+  live `getChatMember`, the owner gate, `can_change_info`, the live `getChat`) on every message, so a demotion or a gate closed between Set
+  and the message ends the wait and stores nothing; then the editor's check (the greeting text check: the commands' conversion, 4096 or 1024
+  with media, event tokens such as `{reason}` stored as typed and not filled by the dry run, D-21; http or https buttons only; the keyboard
+  limits with the reserved Unban or Unmute row counted), the claim and the `Write` hook. The parts' one write paths are `applyEventText(ctx,
+  chatID, event, text, by)`, `applyEventMedia(ctx, chatID, event, fileID, mediaType, by)` and `applyEventButtons(ctx, chatID, event, buttons,
+  by)` in `event_message_apply.go`, beside `applyEventSilent`: each writes through its seam (`eventMsgWrites.Text`, `.Media`, `.Buttons`,
+  defaults `eventmsg.SetText`, `SetMedia`, `SetButtons`, destination `eventmsg.DestGroup`, the presser or typist as `updated_by`), reads
+  the row back fresh (`eventMsgApplyReadBack`), judges no person's rights and logs the chat ID, the event and the part only, never a text,
+  a file ID or a button. There is no command to compare with, so `TestSettingsAuthorityMessagesEdit` (without `can_change_info` at Set and
+  Remove, a demotion between Set and the typed text, the owner gate at the press and at the typed text, a plain member, Cancel and the
+  screens with the admin check alone, the live creator) and `TestSettingsDriftMessagesEdit` (a text stored through the repository is drawn
+  and counted Custom, a page Remove and a typed save are what the send path's cached `eventMessagesLookup` reads at once, opening every
+  screen writes nothing) stand in for a parity test, beside `TestSettingsMessagesSet`, `TestSettingsMessagesRemove` and
+  `TestSettingsMessagesTyped` (`settings_messages_edit_test.go`). Plan 20-09 adds the previews. The Silent switch (plan 20-07, MSG-07, D-14: on, the bot still acts and
   posts nothing in the group for that event; the default is off) is the page action `hq` (`settingsActMsgSilent`), fields exactly `k` and
   `v`, its `Validate` (`settingsMsgSilentFields`) the private owner field `c`, a known event and `v` exactly `0` or `1`
   (`settingsEditSwitchValue`), so a forged `v`, an unknown `k`, an extra field or a group menu's `u` is an invalid request in step 1 before
@@ -1744,7 +1772,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   never runs.
   `settingsRightChangeInfo` needs the creator or an administrator with `can_change_info` from the same member record (no
   extra call) and refuses with the alert `settings_no_change_info` (the editor's Delete last, as `/cleanwelcome` and
-  `/cleangoodbye` refuse through `CanUserChangeInfo`); it also gates every choice of the Deletion page (`/cleanservice` asks for it too), the three Member messages rows (`mc`, `me`, `ms`, Off included) and the Self-destruct card's Yes (`dy`), each judged on the press's fresh member record, so a Yes after the presser lost the right is refused with nothing written, while opening the section, a list and a row screen needs only the admin check every press makes (`TestSettingsAuthorityDeletionMember`; the owner gate's carve-out applies: a non-owner administrator with the switch off is refused at step 4b). It also gates the Messages page's Silent switch (`hq`, Phase 20 plan 20-07), judged on the press's own live member record with nothing written on a refusal, while opening the hub, a family and an event screen needs only `settingsRightAdmin`; Set, Remove and the typed reply of an event message follow in plan 20-08 under the same right (the event definitions' `EditRight`). `settingsRightRefusalFor` is the one pure judgement of a right's
+  `/cleangoodbye` refuse through `CanUserChangeInfo`); it also gates every choice of the Deletion page (`/cleanservice` asks for it too), the three Member messages rows (`mc`, `me`, `ms`, Off included) and the Self-destruct card's Yes (`dy`), each judged on the press's fresh member record, so a Yes after the presser lost the right is refused with nothing written, while opening the section, a list and a row screen needs only the admin check every press makes (`TestSettingsAuthorityDeletionMember`; the owner gate's carve-out applies: a non-owner administrator with the switch off is refused at step 4b). It also gates the Messages page's Silent switch (`hq`, Phase 20 plan 20-07), judged on the press's own live member record with nothing written on a refusal, while opening the hub, a family and an event screen needs only `settingsRightAdmin`; Set (`hs`) and Remove (`hr`) of an event message's text, media and buttons (Phase 20 plan 20-08) need it too, the event definitions' `EditRight`, judged on every press and, through the typed-reply door's `authorize`, on every typed message, so a demotion between Set and the message ends the wait and stores nothing; the prompt's Cancel (`hc`) needs only `settingsRightAdmin`. `settingsRightRefusalFor` is the one pure judgement of a right's
   member-record part, shared by a button press and a typed reply, so the two can never judge a right differently.
   Two composite rights (Phase 18, the only framework edit of that phase, appended after `settingsRightChangeInfo` so the zero value
   stays `settingsRightAdmin`, which made eight rights at the end of Phase 18; Phase 19 adds a ninth, below) judge the bot part first, as the commands they mirror do, then the member part:
@@ -1820,7 +1848,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   a replace of the whole roster or a clear. Only a cycle cut off by a cancel gives it back, by compare-and-delete.
 - The message editor's wait for a typed reply (`settings_input.go`, all outside the `fuku:cache:` prefix in the
   `fuku:settings:*` family, so `CLEAR_CACHE_ON_STARTUP` keeps them, and holding IDs and codes only, never message text or
-  a file ID, except the one bounded user-text field `w` below). `fuku:settings:input:<user>` is one hash per user with `c` (group chat ID), `p` (page key), `t` (part), `m`
+  a file ID, except the one bounded user-text field `w` below). `fuku:settings:input:<user>` is one hash per user with `c` (group chat ID), `p` (page key, which may also be the key of a registered message editor definition such as an event message's `hbng`), `t` (part), `m`
   (prompt message ID), `n` (16 hex nonce from `crypto/rand`), `x` (expiry, unix ms), `r<message id>` for each refusal reply that carries a Cancel button (at most 40 fields in
   all, no text), while a claim is held `k`, and, on the second part of a two-step list add only (Filters `(i,y)`, Notes `(e,c)`), `w`
   (the step-1 keyword or name: valid UTF-8, not blank, at most 100 code points, never logged, never in callback data, deleted with the

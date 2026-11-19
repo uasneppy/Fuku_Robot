@@ -42,7 +42,8 @@ func settingsMsgSilentToggle(t *testing.T, keyboard [][]gotgbot.InlineKeyboardBu
 
 // settingsMsgWantSilentScreen fails the test unless text and keyboard are the screen of the event code with
 // the Silent switch drawn in the given state: the line with the state word, the hint, and a full-width toggle
-// with the state icon that targets the opposite state, above Back and Close.
+// with the state icon that targets the opposite state, below the three part rows ([Set] or [Set | Remove])
+// and above Back and Close.
 func settingsMsgWantSilentScreen(t *testing.T, text string, keyboard [][]gotgbot.InlineKeyboardButton, code string, on bool) {
 	t.Helper()
 	word, icon, target := staffMarker("common_status_off"), "❌", "1"
@@ -55,10 +56,18 @@ func settingsMsgWantSilentScreen(t *testing.T, text string, keyboard [][]gotgbot
 	if !containsMarker(text, "settings_msg_hint_silent") {
 		t.Errorf("the %s screen %q lacks the Silent hint", code, text)
 	}
-	settingsMsgWantWidths(t, "the "+code+" screen", keyboard, 1, 2)
+	widths := settingsListRowWidths(keyboard)
+	if len(widths) != 5 || widths[3] != 1 || widths[4] != 2 {
+		t.Fatalf("the %s screen rows = %v, want three part rows, the toggle and Back and Close", code, widths)
+	}
+	for i := range 3 {
+		if widths[i] < 1 || widths[i] > 2 || settingsButtonFields(t, keyboard[i][0])["a"] != settingsActMsgSet {
+			t.Errorf("row %d of the %s screen is not a part row: %+v", i, code, keyboard[i])
+		}
+	}
 	toggle, fields := settingsMsgSilentToggle(t, keyboard)
-	if keyboard[0][0].CallbackData != toggle.CallbackData {
-		t.Errorf("the Silent toggle is not the first row: %+v", keyboard)
+	if keyboard[3][0].CallbackData != toggle.CallbackData {
+		t.Errorf("the Silent toggle is not the row after the part rows: %+v", keyboard)
 	}
 	if want := staffMarker("settings_btn_msg_silent") + " " + icon; toggle.Text != want {
 		t.Errorf("the Silent toggle reads %q, want %q", toggle.Text, want)

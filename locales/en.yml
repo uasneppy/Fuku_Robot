@@ -1874,6 +1874,8 @@ settings_msg_group_note: "Messages are set only in my private chat, so the membe
 settings_msg_line_silent: "Silent: {state}"
 settings_btn_msg_silent: "{state} Silent"
 settings_msg_hint_silent: "Silent: when on, I still act but post nothing in the group for this event."
+settings_msg_wait_text_manual: "Send me the new text now, as a normal message. Bold, italic, links and other formatting are kept.\n\nFor the member: <code>{first}</code> <code>{last}</code> <code>{fullname}</code> <code>{username}</code> <code>{mention}</code> <code>{id}</code>. For the group: <code>{chatname}</code>. For the punishment: <code>{admin}</code> <code>{reason}</code>, and for a timed ban or mute also <code>{duration}</code> <code>{until}</code>. Add <code>{rules}</code> for a Rules button. I do not add the reason line to your text: put <code>{reason}</code> where you want it.\n\nUp to {max} characters."
+settings_msg_hint_manual: "Set takes your next message in my private chat as that part. Without your own text I post my default text in the group's language, with your media and buttons."
 settings_state_default: "Default"
 settings_edit_line_text: "Text: {state}"
 settings_edit_line_media: "Media: {state}"

@@ -639,6 +639,10 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_msg_line_silent": {20, 28},
 	"settings_btn_msg_silent":  {20, 26},
 	"settings_msg_hint_silent": {90, 126},
+	// The editor on an event screen (Phase 20, plan 20-08): the manual family's text prompt, which lists the
+	// Welcome and event placeholders, and the family's hint.
+	"settings_msg_wait_text_manual": {600, 840},
+	"settings_msg_hint_manual":      {180, 252},
 }
 
 // settingsAlertKeys are shown as answerCallbackQuery alerts: plain text, no tag, at most
@@ -1189,7 +1193,7 @@ func TestSettingsReusedKeyPlaceholders(t *testing.T) {
 					// The editor's text prompt lists the literal {id} placeholder of a welcome
 					// text as copyable code; it is never filled in (TestSettingsEditLocaleTokens
 					// holds it byte-identical), so it cannot name anyone.
-					if name == "id" && key == settingsEditWaitTextKey {
+					if name == "id" && (key == settingsEditWaitTextKey || key == settingsMsgWaitTextManualKey) {
 						continue
 					}
 					if name == "staff" || name == "id" {
@@ -1271,6 +1275,18 @@ func TestSettingsHelpFitsOneMessage(t *testing.T) {
 // that carries the literal {id} placeholder.
 const settingsEditWaitTextKey = "settings_edit_wait_text"
 
+// settingsMsgWaitTextManualKey is the text prompt of the manual family's event messages, which lists the
+// literal {id} placeholder too.
+const settingsMsgWaitTextManualKey = "settings_msg_wait_text_manual"
+
+// settingsMsgManualLiteralTokens are the placeholders the manual family's text prompt shows as copyable code:
+// the Welcome ones an event fills for the punished member and the group, and the event's own.
+var settingsMsgManualLiteralTokens = []string{
+	"<code>{first}</code>", "<code>{last}</code>", "<code>{fullname}</code>", "<code>{username}</code>",
+	"<code>{mention}</code>", "<code>{id}</code>", "<code>{chatname}</code>", "<code>{admin}</code>",
+	"<code>{reason}</code>", "<code>{duration}</code>", "<code>{until}</code>", "<code>{rules}</code>",
+}
+
 // settingsEditLiteralTokens are the welcome-text placeholders and the button syntax the
 // editor's prompts show as copyable code. They are never translated, in any language, and
 // the translator leaves unknown {name} tokens alone, so each must reach the owner unchanged.
@@ -1304,6 +1320,7 @@ func TestSettingsEditLocaleTokens(t *testing.T) {
 		}},
 		{"settings_edit_hint_rules", []string{"<code>/rules</code>"}},
 		{"settings_edit_refuse_buttons_syntax", []string{settingsEditSyntaxExample}},
+		{settingsMsgWaitTextManualKey, settingsMsgManualLiteralTokens},
 	}
 
 	parameters := []tokenKey{
@@ -1334,6 +1351,7 @@ func TestSettingsEditLocaleTokens(t *testing.T) {
 		{"settings_edit_line_clean_goodbye", []string{"{state}"}},
 		{"settings_msg_line_silent", []string{"{state}"}},
 		{"settings_btn_msg_silent", []string{"{state}"}},
+		{settingsMsgWaitTextManualKey, []string{"{max}"}},
 	}
 
 	english := loadStaffLocale(t, "en")
