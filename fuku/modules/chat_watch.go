@@ -71,32 +71,53 @@ func chatWatch(b *gotgbot.Bot, ctx *ext.Context) {
 	if !ok || ctx.EffectiveSender.User.IsBot {
 		return
 	}
-	addressed, client := chatAddressed(b, msg)
-	if !addressed {
+	if addressed, _ := chatAddressed(b, msg); !addressed {
 		return
 	}
+	gate, provider := chatAccept(b, chat.Id, userID)
+	if gate != chatGateOpen {
+		return
+	}
+	chatEnqueue(chatJobOf(b, msg, userID, provider))
+}
+
+// chatGate is what the group's settings and the server say about one addressed message.
+type chatGate int
+
+const (
+	// chatGateOpen means the message gets a job.
+	chatGateOpen chatGate = iota
+	// chatGateOff means conversations are off in the group or cannot run on this server: /ask
+	// answers chat_off_hint, a mention or a reply gets nothing.
+	chatGateOff
+	// chatGateSilent means no reply and no line: an unreadable setting, no Redis or an audience
+	// the sender is not in.
+	chatGateSilent
+)
+
+// chatAccept applies the checks after the address: the server can converse, the cached setting
+// (an error answers nothing), the switch and its provider, Redis, and the audience.
+func chatAccept(b *gotgbot.Bot, chatID, userID int64) (chatGate, string) {
 	if !chatAnyProviderConfigured() {
-		return
+		return chatGateOff, ""
 	}
-	readCtx, cancel := context.WithTimeout(context.Background(), chatWatchTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), chatWatchTimeout)
 	defer cancel()
-	settings, err := chatSettingsLookup(readCtx, chat.Id)
+	settings, err := chatSettingsLookup(ctx, chatID)
 	if err != nil {
-		log.WithField("chat_id", chat.Id).Debug("[Chat] the conversation setting could not be read, no reply")
-		return
+		log.WithField("chat_id", chatID).Debug("[Chat] the conversation setting could not be read, no reply")
+		return chatGateSilent, ""
 	}
 	if !settings.Enabled || !chatProviderConfigured(settings.Provider) {
-		return
+		return chatGateOff, ""
 	}
-	if client == nil {
-		if client = chatRedisClient(); client == nil {
-			return
-		}
+	if chatRedisClient() == nil {
+		return chatGateSilent, ""
 	}
-	if !chatAudienceAllows(readCtx, b, settings.Audience, chat.Id, userID) {
-		return
+	if !chatAudienceAllows(ctx, b, settings.Audience, chatID, userID) {
+		return chatGateSilent, ""
 	}
-	chatEnqueue(chatJobOf(b, msg, userID, settings.Provider))
+	return chatGateOpen, settings.Provider
 }
 
 // chatAddressed reports whether the message is addressed to the bot: a mention (pure), else a

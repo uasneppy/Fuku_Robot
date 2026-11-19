@@ -55,5 +55,5 @@ The brief is `.planning/research/xenobot-chat/PLAN.md` (with `LORE.md`, `COMIC-D
   - [x] 20-04: Storage and apply functions
   - [x] 20-05: Settings page
   - [x] 20-06: Runtime
-  - [ ] 20-07: `/ask`, help, locales, docs, `AGENTS.md`
+  - [x] 20-07: `/ask`, help, locales, docs, `AGENTS.md`
   - [ ] 20-08: End-to-end test, full checks, owner checklist

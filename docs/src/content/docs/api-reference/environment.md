@@ -130,6 +130,24 @@ group, from the bot's private chat (`/settings`, Conversations). The bot never
 converses in a private chat. A group's members' messages that address the bot
 are sent to the provider the owner chose, under the terms of your API account.
 
+Supported conversation models are the 5.x generation of Claude and Gemini 4. Use a paid-tier
+Gemini key: on the free tier Google may use prompts to improve its products and human
+reviewers may read them, and only paid services may serve users in the EEA, Switzerland
+or the UK. The hourly limits are 12 replies per member in a group, 80 per group and 800
+for the whole bot.
+
+Rough cost per reply, from the planning estimate of about 10,000 cached system tokens,
+1,500 fresh input tokens and 300 output tokens at list prices on 2026-11-19. These are
+estimates, not measurements; `scripts/chat-spike` prints the real token counts of your
+own runs.
+
+| Model | Per reply | 1,000 replies |
+|---|---|---|
+| `claude-haiku-5-5` (default) | about $0.0004 | about $0.40 |
+| `claude-sonnet-5-5` | about $0.007 | about $7 |
+| `claude-opus-5-5` | about $0.014 | about $14 |
+| `gemini-4-hydrogen` (default) | about $0.005 | about $5 |
+
 ### `ENABLE_CHAT`
 
 Server-wide switch for conversations. With `false` (the default) no group can

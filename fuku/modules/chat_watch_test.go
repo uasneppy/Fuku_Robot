@@ -12,6 +12,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/uasneppy/fuku_robot/fuku/db/chatconv"
+	"github.com/uasneppy/fuku_robot/fuku/db/disabling"
 	"github.com/uasneppy/fuku_robot/fuku/utils/claude"
 )
 
@@ -368,5 +369,65 @@ func TestChatDeletedMessageGetsNoReply(t *testing.T) {
 	env.deliver(env.mention(env.member("Resident"), "hello"))
 	if sends := env.sends(); len(sends) != 1 {
 		t.Fatalf("sends = %q, want one reply to the clean mention", sends)
+	}
+}
+
+// TestChatAskCommand holds /ask and /xeno: a question is answered like a mention; with no text the
+// usage is shown; in a private chat and in a group with conversations off a hint is the answer;
+// disabling /ask silences both names for a member.
+func TestChatAskCommand(t *testing.T) {
+	env := newChatEnv(t)
+	member := env.member("Gale")
+	command := func(from *gotgbot.User, text string, chat gotgbot.Chat) *gotgbot.Message {
+		msg := env.message(from, text)
+		msg.Chat = chat
+		word := strings.Fields(text)[0]
+		msg.Entities = []gotgbot.MessageEntity{{Type: "bot_command", Offset: 0, Length: int64(len(word))}}
+		return msg
+	}
+	group := gotgbot.Chat{Id: env.chatID, Type: "supergroup", Title: "Facility 7"}
+
+	env.deliver(command(member, "/ask what is a ration?\nexactly", group))
+	if sends := env.sends(); len(sends) != 1 || sends[0] != chatFakeDefaultReply {
+		t.Fatalf("/ask sends = %q, want the provider's reply", sends)
+	}
+	if user := env.provider.calls()[0].User; !strings.Contains(user, "Gale: what is a ration? exactly") {
+		t.Fatalf("/ask user text %q, want the question after the command", user)
+	}
+
+	env.deliver(command(env.member("Hal"), "/xeno status", group))
+	env.deliver(command(env.member("Ivy"), "/ask", group))
+	sends := env.sends()
+	if len(sends) != 3 || sends[1] != chatFakeDefaultReply || !strings.Contains(sends[2], "/ask") {
+		t.Fatalf("sends = %q, want the /xeno reply and the usage", sends)
+	}
+
+	private := command(member, "/ask hello", gotgbot.Chat{Id: member.Id, Type: "private"})
+	env.deliver(private)
+	if got := env.client.callsFor("sendMessage"); fmt.Sprint(got[len(got)-1].Params["chat_id"]) != fmt.Sprint(member.Id) {
+		t.Fatalf("/ask in private got no answer in the private chat")
+	}
+
+	if err := disabling.DisableCMD(env.chatID, "ask"); err != nil {
+		t.Fatalf("DisableCMD(ask): %v", err)
+	}
+	t.Cleanup(func() { _ = disabling.EnableCMD(env.chatID, "ask") })
+	env.deliver(command(env.member("Kit"), "/xeno status", group))
+	env.deliver(command(env.member("Lee"), "/ask status", group))
+	if got := len(env.sends()); got != 3 {
+		t.Fatalf("with /ask disabled sends = %d, want still 3", got)
+	}
+	_ = disabling.EnableCMD(env.chatID, "ask")
+
+	if err := chatconv.SetEnabled(context.Background(), env.chatID, false, 1); err != nil {
+		t.Fatalf("SetEnabled off: %v", err)
+	}
+	env.deliver(command(env.member("Jo"), "/ask hello", group))
+	sends = env.sends()
+	if len(sends) != 4 || !strings.Contains(sends[3], "/settings") {
+		t.Fatalf("off: sends = %q, want the off hint", sends)
+	}
+	if got := len(env.provider.calls()); got != 2 {
+		t.Fatalf("provider calls = %d, want 2", got)
 	}
 }

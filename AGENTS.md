@@ -471,7 +471,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   other AI lines (`chatStatsSection`: numbers only). Logs carry chat and user IDs, the provider's status and error type
   (`chatErrorClass`) and Telegram codes only, never the text, a name, a reply, the provider's message or a key
   (`TestChatLogsCarryIDsOnly`). `TestChatWatcherGroupReachedByMention` loads every module and proves that a mention in a text or a
-  caption and a reply to the bot reach group 13.
+  caption and a reply to the bot reach group 13. `/ask <text>` and its alias `/xeno` (`chat.go`) go through `helpers.WrapCommand`,
+  each `Disableable` and checking its own name (`/xeno` also `ask`, so disabling `/ask` silences both); in a private chat they
+  answer `chat_private_refused`, in a group whose conversations are off or cannot run here `chat_off_hint`, with no text
+  `chat_ask_usage`, for an anonymous admin, a channel, an unreadable setting, no Redis or an audience the sender is not in nothing,
+  and otherwise the text after the command is handed to the pool after the same checks as a mention (`chatAccept`, shared with the
+  watcher). The module's help page is `chat_help_msg` (`help_module_name_chat`, icon 🗨), which says how to talk to the bot, that
+  the owner turns it on in private and what goes to the provider.
 - The web captcha adds no handler group: its routes are HTTP routes on the bot's server, not dispatcher handlers.
 - The Settings module (priority 239, `settings.go`) adds one handler group, `1`, for the typed-reply door below; its other entry points are `/settings`, the callbacks and the deep link. `/settings` goes through `helpers.WrapCommand`
   with `settingsDesc.RequiredChecks` of `requireSettingsAccess()` alone (`settings_gate.go`: a private chat passes at
@@ -4517,6 +4523,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `TestNamesModeKeyNeverPrinted`, `TestNamesModeExclusiveFlags`). The tool imports only the `claude` and `namecanon`
   packages of the repository. `.planning/milestones/v1.1-phases/15-ai-spam-name-check/15-SPIKE.md` is the owner's non-blocking checklist
   for the live Haiku spike and the test-group walk-through.
+- The conversation runtime's tests (Phase 20, `fuku/modules`) run on the toolkit `chat_env_test.go`: `newChatEnv` (a group with
+  conversations on, the real dispatcher with `LoadChat`, a recorder after the watcher at group 13, miniredis through
+  `withChatRedis`, both providers configured through `withChatProviders`, a scripted `chatFakeProvider` installed through the
+  `chatProviderOf` seam, and `chatTelegramFake`, the module fake plus the Bot API's refusal of a reply whose target was deleted),
+  `withChatRuntime` (a fast pacer, fresh breakers, the cooldown and budgets restored), `chatSwap` and `restoreChatPool` for a test
+  that runs `StopChat`. Fresh chat and user IDs, `chatConvCleanup` and `memberReqCleanup` in `t.Cleanup`, no `t.Parallel`, no real
+  provider. The families: `TestChatWatcherGroupReachedByMention` (`chat_group_test.go`), `TestChatWatcherAnswers`,
+  `TestChatWatcherIgnores`, `TestChatWatcherAudience`, `TestChatGuards`, `TestChatFilterReply`, `TestShutdownEndsChat`,
+  `TestChatDeletedMessageGetsNoReply`, `TestChatAskCommand` (`chat_watch_test.go`), `TestChatProvidersRequest` (both real adapters
+  against one `httptest` stand-in, `chat_provider_test.go`) and `TestChatLogsCarryIDsOnly` (`chat_logs_test.go`).
 - `scripts/chat-spike` (Phase 20) is the owner's persona check: it sends each line of a questions file
   (`scripts/chat-spike/persona-check.txt`, kept in step with `.planning/phases/20-conversations/20-PERSONA-CHECK.md` by
   `TestPersonaCheckFilesAgree`) through `chatprompt` and `claude.Client.Converse` or `gemini.Client.Generate`, and prints
