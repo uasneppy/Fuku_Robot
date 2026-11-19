@@ -123,6 +123,59 @@ request URL.
 | **Required** | No |
 | **Default** | `claude-haiku-5-5` |
 
+## 📂 Conversations configuration
+
+Conversations let a group's owner turn on chat replies of Xenobot-72 in that
+group, from the bot's private chat (`/settings`, Conversations). The bot never
+converses in a private chat. A group's members' messages that address the bot
+are sent to the provider the owner chose, under the terms of your API account.
+
+### `ENABLE_CHAT`
+
+Server-wide switch for conversations. With `false` (the default) no group can
+turn them on, the settings page says they are not set up here, and nothing is
+sent to any provider for a conversation.
+
+| Property | Value |
+|----------|-------|
+| **Type** | `boolean` |
+| **Required** | No |
+| **Default** | `false` |
+
+### `GEMINI_API_KEY`
+
+Google Gemini API key for groups whose owner picks Google as the provider.
+Unset, Google cannot be picked. The key travels in a request header only and is
+scrubbed from logs. Anthropic conversations use `ANTHROPIC_API_KEY`.
+
+| Property | Value |
+|----------|-------|
+| **Type** | `string` |
+| **Required** | No |
+
+### `CHAT_ANTHROPIC_MODEL`
+
+Claude model for conversations, separate from `ANTHROPIC_MODEL`. The name rules
+are those of `ANTHROPIC_MODEL`: anything else falls back to the default with a
+warning.
+
+| Property | Value |
+|----------|-------|
+| **Type** | `string` |
+| **Required** | No |
+| **Default** | `claude-haiku-5-5` |
+
+### `CHAT_GEMINI_MODEL`
+
+Gemini model for conversations. Same name rules; anything else falls back to the
+default with a warning.
+
+| Property | Value |
+|----------|-------|
+| **Type** | `string` |
+| **Required** | No |
+| **Default** | `gemini-4-hydrogen` |
+
 ## 📂 Web captcha configuration
 
 The web captcha verifies new members with Cloudflare Turnstile inside a Telegram
@@ -662,6 +715,8 @@ ANTHROPIC_MODEL=# Claude model for those checks, must accept a forced tool call 
 API_SERVER=# custom API server URL (default: https://api.telegram.org)
 AUTO_MIGRATE=# enable automatic database migrations (default: false)
 AUTO_MIGRATE_SILENT_FAIL=# continue even if migrations fail (default: false)
+CHAT_ANTHROPIC_MODEL=# Claude model for conversations (default: claude-haiku-5-5)
+CHAT_GEMINI_MODEL=# Gemini model for conversations (default: gemini-4-hydrogen)
 CAPTCHA_WEB_BASE_URL=# public https address of the bot's HTTP port for the web captcha (all four web captcha variables together or none)
 CAPTCHA_WEB_TRUSTED_PROXIES=# comma-separated IPs or CIDRs of the reverse proxies whose X-Forwarded-For is trusted (empty: header ignored)
 CLEAR_CACHE_ON_STARTUP=false # clear disposable cached data on startup
@@ -674,11 +729,13 @@ DISPATCHER_MAX_ROUTINES=# (default: 200)
 DROP_PENDING_UPDATES=# (default: false)
 ENABLE_AISPAM=# global kill switch for every AI check, text, images and names (default: true)
 ENABLE_AUTO_CLEANUP=# (default: true)
+ENABLE_CHAT=# server-wide switch for group conversations (default: false)
 ENABLE_BACKGROUND_STATS=# (default: true in prod, false in debug)
 ENABLE_DB_MONITORING=# (default: false)
 ENABLE_PERFORMANCE_MONITORING=# (default: true in prod, false in debug)
 ENABLE_PPROF=# enable pprof endpoints (default: false)
 ENABLED_LOCALES=# comma-separated language codes (default: en)
+GEMINI_API_KEY=# Google Gemini key for conversations (scrubbed from logs; Google not offered when unset)
 HTTP_MAX_IDLE_CONNS=# (default: 100)
 HTTP_MAX_IDLE_CONNS_PER_HOST=# (default: 50)
 HTTP_PORT=# unified HTTP server port (PORT fallback, then 8080)

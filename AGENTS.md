@@ -1473,6 +1473,28 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `reactions` table keeps what backup does with it today. `TestSettingsReactions*`, `TestSettingsParityReactionAdd` (the page and
   `/addreaction` store the same row, and the page draws what the commands wrote), `TestSettingsAuthorityParityReactions`,
   `TestSettingsListReactionsFits` and `TestReactionCap` hold it.
+- The Conversations page (`settings_chat.go`, page `p`, `Order` 89 with key `p`, after Anonymous admins; icon 🗨,
+  `settings_page_chat`; Phase 20 plan 20-05) is the one door that turns a group's conversations on, and it is both
+  `OwnerOnly` and `PrivateOnly`: Main shows it, on its own full-width row before Access, only to the live creator, and only
+  in the bot's private chat (a group menu reads `In private` on the owner's line and opens the framework note). Every
+  control and action declares `settingsRightOwner` and is refused for a press from a menu in a group
+  (`settingsChatGroupRefused`, the invalid-request alert, nothing written), so a forged group press can never write. The
+  controls: `e` the toggle (`tg` only, `v` 0 or 1): Off writes at once through `applyChatEnabled` (which also deletes the
+  chat's transcript and its set of the feature's message IDs), On writes nothing and draws the shared two-tap card
+  (`settings_chat_confirm` and the data notice naming the provider), whose Yes is the page action `py` (`e`; the expiry
+  check, then the provider check again, then the write); `m` the provider (`st` only, `v` `a` Anthropic or `g` Google,
+  through `applyChatProvider`); `w` who may talk (`st` only, `v` `e` everyone or `a` administrators and approved members,
+  through `applyChatAudience`). A provider this server cannot run (`chatProviderConfigured`: `ENABLE_CHAT` on and
+  `ANTHROPIC_API_KEY` or `GEMINI_API_KEY` set) is refused before any write with the alert `settings_chat_not_set_up` (no
+  provider at all) or `settings_chat_provider_missing` and the page is redrawn; a press of the stored value writes nothing.
+  The page reads through `chatconv.GetFresh` (a failed read is the cannot-open edit, the unknown mark on Main) and draws
+  the switch, the provider, the audience, the data notice of the stored provider and the hint; its button sizes and its
+  length in 8 languages are held by `TestSettingsChatCallbackBytes` and `TestSettingsChatPageFitsEveryLocale`. There is no
+  command, so the page carries a drift test (`TestSettingsDriftChat`) and its own authority tests
+  (`TestSettingsChatAuthority`: a non-owner administrator, a gated one and a group menu are all refused with nothing
+  written) in place of a parity test, and it does not join `TestSettingsGateAllDoors`, whose doors all decide alike and
+  admit administrators the owner lets in, while this page admits the creator alone. With this page Main has
+  `settingsMainOwnerOnlyRows` 2 (Conversations and Access) and `settingsMainOwnerRows` 13.
 - The Timezone page (`settings_timezone.go`, page `z`, `Order` 87 with key `z`, so it sorts right after Language; icon 🕒,
   `settings_page_tz`; plan of 2026-11-18, Part 3) and `/timezone` (`timezone.go`, `helpers.WrapCommand` with `RequireGroup`
   and `RequireUserAdmin`, anonymous-admin re-entry, not `Disableable`) write through one apply function, `applyTimezone`
@@ -4388,7 +4410,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Version strings are shape-locked (`BotVersion:` with two spaces in `fuku/config/config.go`, `version =` in
   `main.go`). Run `make bump-version` on a PR branch, merge, then tag. Tags match `^v\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$`.
 - `.env` in cwd auto-loads without overriding real env. Run `--version` smoke checks from `/tmp`.
-- Defaults that surprise: `DEFAULT_TIMEZONE=Europe/Kyiv` (the zone every group without a choice shows times in; an invalid
+- Defaults that surprise: `ENABLE_CHAT=false` (group conversations are off on the whole server until it is set, and then
+  each group's owner still turns them on; `CHAT_ANTHROPIC_MODEL` and `CHAT_GEMINI_MODEL` are separate from
+  `ANTHROPIC_MODEL` and fall back to `claude-haiku-5-5` and `gemini-4-hydrogen` with a warning); `DEFAULT_TIMEZONE=Europe/Kyiv` (the zone every group without a choice shows times in; an invalid
   name stops startup; the zone database is embedded through `time/tzdata`, imported in `fuku/config` so it is ready before
   the config reads the variable); `REDIS_DB=1`; `ENABLE_AISPAM=true` (the global AI kill switch, text, images and the AI spam-name rule; the text checks are inert without `TYPESAFE_API_KEY`); `ANTHROPIC_API_KEY` empty
   means no raid image check, no AI name check and no image or name leaves the server, and `ANTHROPIC_MODEL` must be a model that

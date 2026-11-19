@@ -52,8 +52,8 @@ The brief is `.planning/research/xenobot-chat/PLAN.md` (with `LORE.md`, `COMIC-D
   - [x] 20-01: Persona and archive (`fuku/utils/xenopersona`, content tests; owner review before going on)
   - [x] 20-02: Provider clients (`claude` conversation call, `gemini` package)
   - [x] 20-03: Spike tool and persona check sheet
-  - [ ] 20-04: Storage and apply functions
-  - [ ] 20-05: Settings page
+  - [x] 20-04: Storage and apply functions
+  - [x] 20-05: Settings page
   - [ ] 20-06: Runtime
   - [ ] 20-07: `/ask`, help, locales, docs, `AGENTS.md`
   - [ ] 20-08: End-to-end test, full checks, owner checklist
