@@ -1544,8 +1544,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   state with the warn notice `common_settings_save_failed`. The repository drops `event_messages:<chat>`, which is in `skipLocal`, so the
   very next command of that event on every replica posts nothing. `TestSettingsMessagesOpens`,
   `TestSettingsMessagesMainState`, `TestSettingsMessagesGroupMenu`, `TestSettingsMessagesStaffGroup` and `TestSettingsMessagesSilent`
-  (`settings_messages_silent_test.go`: the press, the hub's Silent line, the stale press, the forged presses and a failed write) hold it
-  (`settings_messages_test.go`, toolkit `settings_messages_env_test.go`: `newSettingsMsgEnv`, `settingsMsgCleanup`, `settingsMsgSeed`,
+  (`settings_messages_silent_test.go`: the press, the hub's Silent line, the stale press, the forged presses and a failed write) hold it,
+  and, because the switch has no command, `TestSettingsDriftMessagesSilent` (a value stored through the repository is drawn on every
+  screen, a page press is what the send path's cached `eventMessagesLookup` reads at once with no cache reset, opening every screen
+  writes nothing) and `TestSettingsAuthorityMessagesSilent` (with and without `can_change_info`, a demotion between two presses, a plain
+  member, an administrator the owner gate refuses and the live creator) stand in for a parity test (D-23). The other tests are in
+  `settings_messages_test.go`, on the toolkit `settings_messages_env_test.go` (`newSettingsMsgEnv`, `settingsMsgCleanup`, `settingsMsgSeed`,
   `settingsMsgOpenPrivate`, `settingsMsgPrivateMenu`).
 - The message editor's pages (`settings_edit.go`, pages `w` Welcome, `g` Goodbye and `r` Rules, orders 50, 60 and 70, each
   registered from that file's `init` through `registerSettingsPage` so `settings_pages.go` is never edited) show which
