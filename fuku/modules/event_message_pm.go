@@ -65,6 +65,12 @@ func init() {
 	// The seven manual events of Phase 20 (D-06): /dban, /dkick and /dmute share their parent's
 	// event, and the silent variants never reach replyEvent, so they send no copy.
 	registerEventPM(eventmsg.EventBan, eventPMSpec{DefaultKey: "eventmsg_pm_ban", Automatic: false})
+	registerEventPM(eventmsg.EventTimedBan, eventPMSpec{DefaultKey: "eventmsg_pm_tban", Automatic: false})
+	registerEventPM(eventmsg.EventKick, eventPMSpec{DefaultKey: "eventmsg_pm_kick", Automatic: false})
+	registerEventPM(eventmsg.EventMute, eventPMSpec{DefaultKey: "eventmsg_pm_mute", Automatic: false})
+	registerEventPM(eventmsg.EventTimedMute, eventPMSpec{DefaultKey: "eventmsg_pm_tmute", Automatic: false})
+	registerEventPM(eventmsg.EventUnban, eventPMSpec{DefaultKey: "eventmsg_pm_unban", Automatic: false})
+	registerEventPM(eventmsg.EventUnmute, eventPMSpec{DefaultKey: "eventmsg_pm_unmute", Automatic: false})
 }
 
 // pmCopyPacerOptions are the options of the private copies' pacer: its own Redis keys, so a burst of

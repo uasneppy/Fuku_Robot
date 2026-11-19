@@ -3338,7 +3338,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   copies bullet below), which never changes the group reply or its error.
 - PM copies (`event_message_pm.go`, Phase 21): an event has a private copy when `registerEventPM(event, eventPMSpec{DefaultKey,
   Automatic})` registered a spec for it in an `init` (it panics on an event `eventmsg.ValidEvent` refuses, an empty key or a
-  second registration; the manual events are `Automatic` false; `eventPMSpecFor` reads the table). `replyEvent` reads the
+  second registration; `eventPMSpecFor` reads the table): the seven manual events, `Automatic` false, each with its
+  default text `eventmsg_pm_<event>` (D-06). `/dban`, `/dkick` and `/dmute` use their parent event's copy, the silent
+  variants never reach `replyEvent` and send none, and the channel `/ban` and `/unban` are not events. `replyEvent` reads the
   messages once, runs the unchanged group step (`replyEventGroup`, pinned by `TestLegacyModerationRequests`) and then
   `offerReplyPM`, whatever the group step did (posted, Silent, the refusal fallback, a send error): it offers a copy only
   for an event with a spec and a `msgs.Resolve(event, eventmsg.DestPM)` whose `Silent` is false (no pm row, or a pm row
@@ -3347,7 +3349,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   stored text, the group renderer (`renderEventText`, so the Welcome and event placeholders, every user value escaped and
   `{admin}` the translated `eventmsg_admin_anon` for an anonymous admin), else `eventPMDefaultText` (the spec's
   `DefaultKey` with `{group}` the group's title through `staffDisplayTitle` and `{until}` in the group's zone, then
-  `eventmsg_pm_reason` with the escaped reason when one was typed; it never names the admin); the keyboard is the stored
+  `eventmsg_pm_reason` with the escaped reason when one was typed; it never names the admin), followed by `eventReply.PMNote`
+  on a new line when the site set it (`/unmute` during an active lockdown reads `eventmsg_pm_unmute_lockdown` beside the
+  group's `mutes_unmute_lockdown_note`; the group `Note` and default are unchanged); the keyboard is the stored
   buttons and the `{rules}` button only, never the bot's Unban or Unmute row (group callbacks), and the media is the
   row's file. It is sent by `offerEventPM` from a bounded job (`pmCopyJobs`, a `raidPostTracker`, `startBelow` of
   `pmCopyMaxInFlight` 16 per replica, a full pool sheds the copy with one Debug line; each job starts with
@@ -3356,7 +3360,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   user ID), so the handler never waits for it. The job builds no `ReplyParameters` and calls no method named `Reply`
   (`TestCommandRepliesStayInsideTheHandler` keeps its empty allow-list). No log line carries a stored or typed text, a
   caption, a button, a file ID, a reason or a name: the chat ID, the user ID, the event and a Telegram error by its code
-  (`memberReqErrText`). `TestEventPMEndToEnd` holds it (toolkit `event_message_pm_env_test.go`: `newEventPMSite`, which is
+  (`memberReqErrText`). `TestEventPMEndToEnd`, `TestEventPMSpecs`, `TestEventPMDefaultTexts` and `TestEventPMComposition`
+  (`event_message_pm_test.go`) and `TestEventMsgLocaleKeys` (`fuku/i18n/eventmsg_locale_test.go`, whose
+  `eventMsgLocaleLimits` must cover exactly the `eventmsg_` keys of the locale files, so a new key adds its row) hold it (toolkit `event_message_pm_env_test.go`: `newEventPMSite`, which is
   `newModerationGoldenSite` with miniredis, `withFastPMCopyPacer` and `eventPMTestClient`; `storeEventPM`, `waitEventPM`,
   `eventPMCleanup`, `eventPMCalls`, `eventPMOnly`, `eventPMNone`).
 - Scheduling the bot's own messages (`deletion_bot.go`): `scheduleBotMessage(sent, kind)` is opt-in at named send sites only

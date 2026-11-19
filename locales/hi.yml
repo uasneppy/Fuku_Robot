@@ -1730,6 +1730,13 @@ error_generic: "एक त्रुटि हुई। कृपया बाद
 eventmsg_admin_anon: "एक एडमिन"
 eventmsg_pm_ban: "🚫 आपको <b>{group}</b> से बैन कर दिया गया है।"
 eventmsg_pm_reason: "<b>कारण:</b> {reason}"
+eventmsg_pm_tban: "⏳ आपको <b>{group}</b> से {until} तक बैन कर दिया गया है।"
+eventmsg_pm_kick: "👢 आपको <b>{group}</b> से हटा दिया गया है। आप फिर से जुड़ सकते हैं।"
+eventmsg_pm_mute: "🔇 आपको <b>{group}</b> में म्यूट कर दिया गया है।"
+eventmsg_pm_tmute: "🔕 आपको <b>{group}</b> में {until} तक म्यूट कर दिया गया है।"
+eventmsg_pm_unban: "🔓 <b>{group}</b> में आपका बैन हटा दिया गया है। आप फिर से जुड़ सकते हैं।"
+eventmsg_pm_unmute: "🔊 अब आप <b>{group}</b> में फिर से लिख सकते हैं।"
+eventmsg_pm_unmute_lockdown: "ग्रुप लॉकडाउन में है, इसलिए एडमिन के इसे हटाते ही आप लिख सकेंगे।"
 
 # Database default keys
 db_default_welcome: "हेलो {first}, आप कैसे हैं?"

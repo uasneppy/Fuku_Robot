@@ -271,15 +271,17 @@ func moderationUnmute(m *moduleStruct) *moderationCommand {
 			// During a lockdown the user is still muted by the locked default
 			// permissions, so say they can talk once it lifts. A failed read only
 			// skips the note: the unmute itself already went through. A custom
-			// unmute text is followed by the same note (D-11).
-			var note string
+			// unmute text is followed by the same note (D-11). The private copy carries the
+			// note's private wording (PMNote), after a custom text or the default.
+			var note, pmNote string
 			if active, lookupErr := lockdownSnapshotLookup(c.Chat.Id); lookupErr != nil {
 				log.Errorf("[Mutes] unmute reply: read lockdown of chat %d: %v", c.Chat.Id, lookupErr)
 			} else if active != nil {
 				note, _ = c.Tr.GetString("mutes_unmute_lockdown_note")
+				pmNote, _ = c.Tr.GetString("eventmsg_pm_unmute_lockdown")
 				text += "\n" + note
 			}
-			err = c.replyEvent(eventReply{Event: eventmsg.EventUnmute, Target: member, Default: text, Opts: opts, Note: note})
+			err = c.replyEvent(eventReply{Event: eventmsg.EventUnmute, Target: member, Default: text, Opts: opts, Note: note, PMNote: pmNote})
 			if err != nil {
 				log.Error(err)
 				return err

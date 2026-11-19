@@ -886,6 +886,13 @@ error_generic: "Ocorreu um erro. Por favor tente novamente mais tarde."
 eventmsg_admin_anon: "um admin"
 eventmsg_pm_ban: "🚫 Você foi banido de <b>{group}</b>."
 eventmsg_pm_reason: "<b>Motivo:</b> {reason}"
+eventmsg_pm_tban: "⏳ Você foi banido de <b>{group}</b> até {until}."
+eventmsg_pm_kick: "👢 Você foi removido de <b>{group}</b>. Pode entrar novamente."
+eventmsg_pm_mute: "🔇 Você foi silenciado em <b>{group}</b>."
+eventmsg_pm_tmute: "🔕 Você foi silenciado em <b>{group}</b> até {until}."
+eventmsg_pm_unban: "🔓 Seu banimento em <b>{group}</b> foi removido. Pode entrar novamente."
+eventmsg_pm_unmute: "🔊 Você pode escrever em <b>{group}</b> novamente."
+eventmsg_pm_unmute_lockdown: "O grupo está em lockdown, então você poderá escrever assim que um admin o encerrar."
 common_anonymous_user_error: Este comando não pode ser usado em usuário anônimo.
 common_anonymous_ban_error: Este comando não pode ser usado em usuário anônimo, estes usuários só podem ser banidos/desbanidos.
 common_cannot_identify_user: Não consigo identificar o usuário. Este comando não pode ser usado por canais.

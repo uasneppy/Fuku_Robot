@@ -896,6 +896,13 @@ error_generic: "Terjadi kesalahan. Silakan coba lagi nanti."
 eventmsg_admin_anon: "seorang admin"
 eventmsg_pm_ban: "🚫 Anda telah di-ban dari <b>{group}</b>."
 eventmsg_pm_reason: "<b>Alasan:</b> {reason}"
+eventmsg_pm_tban: "⏳ Anda telah di-ban dari <b>{group}</b> hingga {until}."
+eventmsg_pm_kick: "👢 Anda telah dikeluarkan dari <b>{group}</b>. Anda bisa bergabung lagi."
+eventmsg_pm_mute: "🔇 Anda telah dibisukan di <b>{group}</b>."
+eventmsg_pm_tmute: "🔕 Anda telah dibisukan di <b>{group}</b> hingga {until}."
+eventmsg_pm_unban: "🔓 Ban Anda di <b>{group}</b> telah dicabut. Anda bisa bergabung lagi."
+eventmsg_pm_unmute: "🔊 Anda bisa menulis lagi di <b>{group}</b>."
+eventmsg_pm_unmute_lockdown: "Grup sedang dalam lockdown, jadi Anda bisa menulis setelah admin mencabutnya."
 common_anonymous_user_error: Perintah ini tidak dapat digunakan pada pengguna anonim.
 common_anonymous_ban_error: Perintah ini tidak dapat digunakan pada pengguna anonim, pengguna ini hanya dapat diblokir/dibuka blokirnya.
 common_cannot_identify_user: Tidak dapat mengidentifikasi pengguna. Perintah ini tidak dapat digunakan oleh kanal.

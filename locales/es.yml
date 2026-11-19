@@ -904,6 +904,13 @@ error_generic: "Ha ocurrido un error. Por favor, inténtalo de nuevo más tarde.
 eventmsg_admin_anon: "un admin"
 eventmsg_pm_ban: "🚫 Has sido baneado de <b>{group}</b>."
 eventmsg_pm_reason: "<b>Razón:</b> {reason}"
+eventmsg_pm_tban: "⏳ Has sido baneado de <b>{group}</b> hasta el {until}."
+eventmsg_pm_kick: "👢 Has sido expulsado de <b>{group}</b>. Puedes volver a unirte."
+eventmsg_pm_mute: "🔇 Has sido silenciado en <b>{group}</b>."
+eventmsg_pm_tmute: "🔕 Has sido silenciado en <b>{group}</b> hasta el {until}."
+eventmsg_pm_unban: "🔓 Se retiró tu baneo en <b>{group}</b>. Puedes volver a unirte."
+eventmsg_pm_unmute: "🔊 Ya puedes volver a escribir en <b>{group}</b>."
+eventmsg_pm_unmute_lockdown: "El grupo está en cierre, así que podrás escribir cuando un admin lo levante."
 common_anonymous_user_error: Este comando no se puede usar en usuario anónimo.
 common_anonymous_ban_error: Este comando no se puede usar en usuario anónimo, estos usuarios solo pueden ser baneados/desbaneados.
 common_cannot_identify_user: No se puede identificar al usuario. Este comando no puede ser usado por canales.
