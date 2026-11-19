@@ -341,6 +341,9 @@ type settingsEditState struct {
 	MediaBelow bool
 	// Silent is the Silent switch of an event message, read by an event definition's Load and Draw only.
 	Silent bool
+	// PMOn is whether an event message's private copy is switched on (the pm row's Silent is false), read by
+	// an event definition's Load and Draw only, so the group message's screen can say it.
+	PMOn bool
 }
 
 // settingsEditScreenOpts are the extras of one drawing: a notice line and the bot's username

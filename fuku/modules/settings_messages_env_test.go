@@ -122,3 +122,29 @@ func settingsMsgOpenPrivate(e *settingsMsgEnv, user gotgbot.User) (*settingsMsgM
 	text, keyboard := m.press("a", settingsActOpen, "p", settingsPageMessages)
 	return m, text, keyboard
 }
+
+// settingsMsgStoredPM reads the private copy (the pm row) of an event straight from the database, past every cache
+// layer. ok is false when the event has no pm row.
+func settingsMsgStoredPM(t *testing.T, chatID int64, event string) (models.ChatEventMessage, bool) {
+	t.Helper()
+	var rows []models.ChatEventMessage
+	if err := db.DB.Where("chat_id = ? AND event = ? AND dest = ?", chatID, event, eventmsg.DestPM).Find(&rows).Error; err != nil {
+		t.Fatalf("read the %s private copy of chat %d: %v", event, chatID, err)
+	}
+	if len(rows) == 0 {
+		return models.ChatEventMessage{}, false
+	}
+	return rows[0], true
+}
+
+// settingsMsgOpenPM opens the screen of the event code in the menu and presses its private copy row, and returns the
+// private copy screen's text and keyboard; a screen with no such row fails the test.
+func settingsMsgOpenPM(t *testing.T, m *settingsMsgMenu, code string) (string, [][]gotgbot.InlineKeyboardButton) {
+	t.Helper()
+	_, keyboard := m.press("a", settingsActMsgEvent, settingsMsgEventField, code)
+	open, ok := settingsMsgButtonWith(t, keyboard, "a", settingsActMsgEvent, settingsMsgDestField, settingsMsgDestPMCode)
+	if !ok {
+		t.Fatalf("the %s screen has no private copy row: %+v", code, keyboard)
+	}
+	return m.pressButton(open)
+}

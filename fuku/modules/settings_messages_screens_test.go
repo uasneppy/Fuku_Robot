@@ -15,8 +15,9 @@ import (
 )
 
 // settingsMsgScreenFields are the only callback fields a button of the Messages page may carry: the action, the owner
-// field of either menu, the page, the family or part, the event and the absolute switch target.
-var settingsMsgScreenFields = map[string]bool{"a": true, "c": true, "u": true, "p": true, "t": true, "k": true, "v": true}
+// field of either menu, the page, the family or part, the event, the destination (d=p on the private copy's buttons,
+// Phase 21) and the absolute switch target.
+var settingsMsgScreenFields = map[string]bool{"a": true, "c": true, "u": true, "p": true, "t": true, "k": true, "d": true, "v": true}
 
 // settingsMsgAllCustom is the stored messages of a chat whose every event of every family has its own text, so the hub and
 // the family list draw every line Custom. The map key is the repository's own (event|dest); a Lookup of each event proves
@@ -42,7 +43,7 @@ func settingsMsgAllCustom(t *testing.T, silent bool) *eventmsg.Messages {
 }
 
 // settingsMsgFullState is an event message with every part stored (a long text, the media kind given, one button) and
-// Silent on: the event screen's worst case, seven rows.
+// Silent on: the event screen's worst case, eight rows (the private copy screen's worst case too, five rows).
 func settingsMsgFullState(mediaType int) settingsEditState {
 	return settingsEditState{
 		Kind: settingsEditEvent, Text: strings.Repeat("x", 3000), MediaType: mediaType, FileID: "f",
@@ -55,6 +56,12 @@ func settingsMsgEmptyState() settingsEditState {
 	return settingsEditState{Kind: settingsEditEvent, TextIsDefault: true}
 }
 
+// settingsMsgPMOffState is a private copy with nothing stored, as the page reads a missing pm row: the default text,
+// no media, no buttons and the switch off (Silent true).
+func settingsMsgPMOffState() settingsEditState {
+	return settingsEditState{Kind: settingsEditEvent, TextIsDefault: true, Silent: true}
+}
+
 // settingsMsgNamedScreen is one rendered screen of the page with the row widths its keyboard must have ("" for a screen
 // whose shape a test does not fix, such as the plain reply of a refusal, which always has its one Cancel).
 type settingsMsgNamedScreen struct {
@@ -64,8 +71,8 @@ type settingsMsgNamedScreen struct {
 
 // settingsMsgScreens renders every screen of the Messages page for view through the functions the code draws and sends
 // them with: the hub (every event Custom, every event Silent, nothing stored), the family list of every family, every
-// event screen with nothing stored and with every part stored and Silent on (a photo, and a sticker, which adds the
-// no-caption line), each under every notice given, the three waiting prompts (replaced, at the largest limit the prompt
+// event screen and every private copy screen with nothing stored and with every part stored and Silent on (a photo, and a
+// sticker, which adds the no-caption line), each under every notice given, the three waiting prompts of each (replaced, at the largest limit the prompt
 // can name), the refusal reply of every editor refusal reason and, in a group view, the group note with and without a bot
 // username. The keys are descriptive and unique. The page exists only in a private menu, so a group view's screens other
 // than the note are what no press can reach; they are drawn all the same, because the privacy sweep searches them too.
@@ -97,19 +104,28 @@ func settingsMsgScreens(t *testing.T, view settingsView, notices []string) map[s
 			if !ok {
 				t.Fatalf("no editor definition for the %s event", ev.Key)
 			}
+			pmDef, ok := settingsEditPageByKey(settingsMsgPMWaitPage(ev))
+			if !ok {
+				t.Fatalf("no private copy definition for the %s event", ev.Key)
+			}
 			for i, notice := range notices {
 				opts := settingsEditScreenOpts{Notice: notice, BotUsername: "FukuTestBot"}
-				add(fmt.Sprintf("event %s empty notice %d", ev.Code, i), renderSettingsMsgEvent(view, fam, ev, def, settingsMsgEmptyState(), opts), "[1 1 1 1 1 2]")
+				add(fmt.Sprintf("event %s empty notice %d", ev.Code, i), renderSettingsMsgEvent(view, fam, ev, def, settingsMsgEmptyState(), opts), "[1 1 1 1 1 1 2]")
+				add(fmt.Sprintf("pm %s empty notice %d", ev.Code, i), renderSettingsMsgPM(view, fam, ev, pmDef, settingsMsgPMOffState(), opts), "[1 1 1 1 2]")
 				for kind, mediaType := range map[string]int{"photo": db.PHOTO, "sticker": db.STICKER} {
 					add(fmt.Sprintf("event %s full %s notice %d", ev.Code, kind, i),
-						renderSettingsMsgEvent(view, fam, ev, def, settingsMsgFullState(mediaType), opts), "[2 2 2 2 2 1 2]")
+						renderSettingsMsgEvent(view, fam, ev, def, settingsMsgFullState(mediaType), opts), "[2 2 2 2 2 1 1 2]")
+					add(fmt.Sprintf("pm %s full %s notice %d", ev.Code, kind, i),
+						renderSettingsMsgPM(view, fam, ev, pmDef, settingsMsgFullState(mediaType), opts), "[2 2 2 1 2]")
 				}
 			}
-			for _, part := range def.Parts {
-				add(fmt.Sprintf("prompt %s %s", ev.Code, part.Code),
-					renderSettingsEditPrompt(view, def, part.Code, time.Now(), settingsEditTextMax, true), "[1]")
-				for key, reason := range settingsEditRefusalReasons(tr) {
-					add(fmt.Sprintf("refusal %s %s %s", ev.Code, part.Code, key), renderSettingsInputRefusal(view, def, part.Code, reason), "[1]")
+			for name, d := range map[string]settingsEditPageDef{"": def, "pm ": pmDef} {
+				for _, part := range d.Parts {
+					add(fmt.Sprintf("%sprompt %s %s", name, ev.Code, part.Code),
+						renderSettingsEditPrompt(view, d, part.Code, time.Now(), settingsEditTextMax, true), "[1]")
+					for key, reason := range settingsEditRefusalReasons(tr) {
+						add(fmt.Sprintf("%srefusal %s %s %s", name, ev.Code, part.Code, key), renderSettingsInputRefusal(view, d, part.Code, reason), "[1]")
+					}
 				}
 			}
 		}
@@ -145,16 +161,16 @@ func TestSettingsMessagesCallbackBytes(t *testing.T) {
 			fields := settingsButtonFields(t, button)
 			for key := range fields {
 				if !settingsMsgScreenFields[key] {
-					t.Errorf("%s: button %q carries the field %q, outside a c u p t k v", name, button.Text, key)
+					t.Errorf("%s: button %q carries the field %q, outside a c u p t k d v", name, button.Text, key)
 				}
 			}
 			sizes[fields["a"]] = max(sizes[fields["a"]], len(button.CallbackData))
 		}
 	}
 	for code, want := range map[string]int{
-		settingsActMsgFamily: 37, settingsActMsgEvent: 38,
-		settingsActMsgSet: 42, settingsActMsgRemove: 42, settingsActMsgPreview: 42, settingsActMsgCancel: 42, settingsActMsgSilent: 42,
-		settingsActMsgFull: 38, settingsActOpen: 37, settingsActBack: 33, settingsActClose: 33,
+		settingsActMsgFamily: 37, settingsActMsgEvent: 42,
+		settingsActMsgSet: 46, settingsActMsgRemove: 46, settingsActMsgPreview: 42, settingsActMsgCancel: 46, settingsActMsgSilent: 42,
+		settingsActMsgFull: 38, settingsActMsgPM: 42, settingsActOpen: 37, settingsActBack: 33, settingsActClose: 33,
 	} {
 		if got := sizes[code]; got != want {
 			t.Errorf("the largest %s button is %d bytes, the plans fixed %d", code, got, want)

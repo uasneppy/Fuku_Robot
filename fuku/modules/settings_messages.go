@@ -53,6 +53,17 @@ const (
 	settingsMsgEventField = "k"
 	// settingsMsgDestGroupCode is the one-letter code of the group destination in a wait key.
 	settingsMsgDestGroupCode = "g"
+	// settingsMsgDestField is the callback field that names the destination of an editor press: absent for the
+	// group message (so every Phase 20 button keeps its bytes) and settingsMsgDestPMCode for the private copy.
+	settingsMsgDestField = "d"
+	// settingsMsgDestPMCode is the one-letter code of the private copy: the only value of the field d and the
+	// destination code in its wait key (hbnp for the ban's private copy).
+	settingsMsgDestPMCode = "p"
+	// settingsActMsgPM is the action code of the private copy screen's switch (fields k, the event code, and v,
+	// the absolute target "0" or "1").
+	settingsActMsgPM = "hp"
+	// settingsMsgPMIcon is the icon of the private copy.
+	settingsMsgPMIcon = "📩"
 	// settingsMsgSampleDuration is the duration a preview of a timed event fills in: the form the duration
 	// takes in a timed reply (the command's own duration text, which is not translated).
 	settingsMsgSampleDuration = "2 hours"
@@ -156,11 +167,12 @@ var settingsMsgEditCodes = settingsEditPageDef{
 }
 
 // settingsMsgEditActions are the page's Set (hs), Remove (hr), Cancel (hc), Preview (hv) and Full preview
-// (hf) actions: the editor's own, resolved by k to the event's definition (settingsMsgDefByFields, which
-// requires the private owner field c, so a group menu's press is refused in step 1). Set and Remove need
-// can_change_info; Cancel and the two previews need only the admin check every press makes.
+// (hf) actions: the editor's own, resolved by k and d to the definition of the event's group message or private
+// copy (settingsMsgDefByFields, which requires the private owner field c, so a group menu's press is refused in
+// step 1). Set and Remove need can_change_info; Cancel and the two previews need only the admin check every
+// press makes.
 func settingsMsgEditActions() map[string]settingsPageAction {
-	all := settingsEditResolvedActions(settingsMsgEditCodes, []string{settingsMsgEventField}, settingsMsgDefByFields)
+	all := settingsEditResolvedActions(settingsMsgEditCodes, []string{settingsMsgEventField, settingsMsgDestField}, settingsMsgDefByFields)
 	codes := []string{settingsActMsgSet, settingsActMsgRemove, settingsActMsgCancel, settingsActMsgPreview, settingsActMsgFull}
 	actions := make(map[string]settingsPageAction, len(codes))
 	for _, code := range codes {
@@ -185,10 +197,14 @@ func init() {
 			Fields: []string{"t"}, Right: settingsRightAdmin, Validate: settingsMsgFamilyFields, Run: settingsMsgRunFamily,
 		},
 		settingsActMsgEvent: {
-			Fields: []string{settingsMsgEventField}, Right: settingsRightAdmin, Validate: settingsMsgEventFields, Run: settingsMsgRunEvent,
+			Fields: []string{settingsMsgEventField, settingsMsgDestField}, Right: settingsRightAdmin, Validate: settingsMsgEventFields,
+			Run: settingsMsgRunEvent,
 		},
 		settingsActMsgSilent: {
 			Fields: []string{settingsMsgEventField, "v"}, Right: settingsRightChangeInfo, Validate: settingsMsgSilentFields, Run: settingsMsgRunSilent,
+		},
+		settingsActMsgPM: {
+			Fields: []string{settingsMsgEventField, "v"}, Right: settingsRightChangeInfo, Validate: settingsMsgPMFields, Run: settingsMsgRunPM,
 		},
 	}
 	maps.Copy(actions, settingsMsgEditActions())
@@ -204,9 +220,14 @@ func init() {
 		PrivateNoteKey: "settings_msg_group_note",
 		Actions:        actions,
 	})
+	// Every event also gets the definition of its private copy. It is registered whether or not the event has a
+	// private copy spec (the spec table is filled by another file's init, whose order is not relied on); a press,
+	// a screen and a wait reach it only through settingsMsgDefByFields and settingsMsgPMDefOf, which require the
+	// spec at the time of the press.
 	for _, fam := range settingsMsgFamilies {
 		for _, ev := range fam.Events {
 			registerSettingsEditDef(settingsMsgEditDef(fam, ev))
+			registerSettingsEditDef(settingsMsgPMEditDef(fam, ev))
 		}
 	}
 }
@@ -239,6 +260,12 @@ func settingsMsgWaitPage(ev settingsMsgEvent) string {
 	return settingsPageMessages + ev.Code + settingsMsgDestGroupCode
 }
 
+// settingsMsgPMWaitPage is the key of an event's private copy definition, which is also the p of its wait: h,
+// the event code and the private copy's code (hbnp for the ban's private copy).
+func settingsMsgPMWaitPage(ev settingsMsgEvent) string {
+	return settingsPageMessages + ev.Code + settingsMsgDestPMCode
+}
+
 // settingsMsgEditDef is the message editor definition of one event: the hooked kind, the page's title,
 // the five editor codes, can_change_info to change it (D-22), the family's three parts, the field k that
 // names the event on every editor button, the bot's own reserved buttons and the hooks that read, draw,
@@ -250,21 +277,63 @@ func settingsMsgEditDef(fam settingsMsgFamily, ev settingsMsgEvent) settingsEdit
 	def.Fields = map[string]string{settingsMsgEventField: ev.Code}
 	def.ReservedButtons = ev.ReservedButtons
 	def.Hooks = &settingsEditHooks{
-		Load: settingsMsgLoad(ev), Draw: settingsMsgDraw(fam, ev),
-		Remove: settingsMsgRemove(ev), Write: settingsMsgWrite(ev),
+		Load: settingsMsgLoad(ev, eventmsg.DestGroup), Draw: settingsMsgDraw(fam, ev),
+		Remove: settingsMsgRemove(ev, eventmsg.DestGroup), Write: settingsMsgWrite(ev, eventmsg.DestGroup),
 		Preview: settingsMsgPreview(ev), PreviewHeaderKey: "settings_msg_preview_header",
 	}
 	return def
 }
 
-// settingsMsgDefByFields is the definition of the event a press names by k. It is false for a press
-// without the private owner field c (a group menu's press, refused in step 1 before any lookup) and for an
-// unknown event.
+// settingsMsgPMEditDef is the message editor definition of one event's private copy (D-07, D-23): the hooked
+// kind, the private copy's title (so the prompt says it is for the private copy), its icon, the same five editor
+// codes and can_change_info as the group message, the family's three parts, the fields k and d=p on every editor
+// button (Set, Remove, the previews and the Cancel of the prompt and of a refusal), no reserved buttons (a
+// private copy never carries the bot's Unban or Unmute row) and the hooks that read, draw, remove and write the
+// pm row. It has no Preview hook yet, so a forged preview is the editor's failed-preview alert with nothing sent.
+func settingsMsgPMEditDef(fam settingsMsgFamily, ev settingsMsgEvent) settingsEditPageDef {
+	def := settingsMsgEditCodes
+	def.Key, def.Kind, def.Icon, def.TitleKey = settingsMsgPMWaitPage(ev), settingsEditEvent, settingsMsgPMIcon, "settings_msg_pm_title"
+	def.Parts = settingsMsgPartsOf(fam)
+	def.Fields = map[string]string{settingsMsgEventField: ev.Code, settingsMsgDestField: settingsMsgDestPMCode}
+	def.Hooks = &settingsEditHooks{
+		Load: settingsMsgLoad(ev, eventmsg.DestPM), Draw: settingsMsgPMDraw(fam, ev),
+		Remove: settingsMsgRemove(ev, eventmsg.DestPM), Write: settingsMsgWrite(ev, eventmsg.DestPM),
+	}
+	return def
+}
+
+// settingsMsgPMDefOf is the private copy definition of the event named by code and the event: false for an
+// unknown event and for an event with no private copy spec (eventPMSpecFor).
+func settingsMsgPMDefOf(code string) (settingsEditPageDef, settingsMsgEvent, bool) {
+	_, ev, ok := settingsMsgEventByCode(code)
+	if !ok {
+		return settingsEditPageDef{}, settingsMsgEvent{}, false
+	}
+	if _, spec := eventPMSpecFor(ev.Key); !spec {
+		return settingsEditPageDef{}, settingsMsgEvent{}, false
+	}
+	def, ok := settingsEditPageByKey(settingsMsgPMWaitPage(ev))
+	return def, ev, ok
+}
+
+// settingsMsgDefByFields is the definition a press names by k and d: the event's group message without d, its
+// private copy with d=p when the event has a private copy spec. It is false for a press without the private owner
+// field c (a group menu's press, refused in step 1 before any lookup), for an unknown event, for any other d and
+// for d=p on an event with no private copy.
 func settingsMsgDefByFields(fields map[string]string) (settingsEditPageDef, bool) {
 	if !settingsListPrivateField(fields) {
 		return settingsEditPageDef{}, false
 	}
-	_, ev, ok := settingsMsgEventByCode(fields[settingsMsgEventField])
+	code := fields[settingsMsgEventField]
+	dest, hasDest := fields[settingsMsgDestField]
+	switch {
+	case hasDest && dest == settingsMsgDestPMCode:
+		def, _, ok := settingsMsgPMDefOf(code)
+		return def, ok
+	case hasDest:
+		return settingsEditPageDef{}, false
+	}
+	_, ev, ok := settingsMsgEventByCode(code)
 	if !ok {
 		return settingsEditPageDef{}, false
 	}
@@ -290,6 +359,16 @@ func settingsMsgEventFields(fields map[string]string) bool {
 // value of exactly "0" or "1".
 func settingsMsgSilentFields(fields map[string]string) bool {
 	return settingsMsgEventFields(fields) && settingsEditSwitchValue(fields["v"])
+}
+
+// settingsMsgPMFields is the Validate of hp: the private owner field, an event with a private copy and a target
+// value of exactly "0" or "1".
+func settingsMsgPMFields(fields map[string]string) bool {
+	if !settingsListPrivateField(fields) || !settingsEditSwitchValue(fields["v"]) {
+		return false
+	}
+	_, _, ok := settingsMsgPMDefOf(fields[settingsMsgEventField])
+	return ok
 }
 
 // settingsMsgState is how one event's message is drawn.
@@ -413,7 +492,7 @@ func settingsMsgRunEvent(p *settingsPress) *settingsScreen {
 
 // settingsMsgRunSilent serves hq, the Silent switch of an event screen: it writes the absolute target
 // through applyEventSilent, the switch's one write path, with the presser as the writer, and redraws the
-// screen from the stored message it read back, with no notice (a stale screen's press of the stored value
+// screen from the stored messages it read back, with no notice (a stale screen's press of the stored value
 // writes the same value again). A failed write redraws the stored state with the save-failed notice; a
 // write whose read-back failed reloads the screen.
 func settingsMsgRunSilent(p *settingsPress) *settingsScreen {
@@ -426,13 +505,36 @@ func settingsMsgRunSilent(p *settingsPress) *settingsScreen {
 	ctx, cancel := context.WithTimeout(context.Background(), settingsReadTimeout)
 	defer cancel()
 	res := applyEventSilent(ctx, p.group.Id, ev.Key, p.fields["v"] == "1", p.query.From.Id)
+	return settingsMsgRedrawApplied(p, def, ev, eventmsg.DestGroup, res)
+}
+
+// settingsMsgRunPM serves hp, the switch of a private copy screen: it writes the absolute target through
+// applyEventPM, the switch's one write path (the pm row's Silent), with the presser as the writer, and redraws
+// the private copy screen from the stored messages it read back, with no notice (a stale screen's press of the
+// stored value writes the same value again). A failed write redraws the stored state with the save-failed
+// notice; a write whose read-back failed reloads the screen.
+func settingsMsgRunPM(p *settingsPress) *settingsScreen {
+	def, ev, ok := settingsMsgPMDefOf(p.fields[settingsMsgEventField])
+	if !ok || !settingsEditSwitchValue(p.fields["v"]) {
+		p.answer(settingsText(p.tr, "common_callback_invalid_request"), true)
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), settingsReadTimeout)
+	defer cancel()
+	res := applyEventPM(ctx, p.group.Id, ev.Key, p.fields["v"] == "1", p.query.From.Id)
+	return settingsMsgRedrawApplied(p, def, ev, eventmsg.DestPM, res)
+}
+
+// settingsMsgRedrawApplied redraws def's screen after a switch write: from the messages the write read back,
+// reloaded when the read-back is missing, or the stored state with the save-failed notice when the write failed.
+func settingsMsgRedrawApplied(p *settingsPress, def settingsEditPageDef, ev settingsMsgEvent, dest string, res eventMsgApplyResult) *settingsScreen {
 	switch {
 	case res.Outcome == greetingSaveFailed:
 		return settingsEditRedraw(p, def, settingsNoticeWarn(settingsText(p.tr, "common_settings_save_failed")))
-	case res.Row == nil:
+	case res.Messages == nil:
 		return settingsEditRedraw(p, def, "")
 	}
-	screen := settingsEditDraw(p.view(), def, settingsMsgStateFromMessage(*res.Row), settingsEditScreenOpts{
+	screen := settingsEditDraw(p.view(), def, settingsMsgStateFor(res.Messages, ev, dest), settingsEditScreenOpts{
 		BotUsername: getBotUsername(p.b),
 	})
 	return &screen
@@ -448,16 +550,29 @@ func settingsMsgStateFromMessage(msg eventmsg.Message) settingsEditState {
 	}
 }
 
-// settingsMsgLoad is an event definition's Load hook: the state of the event's group message from a fresh
-// read, creating nothing. No row reads as the default text with no media, no buttons and Silent off.
-func settingsMsgLoad(ev settingsMsgEvent) func(context.Context, int64) (settingsEditState, error) {
+// settingsMsgStateFor is the editor state of one event's message for a destination, as the send path reads it
+// (Resolve: no group row is the default message with Silent off, no pm row a private copy that is off). The
+// group message's state also carries PMOn, whether the event's private copy is switched on, for an event with a
+// private copy spec, so the event screen's line can say it after any redraw.
+func settingsMsgStateFor(msgs *eventmsg.Messages, ev settingsMsgEvent, dest string) settingsEditState {
+	st := settingsMsgStateFromMessage(msgs.Resolve(ev.Key, dest))
+	if dest == eventmsg.DestGroup {
+		if _, spec := eventPMSpecFor(ev.Key); spec {
+			st.PMOn = !msgs.Resolve(ev.Key, eventmsg.DestPM).Silent
+		}
+	}
+	return st
+}
+
+// settingsMsgLoad is an event definition's Load hook for a destination: the state of the event's message from a
+// fresh read, creating nothing (settingsMsgStateFor).
+func settingsMsgLoad(ev settingsMsgEvent, dest string) func(context.Context, int64) (settingsEditState, error) {
 	return func(ctx context.Context, chatID int64) (settingsEditState, error) {
 		msgs, err := settingsMsgRead(ctx, chatID)
 		if err != nil {
 			return settingsEditState{}, err
 		}
-		msg, _ := msgs.Lookup(ev.Key, eventmsg.DestGroup)
-		return settingsMsgStateFromMessage(msg), nil
+		return settingsMsgStateFor(msgs, ev, dest), nil
 	}
 }
 
@@ -468,47 +583,56 @@ func settingsMsgDraw(fam settingsMsgFamily, ev settingsMsgEvent) func(settingsVi
 	}
 }
 
-// settingsMsgApplied is the outcome and the editor state of an event message apply function's result:
-// nil when the write failed or its read-back did (the caller reloads). A write that left no row is drawn
-// as the default message.
-func settingsMsgApplied(res eventMsgApplyResult) (greetingApplyOutcome, *settingsEditState) {
-	if res.Outcome == greetingSaveFailed || res.Row == nil {
+// settingsMsgPMDraw is a private copy definition's Draw hook.
+func settingsMsgPMDraw(fam settingsMsgFamily, ev settingsMsgEvent) func(settingsView, settingsEditPageDef, settingsEditState, settingsEditScreenOpts) settingsScreen {
+	return func(v settingsView, def settingsEditPageDef, st settingsEditState, opts settingsEditScreenOpts) settingsScreen {
+		return renderSettingsMsgPM(v, fam, ev, def, st, opts)
+	}
+}
+
+// settingsMsgApplied is the outcome and the editor state of an event message apply function's result for a
+// destination: nil when the write failed or its read-back did (the caller reloads). The state is built from the
+// whole fresh read (settingsMsgStateFor), so the group message's private copy line survives a Remove.
+func settingsMsgApplied(res eventMsgApplyResult, ev settingsMsgEvent, dest string) (greetingApplyOutcome, *settingsEditState) {
+	if res.Outcome == greetingSaveFailed || res.Messages == nil {
 		return res.Outcome, nil
 	}
-	st := settingsMsgStateFromMessage(*res.Row)
+	st := settingsMsgStateFor(res.Messages, ev, dest)
 	return res.Outcome, &st
 }
 
-// settingsMsgRemove is an event definition's Remove hook: it clears one part through its apply function
-// (an empty text, no file and type 0, no buttons) for the presser by and returns the state read back. A
-// row with nothing left and Silent off reads as Default, so the send path sends today's reply.
-func settingsMsgRemove(ev settingsMsgEvent) func(context.Context, int64, string, int64) (greetingApplyOutcome, *settingsEditState) {
+// settingsMsgRemove is an event definition's Remove hook for a destination: it clears one part through its apply
+// function (an empty text, no file and type 0, no buttons) for the presser by and returns the state read back. A
+// group row with nothing left and Silent off reads as Default, so the send path sends today's reply; a private
+// copy keeps its switch, so with it on and nothing left the default private text is sent.
+func settingsMsgRemove(ev settingsMsgEvent, dest string) func(context.Context, int64, string, int64) (greetingApplyOutcome, *settingsEditState) {
 	return func(ctx context.Context, chatID int64, part string, by int64) (greetingApplyOutcome, *settingsEditState) {
 		switch part {
 		case settingsEditPartText:
-			return settingsMsgApplied(applyEventText(ctx, chatID, ev.Key, "", by))
+			return settingsMsgApplied(applyEventText(ctx, chatID, ev.Key, dest, "", by), ev, dest)
 		case settingsEditPartMedia:
-			return settingsMsgApplied(applyEventMedia(ctx, chatID, ev.Key, "", 0, by))
+			return settingsMsgApplied(applyEventMedia(ctx, chatID, ev.Key, dest, "", 0, by), ev, dest)
 		case settingsEditPartButtons:
-			return settingsMsgApplied(applyEventButtons(ctx, chatID, ev.Key, nil, by))
+			return settingsMsgApplied(applyEventButtons(ctx, chatID, ev.Key, dest, nil, by), ev, dest)
 		}
 		return greetingSaveFailed, nil
 	}
 }
 
-// settingsMsgWrite is an event definition's Write hook: it stores the part the editor's check accepted
-// (the converted text, the media's file ID and type, or the parsed buttons) through the part's apply
-// function, with the person who typed it as the writer, and reports whether it was stored.
-func settingsMsgWrite(ev settingsMsgEvent) func(context.Context, int64, string, settingsEditVerdict, int64) bool {
+// settingsMsgWrite is an event definition's Write hook for a destination: it stores the part the editor's check
+// accepted (the converted text, the media's file ID and type, or the parsed buttons) through the part's apply
+// function, with the person who typed it as the writer, and reports whether it was stored. Storing a part of a
+// private copy never turns it on.
+func settingsMsgWrite(ev settingsMsgEvent, dest string) func(context.Context, int64, string, settingsEditVerdict, int64) bool {
 	return func(ctx context.Context, chatID int64, part string, verdict settingsEditVerdict, by int64) bool {
 		var res eventMsgApplyResult
 		switch part {
 		case settingsEditPartText:
-			res = applyEventText(ctx, chatID, ev.Key, verdict.Text, by)
+			res = applyEventText(ctx, chatID, ev.Key, dest, verdict.Text, by)
 		case settingsEditPartMedia:
-			res = applyEventMedia(ctx, chatID, ev.Key, verdict.FileID, verdict.DataType, by)
+			res = applyEventMedia(ctx, chatID, ev.Key, dest, verdict.FileID, verdict.DataType, by)
 		case settingsEditPartButtons:
-			res = applyEventButtons(ctx, chatID, ev.Key, verdict.Buttons, by)
+			res = applyEventButtons(ctx, chatID, ev.Key, dest, verdict.Buttons, by)
 		default:
 			return false
 		}
@@ -623,42 +747,94 @@ func renderSettingsMsgFamily(v settingsView, fam settingsMsgFamily, msgs *eventm
 	return k.screen(settingsCompose(v, "settings_page_msgs", body, notice, false))
 }
 
-// renderSettingsMsgEvent draws an event's screen (the Draw hook of its editor definition): the event's icon
-// and bold name, its description, then the state of each part in words (never the stored text, a button
-// name or a link), the editor's note for a media kind that carries no caption, the Silent line and, after a
-// blank line each, the family's hint and the Silent hint; the keyboard opens with the editor's part rows
-// ([Set] while a part is not set, [Set | Remove] while it is, each button carrying k), then the editor's
-// preview rows (Preview of each part that is set, then Full preview, two to a row), then the full-width
-// Silent toggle (the state icon, sending the opposite of the stored state as an absolute target), then Back
-// (the family) and Close: at most seven rows, [2 2 2 2 2 1 2]. It is pure.
-func renderSettingsMsgEvent(
-	v settingsView, fam settingsMsgFamily, ev settingsMsgEvent, def settingsEditPageDef, st settingsEditState, opts settingsEditScreenOpts,
-) settingsScreen {
-	tr := v.Tr
-	body := []string{ev.Icon + " <b>" + settingsText(tr, ev.NameKey) + "</b>", settingsText(tr, ev.DescKey), ""}
+// settingsMsgPartLines is the state of each part of def in words (never the stored text, a button name or a
+// link), then the editor's note for a media kind that carries no caption.
+func settingsMsgPartLines(tr *i18n.Translator, def settingsEditPageDef, st settingsEditState) []string {
+	lines := make([]string, 0, len(def.Parts)+1)
 	for _, part := range def.Parts {
-		body = append(body, settingsText(tr, part.LineKey, i18n.TranslationParams{
+		lines = append(lines, settingsText(tr, part.LineKey, i18n.TranslationParams{
 			"state": settingsEditStateWord(tr, st, part.Code),
 		}))
 	}
 	if settingsEditPartIsSet(st, settingsEditPartMedia) && (st.MediaType == db.STICKER || st.MediaType == db.VIDEO_NOTE) {
-		body = append(body, settingsText(tr, "settings_edit_note_no_caption"))
+		lines = append(lines, settingsText(tr, "settings_edit_note_no_caption"))
+	}
+	return lines
+}
+
+// settingsMsgSwitchRow adds a full-width switch of an event's screen: the label key with the state icon of on,
+// pressing action with the event code and the opposite of on as the absolute target.
+func settingsMsgSwitchRow(k *settingsKeyboard, labelKey, action string, ev settingsMsgEvent, on bool) {
+	target := "1"
+	if on {
+		target = "0"
+	}
+	label := settingsText(k.view.Tr, labelKey, i18n.TranslationParams{"state": settingsStateIcon(on)})
+	if button, ok := k.button(label, map[string]string{"a": action, settingsMsgEventField: ev.Code, "v": target}); ok {
+		k.row(button)
+	}
+}
+
+// renderSettingsMsgEvent draws an event's screen (the Draw hook of its editor definition): the event's icon
+// and bold name, its description, then the state of each part in words (never the stored text, a button
+// name or a link), the editor's note for a media kind that carries no caption, the Silent line, for an event
+// with a private copy the private copy line (On or Off, D-22), and, after a blank line each, the family's hint
+// and the Silent hint; the keyboard opens with the editor's part rows ([Set] while a part is not set,
+// [Set | Remove] while it is, each button carrying k), then the editor's preview rows (Preview of each part
+// that is set, then Full preview, two to a row), then the full-width Silent toggle (the state icon, sending the
+// opposite of the stored state as an absolute target), then, for an event with a private copy, the full-width
+// row that opens the private copy's screen (a=he, k and d=p), then Back (the family) and Close: at most eight
+// rows, [2 2 2 2 2 1 1 2]. It is pure.
+func renderSettingsMsgEvent(
+	v settingsView, fam settingsMsgFamily, ev settingsMsgEvent, def settingsEditPageDef, st settingsEditState, opts settingsEditScreenOpts,
+) settingsScreen {
+	tr := v.Tr
+	_, hasPM := eventPMSpecFor(ev.Key)
+	body := []string{ev.Icon + " <b>" + settingsText(tr, ev.NameKey) + "</b>", settingsText(tr, ev.DescKey), ""}
+	body = append(body, settingsMsgPartLines(tr, def, st)...)
+	body = append(body, settingsText(tr, "settings_msg_line_silent", i18n.TranslationParams{"state": settingsStateWord(tr, st.Silent)}))
+	if hasPM {
+		body = append(body, settingsText(tr, "settings_msg_line_pm", i18n.TranslationParams{"state": settingsStateWord(tr, st.PMOn)}))
 	}
 	body = append(body,
-		settingsText(tr, "settings_msg_line_silent", i18n.TranslationParams{"state": settingsStateWord(tr, st.Silent)}),
 		"", settingsText(tr, fam.HintKey),
 		"", settingsText(tr, "settings_msg_hint_silent"))
 	k := newSettingsKeyboard(v)
 	settingsEditPartRows(k, def, st)
 	settingsEditPreviewRows(k, def, st)
-	target := "1"
-	if st.Silent {
-		target = "0"
-	}
-	label := settingsText(tr, "settings_btn_msg_silent", i18n.TranslationParams{"state": settingsStateIcon(st.Silent)})
-	if button, ok := k.button(label, map[string]string{"a": settingsActMsgSilent, settingsMsgEventField: ev.Code, "v": target}); ok {
-		k.row(button)
+	settingsMsgSwitchRow(k, "settings_btn_msg_silent", settingsActMsgSilent, ev, st.Silent)
+	if hasPM {
+		open := map[string]string{"a": settingsActMsgEvent, settingsMsgEventField: ev.Code, settingsMsgDestField: settingsMsgDestPMCode}
+		if button, ok := k.button(settingsText(tr, "settings_btn_msg_pm_open"), open); ok {
+			k.row(button)
+		}
 	}
 	settingsDelBackRow(k, map[string]string{"a": settingsActMsgFamily, "t": fam.Code})
 	return k.screen(settingsCompose(v, "settings_page_msgs", body, opts.Notice, false))
+}
+
+// renderSettingsMsgPM draws an event's private copy screen (the Draw hook of its private copy definition, D-23):
+// the event's icon and bold name, the private copy's intro, a blank line, the state of each part in words (the
+// text reads Default while no text is stored: the default private text is then sent), the no-caption note, the
+// private copy line (On while the pm row's Silent is false) and, after a blank line each, the family's hint and
+// the private copy hint; the keyboard is the editor's part rows (each button carrying k and d=p through the
+// definition's Fields), the full-width switch (the state icon, sending the opposite of the stored state as an
+// absolute target, a=hp), then Back (the event's screen) and Close: [1 1 1 1 2] with nothing stored and at most
+// [2 2 2 1 2]. It is pure.
+func renderSettingsMsgPM(
+	v settingsView, fam settingsMsgFamily, ev settingsMsgEvent, def settingsEditPageDef, st settingsEditState, opts settingsEditScreenOpts,
+) settingsScreen {
+	tr := v.Tr
+	on := !st.Silent
+	body := []string{ev.Icon + " <b>" + settingsText(tr, ev.NameKey) + "</b>", settingsText(tr, "settings_msg_pm_intro"), ""}
+	body = append(body, settingsMsgPartLines(tr, def, st)...)
+	body = append(body,
+		settingsText(tr, "settings_msg_line_pm", i18n.TranslationParams{"state": settingsStateWord(tr, on)}),
+		"", settingsText(tr, fam.HintKey),
+		"", settingsText(tr, "settings_msg_hint_pm"))
+	k := newSettingsKeyboard(v)
+	settingsEditPartRows(k, def, st)
+	settingsMsgSwitchRow(k, "settings_btn_msg_pm", settingsActMsgPM, ev, on)
+	settingsDelBackRow(k, map[string]string{"a": settingsActMsgEvent, settingsMsgEventField: ev.Code})
+	return k.screen(settingsCompose(v, def.TitleKey, body, opts.Notice, false))
 }
