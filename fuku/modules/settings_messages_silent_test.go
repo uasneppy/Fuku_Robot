@@ -97,7 +97,7 @@ func TestSettingsMessagesSilent(t *testing.T) {
 	settingsMsgWantStates(t, hub, map[string]string{eventmsg.EventBan: "settings_msg_state_silent"})
 
 	// A second press stores false and the line reads Default again.
-	text, keyboard = m.press("a", settingsActMsgEvent, settingsMsgEventField, "bn")
+	_, keyboard = m.press("a", settingsActMsgEvent, settingsMsgEventField, "bn")
 	toggle, _ = settingsMsgSilentToggle(t, keyboard)
 	text, keyboard = m.pressButton(toggle)
 	if silent, _, ok := settingsMsgSilentStored(t, env.chat.Id, eventmsg.EventBan); !ok || silent {
