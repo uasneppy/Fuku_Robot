@@ -2,6 +2,7 @@ package modules
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
@@ -126,6 +127,15 @@ type target struct {
 	timeVal   string // used by time-based commands (e.g., tban)
 	isChannel bool   // true if original target was a channel ID
 	untilDate int64  // the Telegram until_date a time-based command computed; 0 for a permanent one
+}
+
+// eventUntil is the end of a timed punishment as the event message's {until} value: the Telegram
+// until_date as a time, or the zero time for a permanent one, which renders {until} empty (D-09).
+func eventUntil(untilDate int64) time.Time {
+	if untilDate <= 0 {
+		return time.Time{}
+	}
+	return time.Unix(untilDate, 0)
 }
 
 // extractFromArgs resolves the target from command arguments using ExtractUserAndText.
