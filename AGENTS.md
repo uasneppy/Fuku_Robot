@@ -4532,7 +4532,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   provider. The families: `TestChatWatcherGroupReachedByMention` (`chat_group_test.go`), `TestChatWatcherAnswers`,
   `TestChatWatcherIgnores`, `TestChatWatcherAudience`, `TestChatGuards`, `TestChatFilterReply`, `TestShutdownEndsChat`,
   `TestChatDeletedMessageGetsNoReply`, `TestChatAskCommand` (`chat_watch_test.go`), `TestChatProvidersRequest` (both real adapters
-  against one `httptest` stand-in, `chat_provider_test.go`) and `TestChatLogsCarryIDsOnly` (`chat_logs_test.go`).
+  against one `httptest` stand-in, `chat_provider_test.go`), `TestChatLogsCarryIDsOnly` (`chat_logs_test.go`) and `TestChatEndToEnd`
+  (`chat_e2e_test.go`: the owner turns conversations on from the private page, a member mentions the bot, the real Anthropic
+  adapter answers through the stand-in, a second member replies and the next request carries the first exchange;
+  `newChatEnvFor` builds the environment over the page's group). `20-SPIKE.md` is the owner's non-blocking checklist.
 - `scripts/chat-spike` (Phase 20) is the owner's persona check: it sends each line of a questions file
   (`scripts/chat-spike/persona-check.txt`, kept in step with `.planning/phases/20-conversations/20-PERSONA-CHECK.md` by
   `TestPersonaCheckFilesAgree`) through `chatprompt` and `claude.Client.Converse` or `gemini.Client.Generate`, and prints

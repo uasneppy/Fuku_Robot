@@ -84,6 +84,16 @@ type chatEnv struct {
 // audience.
 func newChatEnv(t *testing.T) *chatEnv {
 	t.Helper()
+	env := newChatEnvFor(t, uniqueModuleChatID())
+	if err := chatconv.SetEnabled(context.Background(), env.chatID, true, 1); err != nil {
+		t.Fatalf("SetEnabled: %v", err)
+	}
+	return env
+}
+
+// newChatEnvFor builds the environment over an existing group and leaves its setting as it is.
+func newChatEnvFor(t *testing.T, chatID int64) *chatEnv {
+	t.Helper()
 	withRealLocales(t)
 	mr, rc := withChatRedis(t)
 	withChatProviders(t, true, true, true)
@@ -92,7 +102,7 @@ func newChatEnv(t *testing.T) *chatEnv {
 	env := &chatEnv{t: t, mr: mr, rc: rc, client: newModuleBotClient(), provider: &chatFakeProvider{}, nextUpdate: 1, nextMsg: 500}
 	env.bot = newModuleTestBot(env.client)
 	env.bot.BotClient = &chatTelegramFake{moduleBotClient: env.client, deleted: map[int64]bool{}}
-	env.chatID = uniqueModuleChatID()
+	env.chatID = chatID
 	chatConvCleanup(t, env.chatID)
 	memberReqCleanup(t, []int64{env.chatID}, nil)
 	chatSwap(t, &chatProviderOf, func(string) chatProvider { return env.provider })
@@ -100,10 +110,6 @@ func newChatEnv(t *testing.T) *chatEnv {
 	env.dispatcher = ext.NewDispatcher(&ext.DispatcherOpts{MaxRoutines: -1})
 	LoadChat(env.dispatcher)
 	env.dispatcher.AddHandlerToGroup(chatGroupRecorder{seen: &env.passed}, chatWatchGroup)
-
-	if err := chatconv.SetEnabled(context.Background(), env.chatID, true, 1); err != nil {
-		t.Fatalf("SetEnabled: %v", err)
-	}
 	return env
 }
 
