@@ -3393,7 +3393,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   ends the copy busy with no request; blocks on the staff, deletion, member requirement, lockdown and federation pacers
   leave the copy alone) and `TestEventPMLogsCarryIDsOnly` (a debug-level hook over every outcome, the shed and the
   capped paths, with a stored text, caption, file ID, button, link, reason, member name, description and transport text
-  each a sentinel: none reaches a line, and each failure line names the chat and the event) and `TestEventMsgLocaleKeys` (`fuku/i18n/eventmsg_locale_test.go`, whose
+  each a sentinel: none reaches a line, and each failure line names the chat and the event), `TestPMCopyCallers`
+  (`pm_copy_callers_test.go`, D-33: a `go/parser` walk of the package's non-test files; `offerEventPM` is used only by
+  `event_message.go` and `registerEventPM` only by `event_message_pm.go`, each allow-list entry with its reason and a stale
+  entry failing, and no file whose name starts with `staff`, `lockdown` or `raid` names `offerEventPM`, `registerEventPM`,
+  `offerReplyPM`, `replyEvent` or any `pmCopy` identifier, so a lockdown's joiner bans, "Ban N recent joiners" and Staff
+  Group actions can never send a copy, PMSG-05; a later phase adds its caller to the list with a reason) and `TestEventMsgLocaleKeys` (`fuku/i18n/eventmsg_locale_test.go`, whose
   `eventMsgLocaleLimits` must cover exactly the `eventmsg_` keys of the locale files, so a new key adds its row) hold it (toolkit `event_message_pm_env_test.go`: `newEventPMSite`, which is
   `newModerationGoldenSite` with miniredis, `withFastPMCopyPacer` and `eventPMTestClient`, whose `eventPMScript` refuses the
   next sends to the member (`eventPMRefuse`), holds them (`eventPMHold`, released in `t.Cleanup` before the jobs are
@@ -5287,6 +5292,15 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `settingsMsgCleanup` for the rows (the `chat_event_message_options` row included, since Phase 21) and the `event_messages` key, every
   swapped seam (`settingsMsgRead`, `eventMsgWrites`, `eventMessagesLookup`) restored through `mreqSwap`, no `t.Skip`, and light tests: the
   language sweeps run over pure renders, a dispatcher test uses one environment and the worst state.
+- Phase 21 test families (the private copies of event messages): `TestEventPMEndToEnd`, `TestEventPMSpecs`, `TestEventPMDefaultTexts`
+  and `TestEventPMComposition` (`event_message_pm_test.go`), `TestEventPMFailures`, `TestEventPMLimits`, `TestEventPMPacerIndependent`
+  and `TestEventPMLogsCarryIDsOnly` (`event_message_pm_failures_test.go`), the guard `TestPMCopyCallers` (`pm_copy_callers_test.go`)
+  and `TestEventMsgLocaleKeys` (`fuku/i18n`), on the toolkit `event_message_pm_env_test.go` (the PM copies bullet under Subsystem traps
+  lists it). Hygiene: `newEventPMSite` registers `pmCopyJobs.wait` as its last cleanup, so a test that swaps a variable a job reads
+  (`pmCopyNow`, `pmCopyAutoCapPerMinute`, `pmCopyRedisClient`) after it registers one more `t.Cleanup(pmCopyJobs.wait)` after the swap,
+  because cleanups run last in, first out; a held job is released in `t.Cleanup` before that wait; the `fuku:pmcopy:*` keys are removed by
+  `eventPMCleanup`; and a test reads the recorded requests under the fake's lock (`eventPMAllCalls`, `eventPMCalls`), never through
+  `callsFor("")`, which matches no method.
 
 ## Commits
 
