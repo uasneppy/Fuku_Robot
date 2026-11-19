@@ -111,7 +111,7 @@ func TestSettingsMessagesOpens(t *testing.T) {
 		t.Errorf("the family list's Back carries %v, want the hub", back)
 	}
 
-	// The ban screen: its name, description and part states, and Back to the family.
+	// The ban screen: its name, description and part states, the Silent toggle and Back to the family.
 	ban, ok := settingsMsgButtonWith(t, keyboard, "a", settingsActMsgEvent, settingsMsgEventField, "bn")
 	if !ok || !strings.HasPrefix(ban.Text, "🚫 ") {
 		t.Fatalf("the family list has no 🚫 ban cell: %+v", keyboard)
@@ -128,8 +128,8 @@ func TestSettingsMessagesOpens(t *testing.T) {
 	if n := strings.Count(text, staffMarker("settings_state_not_set")); n != 2 {
 		t.Errorf("the ban screen reads Not set %d times, want 2 (media and buttons):\n%s", n, text)
 	}
-	settingsMsgWantWidths(t, "the ban screen", keyboard, 2)
-	if back := settingsButtonFields(t, keyboard[0][0]); back["a"] != settingsActMsgFamily || back["t"] != "m" {
+	settingsMsgWantWidths(t, "the ban screen", keyboard, 1, 2)
+	if back := settingsButtonFields(t, keyboard[1][0]); back["a"] != settingsActMsgFamily || back["t"] != "m" {
 		t.Errorf("the ban screen's Back carries %v, want the family", back)
 	}
 

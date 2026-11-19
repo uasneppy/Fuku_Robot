@@ -635,6 +635,10 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_msg_state_custom":     {12, 18},
 	"settings_msg_state_silent":     {12, 18},
 	"settings_msg_group_note":       {130, 182},
+	// The Silent switch of an event screen (Phase 20, plan 20-07): its line, its full-width toggle and its hint.
+	"settings_msg_line_silent": {20, 28},
+	"settings_btn_msg_silent":  {20, 26},
+	"settings_msg_hint_silent": {90, 126},
 }
 
 // settingsAlertKeys are shown as answerCallbackQuery alerts: plain text, no tag, at most
@@ -924,6 +928,9 @@ func TestSettingsLabelLengths(t *testing.T) {
 	// The full-width toggles of the Switches and Anonymous admins pages (Phase 18): each is
 	// rendered with the check or cross icon and the language's longer On or Off word.
 	phase18Toggles := []string{"settings_btn_sw_reports", "settings_btn_sw_aispam", "settings_btn_sw_approve", "settings_btn_anon_toggle"}
+	// The full-width toggles that carry the state icon alone in place of {state} (Phase 20, plan 20-07: an event
+	// screen's Silent switch).
+	iconToggles := []string{"settings_btn_msg_silent"}
 	// The editor's two-column buttons (UI-SPEC rows 28 to 38): at most 20 code points as
 	// written, icon included.
 	editorButtons := []string{
@@ -1080,6 +1087,16 @@ func TestSettingsLabelLengths(t *testing.T) {
 					{"❌ ", "common_status_off"},
 				} {
 					rendered := strings.ReplaceAll(template, "{state}", state.icon+settingsLocaleString(t, lang, data, state.key))
+					if runes := utf8.RuneCountInString(rendered); runes > accessToggle {
+						t.Errorf("%s: toggle %q (%s) has %d characters, ceiling %d", lang, rendered, key, runes, accessToggle)
+					}
+				}
+			}
+
+			for _, key := range iconToggles {
+				template := settingsLocaleString(t, lang, data, key)
+				for _, icon := range []string{"✅", "❌"} {
+					rendered := strings.ReplaceAll(template, "{state}", icon)
 					if runes := utf8.RuneCountInString(rendered); runes > accessToggle {
 						t.Errorf("%s: toggle %q (%s) has %d characters, ceiling %d", lang, rendered, key, runes, accessToggle)
 					}
@@ -1315,6 +1332,8 @@ func TestSettingsEditLocaleTokens(t *testing.T) {
 		{"settings_edit_line_goodbye", []string{"{state}"}},
 		{"settings_edit_line_clean_welcome", []string{"{state}"}},
 		{"settings_edit_line_clean_goodbye", []string{"{state}"}},
+		{"settings_msg_line_silent", []string{"{state}"}},
+		{"settings_btn_msg_silent", []string{"{state}"}},
 	}
 
 	english := loadStaffLocale(t, "en")

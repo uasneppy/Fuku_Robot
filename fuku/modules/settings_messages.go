@@ -39,6 +39,9 @@ const (
 	settingsActMsgCancel  = "hc"
 	settingsActMsgPreview = "hv"
 	settingsActMsgFull    = "hf"
+	// settingsActMsgSilent is the action code of an event screen's Silent switch (fields k, the event code,
+	// and v, the absolute target "0" or "1").
+	settingsActMsgSilent = "hq"
 	// settingsMsgEventField is the callback field that names the event of a press (not e, which is the
 	// confirm-card expiry everywhere else in the namespace).
 	settingsMsgEventField = "k"
@@ -117,6 +120,9 @@ func init() {
 			},
 			settingsActMsgEvent: {
 				Fields: []string{settingsMsgEventField}, Right: settingsRightAdmin, Validate: settingsMsgEventFields, Run: settingsMsgRunEvent,
+			},
+			settingsActMsgSilent: {
+				Fields: []string{settingsMsgEventField, "v"}, Right: settingsRightChangeInfo, Validate: settingsMsgSilentFields, Run: settingsMsgRunSilent,
 			},
 		},
 	})
@@ -197,6 +203,12 @@ func settingsMsgFamilyFields(fields map[string]string) bool {
 func settingsMsgEventFields(fields map[string]string) bool {
 	_, ok := settingsMsgDefByFields(fields)
 	return ok
+}
+
+// settingsMsgSilentFields is the Validate of hq: the private owner field, a known event code and a target
+// value of exactly "0" or "1".
+func settingsMsgSilentFields(fields map[string]string) bool {
+	return settingsMsgEventFields(fields) && settingsEditSwitchValue(fields["v"])
 }
 
 // settingsMsgState is how one event's message is drawn.
@@ -318,6 +330,43 @@ func settingsMsgRunEvent(p *settingsPress) *settingsScreen {
 	return settingsEditRedraw(p, def, "")
 }
 
+// settingsMsgRunSilent serves hq, the Silent switch of an event screen: it writes the absolute target
+// through applyEventSilent, the switch's one write path, with the presser as the writer, and redraws the
+// screen from the stored message it read back, with no notice (a stale screen's press of the stored value
+// writes the same value again). A failed write redraws the stored state with the save-failed notice; a
+// write whose read-back failed reloads the screen.
+func settingsMsgRunSilent(p *settingsPress) *settingsScreen {
+	def, ok := settingsMsgDefByFields(p.fields)
+	_, ev, evOK := settingsMsgEventByCode(p.fields[settingsMsgEventField])
+	if !ok || !evOK || !settingsEditSwitchValue(p.fields["v"]) {
+		p.answer(settingsText(p.tr, "common_callback_invalid_request"), true)
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), settingsReadTimeout)
+	defer cancel()
+	res := applyEventSilent(ctx, p.group.Id, ev.Key, p.fields["v"] == "1", p.query.From.Id)
+	switch {
+	case res.Outcome == greetingSaveFailed:
+		return settingsEditRedraw(p, def, settingsNoticeWarn(settingsText(p.tr, "common_settings_save_failed")))
+	case res.Row == nil:
+		return settingsEditRedraw(p, def, "")
+	}
+	screen := settingsEditDraw(p.view(), def, settingsMsgStateFromMessage(*res.Row), settingsEditScreenOpts{
+		BotUsername: getBotUsername(p.b),
+	})
+	return &screen
+}
+
+// settingsMsgStateFromMessage is the editor state of one stored event message; the zero Message (no row)
+// reads as the default text with no media, no buttons and Silent off.
+func settingsMsgStateFromMessage(msg eventmsg.Message) settingsEditState {
+	return settingsEditState{
+		Kind: settingsEditEvent, Text: msg.Text, TextIsDefault: msg.Text == "",
+		MediaType: msg.MediaType, FileID: msg.FileID, Buttons: models.ButtonArray(msg.Buttons),
+		Silent: msg.Silent,
+	}
+}
+
 // settingsMsgLoad is an event definition's Load hook: the state of the event's group message from a fresh
 // read, creating nothing. No row reads as the default text with no media, no buttons and Silent off.
 func settingsMsgLoad(ev settingsMsgEvent) func(context.Context, int64) (settingsEditState, error) {
@@ -327,11 +376,7 @@ func settingsMsgLoad(ev settingsMsgEvent) func(context.Context, int64) (settings
 			return settingsEditState{}, err
 		}
 		msg, _ := msgs.Lookup(ev.Key, eventmsg.DestGroup)
-		return settingsEditState{
-			Kind: settingsEditEvent, Text: msg.Text, TextIsDefault: msg.Text == "",
-			MediaType: msg.MediaType, FileID: msg.FileID, Buttons: models.ButtonArray(msg.Buttons),
-			Silent: msg.Silent,
-		}, nil
+		return settingsMsgStateFromMessage(msg), nil
 	}
 }
 
@@ -398,8 +443,10 @@ func renderSettingsMsgFamily(v settingsView, fam settingsMsgFamily, msgs *eventm
 
 // renderSettingsMsgEvent draws an event's screen (the Draw hook of its editor definition): the event's icon
 // and bold name, its description, then the state of each part in words (never the stored text, a button
-// name or a link) and the editor's note for a media kind that carries no caption; Back (the family) and
-// Close. It is pure. Plans 20-07 to 20-09 add the Silent switch, the part rows and the previews.
+// name or a link), the editor's note for a media kind that carries no caption, the Silent line and, after a
+// blank line, the Silent hint; the full-width Silent toggle (the state icon, sending the opposite of the
+// stored state as an absolute target), then Back (the family) and Close. It is pure. Plans 20-08 and 20-09
+// add the part rows and the previews.
 func renderSettingsMsgEvent(v settingsView, fam settingsMsgFamily, ev settingsMsgEvent, st settingsEditState, opts settingsEditScreenOpts) settingsScreen {
 	tr := v.Tr
 	body := []string{ev.Icon + " <b>" + settingsText(tr, ev.NameKey) + "</b>", settingsText(tr, ev.DescKey), ""}
@@ -411,7 +458,18 @@ func renderSettingsMsgEvent(v settingsView, fam settingsMsgFamily, ev settingsMs
 	if settingsEditPartIsSet(st, settingsEditPartMedia) && (st.MediaType == db.STICKER || st.MediaType == db.VIDEO_NOTE) {
 		body = append(body, settingsText(tr, "settings_edit_note_no_caption"))
 	}
+	body = append(body,
+		settingsText(tr, "settings_msg_line_silent", i18n.TranslationParams{"state": settingsStateWord(tr, st.Silent)}),
+		"", settingsText(tr, "settings_msg_hint_silent"))
 	k := newSettingsKeyboard(v)
+	target := "1"
+	if st.Silent {
+		target = "0"
+	}
+	label := settingsText(tr, "settings_btn_msg_silent", i18n.TranslationParams{"state": settingsStateIcon(st.Silent)})
+	if button, ok := k.button(label, map[string]string{"a": settingsActMsgSilent, settingsMsgEventField: ev.Code, "v": target}); ok {
+		k.row(button)
+	}
 	settingsDelBackRow(k, map[string]string{"a": settingsActMsgFamily, "t": fam.Code})
 	return k.screen(settingsCompose(v, "settings_page_msgs", body, opts.Notice, false))
 }

@@ -1512,8 +1512,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   its state word; one cell per family, two to a row, then Back to Main and Close, rows `[1] [2]`), a family's list (`a=hl&t=<family>`:
   its intro, the event lines and `settings_msg_list_hint`; one cell per event, two to a row, then Back to the hub and Close, rows
   `[2 2 2 1 2]`) and an event's screen (`a=he&k=<code>`: the event's icon and bold name, its description, then the editor's part lines
-  `settings_edit_line_text`, `_media` and `_buttons` with `settingsEditStateWord`, and the no-caption note for a sticker or a video
-  note; Back to the family and Close). An event's state (`settingsMsgStateOf`) is Silent when its Silent switch is on, Custom when it
+  `settings_edit_line_text`, `_media` and `_buttons` with `settingsEditStateWord`, the no-caption note for a sticker or a video
+  note, then `settings_msg_line_silent` with `settingsStateWord` and, after a blank line, `settings_msg_hint_silent`; the full-width
+  Silent toggle `settings_btn_msg_silent` with `settingsStateIcon`, then Back to the family and Close, rows `[1 2]`). An event's state (`settingsMsgStateOf`) is Silent when its Silent switch is on, Custom when it
   has a text, a media or a button, else Default (no row, or a row with nothing left, reads as the send path reads it); Main reads
   `settings_state_default` when every event is Default and `settings_state_msg_n` (`{n} custom`) for the n events that are not
   (`settingsMsgCountChanged`), the unknown mark when the read failed. Every read is `settingsMsgRead` (= `eventmsg.GetFresh`, never the
@@ -1528,8 +1529,22 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `(event, group)`, `TextIsDefault` when there is no text, `Silent` from the row) and `Draw` (`renderSettingsMsgEvent`); `he` redraws
   through `settingsEditRedraw` of that definition. `settingsMsgDefByFields` resolves a press's `k` to its definition and is false without
   `c`, so plan 20-08's `settingsEditResolvedActions(…, []string{"k"}, settingsMsgDefByFields)` refuses a group menu's press in step 1. Plan
-  20-07 adds the Silent switch (`hq`), 20-08 Set, Remove and the typed reply, 20-09 the previews. `TestSettingsMessagesOpens`,
-  `TestSettingsMessagesMainState`, `TestSettingsMessagesGroupMenu` and `TestSettingsMessagesStaffGroup` hold it
+  20-08 adds Set, Remove and the typed reply, 20-09 the previews. The Silent switch (plan 20-07, MSG-07, D-14: on, the bot still acts and
+  posts nothing in the group for that event; the default is off) is the page action `hq` (`settingsActMsgSilent`), fields exactly `k` and
+  `v`, its `Validate` (`settingsMsgSilentFields`) the private owner field `c`, a known event and `v` exactly `0` or `1`
+  (`settingsEditSwitchValue`), so a forged `v`, an unknown `k`, an extra field or a group menu's `u` is an invalid request in step 1 before
+  any `getChatMember`. It needs `settingsRightChangeInfo` (D-22), judged on the press's own live member record. The toggle sends the
+  absolute target (the opposite of the stored state, `a=hq&c=<chat>&k=<code>&v=<target>`, 42 bytes at a 14-character chat ID), so a
+  double tap or a stale screen writes the same value again and shows no notice. `settingsMsgRunSilent` writes only through
+  `applyEventSilent(ctx, chatID, event, on, by)` (`event_message_apply.go`), the switch's one write path, which has no command and
+  judges no person's rights: it writes through the seam `eventMsgWrites.Silent` (default `eventmsg.SetSilent`, destination
+  `eventmsg.DestGroup`, the presser as `updated_by`) and reads the row back with `eventmsg.GetFresh`, returning
+  `eventMsgApplyResult{Outcome greetingApplyOutcome; Row *eventmsg.Message; Err error}`. The screen is redrawn from the read-back
+  (`settingsMsgStateFromMessage`), reloaded when the read-back is missing, and a failed write (`greetingSaveFailed`) redraws the stored
+  state with the warn notice `common_settings_save_failed`. The repository drops `event_messages:<chat>`, which is in `skipLocal`, so the
+  very next command of that event on every replica posts nothing. `TestSettingsMessagesOpens`,
+  `TestSettingsMessagesMainState`, `TestSettingsMessagesGroupMenu`, `TestSettingsMessagesStaffGroup` and `TestSettingsMessagesSilent`
+  (`settings_messages_silent_test.go`: the press, the hub's Silent line, the stale press, the forged presses and a failed write) hold it
   (`settings_messages_test.go`, toolkit `settings_messages_env_test.go`: `newSettingsMsgEnv`, `settingsMsgCleanup`, `settingsMsgSeed`,
   `settingsMsgOpenPrivate`, `settingsMsgPrivateMenu`).
 - The message editor's pages (`settings_edit.go`, pages `w` Welcome, `g` Goodbye and `r` Rules, orders 50, 60 and 70, each
@@ -1725,7 +1740,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   never runs.
   `settingsRightChangeInfo` needs the creator or an administrator with `can_change_info` from the same member record (no
   extra call) and refuses with the alert `settings_no_change_info` (the editor's Delete last, as `/cleanwelcome` and
-  `/cleangoodbye` refuse through `CanUserChangeInfo`); it also gates every choice of the Deletion page (`/cleanservice` asks for it too), the three Member messages rows (`mc`, `me`, `ms`, Off included) and the Self-destruct card's Yes (`dy`), each judged on the press's fresh member record, so a Yes after the presser lost the right is refused with nothing written, while opening the section, a list and a row screen needs only the admin check every press makes (`TestSettingsAuthorityDeletionMember`; the owner gate's carve-out applies: a non-owner administrator with the switch off is refused at step 4b). `settingsRightRefusalFor` is the one pure judgement of a right's
+  `/cleangoodbye` refuse through `CanUserChangeInfo`); it also gates every choice of the Deletion page (`/cleanservice` asks for it too), the three Member messages rows (`mc`, `me`, `ms`, Off included) and the Self-destruct card's Yes (`dy`), each judged on the press's fresh member record, so a Yes after the presser lost the right is refused with nothing written, while opening the section, a list and a row screen needs only the admin check every press makes (`TestSettingsAuthorityDeletionMember`; the owner gate's carve-out applies: a non-owner administrator with the switch off is refused at step 4b). It also gates the Messages page's Silent switch (`hq`, Phase 20 plan 20-07), judged on the press's own live member record with nothing written on a refusal, while opening the hub, a family and an event screen needs only `settingsRightAdmin`; Set, Remove and the typed reply of an event message follow in plan 20-08 under the same right (the event definitions' `EditRight`). `settingsRightRefusalFor` is the one pure judgement of a right's
   member-record part, shared by a button press and a typed reply, so the two can never judge a right differently.
   Two composite rights (Phase 18, the only framework edit of that phase, appended after `settingsRightChangeInfo` so the zero value
   stays `settingsRightAdmin`, which made eight rights at the end of Phase 18; Phase 19 adds a ninth, below) judge the bot part first, as the commands they mirror do, then the member part:
