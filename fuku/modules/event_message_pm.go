@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
+	"github.com/redis/go-redis/v9"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
@@ -31,7 +33,7 @@ import (
 
 // eventPMSpec is how an event's private copy is built. DefaultKey is the locale key of the event's
 // default private text, used when the pm row stores no text. Automatic marks an event the bot raises
-// by itself (the per-group cap of a later phase applies to it); the manual events are not automatic.
+// by itself, whose copies the per-group cap counts (pmCopyCapAllow); the manual events are not automatic.
 type eventPMSpec struct {
 	DefaultKey string
 	Automatic  bool
@@ -119,15 +121,17 @@ var pmCopyJobTimeout = 60 * time.Second
 // the job), the event, the punished member's user ID (the private chat the copy goes to) and the
 // composed message, which carries no reply target and no topic. Custom says the copy was composed from
 // stored content (a text, a media or buttons of the pm row), and Fallback is then the event's default
-// private text, sent once in its place when Telegram refuses the custom copy (D-15).
+// private text, sent once in its place when Telegram refuses the custom copy (D-15). automatic is set by
+// offerEventPM from the event's spec, never by a caller: the job checks the per-group cap for it.
 type eventPMOffer struct {
-	Bot      *gotgbot.Bot
-	Chat     gotgbot.Chat
-	Event    string
-	UserID   int64
-	Message  media.GreetingMessage
-	Custom   bool
-	Fallback string
+	Bot       *gotgbot.Bot
+	Chat      gotgbot.Chat
+	Event     string
+	UserID    int64
+	Message   media.GreetingMessage
+	Custom    bool
+	Fallback  string
+	automatic bool
 }
 
 // pmCopyOutcome is the final class of a private copy job's send (D-15), decided by Telegram's error code
@@ -209,6 +213,52 @@ func pmCopySkipTarget(b *gotgbot.Bot, userID int64) bool {
 	return b != nil && userID == b.Id
 }
 
+// pmCopyAutoCapPerMinute is the most private copies of automatic events (spec Automatic true) one group
+// sends in one fixed minute (D-17). Manual events are never counted. A variable only so a test can make
+// it small; production code never reassigns it.
+var pmCopyAutoCapPerMinute = 10
+
+// pmCopyCapCounterTTL is how long a minute's counter lives: two windows, so an idle group's counters
+// expire on their own.
+const pmCopyCapCounterTTL = 120 * time.Second
+
+// pmCopyNow is the clock of the automatic cap's minute. A variable only so a test can stop it.
+var pmCopyNow = time.Now
+
+// pmCopyRedisClient is the Redis client of the automatic cap, nil without Redis. A variable only so a
+// test can take it away.
+var pmCopyRedisClient = raidRedis
+
+// pmCopyCapKey is the counter of one group's automatic private copies in one fixed minute (the Unix time
+// divided by 60): fuku:pmcopy:{<chat>}:cap:<minute>, outside the cache prefix, the chat ID a hash tag.
+func pmCopyCapKey(chatID, minute int64) string {
+	return "fuku:pmcopy:{" + strconv.FormatInt(chatID, 10) + "}:cap:" + strconv.FormatInt(minute, 10)
+}
+
+// pmCopyCapAllow counts one automatic private copy in the group's current minute (INCR and EXPIRE 120 in
+// one transaction, bounded by raidRedisTimeout) and reports whether it may be sent: at most
+// pmCopyAutoCapPerMinute a minute. It fails closed (D-17): with no Redis client or on any Redis error the
+// copy is not sent, because the copy is optional and a raid must not become a stream of private
+// messages. Only the job of an automatic event calls it; a manual copy never reads the counter.
+func pmCopyCapAllow(ctx context.Context, chatID int64) bool {
+	client := pmCopyRedisClient()
+	if client == nil {
+		return false
+	}
+	capCtx, cancel := context.WithTimeout(ctx, raidRedisTimeout)
+	defer cancel()
+	key := pmCopyCapKey(chatID, pmCopyNow().Unix()/60)
+	var count *redis.IntCmd
+	if _, err := client.TxPipelined(capCtx, func(pipe redis.Pipeliner) error {
+		count = pipe.Incr(capCtx, key)
+		pipe.Expire(capCtx, key, pmCopyCapCounterTTL)
+		return nil
+	}); err != nil {
+		return false
+	}
+	return count.Val() <= int64(pmCopyAutoCapPerMinute)
+}
+
 // offerEventPM hands one private copy to a job and returns at once. The punishment and the group step
 // have already happened (D-03). A target pmCopySkipTarget refuses and an event without a spec start
 // nothing; a pool at pmCopyMaxInFlight sheds the copy with one Debug line (D-13, D-18). The job recovers
@@ -219,9 +269,11 @@ func offerEventPM(o eventPMOffer) {
 		log.Debugf("[EventMessage] the private %s copy in chat %d was not offered: user %d cannot receive one", o.Event, o.Chat.Id, o.UserID)
 		return
 	}
-	if _, ok := eventPMSpecFor(o.Event); !ok {
+	spec, ok := eventPMSpecFor(o.Event)
+	if !ok {
 		return
 	}
+	o.automatic = spec.Automatic
 	if !pmCopyJobs.startBelow(pmCopyMaxInFlight) {
 		log.Debugf("[EventMessage] the private %s copy of user %d in chat %d was shed: too many copies in flight", o.Event, o.UserID, o.Chat.Id)
 		return
@@ -235,13 +287,19 @@ func offerEventPM(o eventPMOffer) {
 	}()
 }
 
-// runEventPM runs one private copy job. The copy is sent to the member's private chat through pmCopyPaced and classified (pmCopyClassify); a refused custom copy is
+// runEventPM runs one private copy job. For an automatic event the per-group cap is the first step, and
+// a copy it refuses ends with one Debug line and nothing else (D-17, D-18). The copy is then sent to the
+// member's private chat through pmCopyPaced and classified (pmCopyClassify); a refused custom copy is
 // replaced by the default private text, sent once as text alone, whose outcome is the job's (D-15).
 // Nothing is retried by the job: the pacer already waited out what it could. The final outcome is
 // logged with the IDs, the event, the class and the Telegram code only, at Debug for delivered and
 // blocked and at Warn otherwise. It builds no reply parameters: the copy is a new message in a private
 // chat, never a reply to the command.
 func runEventPM(ctx context.Context, o eventPMOffer) {
+	if o.automatic && !pmCopyCapAllow(ctx, o.Chat.Id) {
+		log.Debugf("[EventMessage] the private %s copy of user %d in chat %d was not sent: over the group's automatic cap, or the cap could not be counted", o.Event, o.UserID, o.Chat.Id)
+		return
+	}
 	outcome, code := pmCopySend(ctx, o, o.Message)
 	if outcome == pmCopyRefused && o.Custom {
 		log.Warnf("[EventMessage] the custom private %s copy of user %d in chat %d was refused (code %d), the default was sent", o.Event, o.UserID, o.Chat.Id, code)

@@ -6,6 +6,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -99,6 +101,33 @@ func eventPMRefuse(t *testing.T, s *botSite, err error) {
 	script.mu.Lock()
 	script.refusals = append(script.refusals, err)
 	script.mu.Unlock()
+}
+
+// eventPMHold keeps every send to the member's private chat waiting until the returned release runs.
+// Release is also registered in t.Cleanup, after newEventPMSite's wait, so it runs before the wait.
+func eventPMHold(t *testing.T, s *botSite) (release func()) {
+	t.Helper()
+	script := eventPMScriptOf(t, s)
+	gate := make(chan struct{})
+	script.mu.Lock()
+	script.hold = gate
+	script.mu.Unlock()
+	var once sync.Once
+	release = func() { once.Do(func() { close(gate) }) }
+	t.Cleanup(release)
+	return release
+}
+
+// withTestEventPM registers a test-only event with a private copy: the event is appended to
+// eventmsg.Events (so registerEventPM accepts it) and the spec is registered; both are put back when
+// the test ends. A job never reads either table, so restoring them before the jobs end is safe.
+func withTestEventPM(t *testing.T, event string, spec eventPMSpec) {
+	t.Helper()
+	mreqSwap(t, &eventmsg.Events, append(slices.Clone(eventmsg.Events), event))
+	saved := eventPMSpecs
+	eventPMSpecs = maps.Clone(saved)
+	t.Cleanup(func() { eventPMSpecs = saved })
+	registerEventPM(event, spec)
 }
 
 // withFastPMCopyPacer installs a private copy pacer built from the production options with a 1 ms

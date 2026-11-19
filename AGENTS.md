@@ -2575,6 +2575,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   copies take at most five sends a second and a burst never delays a punishment, a group reply or another pacer's work; a
   slot more than 15 s away fails at once with no request. They sit outside the `fuku:cache:` prefix, so
   `CLEAR_CACHE_ON_STARTUP` keeps them.
+- `fuku:pmcopy:{<chat>}:cap:<unix minute>` is the per-group cap of the private copies of automatic events (`pmCopyCapKey`,
+  `pmCopyCapAllow`, D-17): a counter of one fixed minute (`pmCopyNow().Unix()/60`), the chat ID a hash tag, `INCR` and
+  `EXPIRE 120` in one transaction under `raidRedisTimeout`, at most `pmCopyAutoCapPerMinute` (10) copies a group a minute.
+  Only the job of an event whose spec is `Automatic` reads it; manual events are never counted (the pool and the pacer bound
+  them). It fails closed: with no Redis client or on any Redis error an automatic copy is not sent. It sits outside the
+  `fuku:cache:` prefix, so `CLEAR_CACHE_ON_STARTUP` keeps it.
 - `fuku:delete:norights:<chat>` is the 10 minute negative latch of a chat the bot cannot act in (`deletionLatchKey`,
   `deletionLatched`, `deletionSetLatch`, `deletionLatchTTL`), outside the `fuku:cache:` prefix so `CLEAR_CACHE_ON_STARTUP`
   keeps it. Its value is the scope: `gone` (the bot is not in the chat, was kicked, or the chat is gone or was upgraded: stops
@@ -3354,8 +3360,15 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   group's `mutes_unmute_lockdown_note`; the group `Note` and default are unchanged); the keyboard is the stored
   buttons and the `{rules}` button only, never the bot's Unban or Unmute row (group callbacks), and the media is the
   row's file. It is sent by `offerEventPM` from a bounded job (`pmCopyJobs`, a `raidPostTracker`, `startBelow` of
-  `pmCopyMaxInFlight` 16 per replica, a full pool sheds the copy with one Debug line; each job starts with
-  `defer error_handling.RecoverFromPanic` and runs under `pmCopyJobTimeout`, 60 s, from `context.Background()`) through
+  `pmCopyMaxInFlight` 16 per replica, a full pool sheds the copy with one Debug line naming the chat and the user; each job starts with
+  `defer error_handling.RecoverFromPanic` and runs under `pmCopyJobTimeout`, 60 s, from `context.Background()`). For an
+  event whose spec is `Automatic` (none yet: Phases 22 and 23 register them) the job's first step is the per-group cap
+  `pmCopyCapAllow` (Data: `fuku:pmcopy:{<chat>}:cap:<unix minute>`, at most `pmCopyAutoCapPerMinute` 10 a group a minute,
+  the minute from `pmCopyNow`, the client from `pmCopyRedisClient`), so the handler never makes a Redis call for a copy;
+  over the cap, with no Redis or on a Redis error the copy is not sent (fail closed, D-17: the copy is optional and a raid
+  must not become a stream of private messages), and a manual copy never reads the counter. A copy shed by the pool or
+  refused by the cap leaves nothing behind but one Debug line with the chat and user IDs (D-18): only a job that tried to
+  send can be "not delivered". The job sends through
   `pmCopyPaced` on its own pacer keys (Data), with `media.SendGreetingMessage` to the member's private chat (the target's
   user ID), so the handler never waits for it. A target that can never receive a copy (`pmCopySkipTarget`: a non-positive
   ID, a Telegram service identity of `staffServiceUserIDs`, the bot itself) is never offered one, checked in `offerReplyPM`
@@ -3374,10 +3387,18 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   blocked log at Debug, refused, busy and unknown at Warn. `TestEventPMEndToEnd`, `TestEventPMSpecs`, `TestEventPMDefaultTexts` and `TestEventPMComposition`
   (`event_message_pm_test.go`), `TestEventPMFailures` (`event_message_pm_failures_test.go`: the classification table, a 403
   of either wording with one request and the golden group reply, the refused custom copy and its default, the refused
-  default, busy, unknown and the impossible targets) and `TestEventMsgLocaleKeys` (`fuku/i18n/eventmsg_locale_test.go`, whose
+  default, busy, unknown and the impossible targets), `TestEventPMLimits` (the full pool, the automatic cap per chat and
+  per minute, fail closed without Redis and on a Redis error while a manual copy is sent, manual copies uncapped),
+  `TestEventPMPacerIndependent` (a block on `fuku:pmcopy:pace:block` leaves the ban and the golden reply immediate and
+  ends the copy busy with no request; blocks on the staff, deletion, member requirement, lockdown and federation pacers
+  leave the copy alone) and `TestEventPMLogsCarryIDsOnly` (a debug-level hook over every outcome, the shed and the
+  capped paths, with a stored text, caption, file ID, button, link, reason, member name, description and transport text
+  each a sentinel: none reaches a line, and each failure line names the chat and the event) and `TestEventMsgLocaleKeys` (`fuku/i18n/eventmsg_locale_test.go`, whose
   `eventMsgLocaleLimits` must cover exactly the `eventmsg_` keys of the locale files, so a new key adds its row) hold it (toolkit `event_message_pm_env_test.go`: `newEventPMSite`, which is
   `newModerationGoldenSite` with miniredis, `withFastPMCopyPacer` and `eventPMTestClient`, whose `eventPMScript` refuses the
-  next sends to the member (`eventPMRefuse`) or names the member in the handler's `getChat`; `storeEventPM`, `waitEventPM`,
+  next sends to the member (`eventPMRefuse`), holds them (`eventPMHold`, released in `t.Cleanup` before the jobs are
+  waited for) or names the member in the handler's `getChat`; `withTestEventPM` registers a test-only event and spec
+  (an automatic one proves the cap) and puts both tables back; `storeEventPM`, `waitEventPM`,
   `eventPMCleanup`, `eventPMCalls`, `eventPMOnly`, `eventPMNone`).
 - Scheduling the bot's own messages (`deletion_bot.go`): `scheduleBotMessage(sent, kind)` is opt-in at named send sites only
   (D-12): the welcome in `SendWelcomeMessage` (`bot:welcome`), the goodbye in `leftMember` (`bot:goodbye`), the group `/rules`
