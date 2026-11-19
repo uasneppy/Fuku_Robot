@@ -1,6 +1,7 @@
 // Package eventmsg stores the custom event messages of a group: one message per event (a manual
-// punishment such as ban or mute) and destination (today only the group itself), each with a
-// text, at most one media item, URL buttons and a Silent switch. A chat's messages are read as
+// punishment such as ban or mute) and destination (the group itself, or the private copy sent to
+// the punished person), each with a text, at most one media item, URL buttons and a Silent switch,
+// plus the group's two options of the private copies. A chat's messages and options are read as
 // one struct per chat through the cache key event_messages:<chat>, which is listed in skipLocal,
 // and every write is a column-targeted upsert that drops that key.
 //
@@ -17,13 +18,13 @@ import (
 const (
 	// EventBan is the reply of a permanent /ban.
 	EventBan = "ban"
-	// EventTimedBan is the reply of /tban, or of /ban with a duration.
+	// EventTimedBan is the reply of /tban.
 	EventTimedBan = "tban"
 	// EventKick is the reply of /kick.
 	EventKick = "kick"
 	// EventMute is the reply of a permanent /mute.
 	EventMute = "mute"
-	// EventTimedMute is the reply of /tmute, or of /mute with a duration.
+	// EventTimedMute is the reply of /tmute.
 	EventTimedMute = "tmute"
 	// EventUnban is the reply of /unban.
 	EventUnban = "unban"
@@ -35,6 +36,9 @@ const (
 const (
 	// DestGroup is the message posted in the group itself.
 	DestGroup = "group"
+	// DestPM is the private copy of the event sent to the punished person in the bot's private
+	// chat. It is off until its Silent switch is written false (see DefaultSilent).
+	DestPM = "pm"
 )
 
 // Events lists every event a message can be stored for, in the order the settings page shows
@@ -49,9 +53,10 @@ var Events = []string{
 	EventUnmute,
 }
 
-// Dests lists every destination a message can be stored for. Phase 21 appends the private copy.
+// Dests lists every destination a message can be stored for.
 var Dests = []string{
 	DestGroup,
+	DestPM,
 }
 
 var (
@@ -69,6 +74,14 @@ func ValidEvent(event string) bool {
 // ValidDest reports whether dest is one of Dests.
 func ValidDest(dest string) bool {
 	return slices.Contains(Dests, dest)
+}
+
+// DefaultSilent is the Silent switch of a destination that has no stored row. Silent means
+// nothing is sent to that destination: the group message is sent by default (false), and a
+// private copy is off until its switch is written (true). A part writer that inserts a new row
+// stores this value too, so storing a text alone never turns a private copy on.
+func DefaultSilent(dest string) bool {
+	return dest == DestPM
 }
 
 // validate checks an event and a destination and returns the matching error for the first that

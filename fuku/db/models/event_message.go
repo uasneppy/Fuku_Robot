@@ -3,10 +3,12 @@ package models
 import "time"
 
 // ChatEventMessage is one group's custom message for one event (a manual punishment such as ban
-// or mute) at one destination (today only the group itself). It holds the owner's text, at most
-// one media item (FileID and MediaType, 0 meaning no media), the URL buttons and the Silent
-// switch. A chat with no row for an event, or a row whose parts are all empty with Silent off,
-// sends the default text. The event and destination are validated in Go (fuku/db/eventmsg).
+// or mute) at one destination (the group itself, or the private copy sent to the punished
+// person). It holds the owner's text, at most one media item (FileID and MediaType, 0 meaning no
+// media), the URL buttons and the Silent switch. A chat with no group row for an event, or a row
+// whose parts are all empty with Silent off, sends the default text; a private copy is off until
+// its Silent switch is written false. The event and destination are validated in Go
+// (fuku/db/eventmsg).
 //
 // The model carries no default: tag on any field, so a Go false, 0 or empty string is written by
 // the column-targeted upserts of the repository.
