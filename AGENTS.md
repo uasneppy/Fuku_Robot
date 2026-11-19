@@ -92,6 +92,17 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   refused once `raidAIDraining` is set (`raidAIFireAsync` counts the start in `raidAIFires` before it reads the flag), so
   no start begins behind `StopRaidAI`'s back. Tests wait for checks with `waitAISpamChecks`, which closes and cancels
   nothing, and a test that runs the drain restores the pool with `restoreAISpamPool` (`TestShutdownDrainsAISpamChecks`).
+- `StopChat` is the conversation pool's stop (Phase 20), a plain shutdown handler (`RegisterHandler`, the 10 s default) that
+  `main.go` registers right after `DrainAISpamChecks`, so LIFO runs it before the AI spam drain. It sets `chatDraining` for good
+  (a late addressed message is shed), cancels the pool's root context first (`chatContext`: every provider call, typing action
+  and reply of a job derives from it, so all of them end at once; a call cut off is neither a breaker failure nor a success)
+  and waits at most `chatStopWait` (2 s) for `chatJobs`, logging one warning when the wait runs out. A reply cut off is lost and
+  nothing needs resuming: the transcript and the set of the feature's message IDs are written only after a reply was sent. It
+  adds 2 s to the webhook-mode worst case, which is now 70 s (HTTP stop 10, conversations 2, AI spam 10, raid AI 2, raid posts 3,
+  lockdown 6, staff actions 31, member requirements 3, deletion worker 3) against the enforced 60 s budget: the cut described
+  under `StopDeletionWorker` comes 2 s earlier and costs no correctness. `TestShutdownEndsChat` proves it: a job inside a hung
+  provider call is ended inside the wait, sends nothing, writes no memory, and a later message starts no job; a test that runs
+  the stop restores the pool with `restoreChatPool`.
 - `StopRaidAI` is a drain registered after DB-close as well, through `RegisterRaidAIDrain` (`raidAIStopWait`, 1 s, plus
   grace), in `main.go` right after `RegisterRaidPostsDrain`. Shutdown is LIFO, so it runs after `DrainAISpamChecks`
   (whose verdicts can start lockdowns) and before `StopRaidPosts` (a start can post a notice) and the database close. It
@@ -158,7 +169,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `ext.ContinueGroups` for anyone with no wait and no marker, consumes and ends the update otherwise) · `2` raid AI candidate watcher (hands a new member's suspicious
   item to the raid AI pool, never ends an update) · `3` aispam · `4` antiflood · `5`/`6` locks · `7` blacklists ·
   `8` reports+reactions (the `@admin` watcher, `reportWatch`, returns `nil` after reporting so groups 9 to 12 still run) · `9` filters · `10` pins · `11` log-channel · `12` late raid flood counter (slash-prefixed texts only; keep it
-  after every other group).
+  after every group that can end a slash text) · `13` conversation watcher (the Chat module, the only handler of the group; handles no command,
+  ignores slash texts and ends no update, which is why it may come after group 12; see the `Chat` bullet).
 - gotgbot stops a group at the first matching handler. Watchers return `ext.ContinueGroups`; commands return
   `ext.EndGroups`. A group-0 watcher returning `nil` silently kills every later group-0 handler.
 - Modules register in `init()` via `RegisterLegacyModule(name, priority, load)`. Use a unique name; duplicates are
@@ -418,6 +430,48 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   goroutines that reach the join entry can outlive the test that started them) and `make test` runs with `-race`; tests
   write it only through `withMemberReqLive`, which restores the previous value (now true) in `t.Cleanup` and is never
   combined with `t.Parallel`. `TestMemberReqEnforcementLive` asserts the default and the registration together.
+- The `Chat` module (priority 245, `chat.go`, Phase 20) registers the conversation watcher alone at handler group `13`
+  (`chatWatchGroup`, `chat_watch.go`) with `handlers.NewMessage(message.All, ...)` and no setter (new messages of real users only).
+  Its result is a named value preset to `ext.ContinueGroups` with `defer error_handling.RecoverFromPanic`, so it ends no update.
+  It never converses in a private chat (the chat type is its first check, before any I/O) and never calls a provider or sends:
+  it hands one `chatJob` to the pool (`chat_run.go`). Its order, cheapest first, with no I/O before the message is known to be
+  addressed: the chat is a group or supergroup; not a slash text (`raidFloodIsSlashText`); the sender's shape
+  (`raidFloodSenderCounts`: no `sender_chat`, automatic forward, service ID or the bot) and not a bot, so anonymous admins and
+  channels cannot converse (a stated limit); addressed (`chatAddressed`): an `@<bot username>` mention entity compared without
+  regard to case or a `text_mention` of the bot, in the text or the caption (pure), else a reply, read through
+  `extraction.ReplyTarget`, to a message the conversation feature sent (one Redis `ZSCORE` of `fuku:chat:{<chat>}:mine`, only for
+  a reply to the bot, so a reply to a ban notice, a welcome or a captcha is no address); the server can converse at all
+  (`chatAnyProviderConfigured`); the cached setting (`chatconv.Get`; an error answers nothing); enabled and its provider configured
+  (`chatProviderConfigured`); Redis present; the audience (`chatAudienceAllows`: everyone, or an administrator by
+  `chat_status.IsUserAdmin` or an approved member by `approvals.IsUserApprovedContext`, where a failed read means no reply).
+  A job, in order (`chatProcessJob`): the per-user cooldown (`SET NX EX 5`), the provider's breaker, the hourly budgets
+  (`chatReserve`: the member's unit, then the group's, then the fleet's, 12, 80 and 800 per UTC hour, through `raidAIBudgetTake`;
+  a counter error makes no call), one paced typing action, the transcript, the request (`chatBuildRequest`, through the leaf
+  `chatprompt`: the static persona and archive, the group's title, language name, today's date in the group's zone and the bot's
+  username, then the transcript, the quoted message when the speaker replies to someone else's, and the message with the bot's
+  mention removed; no user ID, username or chat ID, `TestChatProvidersRequest`), the provider call behind `chatProvider` (two
+  adapters, `chatAnthropicProvider` over `claude.Client.Converse` and `chatGeminiProvider` over `gemini.Client.Generate`, so the
+  runtime never branches on the provider), the output filter (`chatFilterReply`: link-like tokens become `[link removed]`, a
+  zero-width space follows every `@` that starts a username, a hard cap of 1,200 runes at the last sentence end; blank is never
+  sent), the reply and the record of the exchange. The reply is plain text, link previews off, a reply to the addressed message
+  sent through the feature's own pacer (`chatPacer`, `fuku:chat:pace:*`), and never sent without its reply target
+  (`AllowSendingWithoutReply` false): aispam, antiflood, a lock or the blacklist can delete a message and still pass it on (the
+  blacklist always does), so the watcher can see a message that is gone; Telegram then refuses the reply and the job stays silent
+  (`chatReplyTargetGone`, counted as shed; `TestChatDeletedMessageGetsNoReply`). This is a deliberate change from the plan's
+  `AllowSendingWithoutReply` true, which would have answered deleted messages. The group sees (plan 3.4): the canned
+  `chat_reply_refused` for a refusal (remembered in the `mine` set, so a reply to it is an address); `chat_reply_malfunction` for a
+  provider error, a blank answer or a paused breaker, at most once per chat per 5 minutes (`fuku:chat:{<chat>}:said:malfunction`);
+  `chat_reply_allowance` for a used-up allowance, at most once per chat per hour; nothing for a full queue, the cooldown, a counter
+  fault, a deleted target or a shutdown. The breakers are two instances of `memberReqAIBreaker`, one per provider, each of its own
+  state (`chatBreakers`): five provider failures in a group pause that group 5 minutes, a rejected key, a 429 with a retry delay
+  over 2 s or Gemini's per-day quota pauses that provider for every group (`chatProviderSpan`); a refusal is an answer and a
+  cancelled call neither. The pool is the raid AI pool's shape: 64 queued jobs, 3 workers started once, each recovering from
+  panics, `chatJobs` (a `raidPostTracker`) taken before `chatDraining` is read, a job dropped when the root context is done. The
+  counters (answered, refused, failed, shed, capped) are in memory per replica and appended to the developer `/stats` after the
+  other AI lines (`chatStatsSection`: numbers only). Logs carry chat and user IDs, the provider's status and error type
+  (`chatErrorClass`) and Telegram codes only, never the text, a name, a reply, the provider's message or a key
+  (`TestChatLogsCarryIDsOnly`). `TestChatWatcherGroupReachedByMention` loads every module and proves that a mention in a text or a
+  caption and a reply to the bot reach group 13.
 - The web captcha adds no handler group: its routes are HTTP routes on the bot's server, not dispatcher handlers.
 - The Settings module (priority 239, `settings.go`) adds one handler group, `1`, for the typed-reply door below; its other entry points are `/settings`, the callbacks and the deep link. `/settings` goes through `helpers.WrapCommand`
   with `settingsDesc.RequiredChecks` of `requireSettingsAccess()` alone (`settings_gate.go`: a private chat passes at
@@ -2519,6 +2573,18 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   cards use the Staff Group's; a lockdown alert copy uses its destination's (`lockdownSlotClock`: the Staff Group's for a
   Staff Group copy, the locked group's for the log channel copy), and the stored `body` keeps the time it was posted
   with. Log lines, file names, Redis hour stamps, stored values and the fban export's RFC 3339 dates stay UTC.
+- The conversation feature's Redis keys (`fuku:chat:*`, outside the `fuku:cache:` prefix, so `CLEAR_CACHE_ON_STARTUP` keeps
+  them; the chat ID is a hash tag): `fuku:chat:{<chat>}:h` is the rolling transcript (`chat_history.go`), a list of compact JSON
+  entries (`r` role, `n` first name, `t` text cut to 600 runes, `m` message ID, `at` unix time), the newest 12, 2 hours after the
+  last line, written in one transaction with the reply's ID only after a reply was sent; `fuku:chat:{<chat>}:mine` is a sorted set
+  of the message IDs the feature sent (answers and canned refusals), scored by the ID, the newest 200, 24 hours, and decides "a
+  reply to a conversation message"; `fuku:chat:{<chat>}:cd:<user>` the per-user cooldown (`SET NX EX 5`);
+  `fuku:chat:b:u:<chat>:<user>:<hour>`, `fuku:chat:b:c:<chat>:<hour>` and `fuku:chat:b:g:<hour>` the hourly budgets (single-key
+  commands, no hash tag needed); `fuku:chat:{<chat>}:said:<kind>` the gates of the canned lines; `fuku:chat:pace:next` and
+  `:block` the send pacer. This is the first place the bot keeps message text in Redis outside `/aispam`'s sender history: only
+  what was addressed to the bot and the bot's replies, bounded, short-lived and disclosed on the settings page. Turning
+  conversations off deletes the transcript and the `mine` set. Without Redis conversations are inert on that replica (one info
+  line per process).
 - `chat_conversations` (migration 20261119120000, Phase 20) is one group's conversation setting: `chat_id` primary key,
   `enabled` (no `default:` tag in the model, so a Go false is written), `provider` (`anthropic` or `google`,
   `chk_chat_conversations_provider`), `audience` (0 everyone, 1 admins and approved members,
@@ -3475,7 +3541,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   first paragraph are judged the same way, because the handler reads them as the command text), and the group `12` watcher counts only the
   slash-prefixed texts that reach it, the ones no command took: `/word` with no handler, `/////`, and a command addressed
   to another bot (`/start@otherbot`). Never keep a second list of command names for this. Group `12` must stay after every
-  other group, so every new handler group needs a number below it. A slash text that a handler ends is not counted, and
+  group that can end a slash text, so every new handler group that can needs a number below it; group `13`, the conversation
+  watcher, handles no command, ignores slash texts and ends no update, so it changes nothing group `12` sees. A slash text that a handler ends is not counted, and
   neither is one that an earlier handler ends (an aispam, antiflood, lock or blacklist deletion at groups `3` to `7`); a
   command that returns `nil` or an error instead of `ext.EndGroups` is counted late, which only raises the counts, so
   new commands should still end with `ext.EndGroups`. Service messages, edited messages, channel posts and bot senders

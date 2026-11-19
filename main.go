@@ -262,6 +262,14 @@ func main() {
 		return nil
 	})
 
+	// Registered right after the AI spam drain, so LIFO runs it first: it sheds late messages,
+	// cancels every conversation provider call and send in flight and waits at most 2 s.
+	shutdownManager.RegisterHandler(func() error {
+		log.Info("[Shutdown] Stopping conversations...")
+		modules.StopChat()
+		return nil
+	})
+
 	httpServer := httpserver.New(config.AppConfig.HTTPPort, appStartTime)
 	httpServer.RegisterHealth()
 	httpServer.SetMetricsAuthToken(config.AppConfig.MetricsAuthToken)

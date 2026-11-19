@@ -3219,3 +3219,6 @@ settings_chat_confirm: "Включить разговоры в этой груп
 settings_btn_chat_toggle: "Разговоры: {state}"
 settings_btn_chat_everyone: "Все"
 settings_btn_chat_admins: "Админы и одобренные"
+chat_reply_refused: "Запрос отклонён. Эту тему я не обсуждаю."
+chat_reply_malfunction: "Сбой модуля разговоров. Попробуйте позже."
+chat_reply_allowance: "Лимит разговоров на этот час исчерпан. Попробуйте в следующий час."

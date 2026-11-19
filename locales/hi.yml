@@ -3127,3 +3127,6 @@ settings_chat_confirm: "इस ग्रुप में बातचीत च�
 settings_btn_chat_toggle: "बातचीत: {state}"
 settings_btn_chat_everyone: "सभी"
 settings_btn_chat_admins: "एडमिन और स्वीकृत"
+chat_reply_refused: "अनुरोध अस्वीकृत। यह यूनिट इस विषय पर बात नहीं करती।"
+chat_reply_malfunction: "बातचीत मॉड्यूल में खराबी। बाद में फिर कोशिश करें।"
+chat_reply_allowance: "इस घंटे की बातचीत की सीमा पूरी हो गई। अगले घंटे फिर कोशिश करें।"
