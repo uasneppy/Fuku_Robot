@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -24,18 +25,80 @@ const eventPMMember int64 = 42
 
 // eventPMTestClient wraps a site's client and answers a send to the member's private chat as a
 // message in a private chat, as Telegram would. Every request still reaches the wrapped client, which
-// records it, so the private copy is read from the site's calls like any other request.
+// records it, so the private copy is read from the site's calls like any other request. Its script
+// can refuse the next sends to the member, hold them until released, and name the member in the
+// handler's getChat.
 type eventPMTestClient struct {
 	gotgbot.BotClient
+	script *eventPMScript
+}
+
+// eventPMScript is what a test asks of the private chat: refusals answer the next sends to the member
+// in order, hold (when set) keeps every send to the member waiting until it is closed, and memberName
+// replaces the member's first name in the getChat answer.
+type eventPMScript struct {
+	mu         sync.Mutex
+	refusals   []error
+	hold       chan struct{}
+	memberName string
 }
 
 func (c eventPMTestClient) RequestWithContext(ctx context.Context, token string, method string, params map[string]any, opts *gotgbot.RequestOpts) (json.RawMessage, error) {
+	toMember := fmt.Sprint(params["chat_id"]) == strconv.FormatInt(eventPMMember, 10)
+	var refusal error
+	var hold chan struct{}
+	name := ""
+	if c.script != nil {
+		c.script.mu.Lock()
+		if toMember && strings.HasPrefix(method, "send") {
+			hold = c.script.hold
+			if len(c.script.refusals) > 0 {
+				refusal, c.script.refusals = c.script.refusals[0], c.script.refusals[1:]
+			}
+		}
+		name = c.script.memberName
+		c.script.mu.Unlock()
+	}
+	if toMember && method == "getChat" && name != "" {
+		_, _ = c.BotClient.RequestWithContext(ctx, token, method, params, opts)
+		return json.RawMessage(fmt.Sprintf(`{"id":%d,"type":"private","first_name":%q}`, eventPMMember, name)), nil
+	}
+	if hold != nil {
+		select {
+		case <-hold:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
 	response, err := c.BotClient.RequestWithContext(ctx, token, method, params, opts)
-	if err != nil || !strings.HasPrefix(method, "send") || fmt.Sprint(params["chat_id"]) != strconv.FormatInt(eventPMMember, 10) {
+	if refusal != nil {
+		return nil, refusal
+	}
+	if err != nil || !strings.HasPrefix(method, "send") || !toMember {
 		return response, err
 	}
 	return json.RawMessage(fmt.Sprintf(`{"message_id":7001,"date":%d,"chat":{"id":%d,"type":"private","first_name":"Ann"}}`,
 		time.Now().Unix(), eventPMMember)), nil
+}
+
+// eventPMScriptOf returns the site's private chat script.
+func eventPMScriptOf(t *testing.T, s *botSite) *eventPMScript {
+	t.Helper()
+	client, ok := s.bot.BotClient.(eventPMTestClient)
+	if !ok || client.script == nil {
+		t.Fatal("the site has no private copy test client")
+	}
+	return client.script
+}
+
+// eventPMRefuse makes the site's next send to the member's private chat fail with err (each call
+// queues one more refusal).
+func eventPMRefuse(t *testing.T, s *botSite, err error) {
+	t.Helper()
+	script := eventPMScriptOf(t, s)
+	script.mu.Lock()
+	script.refusals = append(script.refusals, err)
+	script.mu.Unlock()
 }
 
 // withFastPMCopyPacer installs a private copy pacer built from the production options with a 1 ms
@@ -68,7 +131,7 @@ func newEventPMSite(t *testing.T) *botSite {
 	withMiniredisServer(t)
 	withFastPMCopyPacer(t)
 	s := newModerationGoldenSite(t)
-	s.bot.BotClient = eventPMTestClient{BotClient: s.bot.BotClient}
+	s.bot.BotClient = eventPMTestClient{BotClient: s.bot.BotClient, script: &eventPMScript{}}
 	eventPMCleanup(t, s.chat.Id)
 	t.Cleanup(pmCopyJobs.wait)
 	return s

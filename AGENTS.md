@@ -3357,13 +3357,27 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `pmCopyMaxInFlight` 16 per replica, a full pool sheds the copy with one Debug line; each job starts with
   `defer error_handling.RecoverFromPanic` and runs under `pmCopyJobTimeout`, 60 s, from `context.Background()`) through
   `pmCopyPaced` on its own pacer keys (Data), with `media.SendGreetingMessage` to the member's private chat (the target's
-  user ID), so the handler never waits for it. The job builds no `ReplyParameters` and calls no method named `Reply`
+  user ID), so the handler never waits for it. A target that can never receive a copy (`pmCopySkipTarget`: a non-positive
+  ID, a Telegram service identity of `staffServiceUserIDs`, the bot itself) is never offered one, checked in `offerReplyPM`
+  before the render and again in `offerEventPM` (D-16). Every send is classified by `pmCopyClassify`, by Telegram's error
+  code and the sentinel errors only, never a description (D-15): no error is `delivered`, a 403 `blocked` (never started
+  the bot, blocked it, or the account is gone: the normal "not delivered" answer, logged at Debug, never retried), any other
+  4xx but 429 and `media.ErrNoPermission` `refused`, a 429 and `ratelimit.ErrRateLimited` `busy`, anything else (a 5xx, a
+  transport error, a timeout) `unknown`. A refused custom copy (`eventPMOffer.Custom`: the pm row has a text, a media or
+  buttons) is replaced once by `eventPMOffer.Fallback`, the event's default private text that `offerReplyPM` built with
+  `eventPMDefaultText`, sent as text alone with no keyboard, and its outcome is the job's; a refused default is final, and
+  the job retries nothing else (the pacer already waited out what it could). The punishment and the group reply are never
+  changed by any of it. The job builds no `ReplyParameters` and calls no method named `Reply`
   (`TestCommandRepliesStayInsideTheHandler` keeps its empty allow-list). No log line carries a stored or typed text, a
-  caption, a button, a file ID, a reason or a name: the chat ID, the user ID, the event and a Telegram error by its code
-  (`memberReqErrText`). `TestEventPMEndToEnd`, `TestEventPMSpecs`, `TestEventPMDefaultTexts` and `TestEventPMComposition`
-  (`event_message_pm_test.go`) and `TestEventMsgLocaleKeys` (`fuku/i18n/eventmsg_locale_test.go`, whose
+  caption, a button, a file ID, a reason or a name: the chat ID, the user ID, the event, the outcome class
+  (`pmCopyOutcome.String`) and the Telegram code alone (`pmCopyErrCode`, 0 for none, never the error's text); delivered and
+  blocked log at Debug, refused, busy and unknown at Warn. `TestEventPMEndToEnd`, `TestEventPMSpecs`, `TestEventPMDefaultTexts` and `TestEventPMComposition`
+  (`event_message_pm_test.go`), `TestEventPMFailures` (`event_message_pm_failures_test.go`: the classification table, a 403
+  of either wording with one request and the golden group reply, the refused custom copy and its default, the refused
+  default, busy, unknown and the impossible targets) and `TestEventMsgLocaleKeys` (`fuku/i18n/eventmsg_locale_test.go`, whose
   `eventMsgLocaleLimits` must cover exactly the `eventmsg_` keys of the locale files, so a new key adds its row) hold it (toolkit `event_message_pm_env_test.go`: `newEventPMSite`, which is
-  `newModerationGoldenSite` with miniredis, `withFastPMCopyPacer` and `eventPMTestClient`; `storeEventPM`, `waitEventPM`,
+  `newModerationGoldenSite` with miniredis, `withFastPMCopyPacer` and `eventPMTestClient`, whose `eventPMScript` refuses the
+  next sends to the member (`eventPMRefuse`) or names the member in the handler's `getChat`; `storeEventPM`, `waitEventPM`,
   `eventPMCleanup`, `eventPMCalls`, `eventPMOnly`, `eventPMNone`).
 - Scheduling the bot's own messages (`deletion_bot.go`): `scheduleBotMessage(sent, kind)` is opt-in at named send sites only
   (D-12): the welcome in `SendWelcomeMessage` (`bot:welcome`), the goodbye in `leftMember` (`bot:goodbye`), the group `/rules`

@@ -279,9 +279,10 @@ func (c *moderationCtx) replyEventGroup(r eventReply, msgs *eventmsg.Messages) (
 
 // offerReplyPM offers the private copy of an event reply after the group step (D-11). It offers
 // nothing for an event without a spec or a private copy whose switch is off (Resolve: no pm row, or a
-// pm row whose switch was never turned on, reads as Silent). The copy is composed here, in the group's
-// language and with the group step's actor, and sent by a job (offerEventPM), so the handler returns
-// at once.
+// pm row whose switch was never turned on, reads as Silent) and for a target that can never receive one
+// (pmCopySkipTarget, checked before the render). The copy is composed here, in the group's language and
+// with the group step's actor, together with the default private text a refused custom copy falls back
+// to, and sent by a job (offerEventPM), so the handler returns at once.
 func (c *moderationCtx) offerReplyPM(r eventReply, msgs *eventmsg.Messages) {
 	spec, ok := eventPMSpecFor(r.Event)
 	if !ok {
@@ -291,12 +292,20 @@ func (c *moderationCtx) offerReplyPM(r eventReply, msgs *eventmsg.Messages) {
 	if row.Silent {
 		return
 	}
+	if pmCopySkipTarget(c.Bot, r.Target.Id) {
+		return
+	}
 	actor := eventActor{User: c.User, Anonymous: actorIsAnonymous(c.Ctx)}
-	offerEventPM(eventPMOffer{
+	offer := eventPMOffer{
 		Bot:     c.Bot,
 		Chat:    *c.Chat,
 		Event:   r.Event,
 		UserID:  r.Target.Id,
 		Message: composeEventPM(c.Bot, c.Chat, c.Tr, spec, r, row, actor),
-	})
+		Custom:  row.HasContent(),
+	}
+	if offer.Custom {
+		offer.Fallback = eventPMDefaultText(c.Tr, spec, c.Chat, r.Values, r.PMNote)
+	}
+	offerEventPM(offer)
 }

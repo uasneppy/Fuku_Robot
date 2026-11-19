@@ -2,6 +2,7 @@ package modules
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"html"
 	"strings"
@@ -116,20 +117,111 @@ var pmCopyJobTimeout = 60 * time.Second
 
 // eventPMOffer is one private copy ready to send: the bot, a copy of the group (only its ID is read by
 // the job), the event, the punished member's user ID (the private chat the copy goes to) and the
-// composed message, which carries no reply target and no topic.
+// composed message, which carries no reply target and no topic. Custom says the copy was composed from
+// stored content (a text, a media or buttons of the pm row), and Fallback is then the event's default
+// private text, sent once in its place when Telegram refuses the custom copy (D-15).
 type eventPMOffer struct {
-	Bot     *gotgbot.Bot
-	Chat    gotgbot.Chat
-	Event   string
-	UserID  int64
-	Message media.GreetingMessage
+	Bot      *gotgbot.Bot
+	Chat     gotgbot.Chat
+	Event    string
+	UserID   int64
+	Message  media.GreetingMessage
+	Custom   bool
+	Fallback string
+}
+
+// pmCopyOutcome is the final class of a private copy job's send (D-15), decided by Telegram's error code
+// and never by a description.
+type pmCopyOutcome int
+
+const (
+	// pmCopyDelivered: Telegram accepted the copy.
+	pmCopyDelivered pmCopyOutcome = iota
+	// pmCopyBlocked: a 403, the person never started the bot, blocked it or the account is gone. It is
+	// the normal "not delivered" answer and is never retried.
+	pmCopyBlocked
+	// pmCopyRefused: any other 4xx except 429, or media.ErrNoPermission.
+	pmCopyRefused
+	// pmCopyBusy: a 429 the pacer did not wait out, or a pacer slot too far away (ratelimit.ErrRateLimited).
+	pmCopyBusy
+	// pmCopyUnknown: a 5xx, a transport error, a timeout or anything else; the copy may have arrived.
+	pmCopyUnknown
+)
+
+// String is the class word a log line carries.
+func (o pmCopyOutcome) String() string {
+	switch o {
+	case pmCopyDelivered:
+		return "delivered"
+	case pmCopyBlocked:
+		return "blocked"
+	case pmCopyRefused:
+		return "refused"
+	case pmCopyBusy:
+		return "busy"
+	default:
+		return "unknown"
+	}
+}
+
+// pmCopyClassify classifies the error of one private copy send by Telegram's error code (also when it is
+// wrapped) and the sentinel errors of the media sender and the pacer, never by a description: nil is
+// delivered, a 403 blocked, a 429 or ratelimit.ErrRateLimited busy, any other 4xx or
+// media.ErrNoPermission refused, and everything else unknown.
+func pmCopyClassify(err error) pmCopyOutcome {
+	if err == nil {
+		return pmCopyDelivered
+	}
+	if errors.Is(err, ratelimit.ErrRateLimited) {
+		return pmCopyBusy
+	}
+	var tgErr *gotgbot.TelegramError
+	if errors.As(err, &tgErr) && tgErr != nil {
+		switch tgErr.Code {
+		case 403:
+			return pmCopyBlocked
+		case 429:
+			return pmCopyBusy
+		}
+	}
+	if isTelegramClientError(err) || errors.Is(err, media.ErrNoPermission) {
+		return pmCopyRefused
+	}
+	return pmCopyUnknown
+}
+
+// pmCopyErrCode is the Telegram error code of a send's error, 0 when it carries none. It is the only
+// part of an error a private copy log line carries (D-31).
+func pmCopyErrCode(err error) int {
+	var tgErr *gotgbot.TelegramError
+	if errors.As(err, &tgErr) && tgErr != nil {
+		return tgErr.Code
+	}
+	return 0
+}
+
+// pmCopySkipTarget reports whether a user can never be sent a private copy (D-16): a non-positive ID (a
+// channel or the group itself), a Telegram service identity and the bot itself.
+func pmCopySkipTarget(b *gotgbot.Bot, userID int64) bool {
+	if userID <= 0 || staffServiceUserIDs[userID] {
+		return true
+	}
+	return b != nil && userID == b.Id
 }
 
 // offerEventPM hands one private copy to a job and returns at once. The punishment and the group step
-// have already happened (D-03). A pool at pmCopyMaxInFlight sheds the copy with one Debug line. The job
-// recovers from a panic, runs under pmCopyJobTimeout from a background context (never the update's)
-// and is not drained at shutdown.
+// have already happened (D-03). A target pmCopySkipTarget refuses and an event without a spec start
+// nothing; a pool at pmCopyMaxInFlight sheds the copy with one Debug line (D-13, D-18). The job recovers
+// from a panic, runs under pmCopyJobTimeout from a background context (never the update's) and is not
+// drained at shutdown.
 func offerEventPM(o eventPMOffer) {
+	if pmCopySkipTarget(o.Bot, o.UserID) {
+		log.Debugf("[EventMessage] the private %s copy in chat %d was not offered: user %d cannot receive one", o.Event, o.Chat.Id, o.UserID)
+		return
+	}
+	if _, ok := eventPMSpecFor(o.Event); !ok {
+		return
+	}
 	if !pmCopyJobs.startBelow(pmCopyMaxInFlight) {
 		log.Debugf("[EventMessage] the private %s copy of user %d in chat %d was shed: too many copies in flight", o.Event, o.UserID, o.Chat.Id)
 		return
@@ -143,19 +235,36 @@ func offerEventPM(o eventPMOffer) {
 	}()
 }
 
-// runEventPM sends one private copy to the member's private chat through pmCopyPaced and logs the
-// outcome at Debug with the IDs, the event and a Telegram error by its code only. It builds no reply
-// parameters: the copy is a new message in a private chat, never a reply to the command.
+// runEventPM runs one private copy job. The copy is sent to the member's private chat through pmCopyPaced and classified (pmCopyClassify); a refused custom copy is
+// replaced by the default private text, sent once as text alone, whose outcome is the job's (D-15).
+// Nothing is retried by the job: the pacer already waited out what it could. The final outcome is
+// logged with the IDs, the event, the class and the Telegram code only, at Debug for delivered and
+// blocked and at Warn otherwise. It builds no reply parameters: the copy is a new message in a private
+// chat, never a reply to the command.
 func runEventPM(ctx context.Context, o eventPMOffer) {
+	outcome, code := pmCopySend(ctx, o, o.Message)
+	if outcome == pmCopyRefused && o.Custom {
+		log.Warnf("[EventMessage] the custom private %s copy of user %d in chat %d was refused (code %d), the default was sent", o.Event, o.UserID, o.Chat.Id, code)
+		outcome, code = pmCopySend(ctx, o, media.GreetingMessage{Text: o.Fallback, MsgType: db.TEXT})
+	}
+	switch outcome {
+	case pmCopyDelivered:
+		log.Debugf("[EventMessage] the private %s copy of user %d in chat %d was delivered", o.Event, o.UserID, o.Chat.Id)
+	case pmCopyBlocked:
+		log.Debugf("[EventMessage] the private %s copy of user %d in chat %d was not delivered: %s (code %d)", o.Event, o.UserID, o.Chat.Id, outcome, code)
+	default:
+		log.Warnf("[EventMessage] the private %s copy of user %d in chat %d was not delivered: %s (code %d)", o.Event, o.UserID, o.Chat.Id, outcome, code)
+	}
+}
+
+// pmCopySend makes one paced send of msg to the member's private chat and returns its class and its
+// Telegram error code (0 for none).
+func pmCopySend(ctx context.Context, o eventPMOffer, msg media.GreetingMessage) (pmCopyOutcome, int) {
 	err := pmCopyPaced(ctx, func(context.Context) error {
-		_, sendErr := media.SendGreetingMessage(o.Bot, o.UserID, o.Message)
+		_, sendErr := media.SendGreetingMessage(o.Bot, o.UserID, msg)
 		return sendErr
 	})
-	if err != nil {
-		log.Debugf("[EventMessage] the private %s copy of user %d in chat %d was not delivered: %s", o.Event, o.UserID, o.Chat.Id, memberReqErrText(err))
-		return
-	}
-	log.Debugf("[EventMessage] the private %s copy of user %d in chat %d was delivered", o.Event, o.UserID, o.Chat.Id)
+	return pmCopyClassify(err), pmCopyErrCode(err)
 }
 
 // composeEventPM builds the private copy of one reply from the pm row (D-12). With a stored text the
