@@ -4308,6 +4308,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `retry-after` header) when present and never relies on it, and reports a rejected key for 401, 402, 403 and an
   `API_KEY_INVALID` 400. Neither package logs; no error carries the key or the URL. Both are tested only against
   `httptest` servers.
+- `fuku/utils/chatprompt` (Phase 20, the standard library and `xenopersona` only, `TestChatpromptPackageIsLeaf`) is the one
+  builder of a conversation request's three strings: `Static` (the persona and archive), `Dynamic` (the group's title cut
+  to 64 runes, its language name, the date and the bot's username, each cleaned of control and format characters) and
+  `User` (the recent conversation oldest first, the quoted message when the speaker replies to someone else, the message
+  to answer cut to 1,500 runes, and a closing line that says all of it is members' conversation). Every turn is rendered
+  as one `name: text` line with its newlines collapsed, so no member can forge a section label, and a member whose name
+  contains Xenobot-72 is shown as `(member)`. It carries no user ID, username or chat ID. The bot and `scripts/chat-spike`
+  both call it, so the spike measures exactly what the bot sends.
 - `fuku/utils/xenopersona` (Phase 20, standard library only, `TestXenopersonaPackageIsLeaf`) embeds `persona.md` and
   `archive.md` and returns the static system text of the conversation feature (`StaticSystemText`: the persona, a fixed
   separator, the archive without its leading source comment), the same bytes for every chat and user so a provider can
@@ -4404,6 +4412,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `TestNamesModeKeyNeverPrinted`, `TestNamesModeExclusiveFlags`). The tool imports only the `claude` and `namecanon`
   packages of the repository. `.planning/milestones/v1.1-phases/15-ai-spam-name-check/15-SPIKE.md` is the owner's non-blocking checklist
   for the live Haiku spike and the test-group walk-through.
+- `scripts/chat-spike` (Phase 20) is the owner's persona check: it sends each line of a questions file
+  (`scripts/chat-spike/persona-check.txt`, kept in step with `.planning/phases/20-conversations/20-PERSONA-CHECK.md` by
+  `TestPersonaCheckFilesAgree`) through `chatprompt` and `claude.Client.Converse` or `gemini.Client.Generate`, and prints
+  the question, the reply, the outcome, the tokens and the latency. It reads `ANTHROPIC_API_KEY` or `GEMINI_API_KEY` from
+  the environment only, never prints it, refuses an `-endpoint` that is not https (http only for localhost), sends nothing
+  before every flag is checked, and exits 1 when every question failed. It imports only leaf packages and is tested
+  against `httptest`; a live run is the owner's manual step, never CI.
 - Assert observable behavior (reply sent, row persisted, cache invalidated, gate enforced). Never assert literals,
   source substrings, or test-double internals.
 - The Turnstile page's script test is `node --test scripts/captcha-page/*.test.mjs` (the directory form does not work on
