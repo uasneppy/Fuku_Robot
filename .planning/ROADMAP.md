@@ -44,6 +44,16 @@ Every phase is code-verified and security-audited with no open threat; each veri
 
 </details>
 
-## Next milestone
+## 🚧 v1.2 Conversations (Phase 20) - IN PROGRESS
 
-Not yet planned. Start it with `/gsd-new-milestone`; candidates are listed in `PROJECT.md` (Next Milestone Goals) and `STATE.md` (Deferred Items).
+The brief is `.planning/research/xenobot-chat/PLAN.md` (with `LORE.md`, `COMIC-DIGEST.md` and `GEMINI-API.md` beside it), imported as the phase context. The bot answers members in groups through Anthropic or Google, in character as Xenobot-72; it never converses in private chats, and only a group's owner can enable it, from the bot's private chat.
+
+- [ ] **Phase 20: Conversations** - 0/8 plans
+  - [ ] 20-01: Persona and archive (`fuku/utils/xenopersona`, content tests; owner review before going on)
+  - [ ] 20-02: Provider clients (`claude` conversation call, `gemini` package)
+  - [ ] 20-03: Spike tool and persona check sheet
+  - [ ] 20-04: Storage and apply functions
+  - [ ] 20-05: Settings page
+  - [ ] 20-06: Runtime
+  - [ ] 20-07: `/ask`, help, locales, docs, `AGENTS.md`
+  - [ ] 20-08: End-to-end test, full checks, owner checklist
