@@ -73,6 +73,8 @@ admin_notes_docs: |
 # Common error messages used across modules
 error_generic: "Une erreur s'est produite. Veuillez réessayer plus tard."
 eventmsg_admin_anon: "un admin"
+eventmsg_pm_ban: "🚫 Vous avez été banni de <b>{group}</b>."
+eventmsg_pm_reason: "<b>Raison :</b> {reason}"
 common_anonymous_user_error: Cette commande ne peut pas être utilisée sur un utilisateur anonyme.
 common_anonymous_ban_error: Cette commande ne peut pas être utilisée sur un utilisateur anonyme, ces utilisateurs peuvent uniquement être bannis/débannis.
 common_cannot_identify_user: Impossible d'identifier l'utilisateur. Cette commande ne peut pas être utilisée par les chaînes.

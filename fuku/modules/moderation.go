@@ -50,12 +50,19 @@ func moderationReasonLine(tr *i18n.Translator, key, reason string) string {
 // it was sent, queues it for deletion under the manual punishment kind (D-13). Validation and error
 // replies, lists and question cards never go through it. The error is exactly what Msg.Reply returned.
 func (c *moderationCtx) replySuccess(text string, opts *gotgbot.SendMessageOpts) error {
+	_, err := c.sendSuccess(text, opts)
+	return err
+}
+
+// sendSuccess is replySuccess returning the message it sent: the same Msg.Reply and the same queueing
+// under the manual punishment kind. The message is nil when the send failed.
+func (c *moderationCtx) sendSuccess(text string, opts *gotgbot.SendMessageOpts) (*gotgbot.Message, error) {
 	sent, err := c.Msg.Reply(c.Bot, text, opts)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	scheduleBotMessage(sent, deletion.KindBotManual)
-	return nil
+	return sent, nil
 }
 
 // replyHint sends a usage hint (a "reply to a message" answer) as a reply to the command. Unlike

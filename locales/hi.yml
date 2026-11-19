@@ -1728,6 +1728,8 @@ extraction_invalid_time_format: "अमान्य समय प्रारू
 # Error keys
 error_generic: "एक त्रुटि हुई। कृपया बाद में पुनः प्रयास करें।"
 eventmsg_admin_anon: "एक एडमिन"
+eventmsg_pm_ban: "🚫 आपको <b>{group}</b> से बैन कर दिया गया है।"
+eventmsg_pm_reason: "<b>कारण:</b> {reason}"
 
 # Database default keys
 db_default_welcome: "हेलो {first}, आप कैसे हैं?"

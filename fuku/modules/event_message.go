@@ -66,6 +66,7 @@ type eventDefaultReply func(tr *i18n.Translator, in eventDefaultInput) (string, 
 // eventReply is one event's reply as a send site hands it to replyEvent: the event key, the punished
 // member, the event's values and the default reply already built (text and options). Note is a line
 // the site appends to its default (the /unmute lockdown note); a custom text is followed by it too.
+// PMNote is the private wording of Note, followed after a private copy's text, custom or default.
 type eventReply struct {
 	Event   string
 	Target  gotgbot.User
@@ -73,6 +74,7 @@ type eventReply struct {
 	Default string
 	Opts    *gotgbot.SendMessageOpts
 	Note    string
+	PMNote  string
 }
 
 // eventTokenNames are the event placeholders. {count}, {action}, {limit} and {window} belong to the
@@ -222,13 +224,12 @@ func eventTargetOf(info *gotgbot.ChatFullInfo) gotgbot.User {
 	return gotgbot.User{Id: info.Id, FirstName: info.FirstName, LastName: info.LastName, Username: info.Username}
 }
 
-// replyEvent sends the success reply of an event. The punishment has already been applied (D-03).
-// It reads the group's stored messages once (bounded by eventMessageReadTimeout): a read error is
-// one Warn and the default; no row, or a row with no content and Silent off, is the default through
-// replySuccess (today's call); Silent posts and schedules nothing; otherwise the custom message is
-// sent as a reply to the command and queued under bot:punish_manual, the default's kind (D-15). A
-// custom message Telegram definitely refuses (eventMessageRefused) is replaced by the default, sent
-// once; any other send error is returned, as the default's send error always was.
+// replyEvent sends the success reply of an event and then offers its private copy. The punishment
+// has already been applied (D-03). It reads the group's stored messages once (bounded by
+// eventMessageReadTimeout): a read error is one Warn, the default and no private copy (the switch is
+// unknown, and unknown never sends). Otherwise the group step runs exactly as before the private copy
+// existed (replyEventGroup), and then, whatever it did, the private copy is offered (offerReplyPM),
+// which never blocks. The error is the group step's.
 func (c *moderationCtx) replyEvent(r eventReply) error {
 	readCtx, cancel := context.WithTimeout(context.Background(), eventMessageReadTimeout)
 	msgs, err := eventMessagesLookup(readCtx, c.Chat.Id)
@@ -237,13 +238,25 @@ func (c *moderationCtx) replyEvent(r eventReply) error {
 		log.Warnf("[EventMessage] the messages of chat %d could not be read for %s, the default was sent", c.Chat.Id, r.Event)
 		return c.replySuccess(r.Default, r.Opts)
 	}
+	_, err = c.replyEventGroup(r, msgs)
+	c.offerReplyPM(r, msgs)
+	return err
+}
+
+// replyEventGroup is the group step of an event reply and returns the message it posted (nil when
+// nothing was posted). No row, or a row with no content and Silent off, is the default through
+// sendSuccess (today's call); Silent posts and schedules nothing; otherwise the custom message is
+// sent as a reply to the command and queued under bot:punish_manual, the default's kind (D-15). A
+// custom message Telegram definitely refuses (eventMessageRefused) is replaced by the default, sent
+// once; any other send error is returned, as the default's send error always was.
+func (c *moderationCtx) replyEventGroup(r eventReply, msgs *eventmsg.Messages) (*gotgbot.Message, error) {
 	row, ok := msgs.Lookup(r.Event, eventmsg.DestGroup)
 	if ok && row.Silent {
 		log.Debugf("[EventMessage] the %s message of chat %d is silent, nothing was posted", r.Event, c.Chat.Id)
-		return nil
+		return nil, nil
 	}
 	if !ok || !row.HasContent() {
-		return c.replySuccess(r.Default, r.Opts)
+		return c.sendSuccess(r.Default, r.Opts)
 	}
 
 	actor := eventActor{User: c.User, Anonymous: actorIsAnonymous(c.Ctx)}
@@ -256,10 +269,34 @@ func (c *moderationCtx) replyEvent(r eventReply) error {
 	if err != nil {
 		if eventMessageRefused(err) {
 			log.Warnf("[EventMessage] the custom %s message of chat %d was refused, the default was sent", r.Event, c.Chat.Id)
-			return c.replySuccess(r.Default, r.Opts)
+			return c.sendSuccess(r.Default, r.Opts)
 		}
-		return err
+		return nil, err
 	}
 	scheduleBotMessage(sent, deletion.KindBotManual)
-	return nil
+	return sent, nil
+}
+
+// offerReplyPM offers the private copy of an event reply after the group step (D-11). It offers
+// nothing for an event without a spec or a private copy whose switch is off (Resolve: no pm row, or a
+// pm row whose switch was never turned on, reads as Silent). The copy is composed here, in the group's
+// language and with the group step's actor, and sent by a job (offerEventPM), so the handler returns
+// at once.
+func (c *moderationCtx) offerReplyPM(r eventReply, msgs *eventmsg.Messages) {
+	spec, ok := eventPMSpecFor(r.Event)
+	if !ok {
+		return
+	}
+	row := msgs.Resolve(r.Event, eventmsg.DestPM)
+	if row.Silent {
+		return
+	}
+	actor := eventActor{User: c.User, Anonymous: actorIsAnonymous(c.Ctx)}
+	offerEventPM(eventPMOffer{
+		Bot:     c.Bot,
+		Chat:    *c.Chat,
+		Event:   r.Event,
+		UserID:  r.Target.Id,
+		Message: composeEventPM(c.Bot, c.Chat, c.Tr, spec, r, row, actor),
+	})
 }

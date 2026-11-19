@@ -253,6 +253,8 @@ devs_specify_user: "Вкажіть користувача, про якого п�
 
 error_generic: "Збій. Спробуйте ще раз."
 eventmsg_admin_anon: "адмін"
+eventmsg_pm_ban: "🚫 Вас забанено в групі <b>{group}</b>."
+eventmsg_pm_reason: "<b>Причина:</b> {reason}"
 common_anonymous_user_error: "Цю команду не можна застосувати до анонімного користувача."
 common_anonymous_ban_error: "Цю команду не можна застосувати до анонімного користувача. Анонімних можна лише забанити або розбанити."
 common_cannot_identify_user: "Не вдається визначити користувача. Канали не можуть користуватися цією командою."

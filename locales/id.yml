@@ -894,6 +894,8 @@ devs_specify_user: Anda harus menentukan pengguna untuk mendapatkan info
 # Common error messages used across modules
 error_generic: "Terjadi kesalahan. Silakan coba lagi nanti."
 eventmsg_admin_anon: "seorang admin"
+eventmsg_pm_ban: "🚫 Anda telah di-ban dari <b>{group}</b>."
+eventmsg_pm_reason: "<b>Alasan:</b> {reason}"
 common_anonymous_user_error: Perintah ini tidak dapat digunakan pada pengguna anonim.
 common_anonymous_ban_error: Perintah ini tidak dapat digunakan pada pengguna anonim, pengguna ini hanya dapat diblokir/dibuka blokirnya.
 common_cannot_identify_user: Tidak dapat mengidentifikasi pengguna. Perintah ini tidak dapat digunakan oleh kanal.

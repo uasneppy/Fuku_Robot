@@ -270,6 +270,8 @@ devs_specify_user: "Specify the user you want info on."
 # Common error messages used across modules
 error_generic: "Malfunction. Try again."
 eventmsg_admin_anon: "an admin"
+eventmsg_pm_ban: "🚫 You were banned from <b>{group}</b>."
+eventmsg_pm_reason: "<b>Reason:</b> {reason}"
 common_anonymous_user_error: "This command cannot be used on an anonymous user."
 common_anonymous_ban_error: "This command cannot be used on an anonymous user. Anonymous users can only be banned or unbanned."
 common_cannot_identify_user: "Cannot identify the user. Channels cannot use this command."

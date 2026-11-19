@@ -126,6 +126,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   and the batcher under that one 3 s timer, so the stop adds no new drain, no handler registration and no allowance: the 68 s
   figure and `stop_grace_period: 75s` stand unchanged. A flush cut off loses only entries that were never queued, whose
   messages stay (`TestShutdownEndsMemberDeletionBatcher`).
+- The private copy jobs of event messages (`pmCopyJobs`, `event_message_pm.go`) have no drain and no flag: a restart cuts
+  off the copies in flight (best effort, like the federation fan-out), so the 68 s worst case and `stop_grace_period: 75s`
+  are unchanged and `main.go` registers nothing for them.
 - Deploy manifests set `AUTO_MIGRATE=true`; the code default is `false`. Never call `gorm.AutoMigrate` in production code.
 - The Turnstile web captcha is configured in `main` (`registerCaptchaWeb`) when `config.AppConfig.CaptchaWebConfigured()`
   holds: all four of `CAPTCHA_WEB_BASE_URL`, `TELEGRAM_MINI_APP_SHORT_NAME`, `TURNSTILE_SITE_KEY` and
@@ -2566,6 +2569,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   whenever any group failed. A database error removing an fban answers `common_settings_save_failed`, and only a missing
   ban answers `feds_unfban_not_banned`. The fan-out is a recover-protected goroutine with no shutdown drain (a restart cuts
   it off, accepted). They sit outside the `fuku:cache:` prefix, so `CLEAR_CACHE_ON_STARTUP` keeps them.
+- `fuku:pmcopy:pace:next` and `fuku:pmcopy:pace:block` are the fleet-wide Telegram pacing of the private copies of event
+  messages (`pmCopyPaced`, `pmCopyPacer` built from `pmCopyPacerOptions`: 200 ms, 1 retry, 15 s, each call bounded by
+  `pmCopyCallTimeout`, 10 s): every Telegram call of a private copy job goes through it and nothing else uses the keys, so
+  copies take at most five sends a second and a burst never delays a punishment, a group reply or another pacer's work; a
+  slot more than 15 s away fails at once with no request. They sit outside the `fuku:cache:` prefix, so
+  `CLEAR_CACHE_ON_STARTUP` keeps them.
 - `fuku:delete:norights:<chat>` is the 10 minute negative latch of a chat the bot cannot act in (`deletionLatchKey`,
   `deletionLatched`, `deletionSetLatch`, `deletionLatchTTL`), outside the `fuku:cache:` prefix so `CLEAR_CACHE_ON_STARTUP`
   keeps it. Its value is the scope: `gone` (the bot is not in the chat, was kicked, or the chat is gone or was upgraded: stops
@@ -3279,8 +3288,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   step of the moderation pipeline, after `execute` applied the punishment, so a message never delays, undoes or skips a
   punishment (D-03). It reads `eventmsg.Get` through the seam `eventMessagesLookup` under `eventMessageReadTimeout` (2 s,
   a variable): a read error is one Warn with the chat ID and the event and the default; no row, and a row with no text,
-  media or buttons and Silent off, send the default through `replySuccess`, literally the call the site made before
-  Phase 20 (`TestLegacyModerationRequests` pins every byte and is never re-recorded); Silent, honoured only from a
+  media or buttons and Silent off, send the default through `sendSuccess` (the body of `replySuccess`, which wraps it),
+  literally the call the site made before Phase 20 (`TestLegacyModerationRequests` pins every byte and is never re-recorded); Silent, honoured only from a
   successful read, posts and schedules nothing. A send site builds its default first (the ban's is `banDefaultReply`, an
   `eventDefaultReply`: the same `Sprintf`, mention, `moderationReasonLine` and Unban keyboard as before) and hands it to
   `replyEvent` with the event key, the target (`eventTargetOf` of its `getChat` answer) and the `eventValues` (reason,
@@ -3324,7 +3333,32 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `TestEventMessageSites` (the six other events, custom and with nothing stored, the lockdown note included),
   `TestEventMessageSilentVariants` and `TestEventMessageAfterAnonymousProof` (`event_message_sites_test.go`) hold it (toolkit
   `event_message_env_test.go`: `eventMsgCleanup`, `eventMsgStore`, `eventMsgStoreRow`, `eventMsgFailingClient` with
-  `eventMsgRefuseOnce`, on plan 20-01's `newModerationGoldenSite`).
+  `eventMsgRefuseOnce`, on plan 20-01's `newModerationGoldenSite`). Since Phase 21 the group part is `replyEventGroup` (the
+  same code, returning the message it posted) and `replyEvent` ends with the private copy offer (`offerReplyPM`, the PM
+  copies bullet below), which never changes the group reply or its error.
+- PM copies (`event_message_pm.go`, Phase 21): an event has a private copy when `registerEventPM(event, eventPMSpec{DefaultKey,
+  Automatic})` registered a spec for it in an `init` (it panics on an event `eventmsg.ValidEvent` refuses, an empty key or a
+  second registration; the manual events are `Automatic` false; `eventPMSpecFor` reads the table). `replyEvent` reads the
+  messages once, runs the unchanged group step (`replyEventGroup`, pinned by `TestLegacyModerationRequests`) and then
+  `offerReplyPM`, whatever the group step did (posted, Silent, the refusal fallback, a send error): it offers a copy only
+  for an event with a spec and a `msgs.Resolve(event, eventmsg.DestPM)` whose `Silent` is false (no pm row, or a pm row
+  whose switch was never written, reads as off, D-08), and never after a failed read (unknown never sends, D-11). The copy
+  is composed in the handler by `composeEventPM` in the group's language (the moderation context's translator): with a
+  stored text, the group renderer (`renderEventText`, so the Welcome and event placeholders, every user value escaped and
+  `{admin}` the translated `eventmsg_admin_anon` for an anonymous admin), else `eventPMDefaultText` (the spec's
+  `DefaultKey` with `{group}` the group's title through `staffDisplayTitle` and `{until}` in the group's zone, then
+  `eventmsg_pm_reason` with the escaped reason when one was typed; it never names the admin); the keyboard is the stored
+  buttons and the `{rules}` button only, never the bot's Unban or Unmute row (group callbacks), and the media is the
+  row's file. It is sent by `offerEventPM` from a bounded job (`pmCopyJobs`, a `raidPostTracker`, `startBelow` of
+  `pmCopyMaxInFlight` 16 per replica, a full pool sheds the copy with one Debug line; each job starts with
+  `defer error_handling.RecoverFromPanic` and runs under `pmCopyJobTimeout`, 60 s, from `context.Background()`) through
+  `pmCopyPaced` on its own pacer keys (Data), with `media.SendGreetingMessage` to the member's private chat (the target's
+  user ID), so the handler never waits for it. The job builds no `ReplyParameters` and calls no method named `Reply`
+  (`TestCommandRepliesStayInsideTheHandler` keeps its empty allow-list). No log line carries a stored or typed text, a
+  caption, a button, a file ID, a reason or a name: the chat ID, the user ID, the event and a Telegram error by its code
+  (`memberReqErrText`). `TestEventPMEndToEnd` holds it (toolkit `event_message_pm_env_test.go`: `newEventPMSite`, which is
+  `newModerationGoldenSite` with miniredis, `withFastPMCopyPacer` and `eventPMTestClient`; `storeEventPM`, `waitEventPM`,
+  `eventPMCleanup`, `eventPMCalls`, `eventPMOnly`, `eventPMNone`).
 - Scheduling the bot's own messages (`deletion_bot.go`): `scheduleBotMessage(sent, kind)` is opt-in at named send sites only
   (D-12): the welcome in `SendWelcomeMessage` (`bot:welcome`), the goodbye in `leftMember` (`bot:goodbye`), the group `/rules`
   reply and the click-to-read message of a group with private rules (`bot:rules`), the success replies of the manual
