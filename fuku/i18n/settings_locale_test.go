@@ -657,6 +657,11 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_btn_msg_pm_open": {24, 34},
 	// The previews of the private copy (Phase 21, plan 21-05): the line sent before a preview of the private copy.
 	"settings_msg_preview_header_pm": {140, 196},
+	// The hub's private copies block (Phase 21, plan 21-06): the Details option's line, its full-width toggle and the
+	// options hint.
+	"settings_msg_line_pm_details": {30, 42},
+	"settings_btn_msg_pm_details":  {24, 34},
+	"settings_msg_hint_pm_options": {260, 364},
 }
 
 // settingsAlertKeys are shown as answerCallbackQuery alerts: plain text, no tag, at most
@@ -948,7 +953,7 @@ func TestSettingsLabelLengths(t *testing.T) {
 	phase18Toggles := []string{"settings_btn_sw_reports", "settings_btn_sw_aispam", "settings_btn_sw_approve", "settings_btn_anon_toggle"}
 	// The full-width toggles that carry the state icon alone in place of {state} (Phase 20, plan 20-07: an event
 	// screen's Silent switch).
-	iconToggles := []string{"settings_btn_msg_silent", "settings_btn_msg_pm"}
+	iconToggles := []string{"settings_btn_msg_silent", "settings_btn_msg_pm", "settings_btn_msg_pm_details"}
 	// The full-width buttons whose label is the whole button (Phase 21, plan 21-04: the event screen's row that
 	// opens the private copy), at most 40 code points.
 	fullWidthLabels := []string{"settings_btn_msg_pm_open"}
@@ -1376,6 +1381,8 @@ func TestSettingsEditLocaleTokens(t *testing.T) {
 		{"settings_btn_msg_silent", []string{"{state}"}},
 		{"settings_msg_line_pm", []string{"{state}"}},
 		{"settings_btn_msg_pm", []string{"{state}"}},
+		{"settings_msg_line_pm_details", []string{"{state}"}},
+		{"settings_btn_msg_pm_details", []string{"{state}"}},
 		{settingsMsgWaitTextManualKey, []string{"{max}"}},
 	}
 

@@ -64,6 +64,9 @@ const (
 	settingsActMsgPM = "hp"
 	// settingsMsgPMIcon is the icon of the private copy.
 	settingsMsgPMIcon = "📩"
+	// settingsActMsgPMOption is the action code of a toggle of the hub's private copies block (fields t, an option code
+	// of settingsMsgPMOptions, and v, the absolute target "0" or "1").
+	settingsActMsgPMOption = "ho"
 	// settingsMsgSampleDuration is the duration a preview of a timed event fills in: the form the duration
 	// takes in a timed reply (the command's own duration text, which is not translated).
 	settingsMsgSampleDuration = "2 hours"
@@ -205,6 +208,9 @@ func init() {
 		},
 		settingsActMsgPM: {
 			Fields: []string{settingsMsgEventField, "v"}, Right: settingsRightChangeInfo, Validate: settingsMsgPMFields, Run: settingsMsgRunPM,
+		},
+		settingsActMsgPMOption: {
+			Fields: []string{"t", "v"}, Right: settingsRightChangeInfo, Validate: settingsMsgPMOptionFields, Run: settingsMsgRunPMOption,
 		},
 	}
 	maps.Copy(actions, settingsMsgEditActions())
@@ -372,6 +378,58 @@ func settingsMsgPMFields(fields map[string]string) bool {
 	return ok
 }
 
+// settingsMsgPMOption is one of the group's private copy options on the hub (D-24): its code (the t value of ho), the
+// key of its line and of its toggle's label (both take {state}), how it reads from the stored options and its one write
+// path. A later option is one more row of settingsMsgPMOptions and needs no renderer change.
+type settingsMsgPMOption struct {
+	Code     string
+	LineKey  string
+	LabelKey string
+	Value    func(eventmsg.Options) bool
+	Apply    func(ctx context.Context, chatID int64, on bool, by int64) eventMsgOptionsResult
+}
+
+// settingsMsgPMOptions are the options of the hub's private copies block, in their order: the Details button.
+var settingsMsgPMOptions = []settingsMsgPMOption{
+	{
+		Code: "d", LineKey: "settings_msg_line_pm_details", LabelKey: "settings_btn_msg_pm_details",
+		Value: func(o eventmsg.Options) bool { return o.PMDetails }, Apply: applyEventPMDetails,
+	},
+}
+
+// settingsMsgPMOptionByCode finds an option of the private copies block.
+func settingsMsgPMOptionByCode(code string) (settingsMsgPMOption, bool) {
+	for _, opt := range settingsMsgPMOptions {
+		if opt.Code == code {
+			return opt, true
+		}
+	}
+	return settingsMsgPMOption{}, false
+}
+
+// settingsMsgPMOptionFields is the Validate of ho: the private owner field, a known option code and a target value of
+// exactly "0" or "1".
+func settingsMsgPMOptionFields(fields map[string]string) bool {
+	if !settingsListPrivateField(fields) || !settingsEditSwitchValue(fields["v"]) {
+		return false
+	}
+	_, ok := settingsMsgPMOptionByCode(fields["t"])
+	return ok
+}
+
+// settingsMsgAnyPM reports whether some event of the page has a private copy spec, so the hub's private copies block
+// has something to set.
+func settingsMsgAnyPM() bool {
+	for _, fam := range settingsMsgFamilies {
+		for _, ev := range fam.Events {
+			if _, ok := eventPMSpecFor(ev.Key); ok {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // settingsMsgState is how one event's message is drawn.
 type settingsMsgState int
 
@@ -534,6 +592,37 @@ func settingsMsgRunPM(p *settingsPress) *settingsScreen {
 	defer cancel()
 	res := applyEventPM(ctx, p.group.Id, ev.Key, p.fields["v"] == "1", p.query.From.Id)
 	return settingsMsgRedrawApplied(p, def, ev, eventmsg.DestPM, res)
+}
+
+// settingsMsgRunPMOption serves ho, a toggle of the hub's private copies block: it writes the absolute target through the
+// option's Apply, its one write path, with the presser as the writer (no same-value shortcut: the value is absolute, so a
+// stale hub's press stores the same value again), and redraws the hub from the messages the write read back, with no
+// notice. A failed write redraws the hub from a fresh read with the save-failed notice; a write whose read-back failed
+// reloads the hub. A read that fails is the cannot-open edit.
+func settingsMsgRunPMOption(p *settingsPress) *settingsScreen {
+	opt, ok := settingsMsgPMOptionByCode(p.fields["t"])
+	if !ok || !settingsEditSwitchValue(p.fields["v"]) {
+		p.answer(settingsText(p.tr, "common_callback_invalid_request"), true)
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), settingsReadTimeout)
+	defer cancel()
+	res := opt.Apply(ctx, p.group.Id, p.fields["v"] == "1", p.query.From.Id)
+	if res.Messages != nil {
+		screen := renderSettingsMsgHub(p.view(), res.Messages, "")
+		return &screen
+	}
+	notice := ""
+	if res.Outcome == greetingSaveFailed {
+		notice = settingsNoticeWarn(settingsText(p.tr, "common_settings_save_failed"))
+	}
+	screen, err := settingsMsgOpen(p, notice)
+	if err != nil {
+		log.Warnf("[Settings] the event messages of chat %d could not be read: %v", p.group.Id, err)
+		p.cannotOpen()
+		return nil
+	}
+	return &screen
 }
 
 // settingsMsgRedrawApplied redraws def's screen after a switch write: from the messages the write read back,
@@ -773,8 +862,11 @@ func settingsMsgEventLines(tr *i18n.Translator, fam settingsMsgFamily, msgs *eve
 }
 
 // renderSettingsMsgHub draws the hub: the intro, then for each family with events a blank line, its icon
-// and bold name and one state line per event; one cell per family with events, two to a row, then Back
-// (Main) and Close. It is pure.
+// and bold name and one state line per event, then, while some event has a private copy, the private copies block
+// (D-24): a blank line, the bold private copy title with its icon, one line per option of settingsMsgPMOptions with
+// its state word, a blank line and the options hint. The keyboard is one cell per family with events, two to a row,
+// then one full-width toggle per option (the state icon, sending the opposite of the stored value as an absolute
+// target, a=ho), then Back (Main) and Close: [1 1 2] with the one family and the Details option. It is pure.
 func renderSettingsMsgHub(v settingsView, msgs *eventmsg.Messages, notice string) settingsScreen {
 	tr := v.Tr
 	body := []string{settingsText(tr, "settings_msg_intro")}
@@ -792,6 +884,22 @@ func renderSettingsMsgHub(v settingsView, msgs *eventmsg.Messages, notice string
 		}
 	}
 	settingsDelGrid(k, cells)
+	if settingsMsgAnyPM() {
+		body = append(body, "", settingsMsgPMIcon+" <b>"+settingsText(tr, "settings_msg_pm_title")+"</b>")
+		for _, opt := range settingsMsgPMOptions {
+			on := opt.Value(msgs.Options)
+			body = append(body, settingsText(tr, opt.LineKey, i18n.TranslationParams{"state": settingsStateWord(tr, on)}))
+			target := "1"
+			if on {
+				target = "0"
+			}
+			label := settingsText(tr, opt.LabelKey, i18n.TranslationParams{"state": settingsStateIcon(on)})
+			if button, ok := k.button(label, map[string]string{"a": settingsActMsgPMOption, "t": opt.Code, "v": target}); ok {
+				k.row(button)
+			}
+		}
+		body = append(body, "", settingsText(tr, "settings_msg_hint_pm_options"))
+	}
 	k.navRow(false)
 	return k.screen(settingsCompose(v, "settings_page_msgs", body, notice, false))
 }

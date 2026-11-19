@@ -12,15 +12,17 @@ import (
 // eventMsgWrites holds the event message repository writes the apply functions call. It is a
 // variable only so a test can make a write fail.
 var eventMsgWrites = struct {
-	Silent  func(ctx context.Context, chatID int64, event, dest string, silent bool, by int64) error
-	Text    func(ctx context.Context, chatID int64, event, dest, text string, by int64) error
-	Media   func(ctx context.Context, chatID int64, event, dest, fileID string, mediaType int, by int64) error
-	Buttons func(ctx context.Context, chatID int64, event, dest string, buttons []db.Button, by int64) error
+	Silent    func(ctx context.Context, chatID int64, event, dest string, silent bool, by int64) error
+	Text      func(ctx context.Context, chatID int64, event, dest, text string, by int64) error
+	Media     func(ctx context.Context, chatID int64, event, dest, fileID string, mediaType int, by int64) error
+	Buttons   func(ctx context.Context, chatID int64, event, dest string, buttons []db.Button, by int64) error
+	PMDetails func(ctx context.Context, chatID int64, on bool, by int64) error
 }{
-	Silent:  eventmsg.SetSilent,
-	Text:    eventmsg.SetText,
-	Media:   eventmsg.SetMedia,
-	Buttons: eventmsg.SetButtons,
+	Silent:    eventmsg.SetSilent,
+	Text:      eventmsg.SetText,
+	Media:     eventmsg.SetMedia,
+	Buttons:   eventmsg.SetButtons,
+	PMDetails: eventmsg.SetPMDetails,
 }
 
 // eventMsgApplyResult is what an event message apply function returns: the outcome, the stored
@@ -117,4 +119,39 @@ func applyEventMedia(ctx context.Context, chatID int64, event, dest, fileID stri
 func applyEventButtons(ctx context.Context, chatID int64, event, dest string, buttons []db.Button, by int64) eventMsgApplyResult {
 	writeErr := eventMsgWrites.Buttons(ctx, chatID, event, dest, buttons, by)
 	return eventMsgApplyReadBack(ctx, chatID, event, dest, "buttons", writeErr)
+}
+
+// eventMsgOptionsResult is what an apply function of the group's private copy options returns: the outcome, the chat's
+// event messages read back fresh after the write (nil when the write or the read-back failed; their Options hold the
+// stored options) and the repository error.
+type eventMsgOptionsResult struct {
+	Outcome  greetingApplyOutcome
+	Messages *eventmsg.Messages
+	Err      error
+}
+
+// eventMsgOptionsReadBack finishes a write of one of the group's private copy options: on success it reads the chat's
+// messages back fresh. what names the option in the log lines, which carry the chat ID and the option only.
+func eventMsgOptionsReadBack(ctx context.Context, chatID int64, what string, writeErr error) eventMsgOptionsResult {
+	msgs, outcome, err := applyReadBack(ctx, writeErr,
+		func(e error) {
+			log.Errorf("[EventMessages] storing the private copy %s option failed for chat %d: %v", what, chatID, e)
+		},
+		func(e error) {
+			log.Warnf("[EventMessages] read back the private copy options of chat %d after the %s option: %v", chatID, what, e)
+		},
+		func(c context.Context) (*eventmsg.Messages, error) {
+			return eventmsg.GetFresh(c, chatID)
+		})
+	return eventMsgOptionsResult{Outcome: outcome, Messages: msgs, Err: err}
+}
+
+// applyEventPMDetails stores the group's Details option of the private copies (D-24): with it on, a private copy that
+// was not delivered adds a Details button to the group message. It is the option's one write path, which has no command,
+// and it judges no person's rights (the press pipeline judged them). The value is absolute, so a repeated call stores the
+// same row. The repository drops event_messages:<chat>, which is in skipLocal, so the send path reads the new option at
+// the very next command on every replica. The messages are read back fresh.
+func applyEventPMDetails(ctx context.Context, chatID int64, on bool, by int64) eventMsgOptionsResult {
+	writeErr := eventMsgWrites.PMDetails(ctx, chatID, on, by)
+	return eventMsgOptionsReadBack(ctx, chatID, "Details", writeErr)
 }
