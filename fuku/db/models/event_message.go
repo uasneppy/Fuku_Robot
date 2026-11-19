@@ -27,3 +27,23 @@ type ChatEventMessage struct {
 func (ChatEventMessage) TableName() string {
 	return "chat_event_messages"
 }
+
+// ChatEventMessageOptions is one group's two options of the private copies of its event messages:
+// PMDetails adds a Details button to the group message when a private copy was not delivered, and
+// PMLog posts one line in the group's log channel then. A chat with no row has both options off.
+// It is read with the chat's event messages (fuku/db/eventmsg) under one cache key.
+//
+// The model carries no default: tag on any field, so a Go false is written by the column-targeted
+// upserts of the repository.
+type ChatEventMessageOptions struct {
+	ChatID    int64     `gorm:"column:chat_id;primaryKey;autoIncrement:false" json:"chat_id"`
+	PMDetails bool      `gorm:"column:pm_details;not null" json:"pm_details"`
+	PMLog     bool      `gorm:"column:pm_log;not null" json:"pm_log"`
+	UpdatedBy int64     `gorm:"column:updated_by;not null" json:"updated_by"`
+	UpdatedAt time.Time `gorm:"column:updated_at" json:"updated_at,omitempty"`
+}
+
+// TableName returns the migration's table name.
+func (ChatEventMessageOptions) TableName() string {
+	return "chat_event_message_options"
+}
