@@ -28,20 +28,6 @@ const (
 	settingsEditCaptionMax = 1024
 )
 
-// settingsEditValidatePart is the Validate hook of Set, Remove and Cancel: t must be present and
-// one of the page's part codes. It runs before any I/O, so a forged or missing t is refused as
-// an invalid request.
-func settingsEditValidatePart(pageKey string) func(map[string]string) bool {
-	return func(fields map[string]string) bool {
-		def, ok := settingsEditPageByKey(pageKey)
-		if !ok {
-			return false
-		}
-		part, present := fields["t"]
-		return present && settingsEditPartByCode(def, part) != nil
-	}
-}
-
 // settingsEditPartByCode finds a part of a page by its t value, nil when the page has none.
 func settingsEditPartByCode(def settingsEditPageDef, code string) *settingsEditPart {
 	i := slices.IndexFunc(def.Parts, func(part settingsEditPart) bool { return part.Code == code })
@@ -288,16 +274,13 @@ func settingsEditRemove(def settingsEditPageDef) func(*settingsPress) *settingsS
 
 // settingsEditActions are the page's Set, Remove, Cancel, Preview and Full preview actions. Set
 // and Remove need the right of the matching commands, Cancel and the previews only the admin
-// check every press makes; all but Full preview have t checked before any I/O.
+// check every press makes; all but Full preview have t checked before any I/O. A built-in page names
+// its one message by its action codes alone, so it is settingsEditResolvedActions with no extra
+// field and a resolve that always answers the page itself.
 func settingsEditActions(def settingsEditPageDef) map[string]settingsPageAction {
-	validate := settingsEditValidatePart(def.Key)
-	return map[string]settingsPageAction{
-		def.SetCode:     {Fields: []string{"t"}, Right: def.EditRight, Validate: validate, Run: settingsEditSet(def)},
-		def.RemoveCode:  {Fields: []string{"t"}, Right: def.EditRight, Validate: validate, Run: settingsEditRemove(def)},
-		def.CancelCode:  {Fields: []string{"t"}, Right: settingsRightAdmin, Validate: validate, Run: settingsEditCancel(def)},
-		def.PreviewCode: {Fields: []string{"t"}, Right: settingsRightAdmin, Validate: validate, Run: settingsEditPreview(def)},
-		def.FullCode:    {Right: settingsRightAdmin, Run: settingsEditFullPreview(def)},
-	}
+	return settingsEditResolvedActions(def, nil, func(map[string]string) (settingsEditPageDef, bool) {
+		return def, true
+	})
 }
 
 // settingsEditResolvedActions are Set, Remove, Cancel, Preview and Full preview of a page that edits many
