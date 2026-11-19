@@ -2,16 +2,21 @@ package modules
 
 import (
 	"context"
+	"errors"
 	"maps"
+	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/uasneppy/fuku_robot/fuku/db"
 	"github.com/uasneppy/fuku_robot/fuku/db/eventmsg"
+	"github.com/uasneppy/fuku_robot/fuku/db/lang"
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 	"github.com/uasneppy/fuku_robot/fuku/db/staff"
 	"github.com/uasneppy/fuku_robot/fuku/i18n"
+	"github.com/uasneppy/fuku_robot/fuku/utils/keyboard"
+	"github.com/uasneppy/fuku_robot/fuku/utils/media"
 )
 
 // The Messages page of the settings menu (Phase 20, D-18, D-19): the group's custom event messages, the
@@ -23,7 +28,7 @@ import (
 // of its parts. Each event is one message editor definition (registerSettingsEditDef), whose wait key is
 // h + the event code + the destination code and whose buttons carry the event in the field k, so plans
 // 20-07 to 20-09 make the event screen act through the editor's hooks. Every read is fresh and creates
-// nothing.
+// nothing, and a preview only ever goes to the presser's own private chat.
 
 const (
 	// settingsPageMessages is the p value of the Messages page.
@@ -34,8 +39,7 @@ const (
 	settingsActMsgEvent = "he"
 	// settingsActMsgSet, settingsActMsgRemove, settingsActMsgCancel, settingsActMsgPreview and
 	// settingsActMsgFull are the editor codes every event definition carries: Set, Remove, the prompt's
-	// Cancel, Preview of one part and Full preview. Set, Remove and Cancel are page actions; plan 20-09
-	// registers the two previews.
+	// Cancel, Preview of one part and Full preview, all five page actions resolved by the field k.
 	settingsActMsgSet     = "hs"
 	settingsActMsgRemove  = "hr"
 	settingsActMsgCancel  = "hc"
@@ -49,11 +53,18 @@ const (
 	settingsMsgEventField = "k"
 	// settingsMsgDestGroupCode is the one-letter code of the group destination in a wait key.
 	settingsMsgDestGroupCode = "g"
+	// settingsMsgSampleDuration is the duration a preview of a timed event fills in: the form the duration
+	// takes in a timed reply (the command's own duration text, which is not translated).
+	settingsMsgSampleDuration = "2 hours"
+	// settingsMsgSampleSpan is how far ahead of the preview the sample end of a timed event lies.
+	settingsMsgSampleSpan = 2 * time.Hour
 )
 
 // settingsMsgEvent is one event of a family: the eventmsg event it edits, its two-letter code (the k
-// value), its icon, its name and description keys, and the buttons the bot itself adds to its message (the
-// Unban or Unmute row), counted against Telegram's keyboard limit.
+// value), its icon, its name and description keys, the buttons the bot itself adds to its message (the
+// Unban or Unmute row), counted against Telegram's keyboard limit, the send site's own default reply
+// builder (which a preview fills in) and whether the event is timed (its preview fills {duration} and
+// {until}).
 type settingsMsgEvent struct {
 	Key             string
 	Code            string
@@ -61,6 +72,8 @@ type settingsMsgEvent struct {
 	NameKey         string
 	DescKey         string
 	ReservedButtons int
+	Default         eventDefaultReply
+	Timed           bool
 }
 
 // settingsMsgFamily is one family of events (D-19): its code (the t value of hl), icon, name, the intro of
@@ -78,13 +91,34 @@ type settingsMsgFamily struct {
 
 // settingsMsgManualEvents are the seven manual punishment events, in the order of eventmsg.Events.
 var settingsMsgManualEvents = []settingsMsgEvent{
-	{Key: eventmsg.EventBan, Code: "bn", Icon: "🚫", NameKey: "settings_msg_ev_ban", DescKey: "settings_msg_desc_ban", ReservedButtons: 1},
-	{Key: eventmsg.EventTimedBan, Code: "tb", Icon: "⏳", NameKey: "settings_msg_ev_tban", DescKey: "settings_msg_desc_tban"},
-	{Key: eventmsg.EventKick, Code: "kk", Icon: "👢", NameKey: "settings_msg_ev_kick", DescKey: "settings_msg_desc_kick"},
-	{Key: eventmsg.EventMute, Code: "mu", Icon: "🔇", NameKey: "settings_msg_ev_mute", DescKey: "settings_msg_desc_mute", ReservedButtons: 1},
-	{Key: eventmsg.EventTimedMute, Code: "tm", Icon: "🔕", NameKey: "settings_msg_ev_tmute", DescKey: "settings_msg_desc_tmute"},
-	{Key: eventmsg.EventUnban, Code: "ub", Icon: "🔓", NameKey: "settings_msg_ev_unban", DescKey: "settings_msg_desc_unban"},
-	{Key: eventmsg.EventUnmute, Code: "um", Icon: "🔊", NameKey: "settings_msg_ev_unmute", DescKey: "settings_msg_desc_unmute"},
+	{
+		Key: eventmsg.EventBan, Code: "bn", Icon: "🚫", NameKey: "settings_msg_ev_ban", DescKey: "settings_msg_desc_ban",
+		ReservedButtons: 1, Default: banDefaultReply,
+	},
+	{
+		Key: eventmsg.EventTimedBan, Code: "tb", Icon: "⏳", NameKey: "settings_msg_ev_tban", DescKey: "settings_msg_desc_tban",
+		Default: tbanDefaultReply, Timed: true,
+	},
+	{
+		Key: eventmsg.EventKick, Code: "kk", Icon: "👢", NameKey: "settings_msg_ev_kick", DescKey: "settings_msg_desc_kick",
+		Default: kickDefaultReply,
+	},
+	{
+		Key: eventmsg.EventMute, Code: "mu", Icon: "🔇", NameKey: "settings_msg_ev_mute", DescKey: "settings_msg_desc_mute",
+		ReservedButtons: 1, Default: muteDefaultReply,
+	},
+	{
+		Key: eventmsg.EventTimedMute, Code: "tm", Icon: "🔕", NameKey: "settings_msg_ev_tmute", DescKey: "settings_msg_desc_tmute",
+		Default: tmuteDefaultReply, Timed: true,
+	},
+	{
+		Key: eventmsg.EventUnban, Code: "ub", Icon: "🔓", NameKey: "settings_msg_ev_unban", DescKey: "settings_msg_desc_unban",
+		Default: unbanDefaultReply,
+	},
+	{
+		Key: eventmsg.EventUnmute, Code: "um", Icon: "🔊", NameKey: "settings_msg_ev_unmute", DescKey: "settings_msg_desc_unmute",
+		Default: unmuteDefaultReply,
+	},
 }
 
 // settingsMsgFamilies are the families of the hub in page order. Only the manual family has events now;
@@ -114,20 +148,22 @@ func settingsMsgPartsOf(fam settingsMsgFamily) []settingsEditPart {
 }
 
 // settingsMsgEditCodes are the editor codes every event definition carries and the right Set and Remove
-// need (can_change_info, D-22). The page's Set, Remove and Cancel actions are built from them, one set of
-// codes for every event, the event named by the field k.
+// need (can_change_info, D-22). The page's Set, Remove, Cancel, Preview and Full preview actions are built
+// from them, one set of codes for every event, the event named by the field k.
 var settingsMsgEditCodes = settingsEditPageDef{
 	SetCode: settingsActMsgSet, RemoveCode: settingsActMsgRemove, CancelCode: settingsActMsgCancel,
 	PreviewCode: settingsActMsgPreview, FullCode: settingsActMsgFull, EditRight: settingsRightChangeInfo,
 }
 
-// settingsMsgEditActions are the page's Set (hs), Remove (hr) and Cancel (hc) actions: the editor's own,
-// resolved by k to the event's definition (settingsMsgDefByFields, which requires the private owner field c,
-// so a group menu's press is refused in step 1). The two preview codes are not registered yet (plan 20-09).
+// settingsMsgEditActions are the page's Set (hs), Remove (hr), Cancel (hc), Preview (hv) and Full preview
+// (hf) actions: the editor's own, resolved by k to the event's definition (settingsMsgDefByFields, which
+// requires the private owner field c, so a group menu's press is refused in step 1). Set and Remove need
+// can_change_info; Cancel and the two previews need only the admin check every press makes.
 func settingsMsgEditActions() map[string]settingsPageAction {
 	all := settingsEditResolvedActions(settingsMsgEditCodes, []string{settingsMsgEventField}, settingsMsgDefByFields)
-	actions := make(map[string]settingsPageAction, 3)
-	for _, code := range []string{settingsActMsgSet, settingsActMsgRemove, settingsActMsgCancel} {
+	codes := []string{settingsActMsgSet, settingsActMsgRemove, settingsActMsgCancel, settingsActMsgPreview, settingsActMsgFull}
+	actions := make(map[string]settingsPageAction, len(codes))
+	for _, code := range codes {
 		actions[code] = all[code]
 	}
 	return actions
@@ -206,7 +242,7 @@ func settingsMsgWaitPage(ev settingsMsgEvent) string {
 // settingsMsgEditDef is the message editor definition of one event: the hooked kind, the page's title,
 // the five editor codes, can_change_info to change it (D-22), the family's three parts, the field k that
 // names the event on every editor button, the bot's own reserved buttons and the hooks that read, draw,
-// remove and write it.
+// remove, write and preview it.
 func settingsMsgEditDef(fam settingsMsgFamily, ev settingsMsgEvent) settingsEditPageDef {
 	def := settingsMsgEditCodes
 	def.Key, def.Kind, def.Icon, def.TitleKey = settingsMsgWaitPage(ev), settingsEditEvent, ev.Icon, "settings_page_msgs"
@@ -216,6 +252,7 @@ func settingsMsgEditDef(fam settingsMsgFamily, ev settingsMsgEvent) settingsEdit
 	def.Hooks = &settingsEditHooks{
 		Load: settingsMsgLoad(ev), Draw: settingsMsgDraw(fam, ev),
 		Remove: settingsMsgRemove(ev), Write: settingsMsgWrite(ev),
+		Preview: settingsMsgPreview(ev), PreviewHeaderKey: "settings_msg_preview_header",
 	}
 	return def
 }
@@ -479,6 +516,59 @@ func settingsMsgWrite(ev settingsMsgEvent) func(context.Context, int64, string, 
 	}
 }
 
+// settingsMsgPreviewReply is the reply a preview of ev builds, as the send site builds it for a real command:
+// the presser is the punished member, the reason is the sample reason in the group's language and, for a timed
+// event, the duration is settingsMsgSampleDuration and the end settingsMsgSampleSpan from now; the default text
+// is the event's own builder in the group's language. The reply carries no options, so composeEventMessage adds
+// no bot row: the Unban and Unmute buttons are live callbacks that must never reach a private chat.
+func settingsMsgPreviewReply(p *settingsPress, groupTr *i18n.Translator, ev settingsMsgEvent) eventReply {
+	target := p.query.From
+	values := eventValues{Reason: settingsText(groupTr, "settings_msg_sample_reason")}
+	if ev.Timed {
+		values.Duration, values.Until = settingsMsgSampleDuration, time.Now().Add(settingsMsgSampleSpan)
+	}
+	text, _ := ev.Default(groupTr, eventDefaultInput{Target: target, Reason: values.Reason, TimeVal: values.Duration})
+	return eventReply{Event: ev.Key, Target: target, Values: values, Default: text}
+}
+
+// settingsMsgPreview is an event definition's Preview hook (D-20). It sends to the presser's private chat only,
+// writes nothing, schedules nothing and ignores Silent: it shows the message the event would post. Full
+// preview is built by composeEventMessage, the send path's own composer, from settingsMsgPreviewReply and the
+// screen's stored parts, filled with the presser as the member and the admin, in the group's language, and
+// sent by media.SendGreetingMessage; Preview text is the stored text filled the same way with no keyboard;
+// Preview media and Preview buttons are the editor's own (the media alone, the stored buttons alone). A
+// {rules} token reads the group's rules as the send path does.
+func settingsMsgPreview(ev settingsMsgEvent) func(*settingsPress, settingsEditPageDef, settingsEditState, string) error {
+	return func(p *settingsPress, _ settingsEditPageDef, st settingsEditState, part string) error {
+		switch part {
+		case settingsEditPartMedia:
+			return settingsEditPreviewMediaAlone(p, st)
+		case settingsEditPartButtons:
+			return settingsEditPreviewButtonsAlone(p, &gotgbot.InlineKeyboardMarkup{InlineKeyboard: keyboard.BuildKeyboard(st.Buttons)})
+		case "", settingsEditPartText:
+		default:
+			return errors.New("settings messages: no such part to preview")
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), settingsReadTimeout)
+		groupTr := i18n.MustNewTranslator(lang.GetGroupLanguage(ctx, p.group.Id))
+		cancel()
+		r := settingsMsgPreviewReply(p, groupTr, ev)
+		presser := p.query.From
+		actor := eventActor{User: &presser}
+		if part == settingsEditPartText {
+			values := eventPlaceholderValues(groupTr, p.group.Id, actor, r.Values)
+			text, _ := renderEventText(p.b, p.group, &r.Target, st.Text, nil, values)
+			_, err := media.SendGreeting(p.b, p.query.From.Id, text, "", db.TEXT, &gotgbot.InlineKeyboardMarkup{}, 0)
+			return err
+		}
+		row := eventmsg.Message{
+			Event: ev.Key, Dest: eventmsg.DestGroup, Text: st.Text, FileID: st.FileID, MediaType: st.MediaType, Buttons: st.Buttons,
+		}
+		_, err := media.SendGreetingMessage(p.b, p.query.From.Id, composeEventMessage(p.b, p.group, groupTr, r, row, actor))
+		return err
+	}
+}
+
 // settingsMsgEventLines is the state lines of a family's events: event icon, name and state word.
 func settingsMsgEventLines(tr *i18n.Translator, fam settingsMsgFamily, msgs *eventmsg.Messages) []string {
 	lines := make([]string, 0, len(fam.Events))
@@ -537,9 +627,10 @@ func renderSettingsMsgFamily(v settingsView, fam settingsMsgFamily, msgs *eventm
 // and bold name, its description, then the state of each part in words (never the stored text, a button
 // name or a link), the editor's note for a media kind that carries no caption, the Silent line and, after a
 // blank line each, the family's hint and the Silent hint; the keyboard opens with the editor's part rows
-// ([Set] while a part is not set, [Set | Remove] while it is, each button carrying k), then the full-width
+// ([Set] while a part is not set, [Set | Remove] while it is, each button carrying k), then the editor's
+// preview rows (Preview of each part that is set, then Full preview, two to a row), then the full-width
 // Silent toggle (the state icon, sending the opposite of the stored state as an absolute target), then Back
-// (the family) and Close. It is pure. Plan 20-09 adds the previews.
+// (the family) and Close: at most seven rows, [2 2 2 2 2 1 2]. It is pure.
 func renderSettingsMsgEvent(
 	v settingsView, fam settingsMsgFamily, ev settingsMsgEvent, def settingsEditPageDef, st settingsEditState, opts settingsEditScreenOpts,
 ) settingsScreen {
@@ -559,6 +650,7 @@ func renderSettingsMsgEvent(
 		"", settingsText(tr, "settings_msg_hint_silent"))
 	k := newSettingsKeyboard(v)
 	settingsEditPartRows(k, def, st)
+	settingsEditPreviewRows(k, def, st)
 	target := "1"
 	if st.Silent {
 		target = "0"

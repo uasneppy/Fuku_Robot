@@ -129,10 +129,10 @@ func TestSettingsMessagesOpens(t *testing.T) {
 	if n := strings.Count(text, staffMarker("settings_state_not_set")); n != 2 {
 		t.Errorf("the ban screen reads Not set %d times, want 2 (media and buttons):\n%s", n, text)
 	}
-	// The text is set, so its row is [Set | Remove]; media and buttons have Set alone; then the toggle and
-	// Back and Close.
-	settingsMsgWantWidths(t, "the ban screen", keyboard, 2, 1, 1, 1, 2)
-	if back := settingsButtonFields(t, keyboard[4][0]); back["a"] != settingsActMsgFamily || back["t"] != "m" {
+	// The text is set, so its row is [Set | Remove]; media and buttons have Set alone; then Preview text and
+	// Full preview, the toggle and Back and Close.
+	settingsMsgWantWidths(t, "the ban screen", keyboard, 2, 1, 1, 2, 1, 2)
+	if back := settingsButtonFields(t, keyboard[5][0]); back["a"] != settingsActMsgFamily || back["t"] != "m" {
 		t.Errorf("the ban screen's Back carries %v, want the family", back)
 	}
 

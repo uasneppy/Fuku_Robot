@@ -643,6 +643,10 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	// Welcome and event placeholders, and the family's hint.
 	"settings_msg_wait_text_manual": {600, 840},
 	"settings_msg_hint_manual":      {180, 252},
+	// The previews of an event screen (Phase 20, plan 20-09): the line sent before a preview and the sample
+	// reason a preview fills in.
+	"settings_msg_preview_header": {130, 182},
+	"settings_msg_sample_reason":  {30, 42},
 }
 
 // settingsAlertKeys are shown as answerCallbackQuery alerts: plain text, no tag, at most

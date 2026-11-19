@@ -104,7 +104,7 @@ func TestSettingsMessagesSet(t *testing.T) {
 	// Nothing is stored, so each part has its Set button alone, carrying k and the private owner field.
 	m := settingsMsgPrivateMenu(env, env.chat, env.admin)
 	_, keyboard := m.press("a", settingsActMsgEvent, settingsMsgEventField, "bn")
-	settingsMsgWantWidths(t, "the empty ban screen", keyboard, 1, 1, 1, 1, 2)
+	settingsMsgWantWidths(t, "the empty ban screen", keyboard, 1, 1, 1, 1, 1, 2)
 	for i, part := range []string{settingsEditPartText, settingsEditPartMedia, settingsEditPartButtons} {
 		fields := settingsButtonFields(t, keyboard[i][0])
 		if fields["a"] != settingsActMsgSet || fields["t"] != part || fields[settingsMsgEventField] != "bn" || fields["c"] != group || len(fields) != 4 {
@@ -195,7 +195,7 @@ func TestSettingsMessagesRemove(t *testing.T) {
 	m := settingsMsgPrivateMenu(env, env.chat, env.admin)
 
 	_, keyboard := m.press("a", settingsActMsgEvent, settingsMsgEventField, "mu")
-	settingsMsgWantWidths(t, "the full mute screen", keyboard, 2, 2, 2, 1, 2)
+	settingsMsgWantWidths(t, "the full mute screen", keyboard, 2, 2, 2, 2, 2, 1, 2)
 
 	// Remove text clears the text alone; the line reads Default.
 	text, keyboard := m.pressButton(settingsMsgPartButton(t, keyboard, settingsActMsgRemove, settingsEditPartText))
@@ -209,7 +209,7 @@ func TestSettingsMessagesRemove(t *testing.T) {
 	if want := staffMarker("settings_edit_line_text") + " " + staffMarker("settings_state_default"); !strings.Contains(text, want) {
 		t.Errorf("the screen %q does not read Default for the text", text)
 	}
-	settingsMsgWantWidths(t, "the mute screen after Remove text", keyboard, 1, 2, 2, 1, 2)
+	settingsMsgWantWidths(t, "the mute screen after Remove text", keyboard, 1, 2, 2, 2, 1, 1, 2)
 
 	// Remove media and Remove buttons clear theirs.
 	text, keyboard = m.pressButton(settingsMsgPartButton(t, keyboard, settingsActMsgRemove, settingsEditPartMedia))
@@ -226,7 +226,7 @@ func TestSettingsMessagesRemove(t *testing.T) {
 	if !strings.Contains(text, settingsNoticeOKIcon+staffMarker("settings_edit_removed_buttons")) {
 		t.Errorf("the screen %q lacks the removed-buttons notice", text)
 	}
-	settingsMsgWantWidths(t, "the emptied mute screen", keyboard, 1, 1, 1, 1, 2)
+	settingsMsgWantWidths(t, "the emptied mute screen", keyboard, 1, 1, 1, 1, 1, 2)
 	hub, _ := m.press("a", settingsActOpen, "p", settingsPageMessages)
 	settingsMsgWantStates(t, hub, nil)
 

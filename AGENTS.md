@@ -1505,9 +1505,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`settingsMsgHidden`: a definite Staff Group row read fresh through the page's own seam `settingsMsgStaffLookup`, never the Deletion page's `deletionStaffLookup`, whose reads `TestSettingsDeletionHidden` counts; an unreadable row shows the page), because
   nothing is set at Staff Group level (D-01). It is drawn from one table, `settingsMsgFamilies` (`settingsMsgFamily{Code, Icon, NameKey,
   IntroKey, WaitTextKey, HintKey, Events}`, a variable only so a test can draw more families), whose events are `settingsMsgEvent{Key, Code, Icon, NameKey,
-  DescKey, ReservedButtons}`; only the manual family (`m`, 🔨, Admin actions) has events now, `settingsMsgManualEvents`: ban `bn` 🚫
-  (reserved 1, the Unban row), tban `tb` ⏳, kick `kk` 👢, mute `mu` 🔇 (reserved 1, the Unmute row), tmute `tm` 🔕, unban `ub` 🔓, unmute
-  `um` 🔊. A family with no events is not drawn anywhere and no renderer branches on a family's or an event's code. Screens: the hub
+  DescKey, ReservedButtons, Default, Timed}` (`Default` the send site's own `eventDefaultReply` builder, `Timed` true for the events whose
+  preview fills `{duration}` and `{until}`); only the manual family (`m`, 🔨, Admin actions) has events now, `settingsMsgManualEvents`: ban
+  `bn` 🚫 (reserved 1, the Unban row, `banDefaultReply`), tban `tb` ⏳ (`tbanDefaultReply`, timed), kick `kk` 👢 (`kickDefaultReply`), mute
+  `mu` 🔇 (reserved 1, the Unmute row, `muteDefaultReply`), tmute `tm` 🔕 (`tmuteDefaultReply`, timed), unban `ub` 🔓 (`unbanDefaultReply`),
+  unmute `um` 🔊 (`unmuteDefaultReply`). A family with no events is not drawn anywhere and no renderer branches on a family's or an event's code. Screens: the hub
   (`a=op&p=h`: the intro, then for each family a blank line, its icon and bold name and one `settings_main_state_line` per event with
   its state word; one cell per family, two to a row, then Back to Main and Close, rows `[1] [2]`), a family's list (`a=hl&t=<family>`:
   its intro, the event lines and `settings_msg_list_hint`; one cell per event, two to a row, then Back to the hub and Close, rows
@@ -1515,8 +1517,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `settings_edit_line_text`, `_media` and `_buttons` with `settingsEditStateWord`, the no-caption note for a sticker or a video
   note, then `settings_msg_line_silent` with `settingsStateWord` and, after a blank line each, the family's hint (`settings_msg_hint_manual`)
   and `settings_msg_hint_silent`; the keyboard opens with the editor's part rows (`settingsEditPartRows`: `[Set]` while a part is not set,
-  `[Set | Remove]` while it is, text, media and buttons in that order, each button carrying `k`), then the full-width
-  Silent toggle `settings_btn_msg_silent` with `settingsStateIcon`, then Back to the family and Close, rows `[1|2 1|2 1|2 1 2]`). An event's state (`settingsMsgStateOf`) is Silent when its Silent switch is on, Custom when it
+  `[Set | Remove]` while it is, text, media and buttons in that order, each button carrying `k`), then the editor's preview rows
+  (`settingsEditPreviewRows`: Preview of each part that is set, then Full preview, always last, two to a row), then the full-width
+  Silent toggle `settings_btn_msg_silent` with `settingsStateIcon`, then Back to the family and Close: six rows with nothing stored
+  (`[1 1 1 1 1 2]`) and at most seven, `[2 2 2 2 2 1 2]` with every part set). An event's state (`settingsMsgStateOf`) is Silent when its Silent switch is on, Custom when it
   has a text, a media or a button, else Default (no row, or a row with nothing left, reads as the send path reads it); Main reads
   `settings_state_default` when every event is Default and `settings_state_msg_n` (`{n} custom`) for the n events that are not
   (`settingsMsgCountChanged`), the unknown mark when the read failed. Every read is `settingsMsgRead` (= `eventmsg.GetFresh`, never the
@@ -1530,11 +1534,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `settingsMsgTextPart(fam)`: the editor's text part with the family's prompt `WaitTextKey` and the removed notice
   `settings_edit_removed_text_default`, then the editor's media and buttons parts, `x m b`), `Fields` `{"k": <code>}`, `ReservedButtons`
   from the table and the hooks `Load` (`settingsMsgLoad(ev)`: the row of `(event, group)`, `TextIsDefault` when there is no text, `Silent`
-  from the row), `Draw` (`renderSettingsMsgEvent`), `Remove` (`settingsMsgRemove(ev)`) and `Write` (`settingsMsgWrite(ev)`); `he` redraws
+  from the row), `Draw` (`renderSettingsMsgEvent`), `Remove` (`settingsMsgRemove(ev)`), `Write` (`settingsMsgWrite(ev)`), `Preview`
+  (`settingsMsgPreview(ev)`) and `PreviewHeaderKey` `settings_msg_preview_header`; `he` redraws
   through `settingsEditRedraw` of that definition. `settingsMsgDefByFields` resolves a press's `k` to its definition and is false without
   `c`. The editor on an event screen (plan 20-08, MSG-06, D-20 to D-22): the page actions `hs` (Set), `hr` (Remove) and `hc` (Cancel)
   are the editor's own, taken from `settingsEditResolvedActions(settingsMsgEditCodes, []string{"k"}, settingsMsgDefByFields)`
-  (`settingsMsgEditActions`; the preview codes `hv` and `hf` are not registered until plan 20-09), so their fields are exactly `t` (a part
+  (`settingsMsgEditActions`, which also takes the previews `hv` and `hf` from the same map), so their fields are exactly `t` (a part
   of the resolved definition) and `k`, a group menu's press (`u` in place of `c`) or an unknown `k` or `t` is an invalid request in step 1
   before any lookup, and each button is 42 bytes at a 14-character chat ID (`a=hs&c=<chat>&k=bn&t=x`). Set and Remove need
   `settingsRightChangeInfo`, Cancel only `settingsRightAdmin`. Set writes the owner's one wait (page `h` + code + `g`, part `x`, `m` or
@@ -1557,7 +1562,25 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   screens with the admin check alone, the live creator) and `TestSettingsDriftMessagesEdit` (a text stored through the repository is drawn
   and counted Custom, a page Remove and a typed save are what the send path's cached `eventMessagesLookup` reads at once, opening every
   screen writes nothing) stand in for a parity test, beside `TestSettingsMessagesSet`, `TestSettingsMessagesRemove` and
-  `TestSettingsMessagesTyped` (`settings_messages_edit_test.go`). Plan 20-09 adds the previews. The Silent switch (plan 20-07, MSG-07, D-14: on, the bot still acts and
+  `TestSettingsMessagesTyped` (`settings_messages_edit_test.go`). The previews (plan 20-09, MSG-06, D-20): `hv` (Preview of one part,
+  fields exactly `t` and `k`, 42 bytes at a 14-character chat ID) and `hf` (Full preview, fields exactly `k`, 38 bytes) need only
+  `settingsRightAdmin`, so an administrator without `can_change_info` can preview. The editor's `settingsEditRunPreview` loads the
+  definition fresh, answers a stale Preview of a part that is not set with `settings_edit_nothing_to_preview` and sends nothing (an
+  event's text is previewable only while a text is stored; the default text is seen through Full preview), sends the header
+  `settings_msg_preview_header` in the presser's language, then the `Preview` hook, and answers as on Welcome (empty in a private menu, a
+  403 `settings_edit_preview_need_start`, any other failure `settings_edit_preview_failed`). Full preview is built by
+  `composeEventMessage`, the send path's own composer, from the screen's stored parts and `settingsMsgPreviewReply`: the presser is the
+  punished member and the admin (`{admin}` their full name, never "an admin"), the reason is `settings_msg_sample_reason` and, for
+  `/tban` and `/tmute` (`Timed`), the duration is `settingsMsgSampleDuration` (`2 hours`, the untranslated form a timed reply shows) and
+  `{until}` `settingsMsgSampleSpan` (2 h) from now in the chat's zone, the default text is the event's own `Default` builder, all in the
+  group's language (`lang.GetGroupLanguage`), and it is sent by `media.SendGreetingMessage` to `query.From.Id` only, with no reply target
+  and no topic. The reply carries no options, so no bot action button is composed (the Unban and Unmute buttons are live callbacks that
+  must never reach a private chat: the one stated difference from the group's message), and an unmute preview has no lockdown note.
+  Preview text is the stored text filled the same way (`renderEventText`) with no keyboard; Preview media and Preview buttons are the
+  editor's own (`settingsEditPreviewMediaAlone`, `settingsEditPreviewButtonsAlone` with the stored buttons alone). A preview ignores Silent
+  (it shows the message the event would post), never posts in the group, writes no row, queues no deletion and makes no wait; a `{rules}`
+  token reads the group's rules as the send path does (which creates an empty rules row for a group without one, the join path's own side
+  effect). `TestSettingsMessagesPreview` (`settings_messages_preview_test.go`) holds it. The Silent switch (plan 20-07, MSG-07, D-14: on, the bot still acts and
   posts nothing in the group for that event; the default is off) is the page action `hq` (`settingsActMsgSilent`), fields exactly `k` and
   `v`, its `Validate` (`settingsMsgSilentFields`) the private owner field `c`, a known event and `v` exactly `0` or `1`
   (`settingsEditSwitchValue`), so a forged `v`, an unknown `k`, an extra field or a group menu's `u` is an invalid request in step 1 before

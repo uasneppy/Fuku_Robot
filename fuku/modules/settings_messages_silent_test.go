@@ -43,7 +43,7 @@ func settingsMsgSilentToggle(t *testing.T, keyboard [][]gotgbot.InlineKeyboardBu
 // settingsMsgWantSilentScreen fails the test unless text and keyboard are the screen of the event code with
 // the Silent switch drawn in the given state: the line with the state word, the hint, and a full-width toggle
 // with the state icon that targets the opposite state, below the three part rows ([Set] or [Set | Remove])
-// and above Back and Close.
+// and the preview rows (one or two, the last ending with Full preview) and above Back and Close.
 func settingsMsgWantSilentScreen(t *testing.T, text string, keyboard [][]gotgbot.InlineKeyboardButton, code string, on bool) {
 	t.Helper()
 	word, icon, target := staffMarker("common_status_off"), "❌", "1"
@@ -57,17 +57,28 @@ func settingsMsgWantSilentScreen(t *testing.T, text string, keyboard [][]gotgbot
 		t.Errorf("the %s screen %q lacks the Silent hint", code, text)
 	}
 	widths := settingsListRowWidths(keyboard)
-	if len(widths) != 5 || widths[3] != 1 || widths[4] != 2 {
-		t.Fatalf("the %s screen rows = %v, want three part rows, the toggle and Back and Close", code, widths)
+	last := len(widths) - 1
+	if len(widths) < 6 || len(widths) > 7 || widths[last-1] != 1 || widths[last] != 2 {
+		t.Fatalf("the %s screen rows = %v, want three part rows, one or two preview rows, the toggle and Back and Close", code, widths)
 	}
 	for i := range 3 {
 		if widths[i] < 1 || widths[i] > 2 || settingsButtonFields(t, keyboard[i][0])["a"] != settingsActMsgSet {
 			t.Errorf("row %d of the %s screen is not a part row: %+v", i, code, keyboard[i])
 		}
 	}
+	for i := 3; i < last-1; i++ {
+		for _, button := range keyboard[i] {
+			if a := settingsButtonFields(t, button)["a"]; a != settingsActMsgPreview && a != settingsActMsgFull {
+				t.Errorf("row %d of the %s screen is not a preview row: %+v", i, code, keyboard[i])
+			}
+		}
+	}
+	if previews := keyboard[last-2]; settingsButtonFields(t, previews[len(previews)-1])["a"] != settingsActMsgFull {
+		t.Errorf("the %s screen's preview rows do not end with Full preview: %+v", code, keyboard)
+	}
 	toggle, fields := settingsMsgSilentToggle(t, keyboard)
-	if keyboard[3][0].CallbackData != toggle.CallbackData {
-		t.Errorf("the Silent toggle is not the row after the part rows: %+v", keyboard)
+	if keyboard[last-1][0].CallbackData != toggle.CallbackData {
+		t.Errorf("the Silent toggle is not the row after the preview rows: %+v", keyboard)
 	}
 	if want := staffMarker("settings_btn_msg_silent") + " " + icon; toggle.Text != want {
 		t.Errorf("the Silent toggle reads %q, want %q", toggle.Text, want)
