@@ -4,8 +4,11 @@ package modules
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"html"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -231,4 +234,82 @@ func TestSettingsMessagesPMPreview(t *testing.T) {
 	if env.redis.Exists(settingsInputKey(admin.Id)) {
 		t.Error("the previews left a wait")
 	}
+}
+
+func TestSettingsMessagesPMStates(t *testing.T) {
+	env := newSettingsMsgEnv(t)
+	ctx := context.Background()
+	// lines returns the hub's and the family list's line of the event named by nameKey, and Main's Messages line.
+	lines := func(t *testing.T, nameKey string) (string, string, string) {
+		t.Helper()
+		m := settingsMsgPrivateMenu(env, env.chat, env.admin)
+		mainText, _ := m.press("a", settingsActBack)
+		mainLine, ok := settingsMainStateLine(mainText, "settings_page_msgs")
+		if !ok {
+			t.Fatalf("Main has no Messages line: %q", mainText)
+		}
+		hubText, _ := m.press("a", settingsActOpen, "p", settingsPageMessages)
+		hubLine, ok := settingsMainStateLine(hubText, nameKey)
+		if !ok {
+			t.Fatalf("the hub has no %s line: %q", nameKey, hubText)
+		}
+		familyText, _ := m.press("a", settingsActMsgFamily, "t", "m")
+		familyLine, ok := settingsMainStateLine(familyText, nameKey)
+		if !ok {
+			t.Fatalf("the family list has no %s line: %q", nameKey, familyText)
+		}
+		return hubLine, familyLine, mainLine
+	}
+	wantLine := func(t *testing.T, what, line, state string, marked bool) {
+		t.Helper()
+		if !containsMarker(line, state) || strings.HasSuffix(line, settingsMsgPMSuffix) != marked {
+			t.Errorf("%s = %q, want %s with the private copy mark %t", what, line, state, marked)
+		}
+	}
+	wantCount := func(t *testing.T, line string, n int) {
+		t.Helper()
+		if want := staffMarker("settings_state_msg_n") + " " + strconv.Itoa(n); !strings.Contains(line, want) {
+			t.Errorf("Main's Messages line = %q, want %q", line, want)
+		}
+	}
+
+	t.Run("a copy that is on marks its line and counts", func(t *testing.T) {
+		if err := eventmsg.SetSilent(ctx, env.chat.Id, eventmsg.EventBan, eventmsg.DestPM, false, 1); err != nil {
+			t.Fatalf("switch the ban's private copy on: %v", err)
+		}
+		hub, family, main := lines(t, "settings_msg_ev_ban")
+		wantLine(t, "the hub's ban line", hub, "settings_state_default", true)
+		wantLine(t, "the family list's ban line", family, "settings_state_default", true)
+		wantCount(t, main, 1)
+		if !strings.HasSuffix(hub, " · 📩") {
+			t.Errorf("the hub's ban line %q does not end with the private copy mark", hub)
+		}
+	})
+
+	t.Run("a stored copy that is off neither marks nor counts", func(t *testing.T) {
+		settingsMsgSeedPM(t, env.chat.Id, eventmsg.EventKick, "You were kicked", false)
+		hub, family, main := lines(t, "settings_msg_ev_kick")
+		wantLine(t, "the hub's kick line", hub, "settings_state_default", false)
+		wantLine(t, "the family list's kick line", family, "settings_state_default", false)
+		wantCount(t, main, 1)
+	})
+
+	t.Run("a custom group message with its copy on counts once", func(t *testing.T) {
+		settingsMsgSeed(t, env.chat.Id, eventmsg.EventBan, "Banned {mention}", false)
+		hub, family, main := lines(t, "settings_msg_ev_ban")
+		wantLine(t, "the hub's ban line", hub, "settings_msg_state_custom", true)
+		wantLine(t, "the family list's ban line", family, "settings_msg_state_custom", true)
+		wantCount(t, main, 1)
+	})
+
+	t.Run("a failed read is the unknown mark on Main", func(t *testing.T) {
+		mreqSwap(t, &settingsMsgRead, func(context.Context, int64) (*eventmsg.Messages, error) {
+			return nil, errors.New("event messages are unreadable")
+		})
+		m := settingsMsgPrivateMenu(env, env.chat, env.admin)
+		text, _ := m.press("a", settingsActBack)
+		if line, ok := settingsMainStateLine(text, "settings_page_msgs"); !ok || !strings.HasSuffix(line, settingsUnknownState) {
+			t.Errorf("Main's Messages line with a failing read = %q, want the unknown mark", line)
+		}
+	})
 }

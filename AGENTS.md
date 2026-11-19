@@ -1514,8 +1514,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `mu` 🔇 (reserved 1, the Unmute row, `muteDefaultReply`), tmute `tm` 🔕 (`tmuteDefaultReply`, timed), unban `ub` 🔓 (`unbanDefaultReply`),
   unmute `um` 🔊 (`unmuteDefaultReply`). A family with no events is not drawn anywhere and no renderer branches on a family's or an event's code. Screens: the hub
   (`a=op&p=h`: the intro, then for each family a blank line, its icon and bold name and one `settings_main_state_line` per event with
-  its state word; one cell per family, two to a row, then Back to Main and Close, rows `[1 2]`), a family's list (`a=hl&t=<family>`:
-  its intro, the event lines and `settings_msg_list_hint`; one cell per event, two to a row, then Back to the hub and Close, rows
+  its state word, followed by the code-side mark ` · 📩` (`settingsMsgPMSuffix`, an icon and no words) while the event's private copy is on
+  (`settingsMsgPMOn`: a spec and `msgs.Resolve(event, eventmsg.DestPM).Silent` false, Phase 21 plan 21-05, D-24); one cell per family, two to
+  a row, then Back to Main and Close, rows `[1 2]`), a family's list (`a=hl&t=<family>`: its intro, the event lines (with the same mark) and
+  `settings_msg_list_hint`; one cell per event, two to a row, then Back to the hub and Close, rows
   `[2 2 2 1 2]`) and an event's screen (`a=he&k=<code>`: the event's icon and bold name, its description, then the editor's part lines
   `settings_edit_line_text`, `_media` and `_buttons` with `settingsEditStateWord`, the no-caption note for a sticker or a video
   note, then `settings_msg_line_silent` with `settingsStateWord`, for an event with a private copy spec (`eventPMSpecFor`) the private copy
@@ -1528,8 +1530,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   seven rows with nothing stored (`[1 1 1 1 1 1 2]`) and at most eight, `[2 2 2 2 2 1 1 2]` with every part set, the private content-page
   budget). An event's state (`settingsMsgStateOf`) is Silent when its Silent switch is on, Custom when it
   has a text, a media or a button, else Default (no row, or a row with nothing left, reads as the send path reads it); Main reads
-  `settings_state_default` when every event is Default and `settings_state_msg_n` (`{n} custom`) for the n events that are not
-  (`settingsMsgCountChanged`), the unknown mark when the read failed. Every read is `settingsMsgRead` (= `eventmsg.GetFresh`, never the
+  `settings_state_default` when every event is Default with its private copy off and `settings_state_msg_n` (`{n} custom`) for the n events
+  whose group message is not Default or whose private copy is on, each event counted once (`settingsMsgCountChanged`, plan 21-05, D-24;
+  `TestSettingsMessagesPMStates`), the unknown mark when the read failed. Every read is `settingsMsgRead` (= `eventmsg.GetFresh`, never the
   cache), creates nothing and returns its error: a failed read is the cannot-open edit on the hub, a family and an event screen and the
   unknown mark on Main. `hl` and `he` take exactly `t` and `k`, require the private owner field `c` in their `Validate` (so a group
   menu's press is an invalid request in step 1, before any `getChatMember`) and a family with events or a known event, and need
@@ -5356,7 +5359,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   and `TestEventPMLogsCarryIDsOnly` (`event_message_pm_failures_test.go`), the guard `TestPMCopyCallers` (`pm_copy_callers_test.go`)
   and `TestEventMsgLocaleKeys` (`fuku/i18n`), and the page's `TestSettingsMessagesPMScreen`, `TestSettingsMessagesPMSwitch`,
   `TestSettingsMessagesPMTyped`, `TestSettingsDriftMessagesPM` and `TestSettingsAuthorityMessagesPM` (`settings_messages_pm_test.go`) and
-  `TestSettingsMessagesPMPreview` (`settings_messages_pm_preview_test.go`, with `settingsMsgSeedPM`, `settingsMsgPMPreviewSeen` and
+  `TestSettingsMessagesPMPreview` and `TestSettingsMessagesPMStates` (`settings_messages_pm_preview_test.go`, with `settingsMsgSeedPM`, `settingsMsgPMPreviewSeen` and
   `settingsMsgPMPreviewContent`) (on the
   Messages page toolkit plus `settingsMsgStoredPM` and `settingsMsgOpenPM`; the `/ban` drift subtest runs on `newMessagesE2E` with
   `withFastPMCopyPacer` and waits with `waitEventPM`), on the toolkit `event_message_pm_env_test.go` (the PM copies bullet under Subsystem traps

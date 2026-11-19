@@ -412,12 +412,22 @@ func settingsMsgStateWord(tr *i18n.Translator, state settingsMsgState) string {
 	return settingsText(tr, "settings_state_default")
 }
 
-// settingsMsgCountChanged counts the events of every family whose state is not Default (Custom or Silent).
+// settingsMsgPMOn reports whether ev's private copy is switched on: the event has a private copy spec and its pm row,
+// resolved as the send path resolves it (no row is a copy that is off), is not Silent.
+func settingsMsgPMOn(msgs *eventmsg.Messages, ev settingsMsgEvent) bool {
+	if _, spec := eventPMSpecFor(ev.Key); !spec {
+		return false
+	}
+	return !msgs.Resolve(ev.Key, eventmsg.DestPM).Silent
+}
+
+// settingsMsgCountChanged counts the events of every family whose group message is not Default (Custom or Silent) or
+// whose private copy is on (D-24), each event once.
 func settingsMsgCountChanged(msgs *eventmsg.Messages) int {
 	n := 0
 	for _, fam := range settingsMsgFamilies {
 		for _, ev := range fam.Events {
-			if settingsMsgStateOf(msgs, ev) != settingsMsgDefault {
+			if settingsMsgStateOf(msgs, ev) != settingsMsgDefault || settingsMsgPMOn(msgs, ev) {
 				n++
 			}
 		}
@@ -433,8 +443,8 @@ func settingsMsgReadNow(chatID int64) (*eventmsg.Messages, error) {
 }
 
 // settingsMsgMainState is the Messages line of Main: one fresh database read and no Telegram call. Default
-// when no event is customised, "{n} custom" otherwise, the unknown mark when the read failed. It is called
-// only in a private menu (PrivateOnly).
+// when no event is customised and no private copy is on, "{n} custom" otherwise (settingsMsgCountChanged), the
+// unknown mark when the read failed. It is called only in a private menu (PrivateOnly).
 func settingsMsgMainState(_ *gotgbot.Bot, tr *i18n.Translator, group *gotgbot.Chat) (string, bool) {
 	msgs, err := settingsMsgReadNow(group.Id)
 	if err != nil {
@@ -558,9 +568,7 @@ func settingsMsgStateFromMessage(msg eventmsg.Message) settingsEditState {
 func settingsMsgStateFor(msgs *eventmsg.Messages, ev settingsMsgEvent, dest string) settingsEditState {
 	st := settingsMsgStateFromMessage(msgs.Resolve(ev.Key, dest))
 	if dest == eventmsg.DestGroup {
-		if _, spec := eventPMSpecFor(ev.Key); spec {
-			st.PMOn = !msgs.Resolve(ev.Key, eventmsg.DestPM).Silent
-		}
+		st.PMOn = settingsMsgPMOn(msgs, ev)
 	}
 	return st
 }
@@ -744,13 +752,22 @@ func settingsMsgPMPreview(ev settingsMsgEvent) func(*settingsPress, settingsEdit
 	}
 }
 
-// settingsMsgEventLines is the state lines of a family's events: event icon, name and state word.
+// settingsMsgPMSuffix is the code-side mark an event line carries while its private copy is on (D-24): an icon and no
+// words, so it needs no string.
+const settingsMsgPMSuffix = " · " + settingsMsgPMIcon
+
+// settingsMsgEventLines is the state lines of a family's events: event icon, name and the group message's state word,
+// then settingsMsgPMSuffix while the event's private copy is on.
 func settingsMsgEventLines(tr *i18n.Translator, fam settingsMsgFamily, msgs *eventmsg.Messages) []string {
 	lines := make([]string, 0, len(fam.Events))
 	for _, ev := range fam.Events {
-		lines = append(lines, settingsText(tr, "settings_main_state_line", i18n.TranslationParams{
+		line := settingsText(tr, "settings_main_state_line", i18n.TranslationParams{
 			"icon": ev.Icon, "page": settingsText(tr, ev.NameKey), "state": settingsMsgStateWord(tr, settingsMsgStateOf(msgs, ev)),
-		}))
+		})
+		if settingsMsgPMOn(msgs, ev) {
+			line += settingsMsgPMSuffix
+		}
+		lines = append(lines, line)
 	}
 	return lines
 }
