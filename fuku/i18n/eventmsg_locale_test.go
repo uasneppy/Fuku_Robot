@@ -32,6 +32,14 @@ var eventMsgLocaleLimits = map[string]eventMsgLimit{
 	"eventmsg_pm_unmute":          {140, 200},
 	"eventmsg_pm_reason":          {40, 60},
 	"eventmsg_pm_unmute_lockdown": {140, 200},
+	"eventmsg_btn_details":        {20, 28},
+	"eventmsg_pm_details_none":    {60, 90},
+}
+
+// eventMsgNotDefaultText are the eventmsg_pm_ keys that are not an event's default private text, so they do
+// not name the group: the reason line, the lockdown note and the neutral Details reply.
+var eventMsgNotDefaultText = map[string]bool{
+	"eventmsg_pm_reason": true, "eventmsg_pm_unmute_lockdown": true, "eventmsg_pm_details_none": true,
 }
 
 // eventMsgAllowedTags is the markup an eventmsg_ text may carry: <b> only, around {group} in the
@@ -85,9 +93,12 @@ func TestEventMsgLocaleKeys(t *testing.T) {
 				if got, want := staffPlaceholders(text), staffPlaceholders(englishText); !slices.Equal(got, want) {
 					failures = append(failures, fmt.Sprintf("%s: %s has placeholders %v, en.yml has %v", lang, key, got, want))
 				}
-				if strings.HasPrefix(key, "eventmsg_pm_") && key != "eventmsg_pm_reason" && key != "eventmsg_pm_unmute_lockdown" &&
-					!strings.Contains(text, "<b>{group}</b>") {
+				// The default private texts name the group; the neutral Details reply must name nothing (D-20).
+				if strings.HasPrefix(key, "eventmsg_pm_") && !eventMsgNotDefaultText[key] && !strings.Contains(text, "<b>{group}</b>") {
 					failures = append(failures, fmt.Sprintf("%s: %s does not name the group as <b>{group}</b>", lang, key))
+				}
+				if key == "eventmsg_pm_details_none" && (strings.Contains(text, "{") || strings.Contains(text, "<b>")) {
+					failures = append(failures, fmt.Sprintf("%s: %s names something, want a neutral reply", lang, key))
 				}
 			}
 

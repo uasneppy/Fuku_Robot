@@ -272,3 +272,54 @@ func eventPMNone(t *testing.T, s *botSite) {
 		t.Fatalf("sends to the member's private chat = %d (%s), want none", len(private), private[0].Method)
 	}
 }
+
+// eventPMDetailsTokens returns the tokens of every Details record stored in the site's Redis.
+func eventPMDetailsTokens(t *testing.T) []string {
+	t.Helper()
+	keys, err := cache.GetRedisClient().Keys(context.Background(), pmCopyDetailsKey("*")).Result()
+	if err != nil {
+		t.Fatalf("list the Details records: %v", err)
+	}
+	tokens := make([]string, 0, len(keys))
+	for _, key := range keys {
+		tokens = append(tokens, strings.TrimPrefix(key, pmCopyDetailsKey("")))
+	}
+	return tokens
+}
+
+// eventPMDetailsRecord reads the Details record of token straight from Redis with its time to live; a missing
+// or unparsable record fails the test.
+func eventPMDetailsRecord(t *testing.T, token string) (pmCopyDetailsRecord, time.Duration) {
+	t.Helper()
+	client := cache.GetRedisClient()
+	value, err := client.Get(context.Background(), pmCopyDetailsKey(token)).Bytes()
+	if err != nil {
+		t.Fatalf("read the Details record %s: %v", token, err)
+	}
+	var rec pmCopyDetailsRecord
+	if err := json.Unmarshal(value, &rec); err != nil {
+		t.Fatalf("decode the Details record %s: %v", token, err)
+	}
+	return rec, client.TTL(context.Background(), pmCopyDetailsKey(token)).Val()
+}
+
+// eventPMDetailsTokenOf returns the token of the Details URL in the last row of an edit's keyboard; a keyboard
+// whose last row is not one Details URL button fails the test.
+func eventPMDetailsTokenOf(t *testing.T, rows []any) string {
+	t.Helper()
+	if len(rows) == 0 {
+		t.Fatal("the edit has no keyboard rows")
+	}
+	last, _ := rows[len(rows)-1].([]any)
+	if len(last) != 1 {
+		t.Fatalf("the edit's last row = %v, want one Details button", last)
+	}
+	button, _ := last[0].(map[string]any)
+	url, _ := button["url"].(string)
+	const prefix = "https://t.me/FukuTestBot?start=" + pmCopyDetailsPrefix
+	token, ok := strings.CutPrefix(url, prefix)
+	if !ok || len(token) != pmCopyTokenLen {
+		t.Fatalf("the Details button's url = %q, want %s and 22 characters", url, prefix)
+	}
+	return token
+}

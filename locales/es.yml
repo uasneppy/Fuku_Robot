@@ -911,6 +911,8 @@ eventmsg_pm_tmute: "🔕 Has sido silenciado en <b>{group}</b> hasta el {until}.
 eventmsg_pm_unban: "🔓 Se retiró tu baneo en <b>{group}</b>. Puedes volver a unirte."
 eventmsg_pm_unmute: "🔊 Ya puedes volver a escribir en <b>{group}</b>."
 eventmsg_pm_unmute_lockdown: "El grupo está en cierre, así que podrás escribir cuando un admin lo levante."
+eventmsg_btn_details: "📩 Detalles"
+eventmsg_pm_details_none: "No hay nada que mostrar aquí."
 common_anonymous_user_error: Este comando no se puede usar en usuario anónimo.
 common_anonymous_ban_error: Este comando no se puede usar en usuario anónimo, estos usuarios solo pueden ser baneados/desbaneados.
 common_cannot_identify_user: No se puede identificar al usuario. Este comando no puede ser usado por canales.

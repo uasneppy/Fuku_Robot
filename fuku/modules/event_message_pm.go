@@ -121,17 +121,25 @@ var pmCopyJobTimeout = 60 * time.Second
 // the job), the event, the punished member's user ID (the private chat the copy goes to) and the
 // composed message, which carries no reply target and no topic. Custom says the copy was composed from
 // stored content (a text, a media or buttons of the pm row), and Fallback is then the event's default
-// private text, sent once in its place when Telegram refuses the custom copy (D-15). automatic is set by
-// offerEventPM from the event's spec, never by a caller: the job checks the per-group cap for it.
+// private text, sent once in its place when Telegram refuses the custom copy (D-15). Options are the group's
+// private copy options from the same read; GroupMsgID is the group message the group step posted (zero when
+// it was Silent or its send failed), GroupRows the keyboard rows it was sent with and DetailsLabel the Details
+// button's label in the group's language: a job that did not deliver adds the Details button from them
+// (pmCopyAddDetails). automatic is set by offerEventPM from the event's spec, never by a caller: the job
+// checks the per-group cap for it.
 type eventPMOffer struct {
-	Bot       *gotgbot.Bot
-	Chat      gotgbot.Chat
-	Event     string
-	UserID    int64
-	Message   media.GreetingMessage
-	Custom    bool
-	Fallback  string
-	automatic bool
+	Bot          *gotgbot.Bot
+	Chat         gotgbot.Chat
+	Event        string
+	UserID       int64
+	Message      media.GreetingMessage
+	Custom       bool
+	Fallback     string
+	Options      eventmsg.Options
+	GroupMsgID   int64
+	GroupRows    [][]gotgbot.InlineKeyboardButton
+	DetailsLabel string
+	automatic    bool
 }
 
 // pmCopyOutcome is the final class of a private copy job's send (D-15), decided by Telegram's error code
@@ -293,25 +301,33 @@ func offerEventPM(o eventPMOffer) {
 // replaced by the default private text, sent once as text alone, whose outcome is the job's (D-15).
 // Nothing is retried by the job: the pacer already waited out what it could. The final outcome is
 // logged with the IDs, the event, the class and the Telegram code only, at Debug for delivered and
-// blocked and at Warn otherwise. It builds no reply parameters: the copy is a new message in a private
-// chat, never a reply to the command.
+// blocked and at Warn otherwise. A copy that was not delivered then adds the Details button
+// (pmCopyAddDetails) when the group's Details option is on and the group step posted a message; a copy the
+// cap refused never gets that far (D-18). It builds no reply parameters: the copy is a new message in a
+// private chat, never a reply to the command.
 func runEventPM(ctx context.Context, o eventPMOffer) {
 	if o.automatic && !pmCopyCapAllow(ctx, o.Chat.Id) {
 		log.Debugf("[EventMessage] the private %s copy of user %d in chat %d was not sent: over the group's automatic cap, or the cap could not be counted", o.Event, o.UserID, o.Chat.Id)
 		return
 	}
-	outcome, code := pmCopySend(ctx, o, o.Message)
+	tried := o.Message
+	outcome, code := pmCopySend(ctx, o, tried)
 	if outcome == pmCopyRefused && o.Custom {
 		log.Warnf("[EventMessage] the custom private %s copy of user %d in chat %d was refused (code %d), the default was sent", o.Event, o.UserID, o.Chat.Id, code)
-		outcome, code = pmCopySend(ctx, o, media.GreetingMessage{Text: o.Fallback, MsgType: db.TEXT})
+		tried = media.GreetingMessage{Text: o.Fallback, MsgType: db.TEXT}
+		outcome, code = pmCopySend(ctx, o, tried)
 	}
 	switch outcome {
 	case pmCopyDelivered:
 		log.Debugf("[EventMessage] the private %s copy of user %d in chat %d was delivered", o.Event, o.UserID, o.Chat.Id)
+		return
 	case pmCopyBlocked:
 		log.Debugf("[EventMessage] the private %s copy of user %d in chat %d was not delivered: %s (code %d)", o.Event, o.UserID, o.Chat.Id, outcome, code)
 	default:
 		log.Warnf("[EventMessage] the private %s copy of user %d in chat %d was not delivered: %s (code %d)", o.Event, o.UserID, o.Chat.Id, outcome, code)
+	}
+	if o.Options.PMDetails && o.GroupMsgID != 0 {
+		pmCopyAddDetails(ctx, o, tried)
 	}
 }
 

@@ -1737,6 +1737,8 @@ eventmsg_pm_tmute: "🔕 आपको <b>{group}</b> में {until} तक �
 eventmsg_pm_unban: "🔓 <b>{group}</b> में आपका बैन हटा दिया गया है। आप फिर से जुड़ सकते हैं।"
 eventmsg_pm_unmute: "🔊 अब आप <b>{group}</b> में फिर से लिख सकते हैं।"
 eventmsg_pm_unmute_lockdown: "ग्रुप लॉकडाउन में है, इसलिए एडमिन के इसे हटाते ही आप लिख सकेंगे।"
+eventmsg_btn_details: "📩 विवरण"
+eventmsg_pm_details_none: "यहाँ दिखाने के लिए कुछ नहीं है।"
 
 # Database default keys
 db_default_welcome: "हेलो {first}, आप कैसे हैं?"

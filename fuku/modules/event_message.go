@@ -238,25 +238,33 @@ func (c *moderationCtx) replyEvent(r eventReply) error {
 		log.Warnf("[EventMessage] the messages of chat %d could not be read for %s, the default was sent", c.Chat.Id, r.Event)
 		return c.replySuccess(r.Default, r.Opts)
 	}
-	_, err = c.replyEventGroup(r, msgs)
-	c.offerReplyPM(r, msgs)
+	post, err := c.replyEventGroup(r, msgs)
+	c.offerReplyPM(r, msgs, post)
 	return err
 }
 
-// replyEventGroup is the group step of an event reply and returns the message it posted (nil when
-// nothing was posted). No row, or a row with no content and Silent off, is the default through
+// eventGroupPost is what the group step of a reply posted: the message (nil when nothing was posted) and the
+// keyboard rows it was sent with (the bot's own rows of the default, or a custom message's composed rows), which
+// the Details button of the private copy keeps (pmCopyAddDetails).
+type eventGroupPost struct {
+	Msg  *gotgbot.Message
+	Rows [][]gotgbot.InlineKeyboardButton
+}
+
+// replyEventGroup is the group step of an event reply and returns what it posted (no message when
+// nothing was posted) with the keyboard rows the message was sent with. No row, or a row with no content and Silent off, is the default through
 // sendSuccess (today's call); Silent posts and schedules nothing; otherwise the custom message is
 // sent as a reply to the command and queued under bot:punish_manual, the default's kind (D-15). A
 // custom message Telegram definitely refuses (eventMessageRefused) is replaced by the default, sent
 // once; any other send error is returned, as the default's send error always was.
-func (c *moderationCtx) replyEventGroup(r eventReply, msgs *eventmsg.Messages) (*gotgbot.Message, error) {
+func (c *moderationCtx) replyEventGroup(r eventReply, msgs *eventmsg.Messages) (eventGroupPost, error) {
 	row, ok := msgs.Lookup(r.Event, eventmsg.DestGroup)
 	if ok && row.Silent {
 		log.Debugf("[EventMessage] the %s message of chat %d is silent, nothing was posted", r.Event, c.Chat.Id)
-		return nil, nil
+		return eventGroupPost{}, nil
 	}
 	if !ok || !row.HasContent() {
-		return c.sendSuccess(r.Default, r.Opts)
+		return c.sendDefaultPost(r)
 	}
 
 	actor := eventActor{User: c.User, Anonymous: actorIsAnonymous(c.Ctx)}
@@ -269,12 +277,26 @@ func (c *moderationCtx) replyEventGroup(r eventReply, msgs *eventmsg.Messages) (
 	if err != nil {
 		if eventMessageRefused(err) {
 			log.Warnf("[EventMessage] the custom %s message of chat %d was refused, the default was sent", r.Event, c.Chat.Id)
-			return c.sendSuccess(r.Default, r.Opts)
+			return c.sendDefaultPost(r)
 		}
-		return nil, err
+		return eventGroupPost{}, err
 	}
 	scheduleBotMessage(sent, deletion.KindBotManual)
-	return sent, nil
+	post := eventGroupPost{Msg: sent}
+	if msg.Keyboard != nil {
+		post.Rows = msg.Keyboard.InlineKeyboard
+	}
+	return post, nil
+}
+
+// sendDefaultPost sends the default reply through sendSuccess (today's call, byte for byte) and returns it with
+// the bot's own rows it carries.
+func (c *moderationCtx) sendDefaultPost(r eventReply) (eventGroupPost, error) {
+	sent, err := c.sendSuccess(r.Default, r.Opts)
+	if err != nil {
+		return eventGroupPost{}, err
+	}
+	return eventGroupPost{Msg: sent, Rows: eventBotRows(r.Opts)}, nil
 }
 
 // offerReplyPM offers the private copy of an event reply after the group step (D-11). It offers
@@ -282,8 +304,11 @@ func (c *moderationCtx) replyEventGroup(r eventReply, msgs *eventmsg.Messages) (
 // pm row whose switch was never turned on, reads as Silent) and for a target that can never receive one
 // (pmCopySkipTarget, checked before the render). The copy is composed here, in the group's language and
 // with the group step's actor, together with the default private text a refused custom copy falls back
-// to, and sent by a job (offerEventPM), so the handler returns at once.
-func (c *moderationCtx) offerReplyPM(r eventReply, msgs *eventmsg.Messages) {
+// to, and sent by a job (offerEventPM), so the handler returns at once. The offer also carries the group's
+// private copy options, the group message the group step posted (none when it was Silent or failed) with its
+// rows, and the Details button's label in the group's language, for the Details button of a copy that is not
+// delivered.
+func (c *moderationCtx) offerReplyPM(r eventReply, msgs *eventmsg.Messages, post eventGroupPost) {
 	spec, ok := eventPMSpecFor(r.Event)
 	if !ok {
 		return
@@ -303,6 +328,14 @@ func (c *moderationCtx) offerReplyPM(r eventReply, msgs *eventmsg.Messages) {
 		UserID:  r.Target.Id,
 		Message: composeEventPM(c.Bot, c.Chat, c.Tr, spec, r, row, actor),
 		Custom:  row.HasContent(),
+		Options: msgs.Options,
+	}
+	if post.Msg != nil {
+		offer.GroupMsgID = post.Msg.MessageId
+		offer.GroupRows = post.Rows
+	}
+	if offer.Options.PMDetails {
+		offer.DetailsLabel, _ = c.Tr.GetString("eventmsg_btn_details")
 	}
 	if offer.Custom {
 		offer.Fallback = eventPMDefaultText(c.Tr, spec, c.Chat, r.Values, r.PMNote)

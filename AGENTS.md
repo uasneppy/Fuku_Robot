@@ -542,6 +542,16 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`TestSettingsStartDeepLinkSameAnswer`). Every refusal is a plain reply with no keyboard. The Main page is sent to the
   private chat in the user's language, its buttons carrying `c` (the group's chat ID) and no opener field. A `/start`
   with extra words (`settings_ -100`) has an unexpected argument count, so `start` ignores it and the handler never runs.
+- The Details button's deep link is `RegisterDeepLinkHandler("pmcopy_", pmCopyDetailsDeepLink)` (`event_message_pm_details.go`,
+  plan 21-06, PMSG-04, D-20), registered from that file's `init`, so `help.go` and `deeplink_router.go` are not edited; deep
+  links run in private chats only. The payload is attacker-controlled and authorizes nothing: `parsePMCopyDetails` accepts
+  exactly `pmcopy_` and 22 characters of `A-Za-z0-9_-`, the record is read by the token alone (`pmCopyDetailsGet`, Data:
+  `fuku:pmcopy:det:<token>`) and the stored copy is sent, with `media.SendGreetingMessage` (no header, no reply target), to the
+  opener's private chat only when the record's `u` equals the opener's user ID. A malformed payload, an unknown or expired
+  token, a record that does not parse, a Redis error and an opener the record does not name all get one neutral reply,
+  `eventmsg_pm_details_none` in the opener's language (`msg.Reply` inside the handler), which names no group, event or person,
+  so nobody can learn whether a token exists or whose it is. The punished person may open it again until the record expires.
+  No line logs the token, the copy or a name (`TestPMCopyDetailsDeepLink`).
 
 ## Callbacks
 
@@ -2642,6 +2652,15 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   Only the job of an event whose spec is `Automatic` reads it; manual events are never counted (the pool and the pacer bound
   them). It fails closed: with no Redis client or on any Redis error an automatic copy is not sent. It sits outside the
   `fuku:cache:` prefix, so `CLEAR_CACHE_ON_STARTUP` keeps it.
+- `fuku:pmcopy:det:<token>` is the Details record of a private copy that was not delivered (`pmCopyDetailsKey`, plan 21-06,
+  D-19): the JSON of `pmCopyDetailsRecord` (`u` the punished user's ID, `c` the chat ID, `e` the event, `t` the text, `f` the
+  file ID, `y` the media type, `b` the URL button rows: the copy exactly as the job tried to send it, never naming the Staff
+  Group or another group), `SET NX` for `pmCopyDetailsTTL` (48 h, longer than the 24 h Bot messages cap, so it outlives every
+  group message that can carry its button) under `raidRedisTimeout`. The token is 16 bytes of `crypto/rand` in unpadded
+  base64url (22 characters, `pmCopyNewToken`), never derived from an ID, and never logged. It is written only by a job that did
+  not deliver its copy with the group's Details option on (`pmCopyAddDetails`) and read only by the `pmcopy_` deep link
+  (`pmCopyDetailsGet`); a view deletes nothing. Redis only (no Redis, no record and no button); it sits outside the
+  `fuku:cache:` prefix, so `CLEAR_CACHE_ON_STARTUP` keeps it.
 - `fuku:delete:norights:<chat>` is the 10 minute negative latch of a chat the bot cannot act in (`deletionLatchKey`,
   `deletionLatched`, `deletionSetLatch`, `deletionLatchTTL`), outside the `fuku:cache:` prefix so `CLEAR_CACHE_ON_STARTUP`
   keeps it. Its value is the scope: `gone` (the bot is not in the chat, was kicked, or the chat is gone or was upgraded: stops
@@ -3401,8 +3420,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `TestEventMessageSilentVariants` and `TestEventMessageAfterAnonymousProof` (`event_message_sites_test.go`) hold it (toolkit
   `event_message_env_test.go`: `eventMsgCleanup`, `eventMsgStore`, `eventMsgStoreRow`, `eventMsgFailingClient` with
   `eventMsgRefuseOnce`, on plan 20-01's `newModerationGoldenSite`). Since Phase 21 the group part is `replyEventGroup` (the
-  same code, returning the message it posted) and `replyEvent` ends with the private copy offer (`offerReplyPM`, the PM
-  copies bullet below), which never changes the group reply or its error.
+  same code, returning what it posted as an `eventGroupPost`: the message and the keyboard rows it was sent with, the default's
+  `eventBotRows` through `sendDefaultPost` or a custom message's composed rows, none when Silent or the send failed) and
+  `replyEvent` ends with the private copy offer (`offerReplyPM`, the PM copies bullet below), which never changes the group
+  reply or its error.
 - PM copies (`event_message_pm.go`, Phase 21): an event has a private copy when `registerEventPM(event, eventPMSpec{DefaultKey,
   Automatic})` registered a spec for it in an `init` (it panics on an event `eventmsg.ValidEvent` refuses, an empty key or a
   second registration; `eventPMSpecFor` reads the table): the seven manual events, `Automatic` false, each with its
@@ -3445,7 +3466,25 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`TestCommandRepliesStayInsideTheHandler` keeps its empty allow-list). No log line carries a stored or typed text, a
   caption, a button, a file ID, a reason or a name: the chat ID, the user ID, the event, the outcome class
   (`pmCopyOutcome.String`) and the Telegram code alone (`pmCopyErrCode`, 0 for none, never the error's text); delivered and
-  blocked log at Debug, refused, busy and unknown at Warn. `TestEventPMEndToEnd`, `TestEventPMSpecs`, `TestEventPMDefaultTexts` and `TestEventPMComposition`
+  blocked log at Debug, refused, busy and unknown at Warn. The Details button (plan 21-06, PMSG-04, D-19,
+  `event_message_pm_details.go`): `offerReplyPM` also puts on the offer the group's options (`eventPMOffer.Options`, from the
+  same read), the group message the group step posted (`GroupMsgID`, zero when it was Silent or its send failed) with the rows
+  it was sent with (`GroupRows`) and the button's label in the group's language (`DetailsLabel`, `eventmsg_btn_details`, read
+  only while the option is on). A job whose final outcome is not delivered (blocked, refused, busy or unknown, after the
+  fallback of a refused custom copy) calls `pmCopyAddDetails(ctx, o, tried)` when `Options.PMDetails` holds and `GroupMsgID`
+  is set; a shed or capped copy never gets there. It adds nothing, with one Debug line naming the chat and the user, when
+  there is no Redis (no record can exist), the bot has no username (`pmCopyBotUsername`, the cached `getBotUsername`), one more
+  button would pass Telegram's 100 (`pmCopyMaxButtons`) or the record cannot be stored; otherwise it stores the copy exactly
+  as the job tried to send it (`tried`: the composed copy, or the default text after a refused custom copy) under a fresh
+  token (Data: `fuku:pmcopy:det:<token>`) and makes one `editMessageReplyMarkup` of the group message through `pmCopyPaced`
+  with a fresh copy of its rows in their order (the bot's Unban or Unmute row first, then the custom and `{rules}` buttons)
+  and one more row with one URL button, `https://t.me/<bot username>?start=pmcopy_<token>`. The edit is no reply and carries
+  no reply parameters. A failed edit (the message already deleted by its Bot messages timer, a 429, a 5xx) is one Warn line
+  with the chat ID and the Telegram code and changes nothing else; the record then expires on its own. Accepted race: an
+  admin who presses Unban or Unmute between the group message and the edit can see that row drawn again by the edit, and a
+  second press finds the member already unbanned or unmuted. Stated limit: a banned person cannot read the group, so for a
+  ban the button mostly serves a public group's visitor who is the punished person. With the option off, or the copy
+  delivered, no request is added (`TestLegacyModerationRequests` passes unedited). `TestEventPMEndToEnd`, `TestEventPMSpecs`, `TestEventPMDefaultTexts` and `TestEventPMComposition`
   (`event_message_pm_test.go`), `TestEventPMFailures` (`event_message_pm_failures_test.go`: the classification table, a 403
   of either wording with one request and the golden group reply, the refused custom copy and its default, the refused
   default, busy, unknown and the impossible targets), `TestEventPMLimits` (the full pool, the automatic cap per chat and
@@ -5356,7 +5395,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   language sweeps run over pure renders, a dispatcher test uses one environment and the worst state.
 - Phase 21 test families (the private copies of event messages): `TestEventPMEndToEnd`, `TestEventPMSpecs`, `TestEventPMDefaultTexts`
   and `TestEventPMComposition` (`event_message_pm_test.go`), `TestEventPMFailures`, `TestEventPMLimits`, `TestEventPMPacerIndependent`
-  and `TestEventPMLogsCarryIDsOnly` (`event_message_pm_failures_test.go`), the guard `TestPMCopyCallers` (`pm_copy_callers_test.go`)
+  and `TestEventPMLogsCarryIDsOnly` (`event_message_pm_failures_test.go`), `TestEventPMDetails` (the button added after a blocked
+  copy with the group message's rows kept, a custom group message's rows kept, nothing for the option off, a delivered copy, a
+  Silent or failed group step, no username, no Redis, a refused custom copy whose default was delivered, 100 buttons and a capped
+  copy, and a failed edit that changes nothing else) and `TestPMCopyDetailsDeepLink` (the punished person sees the stored copy and
+  can open it again, anyone else, a forged payload, an unknown token, an unparsable record and a Redis error get the one neutral
+  reply) in `event_message_pm_details_test.go` with the toolkit's `eventPMDetailsTokens`, `eventPMDetailsRecord` and
+  `eventPMDetailsTokenOf`, the guard `TestPMCopyCallers` (`pm_copy_callers_test.go`)
   and `TestEventMsgLocaleKeys` (`fuku/i18n`), and the page's `TestSettingsMessagesPMScreen`, `TestSettingsMessagesPMSwitch`,
   `TestSettingsMessagesPMTyped`, `TestSettingsDriftMessagesPM` and `TestSettingsAuthorityMessagesPM` (`settings_messages_pm_test.go`) and
   `TestSettingsMessagesPMPreview` and `TestSettingsMessagesPMStates` (`settings_messages_pm_preview_test.go`, with `settingsMsgSeedPM`, `settingsMsgPMPreviewSeen` and
