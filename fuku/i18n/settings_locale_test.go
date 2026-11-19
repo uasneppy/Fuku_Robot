@@ -614,9 +614,9 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	// seven event names and descriptions, the two state words and the group note.
 	"settings_page_msgs":            {14, 18},
 	"settings_state_msg_n":          {16, 22},
-	"settings_msg_intro":            {240, 336},
+	"settings_msg_intro":            {285, 336},
 	"settings_msg_fam_manual":       {16, 18},
-	"settings_msg_fam_manual_intro": {160, 224},
+	"settings_msg_fam_manual_intro": {230, 270},
 	"settings_msg_list_hint":        {45, 63},
 	"settings_msg_ev_ban":           {16, 18},
 	"settings_msg_ev_tban":          {16, 18},
@@ -647,6 +647,14 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	// reason a preview fills in.
 	"settings_msg_preview_header": {130, 182},
 	"settings_msg_sample_reason":  {30, 42},
+	// The private copy of an event (Phase 21, plan 21-04): its screen's title and intro, the line that says
+	// whether it is on, its hint, the full-width switch and the event screen's row that opens it.
+	"settings_msg_pm_title":    {20, 28},
+	"settings_msg_pm_intro":    {200, 280},
+	"settings_msg_line_pm":     {28, 40},
+	"settings_msg_hint_pm":     {260, 364},
+	"settings_btn_msg_pm":      {20, 26},
+	"settings_btn_msg_pm_open": {24, 34},
 }
 
 // settingsAlertKeys are shown as answerCallbackQuery alerts: plain text, no tag, at most
@@ -938,7 +946,10 @@ func TestSettingsLabelLengths(t *testing.T) {
 	phase18Toggles := []string{"settings_btn_sw_reports", "settings_btn_sw_aispam", "settings_btn_sw_approve", "settings_btn_anon_toggle"}
 	// The full-width toggles that carry the state icon alone in place of {state} (Phase 20, plan 20-07: an event
 	// screen's Silent switch).
-	iconToggles := []string{"settings_btn_msg_silent"}
+	iconToggles := []string{"settings_btn_msg_silent", "settings_btn_msg_pm"}
+	// The full-width buttons whose label is the whole button (Phase 21, plan 21-04: the event screen's row that
+	// opens the private copy), at most 40 code points.
+	fullWidthLabels := []string{"settings_btn_msg_pm_open"}
 	// The editor's two-column buttons (UI-SPEC rows 28 to 38): at most 20 code points as
 	// written, icon included.
 	editorButtons := []string{
@@ -1098,6 +1109,12 @@ func TestSettingsLabelLengths(t *testing.T) {
 					if runes := utf8.RuneCountInString(rendered); runes > accessToggle {
 						t.Errorf("%s: toggle %q (%s) has %d characters, ceiling %d", lang, rendered, key, runes, accessToggle)
 					}
+				}
+			}
+
+			for _, key := range fullWidthLabels {
+				if runes := utf8.RuneCountInString(settingsLocaleString(t, lang, data, key)); runes > accessToggle {
+					t.Errorf("%s: full-width button %s has %d characters, ceiling %d", lang, key, runes, accessToggle)
 				}
 			}
 
@@ -1355,6 +1372,8 @@ func TestSettingsEditLocaleTokens(t *testing.T) {
 		{"settings_edit_line_clean_goodbye", []string{"{state}"}},
 		{"settings_msg_line_silent", []string{"{state}"}},
 		{"settings_btn_msg_silent", []string{"{state}"}},
+		{"settings_msg_line_pm", []string{"{state}"}},
+		{"settings_btn_msg_pm", []string{"{state}"}},
 		{settingsMsgWaitTextManualKey, []string{"{max}"}},
 	}
 
