@@ -256,3 +256,123 @@ func TestSettingsMessagesRemove(t *testing.T) {
 		t.Errorf("the redraw after a failed Remove lost the text's Remove button: %+v", keyboard)
 	}
 }
+
+func TestSettingsMessagesTyped(t *testing.T) {
+	env := newSettingsMsgEnv(t)
+	listEditAdmin(env.settingsEnv, env.chat, env.admin, true)
+	user := env.admin
+
+	// wantRefusal fails the test unless exactly one reply was sent since before, carrying the refusal key and
+	// the still-waiting line, with a Cancel of the event, and the wait is kept.
+	wantRefusal := func(t *testing.T, before int, code, key string) {
+		t.Helper()
+		settingsEditWantReply(t, env.settingsEnv, user, before, key, "settings_edit_still_waiting")
+		_, keyboard := settingsMsgLastSent(t, env, user)
+		if _, ok := settingsMsgButtonWith(t, keyboard, "a", settingsActMsgCancel, settingsMsgEventField, code); !ok {
+			t.Errorf("the refusal carries no Cancel with k=%s: %+v", code, keyboard)
+		}
+		settingsEditWaitKept(t, env.settingsEnv, user)
+	}
+
+	t.Run("a typed text is stored and the send path reads it at once", func(t *testing.T) {
+		if got := settingsMsgSendPathText(t, env.chat.Id, eventmsg.EventBan); got != "" {
+			t.Fatalf("the send path reads a ban text %q before any save", got)
+		}
+		m := settingsMsgSetWait(t, env, user, "bn", settingsEditPartText)
+		before := settingsEditSentCount(env.settingsEnv, user)
+		sendPrivateMessage(env.settingsEnv, user, gotgbot.Message{
+			Text: "Bye {first}, {reason}", Entities: []gotgbot.MessageEntity{{Type: "bold", Offset: 0, Length: 3}},
+		})
+		const want = "<b>Bye</b> {first}, {reason}"
+		if row, _ := settingsMsgStored(t, env.chat.Id, eventmsg.EventBan); row.Text != want || row.UpdatedBy != user.Id {
+			t.Errorf("the ban row is %+v, want the text %q written by %d", row, want, user.Id)
+		}
+		settingsEditWantReply(t, env.settingsEnv, user, before, "settings_edit_saved_text", "settings_msg_ev_ban")
+		page, keyboard := settingsMsgLastSent(t, env, user)
+		if line := staffMarker("settings_edit_line_text") + " " + staffMarker("settings_edit_state_text_len"); !strings.Contains(page, line) {
+			t.Errorf("the saved page %q does not read the text as Set", page)
+		}
+		if _, ok := settingsMsgButtonWith(t, keyboard, "a", settingsActMsgRemove, "t", settingsEditPartText, settingsMsgEventField, "bn"); !ok {
+			t.Errorf("the saved page does not offer Remove for the text: %+v", keyboard)
+		}
+		if closed, closedKeyboard := env.lastEdit(user.Id, m.msgID); !containsMarker(closed, "settings_edit_prompt_closed") || len(closedKeyboard) != 0 {
+			t.Errorf("the prompt was edited to %q with %+v, want the closed line and no keyboard", closed, closedKeyboard)
+		}
+		settingsEditWaitGone(t, env.settingsEnv, user)
+		if got := settingsMsgSendPathText(t, env.chat.Id, eventmsg.EventBan); got != want {
+			t.Errorf("the send path reads %q after the save, want %q", got, want)
+		}
+	})
+
+	t.Run("a typed photo is stored and its caption ignored", func(t *testing.T) {
+		settingsMsgSetWait(t, env, user, "bn", settingsEditPartMedia)
+		before := settingsEditSentCount(env.settingsEnv, user)
+		photo := settingsMediaItemID("photo", "ban-photo")
+		photo.Caption = "a caption"
+		sendPrivateMessage(env.settingsEnv, user, photo)
+		if row, _ := settingsMsgStored(t, env.chat.Id, eventmsg.EventBan); row.FileID != "ban-photo" || row.MediaType != db.PHOTO {
+			t.Errorf("the ban media is %q type %d, want ban-photo as a photo", row.FileID, row.MediaType)
+		}
+		settingsEditWantReply(t, env.settingsEnv, user, before, "settings_edit_saved_media", "settings_edit_caption_ignored")
+		settingsEditWaitGone(t, env.settingsEnv, user)
+	})
+
+	t.Run("a typed button line is stored as one button", func(t *testing.T) {
+		settingsMsgSetWait(t, env, user, "bn", settingsEditPartButtons)
+		before := settingsEditSentCount(env.settingsEnv, user)
+		sendPrivateMessage(env.settingsEnv, user, gotgbot.Message{Text: "[Rules](buttonurl://https://example.com/rules)"})
+		row, _ := settingsMsgStored(t, env.chat.Id, eventmsg.EventBan)
+		if len(row.Buttons) != 1 || row.Buttons[0].Name != "Rules" || row.Buttons[0].Url != "https://example.com/rules" {
+			t.Errorf("the ban buttons are %+v, want one Rules button", row.Buttons)
+		}
+		settingsEditWantReply(t, env.settingsEnv, user, before, "settings_edit_saved_buttons")
+		settingsEditWaitGone(t, env.settingsEnv, user)
+	})
+
+	refusals := []struct {
+		name, code, part, key string
+		msg                   gotgbot.Message
+	}{
+		{"a text with a button line", "bn", settingsEditPartText, "settings_edit_refuse_text_buttons",
+			gotgbot.Message{Text: "Bye\n[a](buttonurl://https://example.com)"}},
+		{"a javascript link", "bn", settingsEditPartButtons, "settings_edit_refuse_button_url",
+			gotgbot.Message{Text: "[a](buttonurl://javascript:alert)"}},
+		{"100 buttons with the Unban row", "bn", settingsEditPartButtons, "settings_edit_refuse_buttons_limit",
+			gotgbot.Message{Text: settingsEditButtonLines(100, 1000)}},
+		{"a slash text", "bn", settingsEditPartText, "settings_edit_refuse_slash", gotgbot.Message{Text: "/notacommandzz now"}},
+	}
+	for _, tc := range refusals {
+		t.Run("refused: "+tc.name, func(t *testing.T) {
+			stored, _ := settingsMsgStored(t, env.chat.Id, eventmsg.EventBan)
+			settingsMsgSetWait(t, env, user, tc.code, tc.part)
+			before := settingsEditSentCount(env.settingsEnv, user)
+			sendPrivateMessage(env.settingsEnv, user, tc.msg)
+			wantRefusal(t, before, tc.code, tc.key)
+			if row, _ := settingsMsgStored(t, env.chat.Id, eventmsg.EventBan); !row.UpdatedAt.Equal(stored.UpdatedAt) {
+				t.Errorf("the refused message wrote the ban row: %+v", row)
+			}
+		})
+	}
+
+	t.Run("refused: a media while the stored text is over 1024", func(t *testing.T) {
+		settingsMsgSeed(t, env.chat.Id, eventmsg.EventTimedBan, strings.Repeat("x", 1100), false)
+		settingsMsgSetWait(t, env, user, "tb", settingsEditPartMedia)
+		before := settingsEditSentCount(env.settingsEnv, user)
+		sendPrivateMedia(env.settingsEnv, user, "photo")
+		wantRefusal(t, before, "tb", "settings_edit_refuse_media_text_long")
+		if row, _ := settingsMsgStored(t, env.chat.Id, eventmsg.EventTimedBan); row.FileID != "" {
+			t.Errorf("the refused photo was stored as %q", row.FileID)
+		}
+	})
+
+	t.Run("an album saves its first item once", func(t *testing.T) {
+		settingsMsgSetWait(t, env, user, "ub", settingsEditPartMedia)
+		before := settingsEditSentCount(env.settingsEnv, user)
+		sendPrivateAlbum(env.settingsEnv, user, settingsMediaAlbumOf(3), false)
+		if row, _ := settingsMsgStored(t, env.chat.Id, eventmsg.EventUnban); row.FileID != "album-1" || row.MediaType != db.PHOTO {
+			t.Errorf("the unban media is %q type %d, want the album's first photo", row.FileID, row.MediaType)
+		}
+		settingsEditWantReply(t, env.settingsEnv, user, before, "settings_edit_saved_media", "settings_edit_album_cut")
+		settingsEditWaitGone(t, env.settingsEnv, user)
+	})
+}
