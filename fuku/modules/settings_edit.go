@@ -272,7 +272,7 @@ var settingsEditExtraDefs = map[string]settingsEditPageDef{}
 // registerSettingsEditDef adds a hooked definition the editor serves outside the three built-in pages.
 // It panics at init on an empty key, a key of a built-in page, a duplicate key, nil hooks or a nil Load or
 // Draw. It never reads the settings page registry, because init order across files is not fixed.
-func registerSettingsEditDef(def settingsEditPageDef) { //nolint:unused // first production caller arrives in plan 20-06
+func registerSettingsEditDef(def settingsEditPageDef) {
 	if def.Key == "" {
 		panic("settings editor: definition registered without a key")
 	}

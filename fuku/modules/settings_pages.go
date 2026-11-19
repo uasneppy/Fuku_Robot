@@ -379,6 +379,9 @@ type settingsPage struct {
 	// without calling Open, so no page code and no database read runs there. A private menu calls
 	// MainState and Open as for every page.
 	PrivateOnly bool
+	// PrivateNoteKey is the locale key of the one line a PrivateOnly page shows in a menu opened in the
+	// group, in place of its own screen. Empty keeps settings_entries_group_note, the list pages' line.
+	PrivateNoteKey string
 }
 
 // settingsControl is one toggle or setting of a page.
