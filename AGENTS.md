@@ -2497,6 +2497,20 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   cards use the Staff Group's; a lockdown alert copy uses its destination's (`lockdownSlotClock`: the Staff Group's for a
   Staff Group copy, the locked group's for the log channel copy), and the stored `body` keeps the time it was posted
   with. Log lines, file names, Redis hour stamps, stored values and the fban export's RFC 3339 dates stay UTC.
+- `chat_conversations` (migration 20261119120000, Phase 20) is one group's conversation setting: `chat_id` primary key,
+  `enabled` (no `default:` tag in the model, so a Go false is written), `provider` (`anthropic` or `google`,
+  `chk_chat_conversations_provider`), `audience` (0 everyone, 1 admins and approved members,
+  `chk_chat_conversations_audience`), `updated_by`, `updated_at`, inline constraints and no foreign key. A chat without a
+  row means off, anthropic, everyone. It is read through `cache.GetFromCacheOrLoad` under `cache.CacheKey("chat_conv",
+  chat)` (`chatconv.Get`, which creates nothing and returns its error; `GetFresh` is the same query without the cache),
+  and the prefix is listed in `skipLocal`, because switching conversations off must stop replies on every replica at the
+  next message. `SetEnabled`, `SetProvider` and `SetAudience` are column-targeted upserts (`ON CONFLICT (chat_id) DO
+  UPDATE` of their own column, `updated_by` and `updated_at`) that refuse a value outside the stored ones before any
+  write and drop the key. It is never part of backup, export, import or reset, so a restored backup can never switch
+  conversations on (`TestChatConversationsStayOutOfBackup`). The apply functions `applyChatEnabled`, `applyChatProvider`
+  and `applyChatAudience` (`fuku/modules/chat_settings.go`, write seam `chatConvWrites`, typed `chatApplyResult`) judge
+  no person's rights; turning conversations off also deletes the chat's transcript `fuku:chat:{<chat>}:h` and its set of
+  the feature's message IDs `fuku:chat:{<chat>}:mine` (best effort; a failed write deletes nothing).
 - `UpdateRecord` skips zero values. Use `UpdateRecordWithZeroValues` to write `false`/`0`/`""`. Both return
   `gorm.ErrRecordNotFound` when no row matched.
 - Check `TableName()` before raw SQL: `ConnectionSettings→connection` (per user), `ConnectionChatSettings→
@@ -4545,6 +4559,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   database `warns_settings.warn_mode` accepts NULL, the empty mode and the five modes and refuses any other value with SQLSTATE
   23514, and exactly one CHECK mentions the column, `chk_warn_mode`; PostgreSQL only, it skips locally;
   `TestWarnModeCheckMigrationStatements` is its database-free half and runs in `make test`).
+  The Phase 20 guarantees are `TestChatConversationSettings` (`./fuku/db/chatconv`: column-targeted upserts that never
+  clobber each other, a Go false written, the two checks refusing values outside the stored ones; it also runs on SQLite
+  in `make test`) and `TestChatConversationMigrationDefaults` (`./fuku/db/migrations`: the statement runs twice, a row with
+  only `chat_id` reads off, anthropic, 0, and both named checks refuse with SQLSTATE 23514; PostgreSQL only, it skips
+  locally; `TestChatConversationMigrationStatements` is its database-free half).
   The forward blocklist guarantees (quick task 261113-tjj) are `TestStaffForwardBlockConstraints` (`./fuku/db/staff`: the
   unique key, `chk_staff_forward_blocks_source` and `chk_staff_forward_block_action` refuse a duplicate, a non-negative
   source and an action outside the five; it also runs on SQLite in `make test`) and `TestStaffForwardBlockMigrationDefaults`
