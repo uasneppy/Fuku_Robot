@@ -610,6 +610,31 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_tz_city_tbilisi":    {12, 12},
 	"settings_tz_city_newyork":    {12, 12},
 	"settings_tz_city_utc":        {12, 12},
+	// The Messages page (Phase 20, plan 20-06): its name, Main state, intro, family, list hint, the
+	// seven event names and descriptions, the two state words and the group note.
+	"settings_page_msgs":            {14, 18},
+	"settings_state_msg_n":          {16, 22},
+	"settings_msg_intro":            {240, 336},
+	"settings_msg_fam_manual":       {16, 18},
+	"settings_msg_fam_manual_intro": {160, 224},
+	"settings_msg_list_hint":        {45, 63},
+	"settings_msg_ev_ban":           {16, 18},
+	"settings_msg_ev_tban":          {16, 18},
+	"settings_msg_ev_kick":          {16, 18},
+	"settings_msg_ev_mute":          {16, 18},
+	"settings_msg_ev_tmute":         {16, 18},
+	"settings_msg_ev_unban":         {16, 18},
+	"settings_msg_ev_unmute":        {16, 18},
+	"settings_msg_desc_ban":         {70, 98},
+	"settings_msg_desc_tban":        {70, 98},
+	"settings_msg_desc_kick":        {70, 98},
+	"settings_msg_desc_mute":        {70, 98},
+	"settings_msg_desc_tmute":       {70, 98},
+	"settings_msg_desc_unban":       {70, 98},
+	"settings_msg_desc_unmute":      {70, 98},
+	"settings_msg_state_custom":     {12, 18},
+	"settings_msg_state_silent":     {12, 18},
+	"settings_msg_group_note":       {130, 182},
 }
 
 // settingsAlertKeys are shown as answerCallbackQuery alerts: plain text, no tag, at most
@@ -837,6 +862,7 @@ func TestSettingsLabelLengths(t *testing.T) {
 		{"📝", "settings_page_notes"},
 		{"🚷", "settings_page_fwdblock"},
 		{"👍", "settings_page_reactions"},
+		{"📨", "settings_page_msgs"},
 		{"🕒", "settings_page_tz"},
 	}
 	options := []string{
@@ -929,6 +955,14 @@ func TestSettingsLabelLengths(t *testing.T) {
 	}
 	mreqRuleIcons := []string{"❌", "❗", "👢", "⛔", "🔇"}
 	mreqSwitchCells := []string{"settings_btn_mreq_switch_join", "settings_btn_mreq_switch_delete"}
+	// The Messages page's cells (Phase 20, plan 20-06): the family cell and the seven event cells, each
+	// its icon, one space and its name, at most 20 code points.
+	messageCells := []struct{ icon, key string }{
+		{"🔨", "settings_msg_fam_manual"},
+		{"🚫", "settings_msg_ev_ban"}, {"⏳", "settings_msg_ev_tban"}, {"👢", "settings_msg_ev_kick"},
+		{"🔇", "settings_msg_ev_mute"}, {"🔕", "settings_msg_ev_tmute"}, {"🔓", "settings_msg_ev_unban"},
+		{"🔊", "settings_msg_ev_unmute"},
+	}
 
 	for _, lang := range staffLocales {
 		t.Run(lang, func(t *testing.T) {
@@ -1002,6 +1036,13 @@ func TestSettingsLabelLengths(t *testing.T) {
 					if runes := utf8.RuneCountInString(label); runes > gridMax {
 						t.Errorf("%s: Deletion cell %q (%s) has %d characters, ceiling %d", lang, label, key, runes, gridMax)
 					}
+				}
+			}
+
+			for _, cell := range messageCells {
+				label := cell.icon + " " + settingsLocaleString(t, lang, data, cell.key)
+				if runes := utf8.RuneCountInString(label); runes > gridMax {
+					t.Errorf("%s: Messages cell %q (%s) has %d characters, ceiling %d", lang, label, cell.key, runes, gridMax)
 				}
 			}
 
