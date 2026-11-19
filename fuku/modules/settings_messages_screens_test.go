@@ -43,7 +43,7 @@ func settingsMsgAllCustom(t *testing.T, silent bool) *eventmsg.Messages {
 }
 
 // settingsMsgFullState is an event message with every part stored (a long text, the media kind given, one button) and
-// Silent on: the event screen's worst case, eight rows (the private copy screen's worst case too, five rows).
+// Silent on: the event screen's worst case, eight rows (the private copy screen's worst case too, seven rows).
 func settingsMsgFullState(mediaType int) settingsEditState {
 	return settingsEditState{
 		Kind: settingsEditEvent, Text: strings.Repeat("x", 3000), MediaType: mediaType, FileID: "f",
@@ -111,12 +111,12 @@ func settingsMsgScreens(t *testing.T, view settingsView, notices []string) map[s
 			for i, notice := range notices {
 				opts := settingsEditScreenOpts{Notice: notice, BotUsername: "FukuTestBot"}
 				add(fmt.Sprintf("event %s empty notice %d", ev.Code, i), renderSettingsMsgEvent(view, fam, ev, def, settingsMsgEmptyState(), opts), "[1 1 1 1 1 1 2]")
-				add(fmt.Sprintf("pm %s empty notice %d", ev.Code, i), renderSettingsMsgPM(view, fam, ev, pmDef, settingsMsgPMOffState(), opts), "[1 1 1 1 2]")
+				add(fmt.Sprintf("pm %s empty notice %d", ev.Code, i), renderSettingsMsgPM(view, fam, ev, pmDef, settingsMsgPMOffState(), opts), "[1 1 1 1 1 2]")
 				for kind, mediaType := range map[string]int{"photo": db.PHOTO, "sticker": db.STICKER} {
 					add(fmt.Sprintf("event %s full %s notice %d", ev.Code, kind, i),
 						renderSettingsMsgEvent(view, fam, ev, def, settingsMsgFullState(mediaType), opts), "[2 2 2 2 2 1 1 2]")
 					add(fmt.Sprintf("pm %s full %s notice %d", ev.Code, kind, i),
-						renderSettingsMsgPM(view, fam, ev, pmDef, settingsMsgFullState(mediaType), opts), "[2 2 2 1 2]")
+						renderSettingsMsgPM(view, fam, ev, pmDef, settingsMsgFullState(mediaType), opts), "[2 2 2 2 2 1 2]")
 				}
 			}
 			for name, d := range map[string]settingsEditPageDef{"": def, "pm ": pmDef} {
@@ -169,8 +169,8 @@ func TestSettingsMessagesCallbackBytes(t *testing.T) {
 	}
 	for code, want := range map[string]int{
 		settingsActMsgFamily: 37, settingsActMsgEvent: 42,
-		settingsActMsgSet: 46, settingsActMsgRemove: 46, settingsActMsgPreview: 42, settingsActMsgCancel: 46, settingsActMsgSilent: 42,
-		settingsActMsgFull: 38, settingsActMsgPM: 42, settingsActOpen: 37, settingsActBack: 33, settingsActClose: 33,
+		settingsActMsgSet: 46, settingsActMsgRemove: 46, settingsActMsgPreview: 46, settingsActMsgCancel: 46, settingsActMsgSilent: 42,
+		settingsActMsgFull: 42, settingsActMsgPM: 42, settingsActOpen: 37, settingsActBack: 33, settingsActClose: 33,
 	} {
 		if got := sizes[code]; got != want {
 			t.Errorf("the largest %s button is %d bytes, the plans fixed %d", code, got, want)

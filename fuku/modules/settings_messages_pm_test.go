@@ -108,7 +108,7 @@ func TestSettingsMessagesPMScreen(t *testing.T) {
 		if !strings.Contains(text, settingsMsgPMLine(false)) {
 			t.Errorf("the private copy screen %q lacks its line reading Off", text)
 		}
-		settingsMsgWantWidths(t, "the empty private copy screen", keyboard, 1, 1, 1, 1, 2)
+		settingsMsgWantWidths(t, "the empty private copy screen", keyboard, 1, 1, 1, 1, 1, 2)
 		for i, part := range []string{settingsEditPartText, settingsEditPartMedia, settingsEditPartButtons} {
 			fields := settingsButtonFields(t, keyboard[i][0])
 			if fields["a"] != settingsActMsgSet || fields["t"] != part || fields[settingsMsgEventField] != "bn" ||
@@ -117,13 +117,13 @@ func TestSettingsMessagesPMScreen(t *testing.T) {
 			}
 		}
 		toggle, fields := settingsMsgPMSwitch(t, keyboard)
-		if keyboard[3][0].CallbackData != toggle.CallbackData || toggle.Text != staffMarker("settings_btn_msg_pm")+" ❌" {
-			t.Errorf("the switch %q is not the full-width fourth row reading Off: %+v", toggle.Text, keyboard)
+		if keyboard[4][0].CallbackData != toggle.CallbackData || toggle.Text != staffMarker("settings_btn_msg_pm")+" ❌" {
+			t.Errorf("the switch %q is not the full-width fifth row reading Off: %+v", toggle.Text, keyboard)
 		}
 		if want := map[string]string{"a": settingsActMsgPM, "c": group, settingsMsgEventField: "bn", "v": "1"}; !maps.Equal(fields, want) {
 			t.Errorf("the switch carries %v, want %v", fields, want)
 		}
-		if back := settingsButtonFields(t, keyboard[4][0]); !maps.Equal(back, map[string]string{"a": settingsActMsgEvent, "c": group, settingsMsgEventField: "bn"}) {
+		if back := settingsButtonFields(t, keyboard[5][0]); !maps.Equal(back, map[string]string{"a": settingsActMsgEvent, "c": group, settingsMsgEventField: "bn"}) {
 			t.Errorf("Back carries %v, want the ban screen with no d", back)
 		}
 		// A screen with nothing stored writes nothing.

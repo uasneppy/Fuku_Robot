@@ -288,8 +288,8 @@ func settingsMsgEditDef(fam settingsMsgFamily, ev settingsMsgEvent) settingsEdit
 // kind, the private copy's title (so the prompt says it is for the private copy), its icon, the same five editor
 // codes and can_change_info as the group message, the family's three parts, the fields k and d=p on every editor
 // button (Set, Remove, the previews and the Cancel of the prompt and of a refusal), no reserved buttons (a
-// private copy never carries the bot's Unban or Unmute row) and the hooks that read, draw, remove and write the
-// pm row. It has no Preview hook yet, so a forged preview is the editor's failed-preview alert with nothing sent.
+// private copy never carries the bot's Unban or Unmute row) and the hooks that read, draw, remove, write and preview
+// the pm row (the previews through composeEventPM, the send path's composer, under their own header line).
 func settingsMsgPMEditDef(fam settingsMsgFamily, ev settingsMsgEvent) settingsEditPageDef {
 	def := settingsMsgEditCodes
 	def.Key, def.Kind, def.Icon, def.TitleKey = settingsMsgPMWaitPage(ev), settingsEditEvent, settingsMsgPMIcon, "settings_msg_pm_title"
@@ -298,6 +298,7 @@ func settingsMsgPMEditDef(fam settingsMsgFamily, ev settingsMsgEvent) settingsEd
 	def.Hooks = &settingsEditHooks{
 		Load: settingsMsgLoad(ev, eventmsg.DestPM), Draw: settingsMsgPMDraw(fam, ev),
 		Remove: settingsMsgRemove(ev, eventmsg.DestPM), Write: settingsMsgWrite(ev, eventmsg.DestPM),
+		Preview: settingsMsgPMPreview(ev), PreviewHeaderKey: "settings_msg_preview_header_pm",
 	}
 	return def
 }
@@ -673,9 +674,7 @@ func settingsMsgPreview(ev settingsMsgEvent) func(*settingsPress, settingsEditPa
 		default:
 			return errors.New("settings messages: no such part to preview")
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), settingsReadTimeout)
-		groupTr := i18n.MustNewTranslator(lang.GetGroupLanguage(ctx, p.group.Id))
-		cancel()
+		groupTr := settingsMsgGroupTranslator(p)
 		r := settingsMsgPreviewReply(p, groupTr, ev)
 		presser := p.query.From
 		actor := eventActor{User: &presser}
@@ -689,6 +688,58 @@ func settingsMsgPreview(ev settingsMsgEvent) func(*settingsPress, settingsEditPa
 			Event: ev.Key, Dest: eventmsg.DestGroup, Text: st.Text, FileID: st.FileID, MediaType: st.MediaType, Buttons: st.Buttons,
 		}
 		_, err := media.SendGreetingMessage(p.b, p.query.From.Id, composeEventMessage(p.b, p.group, groupTr, r, row, actor))
+		return err
+	}
+}
+
+// settingsMsgGroupTranslator is the translator of the group's language, read by chat ID under the settings read
+// timeout as the send path reads it: a preview is in the language the group's members read, while its header line
+// stays in the presser's.
+func settingsMsgGroupTranslator(p *settingsPress) *i18n.Translator {
+	ctx, cancel := context.WithTimeout(context.Background(), settingsReadTimeout)
+	defer cancel()
+	return i18n.MustNewTranslator(lang.GetGroupLanguage(ctx, p.group.Id))
+}
+
+// errSettingsMsgNoPMSpec is the error of a private copy preview of an event that has no private copy spec, which
+// settingsMsgDefByFields already refuses in step 1, so no press reaches it.
+var errSettingsMsgNoPMSpec = errors.New("settings messages: the event has no private copy")
+
+// settingsMsgPMPreview is a private copy definition's Preview hook (D-27). It sends to the presser's private chat
+// only, ignores the copy's switch, writes nothing, schedules nothing and never goes through offerEventPM: it shows
+// what the punished person would receive. Full preview is built by composeEventPM, the send path's own composer,
+// from settingsMsgPreviewReply (the presser as the member and the admin, the sample reason and, for a timed event,
+// the sample duration and end, in the group's language) and the screen's stored parts, with no lockdown note, and
+// sent by media.SendGreetingMessage; with no text stored it is the event's default private text. Preview text is the
+// stored text composed the same way and sent alone with no keyboard; Preview media and Preview buttons are the
+// editor's own (the media alone, the stored buttons alone). The keyboard is the stored buttons and the {rules}
+// button only, never the group's Unban or Unmute row.
+func settingsMsgPMPreview(ev settingsMsgEvent) func(*settingsPress, settingsEditPageDef, settingsEditState, string) error {
+	return func(p *settingsPress, _ settingsEditPageDef, st settingsEditState, part string) error {
+		spec, ok := eventPMSpecFor(ev.Key)
+		if !ok {
+			return errSettingsMsgNoPMSpec
+		}
+		row := eventmsg.Message{Event: ev.Key, Dest: eventmsg.DestPM, Text: st.Text}
+		switch part {
+		case settingsEditPartMedia:
+			return settingsEditPreviewMediaAlone(p, st)
+		case settingsEditPartButtons:
+			return settingsEditPreviewButtonsAlone(p, &gotgbot.InlineKeyboardMarkup{InlineKeyboard: keyboard.BuildKeyboard(st.Buttons)})
+		case "":
+			row.FileID, row.MediaType, row.Buttons = st.FileID, st.MediaType, st.Buttons
+		case settingsEditPartText:
+		default:
+			return errors.New("settings messages: no such part to preview")
+		}
+		groupTr := settingsMsgGroupTranslator(p)
+		presser := p.query.From
+		msg := composeEventPM(p.b, p.group, groupTr, spec, settingsMsgPreviewReply(p, groupTr, ev), row, eventActor{User: &presser})
+		if part == settingsEditPartText {
+			_, err := media.SendGreeting(p.b, presser.Id, msg.Text, "", db.TEXT, &gotgbot.InlineKeyboardMarkup{}, 0)
+			return err
+		}
+		_, err := media.SendGreetingMessage(p.b, presser.Id, msg)
 		return err
 	}
 }
@@ -818,9 +869,10 @@ func renderSettingsMsgEvent(
 // text reads Default while no text is stored: the default private text is then sent), the no-caption note, the
 // private copy line (On while the pm row's Silent is false) and, after a blank line each, the family's hint and
 // the private copy hint; the keyboard is the editor's part rows (each button carrying k and d=p through the
-// definition's Fields), the full-width switch (the state icon, sending the opposite of the stored state as an
-// absolute target, a=hp), then Back (the event's screen) and Close: [1 1 1 1 2] with nothing stored and at most
-// [2 2 2 1 2]. It is pure.
+// definition's Fields), the editor's preview rows (Preview of each part that is set, then Full preview, two to a
+// row, each carrying k and d=p), the full-width switch (the state icon, sending the opposite of the stored state as
+// an absolute target, a=hp), then Back (the event's screen) and Close: [1 1 1 1 1 2] with nothing stored and at most
+// [2 2 2 2 2 1 2]. It is pure.
 func renderSettingsMsgPM(
 	v settingsView, fam settingsMsgFamily, ev settingsMsgEvent, def settingsEditPageDef, st settingsEditState, opts settingsEditScreenOpts,
 ) settingsScreen {
@@ -834,6 +886,7 @@ func renderSettingsMsgPM(
 		"", settingsText(tr, "settings_msg_hint_pm"))
 	k := newSettingsKeyboard(v)
 	settingsEditPartRows(k, def, st)
+	settingsEditPreviewRows(k, def, st)
 	settingsMsgSwitchRow(k, "settings_btn_msg_pm", settingsActMsgPM, ev, on)
 	settingsDelBackRow(k, map[string]string{"a": settingsActMsgEvent, settingsMsgEventField: ev.Code})
 	return k.screen(settingsCompose(v, def.TitleKey, body, opts.Notice, false))

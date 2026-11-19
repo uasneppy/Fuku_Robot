@@ -1611,11 +1611,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `settings_messages_test.go`, on the toolkit `settings_messages_env_test.go` (`newSettingsMsgEnv`, `settingsMsgCleanup`, `settingsMsgSeed`,
   `settingsMsgOpenPrivate`, `settingsMsgPrivateMenu`). The page's limits are measured (plan 20-10, D-23; Phase 21 plan
   21-04 for the private copy): at a 14-character chat ID the hub's family cell and the family list's Back are 37 bytes, an event cell 38, the
-  private copy row 42, Set, Remove and Cancel 42 (46 with `d=p`), Preview and Silent 42, the private copy switch 42, Full preview 38, Back to
-  Main and Close 33, Main's cell 37 private and 33 group, with no field outside `a c u p t k d v` (`TestSettingsMessagesCallbackBytes`); every
+  private copy row 42, Set, Remove and Cancel 42 (46 with `d=p`), Preview 42 (46 with `d=p`) and Silent 42, the private copy switch 42, Full
+  preview 38 (42 with `d=p`), Back to Main and Close 33, Main's cell 37 private and 33 group, with no field outside `a c u p t k d v` (`TestSettingsMessagesCallbackBytes`); every
   screen fits 3800 UTF-16 units in 8 languages with a 64-rune title, cells 20 code points, in the rows hub `[1 2]`, family list
-  `[2 2 2 1 2]`, event screen `[1 1 1 1 1 1 2]` empty and `[2 2 2 2 2 1 1 2]` full, private copy screen `[1 1 1 1 2]` empty and
-  `[2 2 2 1 2]` full, group note `[1 2]` (`[2]` without a bot username)
+  `[2 2 2 1 2]`, event screen `[1 1 1 1 1 1 2]` empty and `[2 2 2 2 2 1 1 2]` full, private copy screen `[1 1 1 1 1 2]` empty and
+  `[2 2 2 2 2 1 2]` full, group note `[1 2]` (`[2]` without a bot username)
   (`TestSettingsMessagesPageFitsEveryLocale`, over `settingsMsgScreens` in `settings_messages_screens_test.go`); every forged press of the
   eight codes is refused in step 1, no draw creates a row or a cache key, a draw costs the pipeline's calls and one read, and no log line
   carries content (`TestSettingsMessagesForged`, `TestSettingsMessagesReadsCreateNothing`, `TestSettingsMessagesCost`,
@@ -1628,8 +1628,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `settingsRightChangeInfo` of `settingsMsgEditCodes`, `Fields` `{"k": <code>, "d": "p"}` (so Set, Remove and the Cancel of the prompt and of a
   refusal carry `d=p`), no reserved buttons (a private copy never carries the bot's Unban or Unmute row) and the hooks `Load`
   (`settingsMsgLoad(ev, eventmsg.DestPM)`), `Draw` (`renderSettingsMsgPM`), `Remove` and `Write` (`settingsMsgRemove(ev, dest)`,
-  `settingsMsgWrite(ev, dest)` with the pm destination); it has no `Preview` hook until plan 21-05, so a forged `hv` or `hf` with `d=p` is the
-  editor's `settings_edit_preview_failed` alert with nothing sent, and the screen draws no preview row. The definition is registered for every
+  `settingsMsgWrite(ev, dest)` with the pm destination), `Preview` (`settingsMsgPMPreview(ev)`, plan 21-05, below) and `PreviewHeaderKey`
+  `settings_msg_preview_header_pm`. The definition is registered for every
   event, whatever the spec table says (another file's `init` fills it, and init order is not relied on); it is reached only through
   `settingsMsgDefByFields` (the owner field `c`, a known `k`, no `d` the group definition, `d=p` the private copy only for an event with a spec,
   `settingsMsgPMDefOf`, any other `d` false) and the event screen's row, which is drawn only for an event with a spec. `he` allows `k` and `d`,
@@ -1638,9 +1638,20 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   nothing added to `settings_input_door.go` or `settings_edit_actions.go`. The private copy's screen (`a=he&k=<code>&d=p`): the event's icon and
   bold name, `settings_msg_pm_intro`, a blank line, the part lines (the text reads Default while no text is stored: the default private text is
   then sent), the no-caption note, `settings_msg_line_pm` (On while the pm row's Silent is false) and, after a blank line each, the family's hint
-  and `settings_msg_hint_pm`; the keyboard is the part rows, the full-width switch `settings_btn_msg_pm` (`settingsStateIcon`, the absolute target
-  `a=hp&k=<code>&v=<opposite>`), then Back to the event screen (`a=he&k=<code>`, no `d`) and Close: `[1 1 1 1 2]` with nothing stored and
-  `[2 2 2 1 2]` with every part set (plan 21-05 adds the preview rows, at most `[2 2 2 2 2 1 2]`). The state comes from
+  and `settings_msg_hint_pm`; the keyboard is the part rows, the editor's preview rows (`settingsEditPreviewRows`, plan 21-05: Preview of each
+  part that is set, then Full preview, each carrying `k` and `d=p`), the full-width switch `settings_btn_msg_pm` (`settingsStateIcon`, the absolute
+  target `a=hp&k=<code>&v=<opposite>`), then Back to the event screen (`a=he&k=<code>`, no `d`) and Close: `[1 1 1 1 1 2]` with nothing stored and
+  `[2 2 2 2 2 1 2]` with every part set. The previews of the private copy (plan 21-05, D-27, PMSG-06) are the page's `hv` and `hf` with `d=p`,
+  needing only `settingsRightAdmin`: the editor sends the header `settings_msg_preview_header_pm` in the presser's language, then
+  `settingsMsgPMPreview(ev)` builds the content with `composeEventPM`, the send path's own composer, from `settingsMsgPreviewReply` (the presser
+  as the member and the admin, the sample reason and, for a timed event, the sample duration and end) in the group's language
+  (`settingsMsgGroupTranslator`, by chat ID) and the screen's stored parts, with no lockdown note: Full preview is that composition sent by
+  `media.SendGreetingMessage` (with no stored text, the event's default private text), Preview text the composed text alone with no keyboard,
+  Preview media and Preview buttons the editor's own. Everything goes to `query.From.Id` only, never through `offerEventPM`, whatever the switch
+  says; it writes nothing, schedules nothing and carries the stored buttons and the `{rules}` button only, never the group's Unban or Unmute
+  row (`TestSettingsMessagesPMPreview`, `settings_messages_pm_preview_test.go`: a custom copy with a photo and a button and the switch off, the
+  part previews, a timed copy, the rows, a 403 on the content, the Spanish default with the header in English, nothing sent to any other chat,
+  no row, queue entry or wait). The state comes from
   `settingsMsgStateFor(msgs, ev, dest)`, which reads `msgs.Resolve(event, dest)` as the send path does (no pm row is a copy that is off, D-08) and,
   for the group message of an event with a spec, sets `settingsEditState.PMOn`; every redraw after a write builds it from the apply result's
   `Messages`, so the event screen's private copy line survives a Silent press and a Remove. The switch is the page action `hp`
@@ -5344,7 +5355,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   and `TestEventPMComposition` (`event_message_pm_test.go`), `TestEventPMFailures`, `TestEventPMLimits`, `TestEventPMPacerIndependent`
   and `TestEventPMLogsCarryIDsOnly` (`event_message_pm_failures_test.go`), the guard `TestPMCopyCallers` (`pm_copy_callers_test.go`)
   and `TestEventMsgLocaleKeys` (`fuku/i18n`), and the page's `TestSettingsMessagesPMScreen`, `TestSettingsMessagesPMSwitch`,
-  `TestSettingsMessagesPMTyped`, `TestSettingsDriftMessagesPM` and `TestSettingsAuthorityMessagesPM` (`settings_messages_pm_test.go`, on the
+  `TestSettingsMessagesPMTyped`, `TestSettingsDriftMessagesPM` and `TestSettingsAuthorityMessagesPM` (`settings_messages_pm_test.go`) and
+  `TestSettingsMessagesPMPreview` (`settings_messages_pm_preview_test.go`, with `settingsMsgSeedPM`, `settingsMsgPMPreviewSeen` and
+  `settingsMsgPMPreviewContent`) (on the
   Messages page toolkit plus `settingsMsgStoredPM` and `settingsMsgOpenPM`; the `/ban` drift subtest runs on `newMessagesE2E` with
   `withFastPMCopyPacer` and waits with `waitEventPM`), on the toolkit `event_message_pm_env_test.go` (the PM copies bullet under Subsystem traps
   lists it). Hygiene: `newEventPMSite` registers `pmCopyJobs.wait` as its last cleanup, so a test that swaps a variable a job reads

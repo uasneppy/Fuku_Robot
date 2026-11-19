@@ -655,6 +655,8 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_msg_hint_pm":     {260, 364},
 	"settings_btn_msg_pm":      {20, 26},
 	"settings_btn_msg_pm_open": {24, 34},
+	// The previews of the private copy (Phase 21, plan 21-05): the line sent before a preview of the private copy.
+	"settings_msg_preview_header_pm": {140, 196},
 }
 
 // settingsAlertKeys are shown as answerCallbackQuery alerts: plain text, no tag, at most
