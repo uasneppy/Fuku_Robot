@@ -376,3 +376,143 @@ func TestSettingsMessagesTyped(t *testing.T) {
 		settingsEditWaitGone(t, env.settingsEnv, user)
 	})
 }
+
+func TestSettingsAuthorityMessagesEdit(t *testing.T) {
+	// refusedPress presses Set (or Remove) of the ban text as user on a fresh private message and fails the
+	// test unless it is answered the alert key with nothing edited, no wait and nothing written.
+	refusedPress := func(t *testing.T, env *settingsMsgEnv, user gotgbot.User, action, key string) {
+		t.Helper()
+		before, _ := settingsMsgStored(t, env.chat.Id, eventmsg.EventBan)
+		msgID := env.updateID()
+		env.pressPrivate(user, msgID, env.privateFields(env.chat.Id, "a", action, settingsMsgEventField, "bn", "t", settingsEditPartText))
+		if answer, alert := env.lastAnswer(); !alert || !containsMarker(answer, key) {
+			t.Errorf("%s answered %q (alert %v), want the alert %s", action, answer, alert, key)
+		}
+		if got := len(env.edits(user.Id, msgID)); got != 0 {
+			t.Errorf("the refused %s made %d edits, want none", action, got)
+		}
+		if env.redis.Exists(settingsInputKey(user.Id)) {
+			t.Errorf("the refused %s left a wait", action)
+		}
+		if after, _ := settingsMsgStored(t, env.chat.Id, eventmsg.EventBan); after.Text != before.Text || !after.UpdatedAt.Equal(before.UpdatedAt) {
+			t.Errorf("the refused %s wrote the ban row: %+v", action, after)
+		}
+	}
+	// typedEnds sets a wait for user, moves the world, sends a typed text and fails the test unless the one
+	// reply is the key followed by the wait-stopped line, the wait is gone and nothing is stored.
+	typedEnds := func(t *testing.T, env *settingsMsgEnv, user gotgbot.User, change func(), key string) {
+		t.Helper()
+		settingsMsgSetWait(t, env, user, "bn", settingsEditPartText)
+		change()
+		before := settingsEditSentCount(env.settingsEnv, user)
+		sendPrivateMessage(env.settingsEnv, user, gotgbot.Message{Text: "a new ban text"})
+		settingsEditWantReply(t, env.settingsEnv, user, before, key)
+		if text := settingsEditTextsSince(env.settingsEnv, user, before)[0]; !strings.HasSuffix(text, staffMarker(key)+"\n\n"+staffMarker("settings_edit_wait_stopped")) {
+			t.Errorf("the reply %q is not %s, a blank line and the wait-stopped line", text, key)
+		}
+		settingsEditWaitGone(t, env.settingsEnv, user)
+		if row, ok := settingsMsgStored(t, env.chat.Id, eventmsg.EventBan); ok && row.Text != "" {
+			t.Errorf("the typed text was stored: %+v", row)
+		}
+	}
+
+	t.Run("an administrator without can_change_info is refused at Set and Remove", func(t *testing.T) {
+		env := newSettingsMsgEnv(t)
+		listEditAdmin(env.settingsEnv, env.chat, env.admin, false)
+		refusedPress(t, env, env.admin, settingsActMsgSet, "settings_no_change_info")
+		settingsMsgSeed(t, env.chat.Id, eventmsg.EventBan, "Banned", false)
+		refusedPress(t, env, env.admin, settingsActMsgRemove, "settings_no_change_info")
+
+		// The screens and Cancel need only the admin check.
+		m := settingsMsgPrivateMenu(env, env.chat, env.admin)
+		text, keyboard := m.press("a", settingsActMsgEvent, settingsMsgEventField, "bn")
+		settingsMsgWantSilentScreen(t, text, keyboard, "bn", false)
+		m.press("a", settingsActMsgCancel, settingsMsgEventField, "bn", "t", settingsEditPartText)
+		if answer, _ := env.lastAnswer(); containsMarker(answer, "settings_no_change_info") {
+			t.Errorf("Cancel was refused with %q, want only the admin check", answer)
+		}
+	})
+
+	t.Run("an administrator demoted between Set and the typed text stores nothing", func(t *testing.T) {
+		env := newSettingsMsgEnv(t)
+		listEditAdmin(env.settingsEnv, env.chat, env.admin, true)
+		typedEnds(t, env, env.admin, func() { listEditAdmin(env.settingsEnv, env.chat, env.admin, false) }, "settings_no_change_info")
+	})
+
+	t.Run("an administrator the owner gate refuses is refused at the press and at the typed text", func(t *testing.T) {
+		resetSettingsOwnerMemo(t)
+		env := newSettingsMsgEnv(t)
+		env.newOwner(env.chat)
+		listEditAdmin(env.settingsEnv, env.chat, env.admin, true)
+		env.setAdminsAllowed(env.chat.Id, false)
+		refusedPress(t, env, env.admin, settingsActMsgSet, "settings_gate_owner_only")
+		env.setAdminsAllowed(env.chat.Id, true)
+		typedEnds(t, env, env.admin, func() { env.setAdminsAllowed(env.chat.Id, false) }, "settings_gate_owner_only")
+	})
+
+	t.Run("a plain member is refused", func(t *testing.T) {
+		env := newSettingsMsgEnv(t)
+		member := gotgbot.User{Id: uniqueLinkOwnerID() + 9_100_000, FirstName: "Member"}
+		env.fake.setMember(env.chat.Id, member.Id, staffFakeMember{Status: gotgbot.ChatMemberStatusMember})
+		refusedPress(t, env, member, settingsActMsgSet, "settings_not_admin")
+	})
+
+	t.Run("the live creator sets and removes", func(t *testing.T) {
+		resetSettingsOwnerMemo(t)
+		env := newSettingsMsgEnv(t)
+		owner := env.newOwner(env.chat)
+		env.setAdminsAllowed(env.chat.Id, false)
+		settingsMsgSetWait(t, env, owner, "bn", settingsEditPartText)
+		sendPrivateMessage(env.settingsEnv, owner, gotgbot.Message{Text: "Gone"})
+		if row, _ := settingsMsgStored(t, env.chat.Id, eventmsg.EventBan); row.Text != "Gone" || row.UpdatedBy != owner.Id {
+			t.Fatalf("the creator's typed text left %+v", row)
+		}
+		settingsMsgPrivateMenu(env, env.chat, owner).press("a", settingsActMsgRemove, settingsMsgEventField, "bn", "t", settingsEditPartText)
+		if row, _ := settingsMsgStored(t, env.chat.Id, eventmsg.EventBan); row.Text != "" {
+			t.Errorf("the creator's Remove left the text %q", row.Text)
+		}
+	})
+}
+
+func TestSettingsDriftMessagesEdit(t *testing.T) {
+	env := newSettingsMsgEnv(t)
+	listEditAdmin(env.settingsEnv, env.chat, env.admin, true)
+	m := settingsMsgPrivateMenu(env, env.chat, env.admin)
+
+	// A text stored straight through the repository is drawn with its length and counted Custom.
+	settingsMsgSeed(t, env.chat.Id, eventmsg.EventKick, "Kicked {mention}", false)
+	text, _ := m.press("a", settingsActMsgEvent, settingsMsgEventField, "kk")
+	if want := staffMarker("settings_edit_state_text_len") + " " + fmt.Sprint(len("Kicked {mention}")); !strings.Contains(text, want) {
+		t.Errorf("the kick screen %q lacks the stored text's length", text)
+	}
+	hub, _ := m.press("a", settingsActOpen, "p", settingsPageMessages)
+	settingsMsgWantStates(t, hub, map[string]string{eventmsg.EventKick: "settings_msg_state_custom"})
+
+	// A page Remove is what the send path reads at once, after it had cached the old text.
+	if got := settingsMsgSendPathText(t, env.chat.Id, eventmsg.EventKick); got != "Kicked {mention}" {
+		t.Fatalf("the send path reads %q before the Remove", got)
+	}
+	m.press("a", settingsActMsgRemove, settingsMsgEventField, "kk", "t", settingsEditPartText)
+	if got := settingsMsgSendPathText(t, env.chat.Id, eventmsg.EventKick); got != "" {
+		t.Errorf("after the page Remove the send path still reads %q", got)
+	}
+
+	// A typed save is what the send path reads at once.
+	settingsMsgSetWait(t, env, env.admin, "kk", settingsEditPartText)
+	sendPrivateMessage(env.settingsEnv, env.admin, gotgbot.Message{Text: "Out you go"})
+	if got := settingsMsgSendPathText(t, env.chat.Id, eventmsg.EventKick); got != "Out you go" {
+		t.Errorf("after the typed save the send path reads %q, want the new text", got)
+	}
+
+	// Opening every screen of the page writes nothing.
+	other := env.addChat()
+	o := settingsMsgPrivateMenu(env, other, env.admin)
+	o.press("a", settingsActOpen, "p", settingsPageMessages)
+	o.press("a", settingsActMsgFamily, "t", "m")
+	for _, ev := range settingsMsgManualEvents {
+		o.press("a", settingsActMsgEvent, settingsMsgEventField, ev.Code)
+	}
+	if n := settingsMsgRows(t, other.Id); n != 0 {
+		t.Errorf("opening every screen wrote %d event message rows, want none", n)
+	}
+}
