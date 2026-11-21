@@ -125,8 +125,9 @@ var pmCopyJobTimeout = 60 * time.Second
 // private copy options from the same read; GroupMsgID is the group message the group step posted (zero when
 // it was Silent or its send failed), GroupRows the keyboard rows it was sent with and DetailsLabel the Details
 // button's label in the group's language: a job that did not deliver adds the Details button from them
-// (pmCopyAddDetails). automatic is set by offerEventPM from the event's spec, never by a caller: the job
-// checks the per-group cap for it.
+// (pmCopyAddDetails). TargetName is the member's first name and Tr the group's translator (set only while the
+// log option is on), from which a job that did not deliver builds its log line (pmCopyPostLog). automatic is set
+// by offerEventPM from the event's spec, never by a caller: the job checks the per-group cap for it.
 type eventPMOffer struct {
 	Bot          *gotgbot.Bot
 	Chat         gotgbot.Chat
@@ -139,6 +140,8 @@ type eventPMOffer struct {
 	GroupMsgID   int64
 	GroupRows    [][]gotgbot.InlineKeyboardButton
 	DetailsLabel string
+	TargetName   string
+	Tr           *i18n.Translator
 	automatic    bool
 }
 
@@ -302,8 +305,9 @@ func offerEventPM(o eventPMOffer) {
 // Nothing is retried by the job: the pacer already waited out what it could. The final outcome is
 // logged with the IDs, the event, the class and the Telegram code only, at Debug for delivered and
 // blocked and at Warn otherwise. A copy that was not delivered then adds the Details button
-// (pmCopyAddDetails) when the group's Details option is on and the group step posted a message; a copy the
-// cap refused never gets that far (D-18). It builds no reply parameters: the copy is a new message in a
+// (pmCopyAddDetails) when the group's Details option is on and the group step posted a message, and posts its
+// log line (pmCopyPostLog) when the group's log option is on; the two are independent. A copy the cap refused
+// never gets that far (D-18). It builds no reply parameters: the copy is a new message in a
 // private chat, never a reply to the command.
 func runEventPM(ctx context.Context, o eventPMOffer) {
 	if o.automatic && !pmCopyCapAllow(ctx, o.Chat.Id) {
@@ -328,6 +332,9 @@ func runEventPM(ctx context.Context, o eventPMOffer) {
 	}
 	if o.Options.PMDetails && o.GroupMsgID != 0 {
 		pmCopyAddDetails(ctx, o, tried)
+	}
+	if o.Options.PMLog {
+		pmCopyPostLog(ctx, o, outcome)
 	}
 }
 

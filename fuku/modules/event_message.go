@@ -307,7 +307,8 @@ func (c *moderationCtx) sendDefaultPost(r eventReply) (eventGroupPost, error) {
 // to, and sent by a job (offerEventPM), so the handler returns at once. The offer also carries the group's
 // private copy options, the group message the group step posted (none when it was Silent or failed) with its
 // rows, and the Details button's label in the group's language, for the Details button of a copy that is not
-// delivered.
+// delivered, and the member's first name with the group's translator (only while the log option is on) for its log
+// line.
 func (c *moderationCtx) offerReplyPM(r eventReply, msgs *eventmsg.Messages, post eventGroupPost) {
 	spec, ok := eventPMSpecFor(r.Event)
 	if !ok {
@@ -322,13 +323,14 @@ func (c *moderationCtx) offerReplyPM(r eventReply, msgs *eventmsg.Messages, post
 	}
 	actor := eventActor{User: c.User, Anonymous: actorIsAnonymous(c.Ctx)}
 	offer := eventPMOffer{
-		Bot:     c.Bot,
-		Chat:    *c.Chat,
-		Event:   r.Event,
-		UserID:  r.Target.Id,
-		Message: composeEventPM(c.Bot, c.Chat, c.Tr, spec, r, row, actor),
-		Custom:  row.HasContent(),
-		Options: msgs.Options,
+		Bot:        c.Bot,
+		Chat:       *c.Chat,
+		Event:      r.Event,
+		UserID:     r.Target.Id,
+		Message:    composeEventPM(c.Bot, c.Chat, c.Tr, spec, r, row, actor),
+		Custom:     row.HasContent(),
+		Options:    msgs.Options,
+		TargetName: r.Target.FirstName,
 	}
 	if post.Msg != nil {
 		offer.GroupMsgID = post.Msg.MessageId
@@ -336,6 +338,9 @@ func (c *moderationCtx) offerReplyPM(r eventReply, msgs *eventmsg.Messages, post
 	}
 	if offer.Options.PMDetails {
 		offer.DetailsLabel, _ = c.Tr.GetString("eventmsg_btn_details")
+	}
+	if offer.Options.PMLog {
+		offer.Tr = c.Tr
 	}
 	if offer.Custom {
 		offer.Fallback = eventPMDefaultText(c.Tr, spec, c.Chat, r.Values, r.PMNote)

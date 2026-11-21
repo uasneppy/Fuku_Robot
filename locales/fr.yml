@@ -84,6 +84,9 @@ eventmsg_pm_unmute: "🔊 Vous pouvez de nouveau écrire dans <b>{group}</b>."
 eventmsg_pm_unmute_lockdown: "Le groupe est en verrouillage, vous pourrez écrire dès qu'un admin le lèvera."
 eventmsg_btn_details: "📩 Détails"
 eventmsg_pm_details_none: "Il n'y a rien à afficher ici."
+eventmsg_pm_log: "📩 La copie privée du message « {event} » n'a pas atteint {user} : {why}."
+eventmsg_pm_why_blocked: "il n'a jamais lancé de discussion avec moi ou m'a bloqué"
+eventmsg_pm_why_failed: "Telegram ne l'a pas remise"
 common_anonymous_user_error: Cette commande ne peut pas être utilisée sur un utilisateur anonyme.
 common_anonymous_ban_error: Cette commande ne peut pas être utilisée sur un utilisateur anonyme, ces utilisateurs peuvent uniquement être bannis/débannis.
 common_cannot_identify_user: Impossible d'identifier l'utilisateur. Cette commande ne peut pas être utilisée par les chaînes.

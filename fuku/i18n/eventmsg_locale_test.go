@@ -34,12 +34,17 @@ var eventMsgLocaleLimits = map[string]eventMsgLimit{
 	"eventmsg_pm_unmute_lockdown": {140, 200},
 	"eventmsg_btn_details":        {20, 28},
 	"eventmsg_pm_details_none":    {60, 90},
+	"eventmsg_pm_log":             {140, 200},
+	"eventmsg_pm_why_blocked":     {70, 100},
+	"eventmsg_pm_why_failed":      {70, 100},
 }
 
 // eventMsgNotDefaultText are the eventmsg_pm_ keys that are not an event's default private text, so they do
-// not name the group: the reason line, the lockdown note and the neutral Details reply.
+// not name the group: the reason line, the lockdown note, the neutral Details reply and the log line with its two
+// reasons (the log channel's header names the group).
 var eventMsgNotDefaultText = map[string]bool{
 	"eventmsg_pm_reason": true, "eventmsg_pm_unmute_lockdown": true, "eventmsg_pm_details_none": true,
+	"eventmsg_pm_log": true, "eventmsg_pm_why_blocked": true, "eventmsg_pm_why_failed": true,
 }
 
 // eventMsgAllowedTags is the markup an eventmsg_ text may carry: <b> only, around {group} in the

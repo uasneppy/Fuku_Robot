@@ -913,6 +913,9 @@ eventmsg_pm_unmute: "🔊 Ya puedes volver a escribir en <b>{group}</b>."
 eventmsg_pm_unmute_lockdown: "El grupo está en cierre, así que podrás escribir cuando un admin lo levante."
 eventmsg_btn_details: "📩 Detalles"
 eventmsg_pm_details_none: "No hay nada que mostrar aquí."
+eventmsg_pm_log: "📩 La copia privada del mensaje «{event}» no llegó a {user}: {why}."
+eventmsg_pm_why_blocked: "nunca inició un chat conmigo o me bloqueó"
+eventmsg_pm_why_failed: "Telegram no la entregó"
 common_anonymous_user_error: Este comando no se puede usar en usuario anónimo.
 common_anonymous_ban_error: Este comando no se puede usar en usuario anónimo, estos usuarios solo pueden ser baneados/desbaneados.
 common_cannot_identify_user: No se puede identificar al usuario. Este comando no puede ser usado por canales.

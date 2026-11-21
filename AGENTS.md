@@ -3624,7 +3624,21 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   admin who presses Unban or Unmute between the group message and the edit can see that row drawn again by the edit, and a
   second press finds the member already unbanned or unmuted. Stated limit: a banned person cannot read the group, so for a
   ban the button mostly serves a public group's visitor who is the punished person. With the option off, or the copy
-  delivered, no request is added (`TestLegacyModerationRequests` passes unedited). `TestEventPMEndToEnd`, `TestEventPMSpecs`, `TestEventPMDefaultTexts` and `TestEventPMComposition`
+  delivered, no request is added (`TestLegacyModerationRequests` passes unedited). The log line (plan 22-07, PMSG-07, D-21,
+  `event_message_pm_log.go`): `offerReplyPM` also puts the member's first name (`eventPMOffer.TargetName`) and, only while
+  the group's log option is on, the group's translator (`eventPMOffer.Tr`) on the offer, and a job whose final outcome is not
+  delivered calls `pmCopyPostLog(ctx, o, outcome)` right after the Details step when `Options.PMLog` holds; the two options are
+  independent, and a shed or capped copy never gets there (D-18). It resolves the group's log channel through
+  `actionlog.Destination(chat, logchannels.CategoryAdmin)` (no channel, or the admin category off, posts nothing; that read is
+  the job's only database read, so once the database is closed at shutdown it fails quietly and nothing is posted) and sends one
+  HTML message, link previews off, no reply parameters, through `pmCopyPaced`: the destination's header, then `#PM_COPY` on its
+  own line (never translated, like `#LOCKDOWN_BAN`), then `eventmsg_pm_log` in the group's language with `{user}` the member's
+  mention and ID in a code tag (the ID as the mention's text when no name is known), `{event}` the event's name from the
+  Messages page (`eventPMEventName`, the event key escaped for an event no family lists) and `{why}` the reason class,
+  `eventmsg_pm_why_blocked` for blocked and `eventmsg_pm_why_failed` for refused, busy and unknown. `pmCopyLogText` is the pure
+  line without the header. It carries no stored or typed text, caption, button, file ID, reason or Details token and names no
+  Staff Group or other group (D-30, D-31); it is best effort, and a failed post is one Warn line with the chat ID and the
+  Telegram code that changes nothing else. `TestEventPMEndToEnd`, `TestEventPMSpecs`, `TestEventPMDefaultTexts` and `TestEventPMComposition`
   (`event_message_pm_test.go`), `TestEventPMFailures` (`event_message_pm_failures_test.go`: the classification table, a 403
   of either wording with one request and the golden group reply, the refused custom copy and its default, the refused
   default, busy, unknown and the impossible targets), `TestEventPMLimits` (the full pool, the automatic cap per chat and
@@ -5606,7 +5620,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   copy, and a failed edit that changes nothing else) and `TestPMCopyDetailsDeepLink` (the punished person sees the stored copy and
   can open it again, anyone else, a forged payload, an unknown token, an unparsable record and a Redis error get the one neutral
   reply) in `event_message_pm_details_test.go` with the toolkit's `eventPMDetailsTokens`, `eventPMDetailsRecord` and
-  `eventPMDetailsTokenOf`, the guard `TestPMCopyCallers` (`pm_copy_callers_test.go`)
+  `eventPMDetailsTokenOf`, `TestEventPMLogLine` (`event_message_pm_log_test.go`: one `#PM_COPY` post in the log channel for a blocked
+  copy and the failed reason for a 5xx, nothing for the option off, a delivered copy, the admin category off, no log channel or a
+  capped copy, one edit and one line with both options on, no copy text, reason or token in the line and the member's name only
+  inside the mention; toolkit `eventPMLogLink`, `eventPMLogOn`, `eventPMLogPosts`, `eventPMLogWant`), the guard `TestPMCopyCallers` (`pm_copy_callers_test.go`)
   and `TestEventMsgLocaleKeys` (`fuku/i18n`), and the page's `TestSettingsMessagesPMScreen`, `TestSettingsMessagesPMSwitch`,
   `TestSettingsMessagesPMTyped`, `TestSettingsDriftMessagesPM` and `TestSettingsAuthorityMessagesPM` (`settings_messages_pm_test.go`) and
   `TestSettingsMessagesPMPreview` and `TestSettingsMessagesPMStates` (`settings_messages_pm_preview_test.go`, with `settingsMsgSeedPM`, `settingsMsgPMPreviewSeen` and

@@ -1739,6 +1739,9 @@ eventmsg_pm_unmute: "🔊 अब आप <b>{group}</b> में फिर स�
 eventmsg_pm_unmute_lockdown: "ग्रुप लॉकडाउन में है, इसलिए एडमिन के इसे हटाते ही आप लिख सकेंगे।"
 eventmsg_btn_details: "📩 विवरण"
 eventmsg_pm_details_none: "यहाँ दिखाने के लिए कुछ नहीं है।"
+eventmsg_pm_log: "📩 \"{event}\" संदेश की निजी कॉपी {user} तक नहीं पहुँची: {why}।"
+eventmsg_pm_why_blocked: "उन्होंने मुझसे कभी चैट शुरू नहीं की या मुझे ब्लॉक कर दिया"
+eventmsg_pm_why_failed: "Telegram ने इसे डिलीवर नहीं किया"
 
 # Database default keys
 db_default_welcome: "हेलो {first}, आप कैसे हैं?"

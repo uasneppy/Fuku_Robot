@@ -905,6 +905,9 @@ eventmsg_pm_unmute: "🔊 Anda bisa menulis lagi di <b>{group}</b>."
 eventmsg_pm_unmute_lockdown: "Grup sedang dalam lockdown, jadi Anda bisa menulis setelah admin mencabutnya."
 eventmsg_btn_details: "📩 Detail"
 eventmsg_pm_details_none: "Tidak ada yang bisa ditampilkan di sini."
+eventmsg_pm_log: "📩 Salinan pribadi pesan \"{event}\" tidak sampai ke {user}: {why}."
+eventmsg_pm_why_blocked: "dia belum pernah memulai obrolan dengan saya, atau memblokir saya"
+eventmsg_pm_why_failed: "Telegram tidak mengirimkannya"
 common_anonymous_user_error: Perintah ini tidak dapat digunakan pada pengguna anonim.
 common_anonymous_ban_error: Perintah ini tidak dapat digunakan pada pengguna anonim, pengguna ini hanya dapat diblokir/dibuka blokirnya.
 common_cannot_identify_user: Tidak dapat mengidentifikasi pengguna. Perintah ini tidak dapat digunakan oleh kanal.

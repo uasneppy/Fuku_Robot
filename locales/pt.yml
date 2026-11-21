@@ -895,6 +895,9 @@ eventmsg_pm_unmute: "🔊 Você pode escrever em <b>{group}</b> novamente."
 eventmsg_pm_unmute_lockdown: "O grupo está em lockdown, então você poderá escrever assim que um admin o encerrar."
 eventmsg_btn_details: "📩 Detalhes"
 eventmsg_pm_details_none: "Não há nada para mostrar aqui."
+eventmsg_pm_log: "📩 A cópia privada da mensagem \"{event}\" não chegou a {user}: {why}."
+eventmsg_pm_why_blocked: "a pessoa nunca iniciou uma conversa comigo ou me bloqueou"
+eventmsg_pm_why_failed: "o Telegram não a entregou"
 common_anonymous_user_error: Este comando não pode ser usado em usuário anônimo.
 common_anonymous_ban_error: Este comando não pode ser usado em usuário anônimo, estes usuários só podem ser banidos/desbanidos.
 common_cannot_identify_user: Não consigo identificar o usuário. Este comando não pode ser usado por canais.
