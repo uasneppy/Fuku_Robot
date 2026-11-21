@@ -42,6 +42,23 @@ func settingsMsgAllCustom(t *testing.T, silent bool) *eventmsg.Messages {
 	return msgs
 }
 
+// settingsMsgEveryPMOn is settingsMsgAllCustom with every event's private copy switched on (a pm row with a text and
+// Silent false) and both options off, so the hub draws the private copy mark on every event line beside the block's Off
+// words.
+func settingsMsgEveryPMOn(t *testing.T) *eventmsg.Messages {
+	t.Helper()
+	msgs := settingsMsgAllCustom(t, false)
+	for _, fam := range settingsMsgFamilies {
+		for _, ev := range fam.Events {
+			msgs.Rows[ev.Key+"|"+eventmsg.DestPM] = eventmsg.Message{Event: ev.Key, Dest: eventmsg.DestPM, Text: "custom"}
+			if !settingsMsgPMOn(msgs, ev) {
+				t.Fatalf("the hand-built messages do not switch the %s private copy on", ev.Key)
+			}
+		}
+	}
+	return msgs
+}
+
 // settingsMsgFullState is an event message with every part stored (a long text, the media kind given, one button) and
 // Silent on: the event screen's worst case, eight rows (the private copy screen's worst case too, seven rows).
 func settingsMsgFullState(mediaType int) settingsEditState {
@@ -89,6 +106,8 @@ func settingsMsgScreens(t *testing.T, view settingsView, notices []string) map[s
 	}
 	// Every private copy option is on with every event custom, so the hub's block is drawn with its longest state words.
 	stored["all custom"].Options = eventmsg.Options{PMDetails: true, PMLog: true}
+	// Every event custom with its private copy on as well: every event line carries the private copy mark (Phase 22).
+	stored["every private copy on"] = settingsMsgEveryPMOn(t)
 	for i, notice := range notices {
 		for name, msgs := range stored {
 			add(fmt.Sprintf("hub %s notice %d", name, i), renderSettingsMsgHub(view, msgs, notice), "[1 1 1 2]")
@@ -120,6 +139,14 @@ func settingsMsgScreens(t *testing.T, view settingsView, notices []string) map[s
 					add(fmt.Sprintf("pm %s full %s notice %d", ev.Code, kind, i),
 						renderSettingsMsgPM(view, fam, ev, pmDef, settingsMsgFullState(mediaType), opts), "[2 2 2 2 2 1 2]")
 				}
+				// Phase 22: the event screen whose private copy line reads On, and the private copy screen with every part
+				// stored and its switch on (Silent false), the state a copy that is sent is drawn in.
+				pmOn := settingsMsgFullState(db.PHOTO)
+				pmOn.PMOn = true
+				add(fmt.Sprintf("event %s full pm on notice %d", ev.Code, i), renderSettingsMsgEvent(view, fam, ev, def, pmOn, opts), "[2 2 2 2 2 1 1 2]")
+				pmSent := settingsMsgFullState(db.PHOTO)
+				pmSent.Silent = false
+				add(fmt.Sprintf("pm %s full switch on notice %d", ev.Code, i), renderSettingsMsgPM(view, fam, ev, pmDef, pmSent, opts), "[2 2 2 2 2 1 2]")
 			}
 			for name, d := range map[string]settingsEditPageDef{"": def, "pm ": pmDef} {
 				for _, part := range d.Parts {
@@ -140,6 +167,33 @@ func settingsMsgScreens(t *testing.T, view settingsView, notices []string) map[s
 	return screens
 }
 
+// settingsMsgEditorCodes are the editor's action codes, the only buttons of a private copy screen, prompt or refusal that
+// carry the destination d.
+var settingsMsgEditorCodes = map[string]bool{
+	settingsActMsgSet: true, settingsActMsgRemove: true, settingsActMsgCancel: true, settingsActMsgPreview: true, settingsActMsgFull: true,
+}
+
+// settingsMsgCheckDest holds the field d of one button of the screen name (Phase 22, D-26): its only value is p, it is on
+// the event screen's private copy row (he) and on the editor buttons of a private copy's screens (whose keys start "pm "),
+// and every such editor button carries it, so no Phase 21 button gains a byte and no private copy button edits the group
+// message.
+func settingsMsgCheckDest(t *testing.T, name, label string, fields map[string]string) {
+	t.Helper()
+	d, hasD := fields[settingsMsgDestField]
+	pmScreen := strings.HasPrefix(name, "pm ")
+	editor := settingsMsgEditorCodes[fields["a"]]
+	switch {
+	case hasD && d != settingsMsgDestPMCode:
+		t.Errorf("%s: button %q carries d=%q, want only p", name, label, d)
+	case hasD && pmScreen && !editor:
+		t.Errorf("%s: button %q (%s) carries d, which only the editor buttons of a private copy screen carry", name, label, fields["a"])
+	case hasD && !pmScreen && !(strings.HasPrefix(name, "event ") && fields["a"] == settingsActMsgEvent):
+		t.Errorf("%s: button %q (%s) carries d outside the private copy row and the private copy screens", name, label, fields["a"])
+	case !hasD && pmScreen && editor:
+		t.Errorf("%s: the editor button %q (%s) of a private copy screen has no d, so it would edit the group message", name, label, fields["a"])
+	}
+}
+
 func TestSettingsMessagesCallbackBytes(t *testing.T) {
 	withRealLocales(t)
 	tr := i18n.MustNewTranslator("en")
@@ -148,7 +202,9 @@ func TestSettingsMessagesCallbackBytes(t *testing.T) {
 
 	// sizes records the largest button of each action code over every private screen; Back to Main and Close have codes too.
 	sizes := make(map[string]int)
-	for name, named := range settingsMsgScreens(t, private, []string{""}) {
+	pmRows := make(map[string]int)
+	screensOf := settingsMsgScreens(t, private, []string{""})
+	for name, named := range screensOf {
 		screen := named.screen
 		if screen.Omitted != 0 {
 			t.Errorf("%s: %d buttons were omitted for their size, want none", name, screen.Omitted)
@@ -166,7 +222,17 @@ func TestSettingsMessagesCallbackBytes(t *testing.T) {
 					t.Errorf("%s: button %q carries the field %q, outside a c u p t k d v", name, button.Text, key)
 				}
 			}
+			settingsMsgCheckDest(t, name, button.Text, fields)
+			if fields[settingsMsgDestField] != "" && strings.HasPrefix(name, "event ") {
+				pmRows[name]++
+			}
 			sizes[fields["a"]] = max(sizes[fields["a"]], len(button.CallbackData))
+		}
+	}
+	// Every event screen has exactly one button carrying d: its private copy row (every manual event has a spec).
+	for name := range screensOf {
+		if strings.HasPrefix(name, "event ") && pmRows[name] != 1 {
+			t.Errorf("%s has %d buttons carrying d, want the one private copy row", name, pmRows[name])
 		}
 	}
 	for code, want := range map[string]int{
