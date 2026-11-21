@@ -166,8 +166,9 @@ func TestSettingsPhase18Codes(t *testing.T) {
 			}
 		}
 		// The sixteen pages of Phase 18, the Blacklist, Filters and Notes pages of Phase 19 and the Blocked sources page of a
-		// Staff Group's forward blocklist ("v"), the Reactions page ("x"), the Messages page ("h"), and no other.
-		want := []string{"s", "v", "l", "c", "f", "n", "k", "b", "i", "w", "g", "r", "e", "x", "h", "m", "d", "t", "u", "z", "o", "y", "a"}
+		// Staff Group's forward blocklist ("v"), the Reactions page ("x"), the Messages page ("h"), the
+		// Conversations page ("p"), and no other.
+		want := []string{"s", "v", "l", "c", "f", "n", "k", "b", "i", "w", "g", "r", "e", "x", "h", "m", "d", "t", "u", "z", "o", "y", "p", "a"}
 		if got := slices.Sorted(maps.Keys(seen)); !slices.Equal(got, slices.Sorted(slices.Values(want))) {
 			t.Errorf("registered pages = %v, want %v", got, slices.Sorted(slices.Values(want)))
 		}

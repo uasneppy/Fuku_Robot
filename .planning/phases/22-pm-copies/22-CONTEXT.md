@@ -296,7 +296,7 @@ The cached read `event_messages:<chat>` (in `skipLocal`) now also carries the `p
 - `AGENTS.md`: Data (`chat_event_messages`), Subsystem traps (Event messages, Scheduling the bot's own messages), Callbacks (the Messages page,
   the message editor), Permissions, Startup and shutdown (the drains and the 68 s worst case), Testing.
 - `.planning/phases/21-message-engine-messages-page-and-manual-punishments/`: `21-CONTEXT.md` and the eleven summaries (identifiers below).
-- `fuku/db/eventmsg/` (`events.go`, `repository.go`), `migrations/20261119120000_add_chat_event_messages.sql`.
+- `fuku/db/eventmsg/` (`events.go`, `repository.go`), `migrations/20261120110000_add_chat_event_messages.sql`.
 - `fuku/modules/event_message.go` (`replyEvent`, `composeEventMessage`, `renderEventText`, `eventPlaceholderValues`, `actorIsAnonymous`),
   `event_message_apply.go` (`eventMsgWrites`, `applyEvent*`), `settings_messages.go` (the page, `settingsMsgEditDef`, `settingsMsgDefByFields`,
   `settingsMsgPreview`), `settings_edit.go` (`registerSettingsEditDef`, `settingsEditHooks`), `settings_edit_actions.go`

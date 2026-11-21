@@ -347,8 +347,8 @@ func TestSettingsFwdBlockMainShape(t *testing.T) {
 	// the Messages page that other chats gained in plan 21-06 does not exist in a Staff Group.
 	const (
 		staffOwnerRows = settingsMainOwnerRows - 1
-		groupOwner     = "s|v / l|c / f|n / k|b / i|w / g|r / e|x / m|t / u|z / o|y / a / close"
-		privateOwner   = "s|v / l|c / f|n / k|b / i|w / g|r / e|x / m|t / u|z / o|y / a / groups|close"
+		groupOwner     = "s|v / l|c / f|n / k|b / i|w / g|r / e|x / m|t / u|z / o|y / p / a / close"
+		privateOwner   = "s|v / l|c / f|n / k|b / i|w / g|r / e|x / m|t / u|z / o|y / p / a / groups|close"
 		groupAdmin     = "s|v / l|c / f|n / k|b / i|w / g|r / e|x / m|t / u|z / o|y / close"
 		privateAdmin   = "s|v / l|c / f|n / k|b / i|w / g|r / e|x / m|t / u|z / o|y / groups|close"
 	)
@@ -375,11 +375,11 @@ func TestSettingsFwdBlockMainShape(t *testing.T) {
 	e.setAdminsAllowed(e.chat.Id, true)
 	adminGroupMsg := e.openMenu(e.admin)
 	_, keyboard = e.lastEdit(e.chat.Id, adminGroupMsg)
-	check("the administrator's group", keyboard, groupAdmin, staffOwnerRows-1)
+	check("the administrator's group", keyboard, groupAdmin, staffOwnerRows-settingsMainOwnerOnlyRows)
 	adminPrivateMsg := e.updateID()
 	e.pressPrivate(e.admin, adminPrivateMsg, e.privateFields(e.chat.Id, "a", settingsActBack))
 	adminText, keyboard := e.lastEdit(e.admin.Id, adminPrivateMsg)
-	check("the administrator's private", keyboard, privateAdmin, staffOwnerRows-1)
+	check("the administrator's private", keyboard, privateAdmin, staffOwnerRows-settingsMainOwnerOnlyRows)
 	if _, ok := settingsMainStateLine(adminText, "settings_page_fwdblock"); !ok {
 		t.Errorf("the administrator's Main has no Blocked sources line:\n%s", adminText)
 	}

@@ -587,6 +587,24 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_rct_saved":             {90, 140},
 	"settings_entries_part_reaction": {16, 24},
 
+	// The Conversations page (Phase 20): its name, body lines, buttons, the card and the data notice.
+	"settings_page_chat":              {14, 18},
+	"settings_state_chat_on":          {24, 34},
+	"settings_chat_intro":             {220, 300},
+	"settings_chat_status":            {30, 40},
+	"settings_chat_provider_line":     {40, 50},
+	"settings_chat_audience_line":     {60, 80},
+	"settings_chat_audience_everyone": {28, 40},
+	"settings_chat_audience_admins":   {28, 40},
+	"settings_chat_not_set_up":        {100, 140},
+	"settings_chat_provider_missing":  {120, 170},
+	"settings_chat_hint":              {120, 170},
+	"settings_chat_data_notice":       {640, 800},
+	"settings_chat_confirm":           {50, 70},
+	"settings_btn_chat_toggle":        {30, 40},
+	"settings_btn_chat_everyone":      {20, 20},
+	"settings_btn_chat_admins":        {20, 20},
+
 	// The Timezone page (plan of 2026-11-18, Part 3): its name, body lines, buttons, prompt, notices and the
 	// preset cities.
 	"settings_page_tz":            {14, 18},
@@ -891,6 +909,7 @@ func TestSettingsLabelLengths(t *testing.T) {
 		{"👍", "settings_page_reactions"},
 		{"📨", "settings_page_msgs"},
 		{"🕒", "settings_page_tz"},
+		{"🗨", "settings_page_chat"},
 	}
 	options := []string{
 		"settings_opt_math", "settings_opt_text", "settings_opt_turnstile",

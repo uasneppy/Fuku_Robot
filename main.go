@@ -59,7 +59,7 @@ func main() {
 	if len(os.Args) > 1 && (os.Args[1] == "--version" || os.Args[1] == "-version" || os.Args[1] == "-v") {
 		version := config.AppConfig.BotVersion
 		if version == "" {
-			version = "v2.25.0"
+			version = "v2.26.0"
 		}
 		fmt.Println(version)
 		os.Exit(0)
@@ -259,6 +259,14 @@ func main() {
 	shutdownManager.RegisterHandler(func() error {
 		log.Info("[Shutdown] Draining AI spam checks...")
 		modules.DrainAISpamChecks()
+		return nil
+	})
+
+	// Registered right after the AI spam drain, so LIFO runs it first: it sheds late messages,
+	// cancels every conversation provider call and send in flight and waits at most 2 s.
+	shutdownManager.RegisterHandler(func() error {
+		log.Info("[Shutdown] Stopping conversations...")
+		modules.StopChat()
 		return nil
 	})
 

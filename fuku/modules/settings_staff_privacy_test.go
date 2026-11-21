@@ -18,6 +18,7 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/db"
 	"github.com/uasneppy/fuku_robot/fuku/db/adminindex"
 	dbcache "github.com/uasneppy/fuku_robot/fuku/db/cache"
+	"github.com/uasneppy/fuku_robot/fuku/db/chatconv"
 	"github.com/uasneppy/fuku_robot/fuku/db/deletion"
 	"github.com/uasneppy/fuku_robot/fuku/db/logchannels"
 	"github.com/uasneppy/fuku_robot/fuku/db/memberreq"
@@ -350,8 +351,20 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 				// Phase 21: every screen of the Messages page (the hub, the family list, every event screen empty and full,
 				// the prompts, the refusals and the group note), once per language with the longest notice, in a group menu
 				// and in the private menu of an administrator who is not the creator. The page reads no Staff Group data.
-				for name, screen := range settingsPrivacyPhase20Screens(t, tr, map[string]settingsView{"group": groupView, "private admin": privateAdminView}) {
+				for name, screen := range settingsPrivacyPhase21Screens(t, tr, map[string]settingsView{"group": groupView, "private admin": privateAdminView}) {
 					screens[name] = screen
+				}
+				// The Conversations page (Phase 20): every state, the card and the refusal notices,
+				// drawn for the private menu the page exists in; none may name the Staff Group.
+				for _, on := range []bool{false, true} {
+					for _, provider := range chatProviders {
+						for audience := 0; audience <= 1; audience++ {
+							stored := chatconv.Settings{Enabled: on, Provider: provider, Audience: audience}
+							screens[fmt.Sprintf("conversations %t %s %d", on, provider, audience)] = renderSettingsChat(privateView, stored,
+								settingsNoticeWarn(settingsText(tr, "common_settings_save_failed")))
+						}
+					}
+					screens[fmt.Sprintf("conversations card %t", on)] = renderSettingsChatCard(privateView, chatconv.ProviderGoogle)
 				}
 
 				for name, screen := range screens {
@@ -1440,9 +1453,9 @@ func settingsPrivacyPhase18Run(t *testing.T, private bool) {
 	}
 }
 
-// settingsPrivacyPhase20Screens renders every screen of the Messages page (settingsMsgScreens) for each view, with no
+// settingsPrivacyPhase21Screens renders every screen of the Messages page (settingsMsgScreens) for each view, with no
 // notice and with a failed save, the page's longest notice in most languages: a notice only adds its own length.
-func settingsPrivacyPhase20Screens(t *testing.T, tr *i18n.Translator, views map[string]settingsView) map[string]settingsScreen {
+func settingsPrivacyPhase21Screens(t *testing.T, tr *i18n.Translator, views map[string]settingsView) map[string]settingsScreen {
 	t.Helper()
 	screens := make(map[string]settingsScreen)
 	notices := []string{"", settingsNoticeWarn(settingsText(tr, "common_settings_save_failed"))}

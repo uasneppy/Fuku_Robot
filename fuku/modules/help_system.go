@@ -152,6 +152,7 @@ var helpModuleIcons = map[string]string{
 	"Filters": "🔁", "Formatting": "✍️", "Greetings": "🎉", "Languages": "🌐", "Lockdown": "🔒", "Locks": "🔐",
 	"LogChannels": "🧾", "Misc": "🧰", "Mutes": "🔇", "Notes": "📝", "Pins": "📌", "Purges": "🧹",
 	"Reactions": "👍", "Reports": "📣", "Rules": "📜", "Settings": "⚙️", "Staff": "👥", "Warns": "🚩",
+	"Chat": "🗨",
 }
 
 // helpModuleTitle is a module page's title text: its icon, when it has one, and its translated name.

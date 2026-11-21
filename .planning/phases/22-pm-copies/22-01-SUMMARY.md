@@ -97,7 +97,7 @@ Rules a later plan must keep:
 - Two mutations fail the tests that guard them: removing the pm insert default fails `a text alone does not switch it on` and `pm default under concurrent writers`; removing `SetPMDetails`'s cache drop fails `one key`.
 - golangci-lint v2.13.1 (`go install` with go1.26.11, `CGO_ENABLED=0`): `run --new-from-rev=9940d97 ./...` 0 issues, and with `--build-tags=notesttools` 0 issues.
 - `CGO_ENABLED=0 go build ./...` ok; `gofmt -l` empty on every touched Go file; `make check-docs` no drift.
-- `git diff --exit-code 9940d97 -- go.mod go.sum main.go fuku/db/backup/backup.go fuku/db/backup/types.go migrations/20261119120000_add_chat_event_messages.sql fuku/db/migrations/runner.go scripts/migrate_psql.sh` exits 0. `TestLegacyModerationRequests` and `TestSettingsDeletionPhase16ScreensUnchanged` untouched.
+- `git diff --exit-code 9940d97 -- go.mod go.sum main.go fuku/db/backup/backup.go fuku/db/backup/types.go migrations/20261120110000_add_chat_event_messages.sql fuku/db/migrations/runner.go scripts/migrate_psql.sh` exits 0. `TestLegacyModerationRequests` and `TestSettingsDeletionPhase16ScreensUnchanged` untouched.
 
 ## Deviations from Plan
 

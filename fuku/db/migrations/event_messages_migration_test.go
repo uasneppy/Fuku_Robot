@@ -11,7 +11,7 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-const chatEventMessagesMigration = "20261119120000_add_chat_event_messages.sql"
+const chatEventMessagesMigration = "20261120110000_add_chat_event_messages.sql"
 
 // chatEventMessagesStatements reads the event messages migration and returns the statements the
 // runner would execute, dropping empty and transaction-control statements as applyMigration does.

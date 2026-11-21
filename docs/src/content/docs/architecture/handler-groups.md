@@ -33,6 +33,7 @@ This page documents every registered message watcher with its exact handler grou
 | 8 | Reactions | `checkReactions` | `message.All` | `EndGroups` | Checks message reactions against configured patterns; takes action (mute/ban) on violation |
 | 9 | Filters | `filtersWatcher` | non-command, non-media-group | `ContinueGroups` (always) | Matches filter patterns; sends configured response but does not block |
 | 10 | Pins | (handler) | `message.All` | `EndGroups` | Anti-channel-pin watcher |
+| 13 | Chat | `chatWatcher` | `message.All` with no setter (new messages of real users) | `ContinueGroups` (always, through a named result preset to it) | The conversation watcher, the only handler of the group and the last group. It reacts only to a message addressed to the bot (a mention of the bot, or a reply to a message the conversation feature sent) by an ordinary member, in a group whose owner turned conversations on. It hands one job to the conversation pool and never sends or calls a provider itself. It ignores slash texts and ends no update |
 
 ## Propagation Behavior
 
@@ -46,6 +47,7 @@ Understanding these rules is essential for debugging why a message did or did no
 - **The raid flood counter never blocks (group -4).** It always returns `ContinueGroups` and deletes nothing. When a flood trigger fires it starts a lockdown, and the lockdown's muting stops the flood.
 - **The raid AI candidate watcher never blocks (group 2).** It runs after the commands (group 0), so a command the bot handled has already ended the update and is never judged. It always returns `ContinueGroups`, applies a cheap rule to a new member's message (a link, a forward, or a repeat of one of their last texts; for media, any photo, GIF, sticker or video) and puts the candidate on the raid AI pool's queue. The pool, not the watcher, calls TypeSafe (text) or Anthropic Claude (images), and only when the matching key is configured. The watcher never deletes, restricts, bans or posts.
 - **AI never decides alone.** A spam verdict, whether from the raid AI pool or from a message `/aispam` deleted, only adds one item to the AI burst count. Only the rule of at least N verdicts (the group's `ai_threshold`, default 5) from at least 3 different accounts within 120 seconds starts a lockdown, through the same start path as `/lockdown`. One verdict never does.
+- **The conversation watcher is last (group 13).** It runs after aispam, antiflood, locks and blacklists. Those can delete a message and still pass it on (the blacklist always does), so the watcher can see a message that is already gone; the reply is therefore sent as a reply that Telegram refuses when its target is deleted, and the bot then stays silent. Group 13 handles no command, ignores slash texts and ends no update, so the late raid flood counter at group 12 still counts every slash text no command took.
 - **Blacklists and Filters use ContinueGroups.** Both take their configured action (warn, mute, ban for blacklists; send reply for filters) but do not block downstream watchers. A message matching a blacklist word still gets checked by filters.
 :::
 

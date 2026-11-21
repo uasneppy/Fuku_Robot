@@ -92,6 +92,17 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   refused once `raidAIDraining` is set (`raidAIFireAsync` counts the start in `raidAIFires` before it reads the flag), so
   no start begins behind `StopRaidAI`'s back. Tests wait for checks with `waitAISpamChecks`, which closes and cancels
   nothing, and a test that runs the drain restores the pool with `restoreAISpamPool` (`TestShutdownDrainsAISpamChecks`).
+- `StopChat` is the conversation pool's stop (Phase 20), a plain shutdown handler (`RegisterHandler`, the 10 s default) that
+  `main.go` registers right after `DrainAISpamChecks`, so LIFO runs it before the AI spam drain. It sets `chatDraining` for good
+  (a late addressed message is shed), cancels the pool's root context first (`chatContext`: every provider call, typing action
+  and reply of a job derives from it, so all of them end at once; a call cut off is neither a breaker failure nor a success)
+  and waits at most `chatStopWait` (2 s) for `chatJobs`, logging one warning when the wait runs out. A reply cut off is lost and
+  nothing needs resuming: the transcript and the set of the feature's message IDs are written only after a reply was sent. It
+  adds 2 s to the webhook-mode worst case, which is now 70 s (HTTP stop 10, conversations 2, AI spam 10, raid AI 2, raid posts 3,
+  lockdown 6, staff actions 31, member requirements 3, deletion worker 3) against the enforced 60 s budget: the cut described
+  under `StopDeletionWorker` comes 2 s earlier and costs no correctness. `TestShutdownEndsChat` proves it: a job inside a hung
+  provider call is ended inside the wait, sends nothing, writes no memory, and a later message starts no job; a test that runs
+  the stop restores the pool with `restoreChatPool`.
 - `StopRaidAI` is a drain registered after DB-close as well, through `RegisterRaidAIDrain` (`raidAIStopWait`, 1 s, plus
   grace), in `main.go` right after `RegisterRaidPostsDrain`. Shutdown is LIFO, so it runs after `DrainAISpamChecks`
   (whose verdicts can start lockdowns) and before `StopRaidPosts` (a start can post a notice) and the database close. It
@@ -161,7 +172,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `ext.ContinueGroups` for anyone with no wait and no marker, consumes and ends the update otherwise) · `2` raid AI candidate watcher (hands a new member's suspicious
   item to the raid AI pool, never ends an update) · `3` aispam · `4` antiflood · `5`/`6` locks · `7` blacklists ·
   `8` reports+reactions (the `@admin` watcher, `reportWatch`, returns `nil` after reporting so groups 9 to 12 still run) · `9` filters · `10` pins · `11` log-channel · `12` late raid flood counter (slash-prefixed texts only; keep it
-  after every other group).
+  after every group that can end a slash text) · `13` conversation watcher (the Chat module, the only handler of the group; handles no command,
+  ignores slash texts and ends no update, which is why it may come after group 12; see the `Chat` bullet).
 - gotgbot stops a group at the first matching handler. Watchers return `ext.ContinueGroups`; commands return
   `ext.EndGroups`. A group-0 watcher returning `nil` silently kills every later group-0 handler.
 - Modules register in `init()` via `RegisterLegacyModule(name, priority, load)`. Use a unique name; duplicates are
@@ -421,6 +433,54 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   goroutines that reach the join entry can outlive the test that started them) and `make test` runs with `-race`; tests
   write it only through `withMemberReqLive`, which restores the previous value (now true) in `t.Cleanup` and is never
   combined with `t.Parallel`. `TestMemberReqEnforcementLive` asserts the default and the registration together.
+- The `Chat` module (priority 245, `chat.go`, Phase 20) registers the conversation watcher alone at handler group `13`
+  (`chatWatchGroup`, `chat_watch.go`) with `handlers.NewMessage(message.All, ...)` and no setter (new messages of real users only).
+  Its result is a named value preset to `ext.ContinueGroups` with `defer error_handling.RecoverFromPanic`, so it ends no update.
+  It never converses in a private chat (the chat type is its first check, before any I/O) and never calls a provider or sends:
+  it hands one `chatJob` to the pool (`chat_run.go`). Its order, cheapest first, with no I/O before the message is known to be
+  addressed: the chat is a group or supergroup; not a slash text (`raidFloodIsSlashText`); the sender's shape
+  (`raidFloodSenderCounts`: no `sender_chat`, automatic forward, service ID or the bot) and not a bot, so anonymous admins and
+  channels cannot converse (a stated limit); addressed (`chatAddressed`): an `@<bot username>` mention entity compared without
+  regard to case or a `text_mention` of the bot, in the text or the caption (pure), else a reply, read through
+  `extraction.ReplyTarget`, to a message the conversation feature sent (one Redis `ZSCORE` of `fuku:chat:{<chat>}:mine`, only for
+  a reply to the bot, so a reply to a ban notice, a welcome or a captcha is no address); the server can converse at all
+  (`chatAnyProviderConfigured`); the cached setting (`chatconv.Get`; an error answers nothing); enabled and its provider configured
+  (`chatProviderConfigured`); Redis present; the audience (`chatAudienceAllows`: everyone, or an administrator by
+  `chat_status.IsUserAdmin` or an approved member by `approvals.IsUserApprovedContext`, where a failed read means no reply).
+  A job, in order (`chatProcessJob`): the per-user cooldown (`SET NX EX 5`), the provider's breaker, the hourly budgets
+  (`chatReserve`: the member's unit, then the group's, then the fleet's, 12, 80 and 800 per UTC hour, through `raidAIBudgetTake`;
+  a counter error makes no call), one paced typing action, the transcript, the request (`chatBuildRequest`, through the leaf
+  `chatprompt`: the static persona and archive, the group's title, language name, today's date in the group's zone and the bot's
+  username, then the transcript, the quoted message when the speaker replies to someone else's, and the message with the bot's
+  mention removed; no user ID, username or chat ID, `TestChatProvidersRequest`), the provider call behind `chatProvider` (two
+  adapters, `chatAnthropicProvider` over `claude.Client.Converse` and `chatGeminiProvider` over `gemini.Client.Generate`, so the
+  runtime never branches on the provider), the output filter (`chatFilterReply`: link-like tokens become `[link removed]`, a
+  zero-width space follows every `@` that starts a username, a hard cap of 1,200 runes at the last sentence end; blank is never
+  sent), the reply and the record of the exchange. The reply is plain text, link previews off, a reply to the addressed message
+  sent through the feature's own pacer (`chatPacer`, `fuku:chat:pace:*`), and never sent without its reply target
+  (`AllowSendingWithoutReply` false): aispam, antiflood, a lock or the blacklist can delete a message and still pass it on (the
+  blacklist always does), so the watcher can see a message that is gone; Telegram then refuses the reply and the job stays silent
+  (`chatReplyTargetGone`, counted as shed; `TestChatDeletedMessageGetsNoReply`). This is a deliberate change from the plan's
+  `AllowSendingWithoutReply` true, which would have answered deleted messages. The group sees (plan 3.4): the canned
+  `chat_reply_refused` for a refusal (remembered in the `mine` set, so a reply to it is an address); `chat_reply_malfunction` for a
+  provider error, a blank answer or a paused breaker, at most once per chat per 5 minutes (`fuku:chat:{<chat>}:said:malfunction`);
+  `chat_reply_allowance` for a used-up allowance, at most once per chat per hour; nothing for a full queue, the cooldown, a counter
+  fault, a deleted target or a shutdown. The breakers are two instances of `memberReqAIBreaker`, one per provider, each of its own
+  state (`chatBreakers`): five provider failures in a group pause that group 5 minutes, a rejected key, a 429 with a retry delay
+  over 2 s or Gemini's per-day quota pauses that provider for every group (`chatProviderSpan`); a refusal is an answer and a
+  cancelled call neither. The pool is the raid AI pool's shape: 64 queued jobs, 3 workers started once, each recovering from
+  panics, `chatJobs` (a `raidPostTracker`) taken before `chatDraining` is read, a job dropped when the root context is done. The
+  counters (answered, refused, failed, shed, capped) are in memory per replica and appended to the developer `/stats` after the
+  other AI lines (`chatStatsSection`: numbers only). Logs carry chat and user IDs, the provider's status and error type
+  (`chatErrorClass`) and Telegram codes only, never the text, a name, a reply, the provider's message or a key
+  (`TestChatLogsCarryIDsOnly`). `TestChatWatcherGroupReachedByMention` loads every module and proves that a mention in a text or a
+  caption and a reply to the bot reach group 13. `/ask <text>` and its alias `/xeno` (`chat.go`) go through `helpers.WrapCommand`,
+  each `Disableable` and checking its own name (`/xeno` also `ask`, so disabling `/ask` silences both); in a private chat they
+  answer `chat_private_refused`, in a group whose conversations are off or cannot run here `chat_off_hint`, with no text
+  `chat_ask_usage`, for an anonymous admin, a channel, an unreadable setting, no Redis or an audience the sender is not in nothing,
+  and otherwise the text after the command is handed to the pool after the same checks as a mention (`chatAccept`, shared with the
+  watcher). The module's help page is `chat_help_msg` (`help_module_name_chat`, icon 🗨), which says how to talk to the bot, that
+  the owner turns it on in private and what goes to the provider.
 - The web captcha adds no handler group: its routes are HTTP routes on the bot's server, not dispatcher handlers.
 - The Settings module (priority 239, `settings.go`) adds one handler group, `1`, for the typed-reply door below; its other entry points are `/settings`, the callbacks and the deep link. `/settings` goes through `helpers.WrapCommand`
   with `settingsDesc.RequiredChecks` of `requireSettingsAccess()` alone (`settings_gate.go`: a private chat passes at
@@ -763,6 +823,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   group alike (`settingsMainOwnerRows` 13). The page is `Hidden` in a Staff Group, so a Staff Group's Main is unchanged:
   `s|v / l|c / f|n / k|b / i|w / g|r / e|x / m|t / u|z / o|y`, twelve rows for the owner and eleven for an administrator, one row
   fewer than another chat's (`TestSettingsFwdBlockMainShape`, whose row count is `settingsMainOwnerRows - 1`).
+  With the Conversations page (key `p`, Phase 20, an `OwnerOnly` row like Access, merged from main) Main is
+  `s|l / c|f / n|k / b|i / w|g / r|e / x|h / m|d / t|u / z|o / y`, then Conversations and Access for the live owner and the
+  navigation row: fourteen rows for the owner and twelve for an administrator, private and group alike (`settingsMainOwnerRows`
+  14, `settingsMainOwnerOnlyRows` 2); a Staff Group's Main keeps Messages hidden and shows Conversations, thirteen rows for the
+  owner and eleven for an administrator (`TestSettingsFwdBlockMainShape`).
   The Blocked sources page (key `v`, `Order` 11, quick task 261113-tjj) is the one page that exists for a Staff Group only (its `Hidden`
   hook, below), so every other chat's Main keeps the eighteen cells, the constants `settingsMainShapeGroup`, `settingsMainShapePrivate`
   and `settingsMainOwnerRows` and the nineteen state lines above. A Staff Group's Main hides Deletion (`d`) and shows Blocked sources, so
@@ -1494,6 +1559,29 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `reactions` table keeps what backup does with it today. `TestSettingsReactions*`, `TestSettingsParityReactionAdd` (the page and
   `/addreaction` store the same row, and the page draws what the commands wrote), `TestSettingsAuthorityParityReactions`,
   `TestSettingsListReactionsFits` and `TestReactionCap` hold it.
+- The Conversations page (`settings_chat.go`, page `p`, `Order` 89 with key `p`, after Anonymous admins; icon 🗨,
+  `settings_page_chat`; Phase 20 plan 20-05) is the one door that turns a group's conversations on, and it is both
+  `OwnerOnly` and `PrivateOnly`: Main shows it, on its own full-width row before Access, only to the live creator, and only
+  in the bot's private chat (a group menu reads `In private` on the owner's line and opens the framework note). Every
+  control and action declares `settingsRightOwner` and is refused for a press from a menu in a group
+  (`settingsChatGroupRefused`, the invalid-request alert, nothing written), so a forged group press can never write. The
+  controls: `e` the toggle (`tg` only, `v` 0 or 1): Off writes at once through `applyChatEnabled` (which also deletes the
+  chat's transcript and its set of the feature's message IDs), On writes nothing and draws the shared two-tap card
+  (`settings_chat_confirm` and the data notice naming the provider), whose Yes is the page action `py` (`e`; the expiry
+  check, then the provider check again, then the write); `m` the provider (`st` only, `v` `a` Anthropic or `g` Google,
+  through `applyChatProvider`); `w` who may talk (`st` only, `v` `e` everyone or `a` administrators and approved members,
+  through `applyChatAudience`). A provider this server cannot run (`chatProviderConfigured`: `ENABLE_CHAT` on and
+  `ANTHROPIC_API_KEY` or `GEMINI_API_KEY` set) is refused before any write with the alert `settings_chat_not_set_up` (no
+  provider at all) or `settings_chat_provider_missing` and the page is redrawn; a press of the stored value writes nothing.
+  The page reads through `chatconv.GetFresh` (a failed read is the cannot-open edit, the unknown mark on Main) and draws
+  the switch, the provider, the audience, the data notice of the stored provider and the hint; its button sizes and its
+  length in 8 languages are held by `TestSettingsChatCallbackBytes` and `TestSettingsChatPageFitsEveryLocale`. There is no
+  command, so the page carries a drift test (`TestSettingsDriftChat`) and its own authority tests
+  (`TestSettingsChatAuthority`: a non-owner administrator, a gated one and a group menu are all refused with nothing
+  written) in place of a parity test, and it does not join `TestSettingsGateAllDoors`, whose doors all decide alike and
+  admit administrators the owner lets in, while this page admits the creator alone. With this page Main has
+  `settingsMainOwnerOnlyRows` 2 (Conversations and Access) and, with the Messages page of Phase 21,
+  `settingsMainOwnerRows` 14.
 - The Timezone page (`settings_timezone.go`, page `z`, `Order` 87 with key `z`, so it sorts right after Language; icon 🕒,
   `settings_page_tz`; plan of 2026-11-18, Part 3) and `/timezone` (`timezone.go`, `helpers.WrapCommand` with `RequireGroup`
   and `RequireUserAdmin`, anonymous-admin re-entry, not `Disableable`) write through one apply function, `applyTimezone`
@@ -2713,6 +2801,32 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   cards use the Staff Group's; a lockdown alert copy uses its destination's (`lockdownSlotClock`: the Staff Group's for a
   Staff Group copy, the locked group's for the log channel copy), and the stored `body` keeps the time it was posted
   with. Log lines, file names, Redis hour stamps, stored values and the fban export's RFC 3339 dates stay UTC.
+- The conversation feature's Redis keys (`fuku:chat:*`, outside the `fuku:cache:` prefix, so `CLEAR_CACHE_ON_STARTUP` keeps
+  them; the chat ID is a hash tag): `fuku:chat:{<chat>}:h` is the rolling transcript (`chat_history.go`), a list of compact JSON
+  entries (`r` role, `n` first name, `t` text cut to 600 runes, `m` message ID, `at` unix time), the newest 12, 2 hours after the
+  last line, written in one transaction with the reply's ID only after a reply was sent; `fuku:chat:{<chat>}:mine` is a sorted set
+  of the message IDs the feature sent (answers and canned refusals), scored by the ID, the newest 200, 24 hours, and decides "a
+  reply to a conversation message"; `fuku:chat:{<chat>}:cd:<user>` the per-user cooldown (`SET NX EX 5`);
+  `fuku:chat:b:u:<chat>:<user>:<hour>`, `fuku:chat:b:c:<chat>:<hour>` and `fuku:chat:b:g:<hour>` the hourly budgets (single-key
+  commands, no hash tag needed); `fuku:chat:{<chat>}:said:<kind>` the gates of the canned lines; `fuku:chat:pace:next` and
+  `:block` the send pacer. This is the first place the bot keeps message text in Redis outside `/aispam`'s sender history: only
+  what was addressed to the bot and the bot's replies, bounded, short-lived and disclosed on the settings page. Turning
+  conversations off deletes the transcript and the `mine` set. Without Redis conversations are inert on that replica (one info
+  line per process).
+- `chat_conversations` (migration 20261119120000, Phase 20) is one group's conversation setting: `chat_id` primary key,
+  `enabled` (no `default:` tag in the model, so a Go false is written), `provider` (`anthropic` or `google`,
+  `chk_chat_conversations_provider`), `audience` (0 everyone, 1 admins and approved members,
+  `chk_chat_conversations_audience`), `updated_by`, `updated_at`, inline constraints and no foreign key. A chat without a
+  row means off, anthropic, everyone. It is read through `cache.GetFromCacheOrLoad` under `cache.CacheKey("chat_conv",
+  chat)` (`chatconv.Get`, which creates nothing and returns its error; `GetFresh` is the same query without the cache),
+  and the prefix is listed in `skipLocal`, because switching conversations off must stop replies on every replica at the
+  next message. `SetEnabled`, `SetProvider` and `SetAudience` are column-targeted upserts (`ON CONFLICT (chat_id) DO
+  UPDATE` of their own column, `updated_by` and `updated_at`) that refuse a value outside the stored ones before any
+  write and drop the key. It is never part of backup, export, import or reset, so a restored backup can never switch
+  conversations on (`TestChatConversationsStayOutOfBackup`). The apply functions `applyChatEnabled`, `applyChatProvider`
+  and `applyChatAudience` (`fuku/modules/chat_settings.go`, write seam `chatConvWrites`, typed `chatApplyResult`) judge
+  no person's rights; turning conversations off also deletes the chat's transcript `fuku:chat:{<chat>}:h` and its set of
+  the feature's message IDs `fuku:chat:{<chat>}:mine` (best effort; a failed write deletes nothing).
 - `chat_event_messages` (migration 20261120110000) holds a group's custom event messages, one row per `(chat_id, event,
   dest)` under the inline primary key `pk_chat_event_messages`: `text`, `file_id` and `media_type` (one media item, 0 for
   none, the `db.*` media constants the greetings and rules rows use), `buttons` (jsonb, `'[]'` for none,
@@ -3831,7 +3945,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   first paragraph are judged the same way, because the handler reads them as the command text), and the group `12` watcher counts only the
   slash-prefixed texts that reach it, the ones no command took: `/word` with no handler, `/////`, and a command addressed
   to another bot (`/start@otherbot`). Never keep a second list of command names for this. Group `12` must stay after every
-  other group, so every new handler group needs a number below it. A slash text that a handler ends is not counted, and
+  group that can end a slash text, so every new handler group that can needs a number below it; group `13`, the conversation
+  watcher, handles no command, ignores slash texts and ends no update, so it changes nothing group `12` sees. A slash text that a handler ends is not counted, and
   neither is one that an earlier handler ends (an aispam, antiflood, lock or blacklist deletion at groups `3` to `7`); a
   command that returns `nil` or an error instead of `ext.EndGroups` is counted late, which only raises the counts, so
   new commands should still end with `ext.EndGroups`. Service messages, edited messages, channel posts and bot senders
@@ -4698,6 +4813,42 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   A change to the canonical form bumps `mrn1` and `mrv1`, and a change to `claude.NamesInstruction` bumps `mrv1`, in the
   same commit, so no old baseline or cached verdict is read under a new meaning; `TestCanonHash` and
   `TestCanonVerdictKey` pin one vector each for that reason.
+- The conversation feature's provider clients (Phase 20). `claude.Client.Converse` (`fuku/utils/claude/converse.go`) sends
+  `system` as two text blocks, the static persona and archive first with `cache_control` ephemeral and the dynamic block
+  after it unmarked, one user message, `output_config.effort` `low`, and no `thinking`, sampling, `tools` or prefill; it
+  uses its own transport (`ConverseTimeout` 40 s, no redirect) and the package's one retry (a retryable error whose wait
+  is at most 2 s). `"fallbacks": "default"` and `anthropic-beta: server-side-fallback-2026-07-01` are sent only for a
+  model `claude.ServerFallback` accepts (`claude-opus-5`, `claude-sonnet-5-5`, `claude-fable-5` prefixes), never for a
+  Haiku model. The stop reason is read before the content: `end_turn` joins the text blocks (thinking and fallback blocks
+  skipped), `max_tokens` keeps non-blank text (`OutcomeTruncated`), `refusal` is `OutcomeRefused` with no error, and
+  anything else or a blank answer wraps `claude.ErrNoReply`. `fuku/utils/gemini` (standard library only,
+  `TestGeminiPackageIsLeaf`) is built the same way: `POST /v1beta/models/{model}:generateContent`, the key in the
+  `x-goog-api-key` header only and never `?key=`, no redirect, the body read capped at 1 MiB, camelCase
+  `systemInstruction` (static then dynamic, two parts), one user content, `generationConfig` with `maxOutputTokens` and
+  `thinkingConfig.thinkingLevel` `low` and nothing else, and the four classic `safetySettings` at `BLOCK_ONLY_HIGH`. Its
+  parser accepts enum values in any case and both blocked-prompt shapes (no candidates or an empty list with
+  `promptFeedback.blockReason`, refused); `STOP` joins non-thought parts, `MAX_TOKENS` keeps non-blank text, `SAFETY`,
+  `PROHIBITED_CONTENT`, `BLOCKLIST`, `SPII` and `RECITATION` are refused, anything else wraps `gemini.ErrNoReply`. Its
+  `HTTPError` is retryable for 408, 5xx and a 429 that names no per-day quota, reads `RetryInfo.retryDelay` (or a
+  `retry-after` header) when present and never relies on it, and reports a rejected key for 401, 402, 403 and an
+  `API_KEY_INVALID` 400. Neither package logs; no error carries the key or the URL. Both are tested only against
+  `httptest` servers.
+- `fuku/utils/chatprompt` (Phase 20, the standard library and `xenopersona` only, `TestChatpromptPackageIsLeaf`) is the one
+  builder of a conversation request's three strings: `Static` (the persona and archive), `Dynamic` (the group's title cut
+  to 64 runes, its language name, the date and the bot's username, each cleaned of control and format characters) and
+  `User` (the recent conversation oldest first, the quoted message when the speaker replies to someone else, the message
+  to answer cut to 1,500 runes, and a closing line that says all of it is members' conversation). Every turn is rendered
+  as one `name: text` line with its newlines collapsed, so no member can forge a section label, and a member whose name
+  contains Xenobot-72 is shown as `(member)`. It carries no user ID, username or chat ID. The bot and `scripts/chat-spike`
+  both call it, so the spike measures exactly what the bot sends.
+- `fuku/utils/xenopersona` (Phase 20, standard library only, `TestXenopersonaPackageIsLeaf`) embeds `persona.md` and
+  `archive.md` and returns the static system text of the conversation feature (`StaticSystemText`: the persona, a fixed
+  separator, the archive without its leading source comment), the same bytes for every chat and user so a provider can
+  cache it. Nothing that varies (a date, a chat title, a name, a username) may go into either file; that belongs in the
+  dynamic system text. `archive.md` is distilled from `.planning/research/xenobot-chat/LORE.md`, the source of record
+  for every name, date and number: change a fact there first. The archive writes no web address (it names the places to
+  read and watch), and the content tests hold the text to 6,000 to 12,000 tokens by a runes/4 count, keep the exact
+  canon numbers, the Contradictions and Not on record sections, and no earlier project name.
 - A missing i18n key returns `""` with an error callers ignore; a typo'd key in Go ships an empty message. Copy key
   names from `locales/en.yml`. `locales/config.yml` is the help alt-name pseudo-locale, not a language.
 - Ukrainian and English texts follow the style guide and glossary in `docs/src/content/docs/contributing/locale-style.md`
@@ -4748,7 +4899,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - Version strings are shape-locked (`BotVersion:` with two spaces in `fuku/config/config.go`, `version =` in
   `main.go`). Run `make bump-version` on a PR branch, merge, then tag. Tags match `^v\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$`.
 - `.env` in cwd auto-loads without overriding real env. Run `--version` smoke checks from `/tmp`.
-- Defaults that surprise: `DEFAULT_TIMEZONE=Europe/Kyiv` (the zone every group without a choice shows times in; an invalid
+- Defaults that surprise: `ENABLE_CHAT=false` (group conversations are off on the whole server until it is set, and then
+  each group's owner still turns them on; `CHAT_ANTHROPIC_MODEL` and `CHAT_GEMINI_MODEL` are separate from
+  `ANTHROPIC_MODEL` and fall back to `claude-haiku-5-5` and `gemini-4-hydrogen` with a warning); `DEFAULT_TIMEZONE=Europe/Kyiv` (the zone every group without a choice shows times in; an invalid
   name stops startup; the zone database is embedded through `time/tzdata`, imported in `fuku/config` so it is ready before
   the config reads the variable); `REDIS_DB=1`; `ENABLE_AISPAM=true` (the global AI kill switch, text, images and the AI spam-name rule; the text checks are inert without `TYPESAFE_API_KEY`); `ANTHROPIC_API_KEY` empty
   means no raid image check, no AI name check and no image or name leaves the server, and `ANTHROPIC_MODEL` must be a model that
@@ -4786,6 +4939,26 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `TestNamesModeKeyNeverPrinted`, `TestNamesModeExclusiveFlags`). The tool imports only the `claude` and `namecanon`
   packages of the repository. `.planning/milestones/v1.1-phases/15-ai-spam-name-check/15-SPIKE.md` is the owner's non-blocking checklist
   for the live Haiku spike and the test-group walk-through.
+- The conversation runtime's tests (Phase 20, `fuku/modules`) run on the toolkit `chat_env_test.go`: `newChatEnv` (a group with
+  conversations on, the real dispatcher with `LoadChat`, a recorder after the watcher at group 13, miniredis through
+  `withChatRedis`, both providers configured through `withChatProviders`, a scripted `chatFakeProvider` installed through the
+  `chatProviderOf` seam, and `chatTelegramFake`, the module fake plus the Bot API's refusal of a reply whose target was deleted),
+  `withChatRuntime` (a fast pacer, fresh breakers, the cooldown and budgets restored), `chatSwap` and `restoreChatPool` for a test
+  that runs `StopChat`. Fresh chat and user IDs, `chatConvCleanup` and `memberReqCleanup` in `t.Cleanup`, no `t.Parallel`, no real
+  provider. The families: `TestChatWatcherGroupReachedByMention` (`chat_group_test.go`), `TestChatWatcherAnswers`,
+  `TestChatWatcherIgnores`, `TestChatWatcherAudience`, `TestChatGuards`, `TestChatFilterReply`, `TestShutdownEndsChat`,
+  `TestChatDeletedMessageGetsNoReply`, `TestChatAskCommand` (`chat_watch_test.go`), `TestChatProvidersRequest` (both real adapters
+  against one `httptest` stand-in, `chat_provider_test.go`), `TestChatLogsCarryIDsOnly` (`chat_logs_test.go`) and `TestChatEndToEnd`
+  (`chat_e2e_test.go`: the owner turns conversations on from the private page, a member mentions the bot, the real Anthropic
+  adapter answers through the stand-in, a second member replies and the next request carries the first exchange;
+  `newChatEnvFor` builds the environment over the page's group). `20-SPIKE.md` is the owner's non-blocking checklist.
+- `scripts/chat-spike` (Phase 20) is the owner's persona check: it sends each line of a questions file
+  (`scripts/chat-spike/persona-check.txt`, kept in step with `.planning/phases/20-conversations/20-PERSONA-CHECK.md` by
+  `TestPersonaCheckFilesAgree`) through `chatprompt` and `claude.Client.Converse` or `gemini.Client.Generate`, and prints
+  the question, the reply, the outcome, the tokens and the latency. It reads `ANTHROPIC_API_KEY` or `GEMINI_API_KEY` from
+  the environment only, never prints it, refuses an `-endpoint` that is not https (http only for localhost), sends nothing
+  before every flag is checked, and exits 1 when every question failed. It imports only leaf packages and is tested
+  against `httptest`; a live run is the owner's manual step, never CI.
 - Assert observable behavior (reply sent, row persisted, cache invalidated, gate enforced). Never assert literals,
   source substrings, or test-double internals.
 - The Turnstile page's script test is `node --test scripts/captcha-page/*.test.mjs` (the directory form does not work on
@@ -4912,6 +5085,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   database `warns_settings.warn_mode` accepts NULL, the empty mode and the five modes and refuses any other value with SQLSTATE
   23514, and exactly one CHECK mentions the column, `chk_warn_mode`; PostgreSQL only, it skips locally;
   `TestWarnModeCheckMigrationStatements` is its database-free half and runs in `make test`).
+  The Phase 20 guarantees are `TestChatConversationSettings` (`./fuku/db/chatconv`: column-targeted upserts that never
+  clobber each other, a Go false written, the two checks refusing values outside the stored ones; it also runs on SQLite
+  in `make test`) and `TestChatConversationMigrationDefaults` (`./fuku/db/migrations`: the statement runs twice, a row with
+  only `chat_id` reads off, anthropic, 0, and both named checks refuse with SQLSTATE 23514; PostgreSQL only, it skips
+  locally; `TestChatConversationMigrationStatements` is its database-free half).
   The forward blocklist guarantees (quick task 261113-tjj) are `TestStaffForwardBlockConstraints` (`./fuku/db/staff`: the
   unique key, `chk_staff_forward_blocks_source` and `chk_staff_forward_block_action` refuse a duplicate, a non-negative
   source and an action outside the five; it also runs on SQLite in `make test`) and `TestStaffForwardBlockMigrationDefaults`
@@ -5365,7 +5543,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `TestSettingsMessagesReadsCreateNothing`, `TestSettingsMessagesCost`, `TestSettingsMessagesLogsCarryIDsOnly`), and, because nothing on it
   has a command, `TestSettingsDriftMessages*` and `TestSettingsAuthorityMessages*` stand in for parity tests (toolkit
   `settings_messages_env_test.go`); `TestSettingsStaffPrivacy` renders every Messages screen in 8 languages through
-  `settingsPrivacyPhase20Screens`. The repository has `TestEventMessages` and `TestEventMessagesUpsert` (`fuku/db/eventmsg`), the migration
+  `settingsPrivacyPhase21Screens`. The repository has `TestEventMessages` and `TestEventMessagesUpsert` (`fuku/db/eventmsg`), the migration
   `TestChatEventMessagesMigrationStatements` and `TestChatEventMessagesMigrationDefaults`, and backup `TestEventMessagesStayOutOfBackup`.
   `TestMessagesEndToEnd` (`messages_e2e_test.go`, plan 21-11, about 7 s) is the phase's end-to-end proof through the real dispatcher with
   only Telegram faked, one environment per subtest on the toolkit `messagesE2E` (`newMessagesE2E(t, real)`: the settings environment with

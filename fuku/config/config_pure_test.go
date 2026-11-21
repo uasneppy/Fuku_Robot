@@ -9,6 +9,7 @@ import (
 	logrustest "github.com/sirupsen/logrus/hooks/test"
 
 	"github.com/uasneppy/fuku_robot/fuku/utils/claude"
+	"github.com/uasneppy/fuku_robot/fuku/utils/gemini"
 	"github.com/uasneppy/fuku_robot/fuku/utils/logredact"
 )
 
@@ -553,6 +554,75 @@ func TestAnthropicConfig(t *testing.T) {
 		registerSecrets(&Config{AnthropicAPIKey: plain})
 		if got := logredact.Scrub("key=" + plain); strings.Contains(got, plain) {
 			t.Errorf("exact-value registration missing: %q", got)
+		}
+	})
+}
+
+func TestChatConfig(t *testing.T) {
+	t.Run("defaults: off, no Gemini key, the default models", func(t *testing.T) {
+		setRequiredConfigEnv(t)
+		for _, name := range []string{"ENABLE_CHAT", "GEMINI_API_KEY", "CHAT_ANTHROPIC_MODEL", "CHAT_GEMINI_MODEL"} {
+			t.Setenv(name, "")
+		}
+		cfg, err := LoadConfig()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.EnableChat || cfg.GeminiAPIKey != "" {
+			t.Errorf("EnableChat %v, GeminiAPIKey %q, want off and empty", cfg.EnableChat, cfg.GeminiAPIKey)
+		}
+		if cfg.ChatAnthropicModel != claude.DefaultModel || cfg.ChatGeminiModel != gemini.DefaultModel {
+			t.Errorf("models %q %q", cfg.ChatAnthropicModel, cfg.ChatGeminiModel)
+		}
+	})
+	t.Run("values load", func(t *testing.T) {
+		setRequiredConfigEnv(t)
+		t.Setenv("ENABLE_CHAT", "true")
+		t.Setenv("GEMINI_API_KEY", "AIzaFAKEconfigKEY0123456789")
+		t.Setenv("CHAT_ANTHROPIC_MODEL", "claude-sonnet-5-5")
+		t.Setenv("CHAT_GEMINI_MODEL", "gemini-3.5-flash-lite")
+		cfg, err := LoadConfig()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !cfg.EnableChat || cfg.GeminiAPIKey != "AIzaFAKEconfigKEY0123456789" ||
+			cfg.ChatAnthropicModel != "claude-sonnet-5-5" || cfg.ChatGeminiModel != "gemini-3.5-flash-lite" {
+			t.Errorf("cfg = %v %q %q %q", cfg.EnableChat, cfg.GeminiAPIKey, cfg.ChatAnthropicModel, cfg.ChatGeminiModel)
+		}
+	})
+	t.Run("a bad model falls back and is not logged", func(t *testing.T) {
+		const pasted = "AIzaPastedIntoTheWrongVariable 0123456789"
+		hook := logrustest.NewGlobal()
+		defer hook.Reset()
+		setRequiredConfigEnv(t)
+		t.Setenv("CHAT_GEMINI_MODEL", pasted)
+		t.Setenv("CHAT_ANTHROPIC_MODEL", "../v1/files")
+		cfg, err := LoadConfig()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.ChatGeminiModel != gemini.DefaultModel || cfg.ChatAnthropicModel != claude.DefaultModel {
+			t.Errorf("models %q %q, want the defaults", cfg.ChatGeminiModel, cfg.ChatAnthropicModel)
+		}
+		warned := false
+		for _, entry := range hook.AllEntries() {
+			if strings.Contains(entry.Message, pasted) || strings.Contains(entry.Message, "../v1") {
+				t.Errorf("a log line carries the rejected value: %q", entry.Message)
+			}
+			if strings.Contains(entry.Message, "CHAT_GEMINI_MODEL") {
+				warned = true
+			}
+		}
+		if !warned {
+			t.Error("no warning names CHAT_GEMINI_MODEL")
+		}
+	})
+	t.Run("the Gemini key is registered", func(t *testing.T) {
+		const key = "plain-gemini-key-registered-by-exact-value"
+		forgetRegisteredSecrets(t)
+		registerSecrets(&Config{GeminiAPIKey: key})
+		if got := logredact.Scrub("key=" + key); strings.Contains(got, key) {
+			t.Errorf("Gemini key leaked: %q", got)
 		}
 	})
 }

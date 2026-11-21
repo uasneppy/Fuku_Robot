@@ -22,6 +22,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/uasneppy/fuku_robot/fuku/utils/claude"
+	"github.com/uasneppy/fuku_robot/fuku/utils/gemini"
 	"github.com/uasneppy/fuku_robot/fuku/utils/logredact"
 )
 
@@ -216,6 +217,20 @@ type Config struct {
 	// is replaced by the default and never used.
 	AnthropicAPIKey string
 	AnthropicModel  string
+
+	// Conversations (Phase 20). EnableChat (ENABLE_CHAT, default false) is the server-wide
+	// switch of the whole feature: an Anthropic key exported for another tool already turns
+	// the image and name checks on, and conversations cost more and speak in public, so they
+	// need their own explicit switch. A provider can serve conversations only with the switch
+	// on and its key set (AnthropicAPIKey, reused, or GeminiAPIKey, a secret registered with
+	// logredact). ChatAnthropicModel (CHAT_ANTHROPIC_MODEL, default claude-haiku-5-5) and
+	// ChatGeminiModel (CHAT_GEMINI_MODEL, default gemini-4-hydrogen) are separate from
+	// AnthropicModel, which must stay a model that accepts a forced tool call; an invalid name
+	// is replaced by the default with a warning that logs no value.
+	EnableChat         bool
+	GeminiAPIKey       string
+	ChatAnthropicModel string
+	ChatGeminiModel    string
 
 	// DefaultTimezone is the zone every group without a choice of its own shows times in
 	// (DEFAULT_TIMEZONE, an IANA name, default Europe/Kyiv). DefaultLocation is it loaded; an
@@ -430,7 +445,7 @@ func LoadConfig() (*Config, error) {
 
 	cfg := &Config{
 		BotToken:    os.Getenv("BOT_TOKEN"),
-		BotVersion:  "2.25.0",
+		BotVersion:  "2.26.0",
 		ApiServer:   os.Getenv("API_SERVER"),
 		WorkingMode: "worker",
 		Debug:       typeConvertor{str: os.Getenv("DEBUG")}.Bool(),
@@ -493,6 +508,11 @@ func LoadConfig() (*Config, error) {
 
 		AnthropicAPIKey: os.Getenv("ANTHROPIC_API_KEY"),
 		AnthropicModel:  os.Getenv("ANTHROPIC_MODEL"),
+
+		EnableChat:         typeConvertor{str: os.Getenv("ENABLE_CHAT")}.Bool(),
+		GeminiAPIKey:       os.Getenv("GEMINI_API_KEY"),
+		ChatAnthropicModel: os.Getenv("CHAT_ANTHROPIC_MODEL"),
+		ChatGeminiModel:    os.Getenv("CHAT_GEMINI_MODEL"),
 
 		DefaultTimezone: strings.TrimSpace(os.Getenv("DEFAULT_TIMEZONE")),
 
@@ -636,6 +656,23 @@ func (cfg *Config) setDefaults() {
 			utf8.RuneCountInString(cfg.AnthropicModel), claude.DefaultModel)
 		cfg.AnthropicModel = claude.DefaultModel
 	}
+	cfg.ChatAnthropicModel = validChatModel("CHAT_ANTHROPIC_MODEL", cfg.ChatAnthropicModel, claude.DefaultModel)
+	cfg.ChatGeminiModel = validChatModel("CHAT_GEMINI_MODEL", cfg.ChatGeminiModel, gemini.DefaultModel)
+}
+
+// validChatModel returns value, or def when value is empty or not a plain model id. The
+// rejected value is never logged, only its length, because a variable pasted into the wrong
+// place could be a key.
+func validChatModel(name, value, def string) string {
+	value = strings.TrimSpace(value)
+	switch {
+	case value == "":
+		return def
+	case !claude.ValidModel(value):
+		log.Warnf("[Config] %s (%d characters) is not a valid model name, using %s", name, utf8.RuneCountInString(value), def)
+		return def
+	}
+	return value
 }
 
 // registerSecrets registers every configured secret with logredact so its exact
@@ -649,6 +686,7 @@ func registerSecrets(cfg *Config) {
 		cfg.MetricsAuthToken,
 		cfg.TypeSafeAPIKey,
 		cfg.AnthropicAPIKey,
+		cfg.GeminiAPIKey,
 		cfg.TurnstileSecretKey,
 	)
 }

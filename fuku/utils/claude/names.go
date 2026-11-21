@@ -114,7 +114,7 @@ func (c *Client) ClassifyNames(ctx context.Context, names Names) (*Verdict, erro
 	ctx, cancel := context.WithTimeout(ctx, Timeout)
 	defer cancel()
 
-	body, err := c.exec(ctx, http.MethodPost, c.baseURL()+"/v1/messages", payload)
+	body, err := c.exec(ctx, sendOptions{}, http.MethodPost, c.baseURL()+"/v1/messages", payload)
 	if err != nil {
 		return nil, err
 	}

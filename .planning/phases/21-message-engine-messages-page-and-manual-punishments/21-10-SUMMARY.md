@@ -9,7 +9,7 @@ provides:
   - settingsMsgScreens (every Messages screen as pure renders, with the row widths each must have)
   - TestSettingsMessagesCallbackBytes and TestSettingsMessagesPageFitsEveryLocale
   - TestSettingsMessagesForged, TestSettingsMessagesReadsCreateNothing, TestSettingsMessagesCost, TestSettingsMessagesLogsCarryIDsOnly
-  - settingsPrivacyPhase20Screens in TestSettingsStaffPrivacy
+  - settingsPrivacyPhase21Screens in TestSettingsStaffPrivacy
   - the Phase 21 test families bullet of AGENTS.md
 affects: [21-11]
 tech-stack:
@@ -55,7 +55,7 @@ safeguard found a defect, so no production code changed.
 |------|------|--------|
 | 1 | TestSettingsMessagesCallbackBytes and TestSettingsMessagesPageFitsEveryLocale over settingsMsgScreens | 6b76658 |
 | 2 | TestSettingsMessagesForged, TestSettingsMessagesReadsCreateNothing, TestSettingsMessagesCost, TestSettingsMessagesLogsCarryIDsOnly | 478fcfe |
-| 3 | settingsPrivacyPhase20Screens in TestSettingsStaffPrivacy; AGENTS.md (the Messages page bullet's limits, the Phase 21 test families) | 540a2a9 |
+| 3 | settingsPrivacyPhase21Screens in TestSettingsStaffPrivacy; AGENTS.md (the Messages page bullet's limits, the Phase 21 test families) | 540a2a9 |
 
 ## Measured limits
 
@@ -97,7 +97,7 @@ safeguard found a defect, so no production code changed.
 - `go test -tags testtools -race -count=1 -timeout 30m -run '^(TestSettingsStaffPrivacy|TestSettingsMessages.*|TestSettingsDriftMessages.*|TestSettingsAuthorityMessages.*)$' ./fuku/modules`: ok (51.6 s).
 - `go vet -tags testtools ./fuku/modules ./fuku/i18n` clean; `CGO_ENABLED=0 go build ./...` ok; `gofmt -l` clean on the three test files; `make check-docs`: no drift.
 - Mutation checks (reverted): a `log.Warnf` of the typed text and file ID in `settingsMsgWrite` fails `TestSettingsMessagesLogsCarryIDsOnly` on both sentinels; `settingsMsgSilentFields` without the `v` check fails `TestSettingsMessagesForged` (a `v=2` press reached `getChatMember` and `getChat`).
-- Acceptance greps: each of the six test functions once in its file; `[2 2 2 2 2 1 2]` in the screens test; `settingsPrivacyPhase20Screens` 3 times in the privacy test; `TestLegacyModerationRequests` and `TestSettingsMessages` in AGENTS.md.
+- Acceptance greps: each of the six test functions once in its file; `[2 2 2 2 2 1 2]` in the screens test; `settingsPrivacyPhase21Screens` 3 times in the privacy test; `TestLegacyModerationRequests` and `TestSettingsMessages` in AGENTS.md.
 
 ## Not verified
 
@@ -134,7 +134,7 @@ None.
 ## Threat Flags
 
 None: T-21-31 (`TestSettingsMessagesForged`), T-21-32 (`TestSettingsMessagesCallbackBytes`,
-`TestSettingsMessagesPageFitsEveryLocale`) and T-21-33 (`settingsPrivacyPhase20Screens`,
+`TestSettingsMessagesPageFitsEveryLocale`) and T-21-33 (`settingsPrivacyPhase21Screens`,
 `TestSettingsMessagesLogsCarryIDsOnly`) are mitigated as planned.
 
 ## Self-Check: PASSED

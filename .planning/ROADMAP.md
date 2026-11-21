@@ -4,7 +4,7 @@
 
 - ✅ **v1.0 Staff Group, Raid Protection, Web Captcha & Settings Menu** - Phases 1-9 (shipped 2026-11-02, archived in `milestones/v1.0-ROADMAP.md`)
 - ✅ **v1.1 PM Settings Hub & Member Screening** - Phases 10-19 (shipped 2026-11-13, archived in `milestones/v1.1-ROADMAP.md`; the owner's live Telegram checks are deferred, see `STATE.md` Deferred Items)
-- 🚧 **v1.2 Custom Messages and Tuning** - Phases 21-30 (in progress)
+- 🚧 **v1.2 Conversations, Custom Messages and Tuning** - Phases 20-30 (in progress; Phase 20 shipped in v2.26.0)
 
 ## Phases
 
@@ -45,16 +45,17 @@ Every phase is code-verified and security-audited with no open threat; each veri
 
 </details>
 
-### 🚧 v1.2 Custom Messages and Tuning (In Progress)
+### 🚧 v1.2 Conversations, Custom Messages and Tuning (In Progress)
 
 **Milestone Goal:** The owner decides, group by group in that group's settings in the bot's private chat, what the bot says when it punishes someone or locks the group, whether the person also gets it privately, and how the punishments themselves behave. Backups of a group's settings are reachable from the same private chat.
 
 **Phase Numbering:**
-- Integer phases (20, 21, 22): Planned milestone work, continuing from v1.1's Phase 19
+- Integer phases (20, 21, 22): Planned milestone work, continuing from v1.1's Phase 19. Phase 20 is Conversations, merged from main; Custom Messages and Tuning were planned as Phases 20 to 29 and renumbered 21 to 30 on 2026-11-21
 - Decimal phases (20.1, 20.2): Urgent insertions (marked with INSERTED)
 
 Decimal phases appear between their surrounding integers in numeric order.
 
+- [x] **Phase 20: Conversations** - 8/8 plans, shipped in v2.26.0 (the bot answers members in groups through Anthropic or Google; its brief is `.planning/research/xenobot-chat/PLAN.md` and its phase folder `phases/20-conversations/`)
 - [ ] **Phase 21: Message Engine, Messages Page and Manual Punishments** - Storage, one renderer with default fallback, goldens of today's replies, a private Messages page on the editor, and custom messages for ban, kick, mute, unban and unmute
 - [ ] **Phase 22: PM Copies** - An optional private copy to the punished person on its own pacing, with a Details button fallback and a log line
 - [ ] **Phase 23: Warn, Flood, Blacklist and Forward Blocklist Messages** - Custom messages for warn, warn limit and the three automatic actions
@@ -66,7 +67,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 29: Plain Tone and Copy Settings** - Neutral default texts per group and a confirmed copy of one group's messages and tuning to another
 - [ ] **Phase 30: Backup Page and Custom Messages in Backups** - Export, import and reset from the private chat, and custom messages inside `/export` and `/import`
 
-**Coverage:** 40/40 v1.2 requirements mapped, each to exactly one phase (see the Traceability table in `REQUIREMENTS.md`).
+**Coverage:** 40/40 Custom Messages and Tuning requirements mapped (Phase 20 has its own brief, not these IDs), each to exactly one phase (see the Traceability table in `REQUIREMENTS.md`).
 
 ## Overview
 
@@ -100,6 +101,11 @@ These were decided before this roadmap and are not reopened by any phase.
 
 ## Phase Details
 
+### Phase 20: Conversations (shipped in v2.26.0)
+The brief is `.planning/research/xenobot-chat/PLAN.md` (with `LORE.md`, `COMIC-DIGEST.md` and `GEMINI-API.md` beside it), imported as the phase context. The bot answers members in groups through Anthropic or Google, in character as Xenobot-72; it never converses in private chats, and only a group's owner can enable it, from the bot's private chat.
+Plans 20-01 to 20-08 are done; see `phases/20-conversations/`.
+
+
 ### Phase 21: Message Engine, Messages Page and Manual Punishments
 **Goal**: As the owner, I can set what the bot says in a group when an admin bans, kicks, mutes, unbans or unmutes someone, from that group's settings in the bot's private chat. A group that sets nothing sees no change.
 **Depends on**: Phase 19 (the settings framework, the message editor, the typed-reply door and the list engine)
@@ -118,17 +124,17 @@ These were decided before this roadmap and are not reopened by any phase.
   5. Each event has a Silent switch. Silent means the bot acts and posts nothing in the group. Viewing the page needs the live admin check and the owner gate. Every change needs `can_change_info`, judged live on every press and every typed message.
 **Plans**: 11 plans
 Plans:
-- [ ] 21-01-PLAN.md — goldens of every manual punishment reply, committed alone (wave 1)
-- [ ] 21-02-PLAN.md — chat_event_messages storage, eventmsg repository, skipLocal, backup exclusion (wave 1)
-- [ ] 21-03-PLAN.md — message editor hooks for page-defined messages (wave 1)
-- [ ] 21-04-PLAN.md — tracer: event message engine and the ban event end to end (wave 2)
-- [ ] 21-05-PLAN.md — tban, kick, unban, mute, tmute, unmute sites and the anonymous mark (wave 3)
-- [ ] 21-06-PLAN.md — private Messages page: families, events, states, Main (wave 4)
-- [ ] 21-07-PLAN.md — Silent switch (wave 5)
-- [ ] 21-08-PLAN.md — editor on event screens: Set, Remove, typed reply (wave 6)
-- [ ] 21-09-PLAN.md — previews through the send path's composer (wave 7)
-- [ ] 21-10-PLAN.md — page safeguards: bytes, lengths, forged presses, privacy (wave 8)
-- [ ] 21-11-PLAN.md — end-to-end proof and phase gates (wave 9)
+- [x] 21-01-PLAN.md — goldens of every manual punishment reply, committed alone (wave 1)
+- [x] 21-02-PLAN.md — chat_event_messages storage, eventmsg repository, skipLocal, backup exclusion (wave 1)
+- [x] 21-03-PLAN.md — message editor hooks for page-defined messages (wave 1)
+- [x] 21-04-PLAN.md — tracer: event message engine and the ban event end to end (wave 2)
+- [x] 21-05-PLAN.md — tban, kick, unban, mute, tmute, unmute sites and the anonymous mark (wave 3)
+- [x] 21-06-PLAN.md — private Messages page: families, events, states, Main (wave 4)
+- [x] 21-07-PLAN.md — Silent switch (wave 5)
+- [x] 21-08-PLAN.md — editor on event screens: Set, Remove, typed reply (wave 6)
+- [x] 21-09-PLAN.md — previews through the send path's composer (wave 7)
+- [x] 21-10-PLAN.md — page safeguards: bytes, lengths, forged presses, privacy (wave 8)
+- [x] 21-11-PLAN.md — end-to-end proof and phase gates (wave 9)
 **UI hint**: yes
 
 ### Phase 22: PM Copies
@@ -303,8 +309,9 @@ Phases execute in numeric order: 20 → 21 → 22 → 23 → 24 → 25 → 26 �
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 21. Message Engine, Messages Page and Manual Punishments | v1.2 | 0/TBD | Not started | - |
-| 22. PM Copies | v1.2 | 0/TBD | Not started | - |
+| 20. Conversations | v1.2 | 8/8 | Complete (v2.26.0) | - |
+| 21. Message Engine, Messages Page and Manual Punishments | v1.2 | 11/11 | Done, awaiting the owner's live checks (21-VERIFICATION.md) | - |
+| 22. PM Copies | v1.2 | 5/9 | In progress (22-06 paused) | - |
 | 23. Warn, Flood, Blacklist and Forward Blocklist Messages | v1.2 | 0/TBD | Not started | - |
 | 24. Captcha, AI Spam and Member Requirement Notices | v1.2 | 0/TBD | Not started | - |
 | 25. Lockdown Messages | v1.2 | 0/TBD | Not started | - |

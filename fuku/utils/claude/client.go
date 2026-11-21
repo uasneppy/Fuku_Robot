@@ -1,4 +1,5 @@
-// Package claude is the Anthropic Messages client of the raid AI image checks.
+// Package claude is the Anthropic Messages client of the raid AI image checks,
+// the AI spam-name check and the conversation feature.
 //
 // It imports the standard library only, so a spike tool can use it without
 // pulling in fuku/config or fuku/db, whose init functions connect to
@@ -36,6 +37,7 @@ const (
 	maxResponseBytes = 1 << 20
 	apiKeyHeader     = "x-api-key"
 	versionHeader    = "anthropic-version"
+	betaHeader       = "anthropic-beta"
 
 	// retryWait is the wait before the one retry when the server names none.
 	retryWait = 500 * time.Millisecond
@@ -138,7 +140,7 @@ func (c *Client) Classify(ctx context.Context, img Image) (*Verdict, error) {
 	ctx, cancel := context.WithTimeout(ctx, Timeout)
 	defer cancel()
 
-	body, err := c.exec(ctx, http.MethodPost, c.baseURL()+"/v1/messages", payload)
+	body, err := c.exec(ctx, sendOptions{}, http.MethodPost, c.baseURL()+"/v1/messages", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -167,7 +169,7 @@ func (c *Client) GetModel(ctx context.Context) (*ModelInfo, error) {
 	ctx, cancel := context.WithTimeout(ctx, Timeout)
 	defer cancel()
 
-	body, err := c.exec(ctx, http.MethodGet, c.baseURL()+"/v1/models/"+url.PathEscape(c.Model), nil)
+	body, err := c.exec(ctx, sendOptions{}, http.MethodGet, c.baseURL()+"/v1/models/"+url.PathEscape(c.Model), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -178,11 +180,20 @@ func (c *Client) GetModel(ctx context.Context) (*ModelInfo, error) {
 	return &info, nil
 }
 
+// sendOptions changes one call: its transport and an anthropic-beta header.
+// The zero value is the classification call.
+type sendOptions struct {
+	// http is the transport of this call; nil uses Client.HTTP or defaultHTTP.
+	http *http.Client
+	// beta is the anthropic-beta header value; empty sends none.
+	beta string
+}
+
 // exec makes the request and, for a 429 or 5xx, one more attempt when the wait
 // is at most maxRetryWait. The wait is the server's retry-after, else
 // retryWait. Any other failure is final.
-func (c *Client) exec(ctx context.Context, method, target string, payload []byte) ([]byte, error) {
-	body, err := c.send(ctx, method, target, payload)
+func (c *Client) exec(ctx context.Context, opt sendOptions, method, target string, payload []byte) ([]byte, error) {
+	body, err := c.send(ctx, opt, method, target, payload)
 	if err == nil {
 		return body, nil
 	}
@@ -198,7 +209,7 @@ func (c *Client) exec(ctx context.Context, method, target string, payload []byte
 	if wait > maxRetryWait || !sleepContext(ctx, wait) {
 		return nil, err
 	}
-	return c.send(ctx, method, target, payload)
+	return c.send(ctx, opt, method, target, payload)
 }
 
 // sleepContext waits, reporting false if the context ended first.
@@ -215,7 +226,7 @@ func sleepContext(ctx context.Context, d time.Duration) bool {
 }
 
 // send makes one request and returns the body of a 2xx answer.
-func (c *Client) send(ctx context.Context, method, target string, payload []byte) ([]byte, error) {
+func (c *Client) send(ctx context.Context, opt sendOptions, method, target string, payload []byte) ([]byte, error) {
 	var reader io.Reader
 	if payload != nil {
 		reader = bytes.NewReader(payload)
@@ -230,8 +241,15 @@ func (c *Client) send(ctx context.Context, method, target string, payload []byte
 	if payload != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
+	if opt.beta != "" {
+		req.Header.Set(betaHeader, opt.beta)
+	}
 
-	resp, err := c.httpClient().Do(req)
+	hc := opt.http
+	if hc == nil {
+		hc = c.httpClient()
+	}
+	resp, err := hc.Do(req)
 	if err != nil {
 		return nil, c.transportError(err)
 	}

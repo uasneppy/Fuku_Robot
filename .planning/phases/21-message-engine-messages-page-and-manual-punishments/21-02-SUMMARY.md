@@ -16,7 +16,7 @@ tech-stack:
   patterns: ["one cached struct per chat (deletion.Rules style)", "column-targeted upsert per part (timezone.Set style)", "Go-side key validation, no CHECK"]
 key-files:
   created:
-    - migrations/20261119120000_add_chat_event_messages.sql
+    - migrations/20261120110000_add_chat_event_messages.sql
     - fuku/db/models/event_message.go
     - fuku/db/migrations/event_messages_migration_test.go
     - fuku/db/eventmsg/events.go

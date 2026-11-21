@@ -375,7 +375,8 @@ func raidAIStatsSection() string {
 		fmt.Sprintf(
 			"\n    <b>/aispam:</b> checked %d, deleted %d, kept %d, shed %d, failed %d",
 			checked, deleted, kept, shed, failed,
-		)
+		) +
+		chatStatsSection()
 }
 
 func (moduleStruct) getStats(b *gotgbot.Bot, ctx *ext.Context) error {

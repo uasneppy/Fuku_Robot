@@ -1,15 +1,15 @@
 ---
 gsd_state_version: "1.0"
 milestone: v1.2
-milestone_name: Custom Messages and Tuning
-status: planning
-last_updated: "2026-11-18T22:50:46.000Z"
-last_activity: 2026-11-18
+milestone_name: Conversations, Custom Messages and Tuning
+status: executing
+last_updated: "2026-11-21T12:00:00.000Z"
+last_activity: 2026-11-21
 progress:
-  total_phases: 10
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_phases: 11
+  completed_phases: 1
+  total_plans: 28
+  completed_plans: 24
   percent: 0
 ---
 
@@ -24,12 +24,12 @@ See: .planning/PROJECT.md (updated 2026-11-18)
 
 ## Current Position
 
-Phase: 20 of 29 (Message Engine, Messages Page and Manual Punishments)
-Plan: Not started (no plans yet)
-Status: Ready to plan
-Last activity: 2026-11-18 - Roadmap created for v1.2 (10 phases, 40 of 40 requirements mapped)
+Phase: 22 of 30 (PM Copies), milestone v1.2 (Phase 20 Conversations shipped in v2.26.0; this milestone's phases were renumbered 20-29 to 21-30 on 2026-11-21)
+Plan: 22-06 of 9 in progress, paused (see `.planning/phases/22-pm-copies/.continue-here.md`); Phase 21's 11 plans are done and verified with no gaps, awaiting the owner's live checks (`21-VERIFICATION.md`)
+Status: Paused
+Last activity: 2026-11-21 - Merged main (Conversations, v2.26.0) and renumbered the phases
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [███░░░░░░░] 3 of 11 phases done or verified
 
 ## Performance Metrics
 
