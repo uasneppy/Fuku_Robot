@@ -18,7 +18,7 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 )
 
-// Goldens recorded on the code as it was before Phase 20 (the event messages); <chat> stands for the
+// Goldens recorded on the code as it was before Phase 21 (the event messages); <chat> stands for the
 // case's chat ID. They are never re-recorded: a later change that alters one of these requests for a
 // group with nothing stored is a regression.
 const (

@@ -344,7 +344,7 @@ func TestSettingsFwdBlockOpens(t *testing.T) {
 func TestSettingsFwdBlockMainShape(t *testing.T) {
 	// A Staff Group hides Deletion and Messages and shows Blocked sources: the grid pairs Blocked sources with Staff, and
 	// Access and the navigation follow. Its Main has one row fewer than another chat's (settingsMainOwnerRows), because
-	// the Messages page that other chats gained in plan 20-06 does not exist in a Staff Group.
+	// the Messages page that other chats gained in plan 21-06 does not exist in a Staff Group.
 	const (
 		staffOwnerRows = settingsMainOwnerRows - 1
 		groupOwner     = "s|v / l|c / f|n / k|b / i|w / g|r / e|x / m|t / u|z / o|y / a / close"

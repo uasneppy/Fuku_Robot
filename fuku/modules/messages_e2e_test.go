@@ -23,7 +23,7 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/utils/cache"
 )
 
-// Custom event messages end to end (plan 20-11; MSG-01 to MSG-09, MSG-11, EVT-01). Everything is real but
+// Custom event messages end to end (plan 21-11; MSG-01 to MSG-09, MSG-11, EVT-01). Everything is real but
 // Telegram: the owner works the private Messages page through the deep link and the buttons the bot drew,
 // every part is a typed private message through the dispatcher, and an administrator's /ban, /tmute, /kick
 // and their silent variants run through the real dispatcher with the Bans and Mutes modules loaded. Only the

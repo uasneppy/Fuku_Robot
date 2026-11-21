@@ -19,7 +19,7 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/utils/media"
 )
 
-// The Messages page of the settings menu (Phase 20, D-18, D-19): the group's custom event messages, the
+// The Messages page of the settings menu (Phase 21, D-18, D-19): the group's custom event messages, the
 // texts the bot posts in the group when someone is punished. It exists only in the bot's private chat
 // (PrivateOnly, so a menu opened in the group shows the settings_msg_group_note line and runs no page code)
 // and not in a Staff Group (Hidden: nothing is set at Staff Group level, D-01). Everything it draws comes
@@ -27,7 +27,7 @@ import (
 // state (Default, Custom or Silent), a family's list opens an event, and an event's screen shows the state
 // of its parts. Each event is one message editor definition (registerSettingsEditDef), whose wait key is
 // h + the event code + the destination code and whose buttons carry the event in the field k, so plans
-// 20-07 to 20-09 make the event screen act through the editor's hooks. Every read is fresh and creates
+// 21-07 to 21-09 make the event screen act through the editor's hooks. Every read is fresh and creates
 // nothing, and a preview only ever goes to the presser's own private chat.
 
 const (
@@ -54,7 +54,7 @@ const (
 	// settingsMsgDestGroupCode is the one-letter code of the group destination in a wait key.
 	settingsMsgDestGroupCode = "g"
 	// settingsMsgDestField is the callback field that names the destination of an editor press: absent for the
-	// group message (so every Phase 20 button keeps its bytes) and settingsMsgDestPMCode for the private copy.
+	// group message (so every Phase 21 button keeps its bytes) and settingsMsgDestPMCode for the private copy.
 	settingsMsgDestField = "d"
 	// settingsMsgDestPMCode is the one-letter code of the private copy: the only value of the field d and the
 	// destination code in its wait key (hbnp for the ban's private copy).

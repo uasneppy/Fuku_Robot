@@ -48,7 +48,7 @@ func kickTargetValidation(c *moderationCtx, t *target) error {
 }
 
 // kickDefaultReply is the kick event's default reply (an eventDefaultReply): the text and the
-// options /kick and /dkick sent before Phase 20, byte for byte (TestLegacyModerationRequests).
+// options /kick and /dkick sent before Phase 21, byte for byte (TestLegacyModerationRequests).
 func kickDefaultReply(tr *i18n.Translator, in eventDefaultInput) (string, *gotgbot.SendMessageOpts) {
 	prefix := strings.ToLower(bansModule.moduleName)
 	baseStr, _ := tr.GetString(prefix + "_kick_kicked_user")
@@ -141,7 +141,7 @@ func moderationTban(m *moduleStruct) *moderationCommand {
 }
 
 // tbanDefaultReply is the timed ban event's default reply (an eventDefaultReply): the text and the
-// options /tban sent before Phase 20, byte for byte (TestLegacyModerationRequests).
+// options /tban sent before Phase 21, byte for byte (TestLegacyModerationRequests).
 func tbanDefaultReply(tr *i18n.Translator, in eventDefaultInput) (string, *gotgbot.SendMessageOpts) {
 	prefix := strings.ToLower(bansModule.moduleName)
 	temp, _ := tr.GetString(prefix + "_ban_tban")
@@ -151,7 +151,7 @@ func tbanDefaultReply(tr *i18n.Translator, in eventDefaultInput) (string, *gotgb
 }
 
 // banDefaultReply is the ban event's default reply (an eventDefaultReply): the text and the Unban
-// keyboard /ban and /dban sent before Phase 20, byte for byte (TestLegacyModerationRequests).
+// keyboard /ban and /dban sent before Phase 21, byte for byte (TestLegacyModerationRequests).
 func banDefaultReply(tr *i18n.Translator, in eventDefaultInput) (string, *gotgbot.SendMessageOpts) {
 	prefix := strings.ToLower(bansModule.moduleName)
 	baseStr, _ := tr.GetString(prefix + "_ban_normal_ban")
@@ -476,7 +476,7 @@ func moderationUnban(m *moduleStruct) *moderationCommand {
 }
 
 // unbanDefaultReply is the unban event's default reply (an eventDefaultReply): the text and the
-// options /unban of a member sent before Phase 20, byte for byte (TestLegacyModerationRequests).
+// options /unban of a member sent before Phase 21, byte for byte (TestLegacyModerationRequests).
 // The channel /unban keeps its own reply.
 func unbanDefaultReply(tr *i18n.Translator, in eventDefaultInput) (string, *gotgbot.SendMessageOpts) {
 	temp, _ := tr.GetString(strings.ToLower(bansModule.moduleName) + "_unban_unbanned_user")

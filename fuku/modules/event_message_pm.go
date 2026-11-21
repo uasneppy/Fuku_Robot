@@ -22,7 +22,7 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/utils/ratelimit"
 )
 
-// The private copy engine (Phase 21). A group can also tell the punished person in private: each
+// The private copy engine (Phase 22). A group can also tell the punished person in private: each
 // event with a registered spec has a private copy (the event's pm row), off until the owner switches
 // it on. The copy is offered by replyEvent after the punishment and after the group step (D-03,
 // D-11), whatever the group step did, and is sent from a bounded job through its own fleet-wide
@@ -65,7 +65,7 @@ func eventPMSpecFor(event string) (eventPMSpec, bool) {
 }
 
 func init() {
-	// The seven manual events of Phase 20 (D-06): /dban, /dkick and /dmute share their parent's
+	// The seven manual events of Phase 21 (D-06): /dban, /dkick and /dmute share their parent's
 	// event, and the silent variants never reach replyEvent, so they send no copy.
 	registerEventPM(eventmsg.EventBan, eventPMSpec{DefaultKey: "eventmsg_pm_ban", Automatic: false})
 	registerEventPM(eventmsg.EventTimedBan, eventPMSpec{DefaultKey: "eventmsg_pm_tban", Automatic: false})

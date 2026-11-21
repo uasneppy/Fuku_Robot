@@ -610,7 +610,7 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_tz_city_tbilisi":    {12, 12},
 	"settings_tz_city_newyork":    {12, 12},
 	"settings_tz_city_utc":        {12, 12},
-	// The Messages page (Phase 20, plan 20-06): its name, Main state, intro, family, list hint, the
+	// The Messages page (Phase 21, plan 21-06): its name, Main state, intro, family, list hint, the
 	// seven event names and descriptions, the two state words and the group note.
 	"settings_page_msgs":            {14, 18},
 	"settings_state_msg_n":          {16, 22},
@@ -635,19 +635,19 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_msg_state_custom":     {12, 18},
 	"settings_msg_state_silent":     {12, 18},
 	"settings_msg_group_note":       {130, 182},
-	// The Silent switch of an event screen (Phase 20, plan 20-07): its line, its full-width toggle and its hint.
+	// The Silent switch of an event screen (Phase 21, plan 21-07): its line, its full-width toggle and its hint.
 	"settings_msg_line_silent": {20, 28},
 	"settings_btn_msg_silent":  {20, 26},
 	"settings_msg_hint_silent": {90, 126},
-	// The editor on an event screen (Phase 20, plan 20-08): the manual family's text prompt, which lists the
+	// The editor on an event screen (Phase 21, plan 21-08): the manual family's text prompt, which lists the
 	// Welcome and event placeholders, and the family's hint.
 	"settings_msg_wait_text_manual": {600, 840},
 	"settings_msg_hint_manual":      {180, 252},
-	// The previews of an event screen (Phase 20, plan 20-09): the line sent before a preview and the sample
+	// The previews of an event screen (Phase 21, plan 21-09): the line sent before a preview and the sample
 	// reason a preview fills in.
 	"settings_msg_preview_header": {130, 182},
 	"settings_msg_sample_reason":  {30, 42},
-	// The private copy of an event (Phase 21, plan 21-04): its screen's title and intro, the line that says
+	// The private copy of an event (Phase 22, plan 22-04): its screen's title and intro, the line that says
 	// whether it is on, its hint, the full-width switch and the event screen's row that opens it.
 	"settings_msg_pm_title":    {20, 28},
 	"settings_msg_pm_intro":    {200, 280},
@@ -655,9 +655,9 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_msg_hint_pm":     {260, 364},
 	"settings_btn_msg_pm":      {20, 26},
 	"settings_btn_msg_pm_open": {24, 34},
-	// The previews of the private copy (Phase 21, plan 21-05): the line sent before a preview of the private copy.
+	// The previews of the private copy (Phase 22, plan 22-05): the line sent before a preview of the private copy.
 	"settings_msg_preview_header_pm": {140, 196},
-	// The hub's private copies block (Phase 21, plan 21-06): the Details option's line, its full-width toggle and the
+	// The hub's private copies block (Phase 22, plan 22-06): the Details option's line, its full-width toggle and the
 	// options hint.
 	"settings_msg_line_pm_details": {30, 42},
 	"settings_btn_msg_pm_details":  {24, 34},
@@ -951,10 +951,10 @@ func TestSettingsLabelLengths(t *testing.T) {
 	// The full-width toggles of the Switches and Anonymous admins pages (Phase 18): each is
 	// rendered with the check or cross icon and the language's longer On or Off word.
 	phase18Toggles := []string{"settings_btn_sw_reports", "settings_btn_sw_aispam", "settings_btn_sw_approve", "settings_btn_anon_toggle"}
-	// The full-width toggles that carry the state icon alone in place of {state} (Phase 20, plan 20-07: an event
+	// The full-width toggles that carry the state icon alone in place of {state} (Phase 21, plan 21-07: an event
 	// screen's Silent switch).
 	iconToggles := []string{"settings_btn_msg_silent", "settings_btn_msg_pm", "settings_btn_msg_pm_details"}
-	// The full-width buttons whose label is the whole button (Phase 21, plan 21-04: the event screen's row that
+	// The full-width buttons whose label is the whole button (Phase 22, plan 22-04: the event screen's row that
 	// opens the private copy), at most 40 code points.
 	fullWidthLabels := []string{"settings_btn_msg_pm_open"}
 	// The editor's two-column buttons (UI-SPEC rows 28 to 38): at most 20 code points as
@@ -988,7 +988,7 @@ func TestSettingsLabelLengths(t *testing.T) {
 	}
 	mreqRuleIcons := []string{"❌", "❗", "👢", "⛔", "🔇"}
 	mreqSwitchCells := []string{"settings_btn_mreq_switch_join", "settings_btn_mreq_switch_delete"}
-	// The Messages page's cells (Phase 20, plan 20-06): the family cell and the seven event cells, each
+	// The Messages page's cells (Phase 21, plan 21-06): the family cell and the seven event cells, each
 	// its icon, one space and its name, at most 20 code points.
 	messageCells := []struct{ icon, key string }{
 		{"🔨", "settings_msg_fam_manual"},

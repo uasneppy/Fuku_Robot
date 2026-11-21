@@ -543,7 +543,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   private chat in the user's language, its buttons carrying `c` (the group's chat ID) and no opener field. A `/start`
   with extra words (`settings_ -100`) has an unexpected argument count, so `start` ignores it and the handler never runs.
 - The Details button's deep link is `RegisterDeepLinkHandler("pmcopy_", pmCopyDetailsDeepLink)` (`event_message_pm_details.go`,
-  plan 21-06, PMSG-04, D-20), registered from that file's `init`, so `help.go` and `deeplink_router.go` are not edited; deep
+  plan 22-06, PMSG-04, D-20), registered from that file's `init`, so `help.go` and `deeplink_router.go` are not edited; deep
   links run in private chats only. The payload is attacker-controlled and authorizes nothing: `parsePMCopyDetails` accepts
   exactly `pmcopy_` and 22 characters of `A-Za-z0-9_-`, the record is read by the token alone (`pmCopyDetailsGet`, Data:
   `fuku:pmcopy:det:<token>`) and the stored copy is sent, with `media.SendGreetingMessage` (no header, no reply target), to the
@@ -757,7 +757,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   and the navigation row: twelve rows for the owner and eleven for an administrator, and twenty state lines; a Staff Group's Main is
   `s|v / l|c / f|n / k|b / i|w / g|r / e|x / m|t / u|o / y` with the same row counts. The numbers in the sentences above are the
   history and the constants of `settings_main_test.go` are the current shape.
-  The Messages page (key `h`, `Order` 74, right after Reactions; Phase 20, plan 20-06) adds the twenty-first cell for every chat that is
+  The Messages page (key `h`, `Order` 74, right after Reactions; Phase 21, plan 21-06) adds the twenty-first cell for every chat that is
   not a Staff Group, so Main is now `s|l / c|f / n|k / b|i / w|g / r|e / x|h / m|d / t|u / z|o / y` (ten full rows and Anonymous admins
   alone on the eleventh), then Access and the navigation row: thirteen rows for the owner and twelve for an administrator, private and
   group alike (`settingsMainOwnerRows` 13). The page is `Hidden` in a Staff Group, so a Staff Group's Main is unchanged:
@@ -1009,7 +1009,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   username, and Back and Close) without calling `Open`, so no page code and no database read runs in a group menu and no entry,
   count or word of a list can reach it. A private menu calls `MainState` and `Open` as for every page. The note is drawn after the
   `OwnerOnly` and `Hidden` guards, whichever route reached the page (open, Back, a forged Refresh). A page may name its own note line
-  with the optional `PrivateNoteKey` (Phase 20, plan 20-06): `openPage` then draws `renderSettingsPrivateOnlyNoteWith` with that key
+  with the optional `PrivateNoteKey` (Phase 21, plan 21-06): `openPage` then draws `renderSettingsPrivateOnlyNoteWith` with that key
   (the Messages page's `settings_msg_group_note`), and an empty key keeps `settings_entries_group_note`. `TestSettingsPrivateOnlyPage`
   proves it through a page the test registers (counting `MainState` and `Open`, zero calls in a group menu).
 - The Deletion page (`settings_deletion.go`, page `d`, `Order` 85, icon 🧹, `settings_page_del`, between Member requirements and
@@ -1511,8 +1511,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `authorize` and slash refusal first, and a reply after the wait ended answers `settings_tz_wait_ended_note`. Main grows to
   twenty cells (`... d|t / u|z / o|y`), still twelve rows for the owner. `TestChatClock*`, `TestApplyTimezone`,
   `TestSettingsTimezone*`, `TestSettingsParityTimezone`, `TestSettingsAuthorityParityTimezone` and `TestDefaultTimezone` hold it.
-- The Messages page (`settings_messages.go`, page `h`, `Order` 74, icon 📨, `settings_page_msgs`, right after Reactions; Phase 20, plan
-  20-06, D-18, D-19) lists a group's custom event messages, the texts the bot posts in the group when someone is punished. It is
+- The Messages page (`settings_messages.go`, page `h`, `Order` 74, icon 📨, `settings_page_msgs`, right after Reactions; Phase 21, plan
+  21-06, D-18, D-19) lists a group's custom event messages, the texts the bot posts in the group when someone is punished. It is
   `PrivateOnly` with `PrivateNoteKey` `settings_msg_group_note` (a group menu's Main line reads `In private`, and opening the page draws
   that note with the Open in private row, Back and Close, with no page code and no read) and `Hidden` in a Staff Group
   (`settingsMsgHidden`: a definite Staff Group row read fresh through the page's own seam `settingsMsgStaffLookup`, never the Deletion page's `deletionStaffLookup`, whose reads `TestSettingsDeletionHidden` counts; an unreadable row shows the page), because
@@ -1525,23 +1525,23 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   unmute `um` 🔊 (`unmuteDefaultReply`). A family with no events is not drawn anywhere and no renderer branches on a family's or an event's code. Screens: the hub
   (`a=op&p=h`: the intro, then for each family a blank line, its icon and bold name and one `settings_main_state_line` per event with
   its state word, followed by the code-side mark ` · 📩` (`settingsMsgPMSuffix`, an icon and no words) while the event's private copy is on
-  (`settingsMsgPMOn`: a spec and `msgs.Resolve(event, eventmsg.DestPM).Silent` false, Phase 21 plan 21-05, D-24); one cell per family, two to
+  (`settingsMsgPMOn`: a spec and `msgs.Resolve(event, eventmsg.DestPM).Silent` false, Phase 22 plan 22-05, D-24); one cell per family, two to
   a row, then Back to Main and Close, rows `[1 2]`), a family's list (`a=hl&t=<family>`: its intro, the event lines (with the same mark) and
   `settings_msg_list_hint`; one cell per event, two to a row, then Back to the hub and Close, rows
   `[2 2 2 1 2]`) and an event's screen (`a=he&k=<code>`: the event's icon and bold name, its description, then the editor's part lines
   `settings_edit_line_text`, `_media` and `_buttons` with `settingsEditStateWord`, the no-caption note for a sticker or a video
   note, then `settings_msg_line_silent` with `settingsStateWord`, for an event with a private copy spec (`eventPMSpecFor`) the private copy
-  line `settings_msg_line_pm` (`settingsStateWord` of `settingsEditState.PMOn`, Phase 21) and, after a blank line each, the family's hint
+  line `settings_msg_line_pm` (`settingsStateWord` of `settingsEditState.PMOn`, Phase 22) and, after a blank line each, the family's hint
   (`settings_msg_hint_manual`) and `settings_msg_hint_silent`; the keyboard opens with the editor's part rows (`settingsEditPartRows`: `[Set]` while a part is not set,
   `[Set | Remove]` while it is, text, media and buttons in that order, each button carrying `k`), then the editor's preview rows
   (`settingsEditPreviewRows`: Preview of each part that is set, then Full preview, always last, two to a row), then the full-width
   Silent toggle `settings_btn_msg_silent` with `settingsStateIcon`, then, for an event with a private copy spec, the full-width row
-  `settings_btn_msg_pm_open` that opens the private copy's screen (`a=he&k=<code>&d=p`, Phase 21), then Back to the family and Close:
+  `settings_btn_msg_pm_open` that opens the private copy's screen (`a=he&k=<code>&d=p`, Phase 22), then Back to the family and Close:
   seven rows with nothing stored (`[1 1 1 1 1 1 2]`) and at most eight, `[2 2 2 2 2 1 1 2]` with every part set, the private content-page
   budget). An event's state (`settingsMsgStateOf`) is Silent when its Silent switch is on, Custom when it
   has a text, a media or a button, else Default (no row, or a row with nothing left, reads as the send path reads it); Main reads
   `settings_state_default` when every event is Default with its private copy off and `settings_state_msg_n` (`{n} custom`) for the n events
-  whose group message is not Default or whose private copy is on, each event counted once (`settingsMsgCountChanged`, plan 21-05, D-24;
+  whose group message is not Default or whose private copy is on, each event counted once (`settingsMsgCountChanged`, plan 22-05, D-24;
   `TestSettingsMessagesPMStates`), the unknown mark when the read failed. Every read is `settingsMsgRead` (= `eventmsg.GetFresh`, never the
   cache), creates nothing and returns its error: a failed read is the cannot-open edit on the hub, a family and an event screen and the
   unknown mark on Main. `hl` and `he` take exactly `t` and `k`, require the private owner field `c` in their `Validate` (so a group
@@ -1556,7 +1556,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   from the row), `Draw` (`renderSettingsMsgEvent`), `Remove` (`settingsMsgRemove(ev)`), `Write` (`settingsMsgWrite(ev)`), `Preview`
   (`settingsMsgPreview(ev)`) and `PreviewHeaderKey` `settings_msg_preview_header`; `he` redraws
   through `settingsEditRedraw` of that definition. `settingsMsgDefByFields` resolves a press's `k` to its definition and is false without
-  `c`. The editor on an event screen (plan 20-08, MSG-06, D-20 to D-22): the page actions `hs` (Set), `hr` (Remove) and `hc` (Cancel)
+  `c`. The editor on an event screen (plan 21-08, MSG-06, D-20 to D-22): the page actions `hs` (Set), `hr` (Remove) and `hc` (Cancel)
   are the editor's own, taken from `settingsEditResolvedActions(settingsMsgEditCodes, []string{"k"}, settingsMsgDefByFields)`
   (`settingsMsgEditActions`, which also takes the previews `hv` and `hf` from the same map), so their fields are exactly `t` (a part
   of the resolved definition) and `k`, a group menu's press (`u` in place of `c`) or an unknown `k` or `t` is an invalid request in step 1
@@ -1575,7 +1575,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   chatID, event, dest, text, by)`, `applyEventMedia(ctx, chatID, event, dest, fileID, mediaType, by)` and `applyEventButtons(ctx, chatID,
   event, dest, buttons, by)` in `event_message_apply.go`, beside `applyEventSilent` and `applyEventPM`: each writes through its seam
   (`eventMsgWrites.Text`, `.Media`, `.Buttons`, defaults `eventmsg.SetText`, `SetMedia`, `SetButtons`, the destination the definition passes,
-  `eventmsg.DestGroup` or, since Phase 21, `eventmsg.DestPM`, the presser or typist as `updated_by`), reads the chat's messages back fresh
+  `eventmsg.DestGroup` or, since Phase 22, `eventmsg.DestPM`, the presser or typist as `updated_by`), reads the chat's messages back fresh
   (`eventMsgApplyReadBack(ctx, chatID, event, dest, what, writeErr)`, which keeps the row in `eventMsgApplyResult.Row` and the whole fresh
   read in `.Messages`, from which every redraw builds its state with `settingsMsgStateFor`), judges no person's rights and logs the chat
   ID, the event, the destination and the part only, never a text, a file ID or a button. There is no command to compare with, so `TestSettingsAuthorityMessagesEdit` (without `can_change_info` at Set and
@@ -1583,7 +1583,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   screens with the admin check alone, the live creator) and `TestSettingsDriftMessagesEdit` (a text stored through the repository is drawn
   and counted Custom, a page Remove and a typed save are what the send path's cached `eventMessagesLookup` reads at once, opening every
   screen writes nothing) stand in for a parity test, beside `TestSettingsMessagesSet`, `TestSettingsMessagesRemove` and
-  `TestSettingsMessagesTyped` (`settings_messages_edit_test.go`). The previews (plan 20-09, MSG-06, D-20): `hv` (Preview of one part,
+  `TestSettingsMessagesTyped` (`settings_messages_edit_test.go`). The previews (plan 21-09, MSG-06, D-20): `hv` (Preview of one part,
   fields exactly `t` and `k`, 42 bytes at a 14-character chat ID) and `hf` (Full preview, fields exactly `k`, 38 bytes) need only
   `settingsRightAdmin`, so an administrator without `can_change_info` can preview. The editor's `settingsEditRunPreview` loads the
   definition fresh, answers a stale Preview of a part that is not set with `settings_edit_nothing_to_preview` and sends nothing (an
@@ -1601,7 +1601,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   editor's own (`settingsEditPreviewMediaAlone`, `settingsEditPreviewButtonsAlone` with the stored buttons alone). A preview ignores Silent
   (it shows the message the event would post), never posts in the group, writes no row, queues no deletion and makes no wait; a `{rules}`
   token reads the group's rules as the send path does (which creates an empty rules row for a group without one, the join path's own side
-  effect). `TestSettingsMessagesPreview` (`settings_messages_preview_test.go`) holds it. The Silent switch (plan 20-07, MSG-07, D-14: on, the bot still acts and
+  effect). `TestSettingsMessagesPreview` (`settings_messages_preview_test.go`) holds it. The Silent switch (plan 21-07, MSG-07, D-14: on, the bot still acts and
   posts nothing in the group for that event; the default is off) is the page action `hq` (`settingsActMsgSilent`), fields exactly `k` and
   `v`, its `Validate` (`settingsMsgSilentFields`) the private owner field `c`, a known event and `v` exactly `0` or `1`
   (`settingsEditSwitchValue`), so a forged `v`, an unknown `k`, an extra field or a group menu's `u` is an invalid request in step 1 before
@@ -1622,8 +1622,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   writes nothing) and `TestSettingsAuthorityMessagesSilent` (with and without `can_change_info`, a demotion between two presses, a plain
   member, an administrator the owner gate refuses and the live creator) stand in for a parity test (D-23). The other tests are in
   `settings_messages_test.go`, on the toolkit `settings_messages_env_test.go` (`newSettingsMsgEnv`, `settingsMsgCleanup`, `settingsMsgSeed`,
-  `settingsMsgOpenPrivate`, `settingsMsgPrivateMenu`). The page's limits are measured (plan 20-10, D-23; Phase 21 plan
-  21-04 for the private copy): at a 14-character chat ID the hub's family cell and the family list's Back are 37 bytes, an event cell 38, the
+  `settingsMsgOpenPrivate`, `settingsMsgPrivateMenu`). The page's limits are measured (plan 21-10, D-23; Phase 22 plan
+  22-04 for the private copy): at a 14-character chat ID the hub's family cell and the family list's Back are 37 bytes, an event cell 38, the
   private copy row 42, Set, Remove and Cancel 42 (46 with `d=p`), Preview 42 (46 with `d=p`) and Silent 42, the private copy switch 42, Full
   preview 38 (42 with `d=p`), Back to Main and Close 33, Main's cell 37 private and 33 group, with no field outside `a c u p t k d v` (`TestSettingsMessagesCallbackBytes`); every
   screen fits 3800 UTF-16 units in 8 languages with a 64-rune title, cells 20 code points, in the rows hub `[1 2]`, family list
@@ -1634,14 +1634,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   carries content (`TestSettingsMessagesForged`, `TestSettingsMessagesReadsCreateNothing`, `TestSettingsMessagesCost`,
   `TestSettingsMessagesLogsCarryIDsOnly`, `settings_messages_safety_test.go`). A refused preview's 403 logs nothing (the presser never
   started the bot); any other refused preview logs the user and chat with Telegram's error only.
-  The private copy on the page (Phase 21, plan 21-04, PMSG-01, D-22, D-23, D-25, D-26): every event also registers a second editor
+  The private copy on the page (Phase 22, plan 22-04, PMSG-01, D-22, D-23, D-25, D-26): every event also registers a second editor
   definition, `settingsMsgPMEditDef(fam, ev)`: key `settingsMsgPMWaitPage(ev)` = `h` + the event code + `p` (`hbnp` for the ban's private copy,
   the wait's `p`, which the typed-reply door finds through `settingsEditPageByKey` exactly as `hbng`), kind `settingsEditEvent`, `TitleKey`
   `settings_msg_pm_title` (so the prompt says it is for the private copy), icon 📩, the family's three parts, the five editor codes and
   `settingsRightChangeInfo` of `settingsMsgEditCodes`, `Fields` `{"k": <code>, "d": "p"}` (so Set, Remove and the Cancel of the prompt and of a
   refusal carry `d=p`), no reserved buttons (a private copy never carries the bot's Unban or Unmute row) and the hooks `Load`
   (`settingsMsgLoad(ev, eventmsg.DestPM)`), `Draw` (`renderSettingsMsgPM`), `Remove` and `Write` (`settingsMsgRemove(ev, dest)`,
-  `settingsMsgWrite(ev, dest)` with the pm destination), `Preview` (`settingsMsgPMPreview(ev)`, plan 21-05, below) and `PreviewHeaderKey`
+  `settingsMsgWrite(ev, dest)` with the pm destination), `Preview` (`settingsMsgPMPreview(ev)`, plan 22-05, below) and `PreviewHeaderKey`
   `settings_msg_preview_header_pm`. The definition is registered for every
   event, whatever the spec table says (another file's `init` fills it, and init order is not relied on); it is reached only through
   `settingsMsgDefByFields` (the owner field `c`, a known `k`, no `d` the group definition, `d=p` the private copy only for an event with a spec,
@@ -1651,10 +1651,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   nothing added to `settings_input_door.go` or `settings_edit_actions.go`. The private copy's screen (`a=he&k=<code>&d=p`): the event's icon and
   bold name, `settings_msg_pm_intro`, a blank line, the part lines (the text reads Default while no text is stored: the default private text is
   then sent), the no-caption note, `settings_msg_line_pm` (On while the pm row's Silent is false) and, after a blank line each, the family's hint
-  and `settings_msg_hint_pm`; the keyboard is the part rows, the editor's preview rows (`settingsEditPreviewRows`, plan 21-05: Preview of each
+  and `settings_msg_hint_pm`; the keyboard is the part rows, the editor's preview rows (`settingsEditPreviewRows`, plan 22-05: Preview of each
   part that is set, then Full preview, each carrying `k` and `d=p`), the full-width switch `settings_btn_msg_pm` (`settingsStateIcon`, the absolute
   target `a=hp&k=<code>&v=<opposite>`), then Back to the event screen (`a=he&k=<code>`, no `d`) and Close: `[1 1 1 1 1 2]` with nothing stored and
-  `[2 2 2 2 2 1 2]` with every part set. The previews of the private copy (plan 21-05, D-27, PMSG-06) are the page's `hv` and `hf` with `d=p`,
+  `[2 2 2 2 2 1 2]` with every part set. The previews of the private copy (plan 22-05, D-27, PMSG-06) are the page's `hv` and `hf` with `d=p`,
   needing only `settingsRightAdmin`: the editor sends the header `settings_msg_preview_header_pm` in the presser's language, then
   `settingsMsgPMPreview(ev)` builds the content with `composeEventPM`, the send path's own composer, from `settingsMsgPreviewReply` (the presser
   as the member and the admin, the sample reason and, for a timed event, the sample duration and end) in the group's language
@@ -1675,7 +1675,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   state with `common_settings_save_failed` after a failed write. Storing a part never turns a private copy on (a new pm row is written with its
   switch off, D-08); every write drops `event_messages:<chat>`, which is in `skipLocal`, so the send path reads the change at the very next
   command on every replica. A group menu's `hp` or `he&d=p` is an invalid request in step 1 (no `c`). `TestSettingsMessagesPMScreen` (the event screen's
-  line and row, the private copy screen, no `d` on a Phase 20 button, a forged or unknown `d` and an event without a spec refused before any
+  line and row, the private copy screen, no `d` on a Phase 21 button, a forged or unknown `d` and an event without a spec refused before any
   lookup), `TestSettingsMessagesPMSwitch` (the press, Back, a second press, a stale press, a failed write, what the send path's cached read
   sees) and `TestSettingsMessagesPMTyped` (the typed text, photo and buttons stored on the pm row with the copy still off, the prompt titled
   `settings_msg_pm_title` with a Cancel carrying `d=p`, the editor's refusals, Remove of each part leaving the group row alone) hold it
@@ -1878,7 +1878,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   never runs.
   `settingsRightChangeInfo` needs the creator or an administrator with `can_change_info` from the same member record (no
   extra call) and refuses with the alert `settings_no_change_info` (the editor's Delete last, as `/cleanwelcome` and
-  `/cleangoodbye` refuse through `CanUserChangeInfo`); it also gates every choice of the Deletion page (`/cleanservice` asks for it too), the three Member messages rows (`mc`, `me`, `ms`, Off included) and the Self-destruct card's Yes (`dy`), each judged on the press's fresh member record, so a Yes after the presser lost the right is refused with nothing written, while opening the section, a list and a row screen needs only the admin check every press makes (`TestSettingsAuthorityDeletionMember`; the owner gate's carve-out applies: a non-owner administrator with the switch off is refused at step 4b). It also gates the Messages page's Silent switch (`hq`, Phase 20 plan 20-07), judged on the press's own live member record with nothing written on a refusal, while opening the hub, a family and an event screen needs only `settingsRightAdmin`; Set (`hs`) and Remove (`hr`) of an event message's text, media and buttons (Phase 20 plan 20-08) need it too, the event definitions' `EditRight`, judged on every press and, through the typed-reply door's `authorize`, on every typed message, so a demotion between Set and the message ends the wait and stores nothing; the prompt's Cancel (`hc`), Preview (`hv`) and Full preview (`hf`, Phase 20 plan 20-09) need only `settingsRightAdmin`, so an administrator without `can_change_info` can open, view and preview every event message (`TestMessagesEndToEnd`'s `rights` subtest). The same holds for an event's private copy (Phase 21 plan 21-04): its screen (`he` with `d=p`) needs only `settingsRightAdmin`, while its Set (`hs`), Remove (`hr`) and switch (`hp`) need `settingsRightChangeInfo`, judged on every press and, through the typed-reply door's `authorize`, on every typed message. `settingsRightRefusalFor` is the one pure judgement of a right's
+  `/cleangoodbye` refuse through `CanUserChangeInfo`); it also gates every choice of the Deletion page (`/cleanservice` asks for it too), the three Member messages rows (`mc`, `me`, `ms`, Off included) and the Self-destruct card's Yes (`dy`), each judged on the press's fresh member record, so a Yes after the presser lost the right is refused with nothing written, while opening the section, a list and a row screen needs only the admin check every press makes (`TestSettingsAuthorityDeletionMember`; the owner gate's carve-out applies: a non-owner administrator with the switch off is refused at step 4b). It also gates the Messages page's Silent switch (`hq`, Phase 21 plan 21-07), judged on the press's own live member record with nothing written on a refusal, while opening the hub, a family and an event screen needs only `settingsRightAdmin`; Set (`hs`) and Remove (`hr`) of an event message's text, media and buttons (Phase 21 plan 21-08) need it too, the event definitions' `EditRight`, judged on every press and, through the typed-reply door's `authorize`, on every typed message, so a demotion between Set and the message ends the wait and stores nothing; the prompt's Cancel (`hc`), Preview (`hv`) and Full preview (`hf`, Phase 21 plan 21-09) need only `settingsRightAdmin`, so an administrator without `can_change_info` can open, view and preview every event message (`TestMessagesEndToEnd`'s `rights` subtest). The same holds for an event's private copy (Phase 22 plan 22-04): its screen (`he` with `d=p`) needs only `settingsRightAdmin`, while its Set (`hs`), Remove (`hr`) and switch (`hp`) need `settingsRightChangeInfo`, judged on every press and, through the typed-reply door's `authorize`, on every typed message. `settingsRightRefusalFor` is the one pure judgement of a right's
   member-record part, shared by a button press and a typed reply, so the two can never judge a right differently.
   Two composite rights (Phase 18, the only framework edit of that phase, appended after `settingsRightChangeInfo` so the zero value
   stays `settingsRightAdmin`, which made eight rights at the end of Phase 18; Phase 19 adds a ninth, below) judge the bot part first, as the commands they mirror do, then the member part:
@@ -2652,7 +2652,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   Only the job of an event whose spec is `Automatic` reads it; manual events are never counted (the pool and the pacer bound
   them). It fails closed: with no Redis client or on any Redis error an automatic copy is not sent. It sits outside the
   `fuku:cache:` prefix, so `CLEAR_CACHE_ON_STARTUP` keeps it.
-- `fuku:pmcopy:det:<token>` is the Details record of a private copy that was not delivered (`pmCopyDetailsKey`, plan 21-06,
+- `fuku:pmcopy:det:<token>` is the Details record of a private copy that was not delivered (`pmCopyDetailsKey`, plan 22-06,
   D-19): the JSON of `pmCopyDetailsRecord` (`u` the punished user's ID, `c` the chat ID, `e` the event, `t` the text, `f` the
   file ID, `y` the media type, `b` the URL button rows: the copy exactly as the job tried to send it, never naming the Staff
   Group or another group), `SET NX` for `pmCopyDetailsTTL` (48 h, longer than the 24 h Bot messages cap, so it outlives every
@@ -2713,14 +2713,14 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   cards use the Staff Group's; a lockdown alert copy uses its destination's (`lockdownSlotClock`: the Staff Group's for a
   Staff Group copy, the locked group's for the log channel copy), and the stored `body` keeps the time it was posted
   with. Log lines, file names, Redis hour stamps, stored values and the fban export's RFC 3339 dates stay UTC.
-- `chat_event_messages` (migration 20261119120000) holds a group's custom event messages, one row per `(chat_id, event,
+- `chat_event_messages` (migration 20261120110000) holds a group's custom event messages, one row per `(chat_id, event,
   dest)` under the inline primary key `pk_chat_event_messages`: `text`, `file_id` and `media_type` (one media item, 0 for
   none, the `db.*` media constants the greetings and rules rows use), `buttons` (jsonb, `'[]'` for none,
   `models.ButtonArray`), `silent`, `updated_by` and `updated_at`, every column `NOT NULL` with a zero default and no foreign
   key. `models.ChatEventMessage` maps it with no `default:` tag. The event and the destination are validated in Go by
   `eventmsg.ValidEvent` and `eventmsg.ValidDest` (`fuku/db/eventmsg/events.go`: today the seven manual events `ban`,
   `tban`, `kick`, `mute`, `tmute`, `unban`, `unmute` and the destinations `group` and `pm`, the private copy sent to the
-  punished person, Phase 21) and never by a CHECK, so Phases 22 to 24 add events with no migration; an unknown one is
+  punished person, Phase 22) and never by a CHECK, so Phases 23 to 25 add events with no migration; an unknown one is
   `ErrUnknownEvent` or `ErrUnknownDest` before any write. It is read through `cache.GetFromCacheOrLoad` as one
   `eventmsg.Messages` per chat (a map keyed `event|dest`, `Lookup(event, dest)`, plus the chat's `Options`, read from
   `chat_event_message_options` below) under `event_messages:<chat>` (`eventmsg.Get`; `eventmsg.GetFresh` is the same two
@@ -2737,7 +2737,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `silent` true and storing a text alone never turns a private copy on), the conflict update never touches the switch of an
   existing row, and only `SetSilent` changes it. The send path reads a message with `(*Messages).Resolve(event, dest)`
   (nil-safe): the stored row, or the empty message whose Silent is `DefaultSilent(dest)`. It is never part of backup,
-  export, import or reset in Phase 20 or 21, `pm` rows included (`TestEventMessagesStayOutOfBackup`; Phase 29 decides).
+  export, import or reset in Phase 21 or 22, `pm` rows included (`TestEventMessagesStayOutOfBackup`; Phase 30 decides).
 - `chat_event_message_options` (migration 20261120120000) holds a group's two options of the private copies, one row per
   chat under the inline primary key `pk_chat_event_message_options`: `pm_details` (a private copy that was not delivered
   adds a Details button to the group message), `pm_log` (it leaves one line in the group's log channel), `updated_by` and
@@ -2748,8 +2748,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   default options, and a value an earlier build cached has no `Options` and reads both off (the safe direction).
   `eventmsg.SetPMDetails` and `eventmsg.SetPMLog` (`ctx, chatID, on, by`) are column-targeted `INSERT ... ON CONFLICT (chat_id)
   DO UPDATE` of their own option plus `updated_by` and `updated_at`, so a Go false is written and the two never clobber each
-  other, and each drops the key after the write. It is never part of backup, export, import or reset in Phase 21
-  (`TestEventMessagesStayOutOfBackup`; Phase 29 decides).
+  other, and each drops the key after the write. It is never part of backup, export, import or reset in Phase 22
+  (`TestEventMessagesStayOutOfBackup`; Phase 30 decides).
 - `UpdateRecord` skips zero values. Use `UpdateRecordWithZeroValues` to write `false`/`0`/`""`. Both return
   `gorm.ErrRecordNotFound` when no row matched.
 - Check `TableName()` before raw SQL: `ConnectionSettings→connection` (per user), `ConnectionChatSettings→
@@ -3369,13 +3369,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `TestMemberSelfDestructQueuesMessages`, `TestMemberSelfDestructKeeps`, `TestMemberSelfDestructPinnedStays`,
   `TestMemberSelfDestructOffCancels`, `TestMemberSelfDestructNeverEndsUpdate`, `TestMemberContentMessageExcludesServiceFields`
   and `TestMemberDeletionStaffGroupNeverTouched` (all three member rules, a Staff Group and a failing Staff Group read) hold it.
-- Event messages (`event_message.go`, Phase 20): a group's stored message for a manual punishment (`chat_event_messages`,
+- Event messages (`event_message.go`, Phase 21): a group's stored message for a manual punishment (`chat_event_messages`,
   see Data) replaces the success reply of that event. `(c *moderationCtx) replyEvent(eventReply{...})` runs in the reply
   step of the moderation pipeline, after `execute` applied the punishment, so a message never delays, undoes or skips a
   punishment (D-03). It reads `eventmsg.Get` through the seam `eventMessagesLookup` under `eventMessageReadTimeout` (2 s,
   a variable): a read error is one Warn with the chat ID and the event and the default; no row, and a row with no text,
   media or buttons and Silent off, send the default through `sendSuccess` (the body of `replySuccess`, which wraps it),
-  literally the call the site made before Phase 20 (`TestLegacyModerationRequests` pins every byte and is never re-recorded); Silent, honoured only from a
+  literally the call the site made before Phase 21 (`TestLegacyModerationRequests` pins every byte and is never re-recorded); Silent, honoured only from a
   successful read, posts and schedules nothing. A send site builds its default first (the ban's is `banDefaultReply`, an
   `eventDefaultReply`: the same `Sprintf`, mention, `moderationReasonLine` and Unban keyboard as before) and hands it to
   `replyEvent` with the event key, the target (`eventTargetOf` of its `getChat` answer) and the `eventValues` (reason,
@@ -3400,7 +3400,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   update's `eventAnonActorKey` mark set by `markAnonymousActor`, or a sender that is the group itself in AnonAdmin mode);
   it never names the Staff Group (D-12). A stored text is one text for every language (D-02). No log line carries a
   stored text, caption, button name, link or file ID (`TestEventMessageLogsCarryIDsOnly`). All seven manual events go
-  through it (plan 20-05, EVT-01, D-16): `ban` (`/ban`, `/dban`), `tban` (`/tban`), `kick` (`/kick`, `/dkick`, both
+  through it (plan 21-05, EVT-01, D-16): `ban` (`/ban`, `/dban`), `tban` (`/tban`), `kick` (`/kick`, `/dkick`, both
   through `kickReply`), `mute` (`/mute`, `/dmute`, both through `muteReplyWithButton`), `tmute` (`/tmute`), `unban`
   (`/unban` of a member) and `unmute` (`/unmute`), each default built by its own `eventDefaultReply`: `banDefaultReply`,
   `tbanDefaultReply`, `kickDefaultReply` and `unbanDefaultReply` in `bans.go`, `muteDefaultReply`, `tmuteDefaultReply`
@@ -3419,12 +3419,12 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `TestEventMessageSites` (the six other events, custom and with nothing stored, the lockdown note included),
   `TestEventMessageSilentVariants` and `TestEventMessageAfterAnonymousProof` (`event_message_sites_test.go`) hold it (toolkit
   `event_message_env_test.go`: `eventMsgCleanup`, `eventMsgStore`, `eventMsgStoreRow`, `eventMsgFailingClient` with
-  `eventMsgRefuseOnce`, on plan 20-01's `newModerationGoldenSite`). Since Phase 21 the group part is `replyEventGroup` (the
+  `eventMsgRefuseOnce`, on plan 21-01's `newModerationGoldenSite`). Since Phase 22 the group part is `replyEventGroup` (the
   same code, returning what it posted as an `eventGroupPost`: the message and the keyboard rows it was sent with, the default's
   `eventBotRows` through `sendDefaultPost` or a custom message's composed rows, none when Silent or the send failed) and
   `replyEvent` ends with the private copy offer (`offerReplyPM`, the PM copies bullet below), which never changes the group
   reply or its error.
-- PM copies (`event_message_pm.go`, Phase 21): an event has a private copy when `registerEventPM(event, eventPMSpec{DefaultKey,
+- PM copies (`event_message_pm.go`, Phase 22): an event has a private copy when `registerEventPM(event, eventPMSpec{DefaultKey,
   Automatic})` registered a spec for it in an `init` (it panics on an event `eventmsg.ValidEvent` refuses, an empty key or a
   second registration; `eventPMSpecFor` reads the table): the seven manual events, `Automatic` false, each with its
   default text `eventmsg_pm_<event>` (D-06). `/dban`, `/dkick` and `/dmute` use their parent event's copy, the silent
@@ -3444,7 +3444,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   row's file. It is sent by `offerEventPM` from a bounded job (`pmCopyJobs`, a `raidPostTracker`, `startBelow` of
   `pmCopyMaxInFlight` 16 per replica, a full pool sheds the copy with one Debug line naming the chat and the user; each job starts with
   `defer error_handling.RecoverFromPanic` and runs under `pmCopyJobTimeout`, 60 s, from `context.Background()`). For an
-  event whose spec is `Automatic` (none yet: Phases 22 and 23 register them) the job's first step is the per-group cap
+  event whose spec is `Automatic` (none yet: Phases 23 and 24 register them) the job's first step is the per-group cap
   `pmCopyCapAllow` (Data: `fuku:pmcopy:{<chat>}:cap:<unix minute>`, at most `pmCopyAutoCapPerMinute` 10 a group a minute,
   the minute from `pmCopyNow`, the client from `pmCopyRedisClient`), so the handler never makes a Redis call for a copy;
   over the cap, with no Redis or on a Redis error the copy is not sent (fail closed, D-17: the copy is optional and a raid
@@ -3466,7 +3466,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`TestCommandRepliesStayInsideTheHandler` keeps its empty allow-list). No log line carries a stored or typed text, a
   caption, a button, a file ID, a reason or a name: the chat ID, the user ID, the event, the outcome class
   (`pmCopyOutcome.String`) and the Telegram code alone (`pmCopyErrCode`, 0 for none, never the error's text); delivered and
-  blocked log at Debug, refused, busy and unknown at Warn. The Details button (plan 21-06, PMSG-04, D-19,
+  blocked log at Debug, refused, busy and unknown at Warn. The Details button (plan 22-06, PMSG-04, D-19,
   `event_message_pm_details.go`): `offerReplyPM` also puts on the offer the group's options (`eventPMOffer.Options`, from the
   same read), the group message the group step posted (`GroupMsgID`, zero when it was Silent or its send failed) with the rows
   it was sent with (`GroupRows`) and the button's label in the group's language (`DetailsLabel`, `eventmsg_btn_details`, read
@@ -3509,7 +3509,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (D-12): the welcome in `SendWelcomeMessage` (`bot:welcome`), the goodbye in `leftMember` (`bot:goodbye`), the group `/rules`
   reply and the click-to-read message of a group with private rules (`bot:rules`), the success replies of the manual
   punishment commands through `moderationCtx.replySuccess` (`bot:punish_manual`: `/ban`, `/dban`, `/tban`, `/kick`,
-  `/dkick`, `/unban`, `/mute`, `/dmute`, `/tmute`, `/unmute`; since plan 20-05 the success replies of all seven manual
+  `/dkick`, `/unban`, `/mute`, `/dmute`, `/tmute`, `/unmute`; since plan 21-05 the success replies of all seven manual
   events reach `scheduleBotMessage` through `replyEvent` under `bot:punish_manual`, the default through `replySuccess`
   and a custom event message directly, so a custom message is on the same timer as the default (MSG-09), while the
   channel `/ban` and `/unban` replies still go through `replySuccess` directly), and the one
@@ -4607,7 +4607,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   and its `settings_edit_refuse_too_long_filled` wording without media (so removing the media keeps a long text up to 3800), and counts no `{rules}`
   token of its stored text as a button, because `/rules` adds none (`TestSettingsRulesCaptionParity` holds the Rules and Welcome boundaries
   together for every media kind).
-  Hooked definitions (Phase 20, plan 20-03; first production user the Messages page of plan 20-06, D-25): besides the three built-in
+  Hooked definitions (Phase 21, plan 21-03; first production user the Messages page of plan 21-06, D-25): besides the three built-in
   pages the editor serves messages another page defines, kind `settingsEditEvent`, registered from that page's `init` with
   `registerSettingsEditDef` (it panics on an empty key, a built-in page's key, a duplicate and nil hooks, `Load` or `Draw`) into
   `settingsEditExtraDefs`, which `settingsEditPageByKey` searches after the three pages, so the wait store and the typed-reply door
@@ -4623,7 +4623,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   so a group menu's press is refused in step 1; the built-in pages build their actions through it with a resolve that answers the page
   itself. A hooked definition's typed reply runs the editor branch of the typed-reply door (no new door): the same `authorize`, the
   greeting text check, the claim and the definition's `Write`, and the saved page and a refusal come from its hooks
-  (`renderSettingsInputRefusalWith`). The Messages page registers two definitions per event (Phase 21): the group message (`h<code>g`, `Fields`
+  (`renderSettingsInputRefusalWith`). The Messages page registers two definitions per event (Phase 22): the group message (`h<code>g`, `Fields`
   `{"k"}`) and the private copy (`h<code>p`, `Fields` `{"k", "d": "p"}`), one set of action codes resolved by `k` and `d`.
 - The log channel link (`/setlog`, `logchannels.go`) is a two-step proof. Step 1: `/setlog` posted in the channel stores a
   one-hour marker `fuku:setlog:<channel>:<message>` (outside the `fuku:cache:` prefix, `storePendingMarker`) and asks for
@@ -4918,13 +4918,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   (`./fuku/db/migrations`: the statements run twice without error, a row with only its required columns reads the defaults,
   the three named constraints refuse with SQLSTATE 23505 and 23514; PostgreSQL only, it skips locally;
   `TestStaffForwardBlockMigrationStatements` is its database-free half and runs in `make test`).
-  The event messages guarantees (Phase 20) are `TestEventMessagesUpsert` (`./fuku/db/eventmsg`: writers of different
+  The event messages guarantees (Phase 21) are `TestEventMessagesUpsert` (`./fuku/db/eventmsg`: writers of different
   columns of one key leave both values, one row per `(chat_id, event, dest)`, chats and events stay apart; it also runs on
   SQLite in `make test`) and `TestChatEventMessagesMigrationDefaults` (`./fuku/db/migrations`: the statement runs twice
   without error, a row with only its key reads every zero default, a second row of the key fails with SQLSTATE 23505;
   PostgreSQL only, it skips locally; `TestChatEventMessagesMigrationStatements` is its database-free half and runs in
   `make test`).
-  The private copies guarantees (Phase 21) are two subtests of `TestEventMessagesUpsert` (`pm default under concurrent
+  The private copies guarantees (Phase 22) are two subtests of `TestEventMessagesUpsert` (`pm default under concurrent
   writers`: concurrent text, media and buttons writes of one fresh `pm` key leave one row with every part and `silent`
   true; `options writers never clobber`: concurrent `SetPMDetails` and `SetPMLog` leave one options row with both on) and
   `TestEventMessageOptionsMigrationDefaults` (`./fuku/db/migrations`: the statement runs twice without error, a row with
@@ -5353,7 +5353,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   codes and the sixth part, the rights tables of `TestSettingsRightBotHalves` and `TestSettingsRightRefusalForParity` gain the tenth right,
   `TestSettingsMainGrid`'s end-to-end subtest leaves out a page whose `Hidden` says so for its chat, and `TestSettingsPhase18InStaffGroup` counts
   nineteen state lines for a Staff Group (Deletion hidden, Blocked sources shown).
-- Phase 20 test families (the event messages: the send path, the editor's hooked definitions and the Messages page `h`). The golden
+- Phase 21 test families (the event messages: the send path, the editor's hooked definitions and the Messages page `h`). The golden
   `TestLegacyModerationRequests` (`moderation_legacy_request_test.go`, toolkit `newModerationGoldenSite` and `moderationTargetClient`) was
   recorded alone before any send site changed and is never re-recorded. The engine's `TestEventMessage*` (`TestEventMessageBanEndToEnd`,
   `TestRenderEventText`, `TestEventMessageCompose`, `TestEventMessageFallback`, `TestEventMessageAnonymousAdmin`,
@@ -5361,13 +5361,13 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `event_message_test.go` and `event_message_sites_test.go` on the toolkit `event_message_env_test.go`. The editor's hooked definitions have
   `TestSettingsEditResolvedDefs` and `TestSettingsEditReservedButtons` (`settings_edit_resolved_test.go`, on the test page `qt` with codes
   `qs qr qc qv qf`). The page has `TestSettingsMessages*` (opens, Main state, group menu, Staff Group, Set, Remove, typed, Silent, previews,
-  and plan 20-10's safeguards `TestSettingsMessagesCallbackBytes`, `TestSettingsMessagesPageFitsEveryLocale`, `TestSettingsMessagesForged`,
+  and plan 21-10's safeguards `TestSettingsMessagesCallbackBytes`, `TestSettingsMessagesPageFitsEveryLocale`, `TestSettingsMessagesForged`,
   `TestSettingsMessagesReadsCreateNothing`, `TestSettingsMessagesCost`, `TestSettingsMessagesLogsCarryIDsOnly`), and, because nothing on it
   has a command, `TestSettingsDriftMessages*` and `TestSettingsAuthorityMessages*` stand in for parity tests (toolkit
   `settings_messages_env_test.go`); `TestSettingsStaffPrivacy` renders every Messages screen in 8 languages through
   `settingsPrivacyPhase20Screens`. The repository has `TestEventMessages` and `TestEventMessagesUpsert` (`fuku/db/eventmsg`), the migration
   `TestChatEventMessagesMigrationStatements` and `TestChatEventMessagesMigrationDefaults`, and backup `TestEventMessagesStayOutOfBackup`.
-  `TestMessagesEndToEnd` (`messages_e2e_test.go`, plan 20-11, about 7 s) is the phase's end-to-end proof through the real dispatcher with
+  `TestMessagesEndToEnd` (`messages_e2e_test.go`, plan 21-11, about 7 s) is the phase's end-to-end proof through the real dispatcher with
   only Telegram faked, one environment per subtest on the toolkit `messagesE2E` (`newMessagesE2E(t, real)`: the settings environment with
   the Bans and Mutes modules, the bot an administrator, a live creator who works the private menu, the environment's administrator who runs
   the commands, a 600 s `bot:punish_manual` timer, and the real locale files only when `real` is set; `member`, `openMain` (the
@@ -5390,10 +5390,10 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   after that replica had cached the custom text). The `refused` and `remove` subtests use the real locales because they compare with the
   Ukrainian goldens; the others use the marker locale.
   Hygiene: fresh chat and user IDs (`uniqueModuleChatID`, `uniqueLinkOwnerID`, or the settings environment's), `eventMsgCleanup` or
-  `settingsMsgCleanup` for the rows (the `chat_event_message_options` row included, since Phase 21) and the `event_messages` key, every
+  `settingsMsgCleanup` for the rows (the `chat_event_message_options` row included, since Phase 22) and the `event_messages` key, every
   swapped seam (`settingsMsgRead`, `eventMsgWrites`, `eventMessagesLookup`) restored through `mreqSwap`, no `t.Skip`, and light tests: the
   language sweeps run over pure renders, a dispatcher test uses one environment and the worst state.
-- Phase 21 test families (the private copies of event messages): `TestEventPMEndToEnd`, `TestEventPMSpecs`, `TestEventPMDefaultTexts`
+- Phase 22 test families (the private copies of event messages): `TestEventPMEndToEnd`, `TestEventPMSpecs`, `TestEventPMDefaultTexts`
   and `TestEventPMComposition` (`event_message_pm_test.go`), `TestEventPMFailures`, `TestEventPMLimits`, `TestEventPMPacerIndependent`
   and `TestEventPMLogsCarryIDsOnly` (`event_message_pm_failures_test.go`), `TestEventPMDetails` (the button added after a blocked
   copy with the group message's rows kept, a custom group message's rows kept, nothing for the option off, a delivered copy, a

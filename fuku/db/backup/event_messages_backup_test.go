@@ -15,7 +15,7 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/db/models"
 )
 
-// TestEventMessagesStayOutOfBackup proves D-07 of Phase 20 and D-10 of Phase 21: a group's custom
+// TestEventMessagesStayOutOfBackup proves D-07 of Phase 21 and D-10 of Phase 22: a group's custom
 // event messages, their private copies (dest pm) and the group's private copy options are not a
 // backup module, so an export carries none of them, an import writes none into the destination
 // chat and a reset leaves the source chat's rows alone. A later phase adds them to backups on

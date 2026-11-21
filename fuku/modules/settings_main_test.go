@@ -396,7 +396,7 @@ func settingsMainWorstState(tr *i18n.Translator) string {
 		// reads n/150, digits only, so five digits is the widest).
 		settingsText(tr, "settings_state_private_only"),
 		"99999/150",
-		// Phase 20: the Messages line at its widest.
+		// Phase 21: the Messages line at its widest.
 		settingsText(tr, "settings_state_msg_n", i18n.TranslationParams{"n": 99}),
 	}
 	for _, mode := range settingsWarnsStoredModes {

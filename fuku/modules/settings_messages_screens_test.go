@@ -16,7 +16,7 @@ import (
 
 // settingsMsgScreenFields are the only callback fields a button of the Messages page may carry: the action, the owner
 // field of either menu, the page, the family or part, the event, the destination (d=p on the private copy's buttons,
-// Phase 21) and the absolute switch target.
+// Phase 22) and the absolute switch target.
 var settingsMsgScreenFields = map[string]bool{"a": true, "c": true, "u": true, "p": true, "t": true, "k": true, "d": true, "v": true}
 
 // settingsMsgAllCustom is the stored messages of a chat whose every event of every family has its own text, so the hub and

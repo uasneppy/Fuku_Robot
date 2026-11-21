@@ -20,12 +20,12 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/utils/media"
 )
 
-// The event message engine (Phase 20). A group can store its own message for an event (a manual
+// The event message engine (Phase 21). A group can store its own message for an event (a manual
 // punishment such as ban); the success reply of that event is then the stored message instead of
 // the default text. The engine runs in the reply step of the moderation pipeline, after execute
 // applied the punishment (D-03): a message never delays, undoes or skips a punishment. With no row,
 // an empty row or a read that fails, it sends the default reply through replySuccess, which is
-// literally the call the send site made before Phase 20 (TestLegacyModerationRequests pins it).
+// literally the call the send site made before Phase 21 (TestLegacyModerationRequests pins it).
 // No stored text, caption, button or file ID is ever logged: a line names the chat ID and the event.
 
 // eventMessagesLookup reads a chat's stored event messages. It is a seam so a test can make the
@@ -60,7 +60,7 @@ type eventDefaultInput struct {
 }
 
 // eventDefaultReply builds an event's default reply: the text and the options the send site sent
-// before Phase 20, byte for byte, in the translator's language (the group's).
+// before Phase 21, byte for byte, in the translator's language (the group's).
 type eventDefaultReply func(tr *i18n.Translator, in eventDefaultInput) (string, *gotgbot.SendMessageOpts)
 
 // eventReply is one event's reply as a send site hands it to replyEvent: the event key, the punished

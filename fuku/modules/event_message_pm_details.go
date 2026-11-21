@@ -21,7 +21,7 @@ import (
 	"github.com/uasneppy/fuku_robot/fuku/utils/media"
 )
 
-// The Details button of a private copy (Phase 21, PMSG-04, D-19, D-20). When a private copy job could not
+// The Details button of a private copy (Phase 22, PMSG-04, D-19, D-20). When a private copy job could not
 // deliver its copy and the group's Details option is on, the job stores the copy, exactly as it tried to
 // send it, in a short-lived Redis record behind a random token, and adds one URL button to the group
 // message that opens the bot's private chat with /start pmcopy_<token>. The deep link shows the record to

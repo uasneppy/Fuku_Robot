@@ -22,7 +22,7 @@ func muteTargetValidation(c *moderationCtx, t *target) error {
 }
 
 // muteDefaultReply is the mute event's default reply (an eventDefaultReply): the text and the
-// Unmute keyboard /mute and /dmute sent before Phase 20, byte for byte (TestLegacyModerationRequests).
+// Unmute keyboard /mute and /dmute sent before Phase 21, byte for byte (TestLegacyModerationRequests).
 func muteDefaultReply(tr *i18n.Translator, in eventDefaultInput) (string, *gotgbot.SendMessageOpts) {
 	baseStr, _ := tr.GetString("mutes_mute_message")
 	text := fmt.Sprintf(baseStr, formatting.MentionHtml(in.Target.Id, in.Target.FirstName)) +
@@ -43,7 +43,7 @@ func muteDefaultReply(tr *i18n.Translator, in eventDefaultInput) (string, *gotgb
 }
 
 // tmuteDefaultReply is the timed mute event's default reply (an eventDefaultReply): the text and the
-// options /tmute sent before Phase 20, byte for byte (TestLegacyModerationRequests).
+// options /tmute sent before Phase 21, byte for byte (TestLegacyModerationRequests).
 func tmuteDefaultReply(tr *i18n.Translator, in eventDefaultInput) (string, *gotgbot.SendMessageOpts) {
 	temp, _ := tr.GetString("mutes_tmute_message")
 	text := fmt.Sprintf(temp, formatting.MentionHtml(in.Target.Id, in.Target.FirstName), in.TimeVal) +
@@ -52,7 +52,7 @@ func tmuteDefaultReply(tr *i18n.Translator, in eventDefaultInput) (string, *gotg
 }
 
 // unmuteDefaultReply is the unmute event's default reply (an eventDefaultReply) without the lockdown
-// note, which the site appends: the text and the options /unmute sent before Phase 20.
+// note, which the site appends: the text and the options /unmute sent before Phase 21.
 func unmuteDefaultReply(tr *i18n.Translator, in eventDefaultInput) (string, *gotgbot.SendMessageOpts) {
 	temp, _ := tr.GetString("mutes_unmute_message")
 	return fmt.Sprintf(temp, formatting.MentionHtml(in.Target.Id, in.Target.FirstName)), formatting.Shtml()

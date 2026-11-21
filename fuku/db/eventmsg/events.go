@@ -42,7 +42,7 @@ const (
 )
 
 // Events lists every event a message can be stored for, in the order the settings page shows
-// them. Phases 22 to 24 append the automatic, lockdown and requirement events.
+// them. Phases 23 to 25 append the automatic, lockdown and requirement events.
 var Events = []string{
 	EventBan,
 	EventTimedBan,
