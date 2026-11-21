@@ -20,7 +20,8 @@ import (
 )
 
 // settingsMsgValidPresses are one valid press of each action code of the Messages page, its fields besides the private owner
-// field c, keyed by the code.
+// field c, keyed by a name (the code, or the code and d=p for the private copy's form of an editor code, Phase 22). The
+// action code is the second item.
 var settingsMsgValidPresses = map[string][]string{
 	settingsActMsgFamily:  {"a", settingsActMsgFamily, "t", "m"},
 	settingsActMsgEvent:   {"a", settingsActMsgEvent, settingsMsgEventField, "bn"},
@@ -30,6 +31,15 @@ var settingsMsgValidPresses = map[string][]string{
 	settingsActMsgPreview: {"a", settingsActMsgPreview, "t", settingsEditPartText, settingsMsgEventField, "bn"},
 	settingsActMsgFull:    {"a", settingsActMsgFull, settingsMsgEventField, "bn"},
 	settingsActMsgSilent:  {"a", settingsActMsgSilent, settingsMsgEventField, "bn", "v", "1"},
+	// Phase 22: the private copy's switch, the hub's option toggle and the d=p form of every event and editor code.
+	settingsActMsgPM:               {"a", settingsActMsgPM, settingsMsgEventField, "bn", "v", "1"},
+	settingsActMsgPMOption:         {"a", settingsActMsgPMOption, "t", "d", "v", "1"},
+	settingsActMsgEvent + " d=p":   {"a", settingsActMsgEvent, settingsMsgEventField, "bn", settingsMsgDestField, settingsMsgDestPMCode},
+	settingsActMsgSet + " d=p":     {"a", settingsActMsgSet, "t", settingsEditPartText, settingsMsgEventField, "bn", settingsMsgDestField, settingsMsgDestPMCode},
+	settingsActMsgRemove + " d=p":  {"a", settingsActMsgRemove, "t", settingsEditPartText, settingsMsgEventField, "bn", settingsMsgDestField, settingsMsgDestPMCode},
+	settingsActMsgCancel + " d=p":  {"a", settingsActMsgCancel, "t", settingsEditPartText, settingsMsgEventField, "bn", settingsMsgDestField, settingsMsgDestPMCode},
+	settingsActMsgPreview + " d=p": {"a", settingsActMsgPreview, "t", settingsEditPartText, settingsMsgEventField, "bn", settingsMsgDestField, settingsMsgDestPMCode},
+	settingsActMsgFull + " d=p":    {"a", settingsActMsgFull, settingsMsgEventField, "bn", settingsMsgDestField, settingsMsgDestPMCode},
 }
 
 // settingsMsgForgedPress is one forged press: in a group menu (the opener u in place of c) or in a private menu, with the
@@ -52,28 +62,36 @@ func settingsMsgWith(kv []string, key, value string) []string {
 	return append(out, key, value)
 }
 
-// settingsMsgForgedPresses are the forged presses of every action code: a group menu's press, a private press carrying u in
-// place of c, an unknown event (or family for hl), an unknown part for the part actions, a target other than 0 or 1 for the
-// Silent switch, and an extra field.
+// settingsMsgForgedPresses are the forged presses of every valid press: a group menu's press, a private press carrying u in
+// place of c, an unknown event (or family for hl, option for ho), an unknown part for the part actions, a target other than 0
+// or 1 for the switches, an extra field and, for the d=p forms, a destination other than p (Phase 22, D-26).
 func settingsMsgForgedPresses() []settingsMsgForgedPress {
 	var forged []settingsMsgForgedPress
-	for code, kv := range settingsMsgValidPresses {
+	for name, kv := range settingsMsgValidPresses {
+		code := kv[1]
 		forged = append(forged,
-			settingsMsgForgedPress{name: code + " from a group menu", group: true, kv: kv},
-			settingsMsgForgedPress{name: code + " carrying u in a private menu", kv: append(append([]string{}, kv...), "u", "1234567890")},
-			settingsMsgForgedPress{name: code + " with an extra field", kv: append(append([]string{}, kv...), "e", "1")},
+			settingsMsgForgedPress{name: name + " from a group menu", group: true, kv: kv},
+			settingsMsgForgedPress{name: name + " carrying u in a private menu", kv: append(append([]string{}, kv...), "u", "1234567890")},
+			settingsMsgForgedPress{name: name + " with an extra field", kv: append(append([]string{}, kv...), "e", "1")},
 		)
 		switch code {
 		case settingsActMsgFamily:
-			forged = append(forged, settingsMsgForgedPress{name: code + " of an unknown family", kv: settingsMsgWith(kv, "t", "z")})
+			forged = append(forged, settingsMsgForgedPress{name: name + " of an unknown family", kv: settingsMsgWith(kv, "t", "z")})
+		case settingsActMsgPMOption:
+			forged = append(forged, settingsMsgForgedPress{name: name + " of an unknown option", kv: settingsMsgWith(kv, "t", "x")})
 		default:
-			forged = append(forged, settingsMsgForgedPress{name: code + " of an unknown event", kv: settingsMsgWith(kv, settingsMsgEventField, "zz")})
+			forged = append(forged, settingsMsgForgedPress{name: name + " of an unknown event", kv: settingsMsgWith(kv, settingsMsgEventField, "zz")})
 		}
 		switch code {
 		case settingsActMsgSet, settingsActMsgRemove, settingsActMsgCancel, settingsActMsgPreview:
-			forged = append(forged, settingsMsgForgedPress{name: code + " of an unknown part", kv: settingsMsgWith(kv, "t", "q")})
-		case settingsActMsgSilent:
-			forged = append(forged, settingsMsgForgedPress{name: code + " with v=2", kv: settingsMsgWith(kv, "v", "2")})
+			forged = append(forged, settingsMsgForgedPress{name: name + " of an unknown part", kv: settingsMsgWith(kv, "t", "q")})
+		case settingsActMsgSilent, settingsActMsgPM, settingsActMsgPMOption:
+			forged = append(forged, settingsMsgForgedPress{name: name + " with v=2", kv: settingsMsgWith(kv, "v", "2")})
+		}
+		if slicesContainsKey(kv, settingsMsgDestField) {
+			for _, d := range []string{"x", settingsMsgDestGroupCode} {
+				forged = append(forged, settingsMsgForgedPress{name: name + " with d=" + d, kv: settingsMsgWith(kv, settingsMsgDestField, d)})
+			}
 		}
 	}
 	return forged
@@ -146,14 +164,14 @@ func TestSettingsMessagesForged(t *testing.T) {
 	}
 
 	// A valid press of each code passes step 1: it reaches the live lookup of the presser and is not the invalid request.
-	for code, kv := range settingsMsgValidPresses {
+	for name, kv := range settingsMsgValidPresses {
 		lookups := env.memberLookupsOf(env.chat.Id, admin.Id)
 		env.pressPrivate(admin, env.updateID(), env.privateFields(env.chat.Id, kv...))
 		if got := env.memberLookupsOf(env.chat.Id, admin.Id) - lookups; got != 1 {
-			t.Errorf("a valid %s press made %d lookups of the presser, want 1", code, got)
+			t.Errorf("a valid %s press made %d lookups of the presser, want 1", name, got)
 		}
 		if text, _ := env.lastAnswer(); containsMarker(text, "common_callback_invalid_request") {
-			t.Errorf("a valid %s press was answered as an invalid request", code)
+			t.Errorf("a valid %s press was answered as an invalid request", name)
 		}
 		env.redis.Del(settingsInputKey(admin.Id))
 		env.redis.Del(settingsInputDoneKey(admin.Id))
@@ -193,10 +211,19 @@ func TestSettingsMessagesReadsCreateNothing(t *testing.T) {
 				open("a", settingsActMsgFamily, "t", "m")
 				for _, ev := range settingsMsgManualEvents {
 					open("a", settingsActMsgEvent, settingsMsgEventField, ev.Code)
+					// Phase 22: the event's private copy screen.
+					open("a", settingsActMsgEvent, settingsMsgEventField, ev.Code, settingsMsgDestField, settingsMsgDestPMCode)
 				}
-				if text, _ := env.lastEdit(env.admin.Id, msgID); !containsMarker(text, settingsMsgManualEvents[len(settingsMsgManualEvents)-1].NameKey) {
-					t.Errorf("the run's last edit is %q, want the last event's screen", text)
+				if text, _ := env.lastEdit(env.admin.Id, msgID); !containsMarker(text, "settings_msg_pm_intro") {
+					t.Errorf("the run's last edit is %q, want the last event's private copy screen", text)
 				}
+				// A private copy's Full preview reads the default private text and sends it to the presser alone.
+				sent := len(env.fake.sentTo(env.admin.Id))
+				open("a", settingsActMsgFull, settingsMsgEventField, "bn", settingsMsgDestField, settingsMsgDestPMCode)
+				if got := len(env.fake.sentTo(env.admin.Id)) - sent; got < 2 {
+					t.Errorf("the private copy's Full preview sent %d messages to the presser, want the header and the copy", got)
+				}
+				open("a", settingsActOpen, "p", settingsPageMessages)
 			} else if text, _ := env.lastEdit(chat.Id, msgID); !containsMarker(text, "settings_msg_group_note") {
 				t.Errorf("the run's last edit is %q, want the group note", text)
 			}
@@ -206,6 +233,13 @@ func TestSettingsMessagesReadsCreateNothing(t *testing.T) {
 			if gotEvents, gotChats, gotRules := settingsMsgSafetyCounts(t, chat.Id); gotEvents != 0 || gotChats != chats || gotRules != 0 {
 				t.Errorf("drawing the page left %d event message rows and %d rules rows and changed the chat rows from %d to %d",
 					gotEvents, gotRules, chats, gotChats)
+			}
+			var options int64
+			if err := db.DB.Model(&models.ChatEventMessageOptions{}).Where("chat_id = ?", chat.Id).Count(&options).Error; err != nil {
+				t.Fatalf("count the options rows of chat %d: %v", chat.Id, err)
+			}
+			if options != 0 {
+				t.Errorf("drawing the page left %d private copy options rows, want none", options)
 			}
 			if key := eventmsg.CacheKey(chat.Id); env.redis.Exists(key) {
 				t.Errorf("drawing the page filled %s", key)
@@ -263,6 +297,8 @@ func TestSettingsMessagesCost(t *testing.T) {
 		"the hub":         {"a", settingsActOpen, "p", settingsPageMessages},
 		"the family list": {"a", settingsActMsgFamily, "t", "m"},
 		"an event screen": {"a", settingsActMsgEvent, settingsMsgEventField, "bn"},
+		// Phase 22: a private copy screen.
+		"a private copy screen": {"a", settingsActMsgEvent, settingsMsgEventField, "bn", settingsMsgDestField, settingsMsgDestPMCode},
 	}
 	pipeline := map[string]int{"getChatMember": 1, "getChat": 1, "editMessageText": 1, "answerCallbackQuery": 1}
 

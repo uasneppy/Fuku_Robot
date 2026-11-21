@@ -4,8 +4,10 @@ package modules
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -421,11 +423,37 @@ func TestEventPMLogsCarryIDsOnly(t *testing.T) {
 		return s
 	}
 
+	// open runs /start <arg> in the private chat of user, as the deep link router does.
+	open := func(t *testing.T, s *botSite, user int64, arg string) {
+		t.Helper()
+		from := gotgbot.User{Id: user, FirstName: "Opener"}
+		ctx := newModuleMessageContext(s.bot, gotgbot.Chat{Id: user, Type: "private", FirstName: "Opener"}, from, "/start "+arg)
+		if err := HandleDeepLink(s.bot, ctx, &from, arg); err == nil {
+			t.Fatalf("/start %s returned nil, want EndGroups", arg)
+		}
+	}
+	// blockedWithDetails runs a blocked /ban of the custom copy with the Details option on and returns the record's token.
+	blockedWithDetails := func(t *testing.T, s *botSite) string {
+		t.Helper()
+		custom(t, s)
+		eventPMDetailsOn(t, s.chat.Id)
+		eventPMRefuse(t, s, eventPMTelegramError(403, "Forbidden: "+description, 0))
+		eventPMBanCommand(t, s, reason)
+		waitEventPM(t)
+		tokens := eventPMDetailsTokens(t)
+		if len(tokens) != 1 {
+			t.Fatalf("Details records = %d, want the one of the blocked copy", len(tokens))
+		}
+		return tokens[0]
+	}
+
 	cases := []struct {
 		name    string
 		run     func(t *testing.T, s *botSite)
 		mustSee string
 		failure bool
+		// lines, when set, are the failure lines the case must log instead of the private copy's own line.
+		lines [][]string
 	}{
 		{name: "delivered", mustSee: "was delivered", run: func(t *testing.T, s *botSite) {
 			custom(t, s)
@@ -475,6 +503,51 @@ func TestEventPMLogsCarryIDsOnly(t *testing.T) {
 			eventPMWaitBeforeRestore(t)
 			eventPMOfferTo(s, s.chat.Id, "pmtest_auto", eventPMMember, storedText+" "+reason)
 		}},
+		// Phase 22 plan 22-08: the Details record is written and the edit that would add its button is refused.
+		{name: "details record and a refused edit", mustSee: "could not be added", failure: true,
+			lines: [][]string{{"the Details button of chat", "could not be added (code 400)"}},
+			run: func(t *testing.T, s *botSite) {
+				s.client.mu.Lock()
+				s.client.errors["editMessageReplyMarkup"] = &gotgbot.TelegramError{
+					Method: "editMessageReplyMarkup", Code: 400, Description: "Bad Request: " + description,
+				}
+				s.client.mu.Unlock()
+				blockedWithDetails(t, s)
+			}},
+		// The deep link: a view by the person (twice, the second refused by Telegram), then every refusal: someone else, a
+		// malformed payload, an unknown token and a Redis error. Only the refused view and the Redis error log a line.
+		{name: "details deep link", mustSee: "could not be shown", failure: true,
+			lines: [][]string{{"the Details copy of user 42 in chat", "could not be shown (code 400)"}, {"a Details record opened by user 42 could not be read"}},
+			run: func(t *testing.T, s *botSite) {
+				token := blockedWithDetails(t, s)
+				open(t, s, eventPMMember, pmCopyDetailsPrefix+token)
+				eventPMRefuse(t, s, eventPMTelegramError(400, "Bad Request: "+description, 0))
+				open(t, s, eventPMMember, pmCopyDetailsPrefix+token)
+				open(t, s, eventPMMember+1, pmCopyDetailsPrefix+token)
+				open(t, s, eventPMMember, pmCopyDetailsPrefix+token[:21]+"!")
+				open(t, s, eventPMMember, pmCopyDetailsPrefix+"AAAAAAAAAAAAAAAAAAAAAA")
+				broken := miniredis.RunT(t)
+				broken.SetError("ERR " + description)
+				client := redis.NewClient(&redis.Options{Addr: broken.Addr()})
+				t.Cleanup(func() { _ = client.Close() })
+				mreqSwap(t, &pmCopyRedisClient, func() *redis.Client { return client })
+				open(t, s, eventPMMember, pmCopyDetailsPrefix+token)
+			}},
+		// The log line of the blocked copy is refused by the log channel.
+		{name: "a failed log post", mustSee: "could not be posted", failure: true,
+			lines: [][]string{{"the " + pmCopyLogTag + " log line of chat", "could not be posted (code 400)"}},
+			run: func(t *testing.T, s *botSite) {
+				channel := eventPMLogLink(t, s)
+				custom(t, s)
+				eventPMLogOn(t, s.chat.Id)
+				eventPMRefuse(t, s, eventPMTelegramError(403, "Forbidden: "+description, 0))
+				s.bot.BotClient = eventPMRefuseLogClient{BotClient: s.bot.BotClient, channel: channel,
+					err: &gotgbot.TelegramError{Method: "sendMessage", Code: 400, Description: "Bad Request: " + description}}
+				eventPMBanCommand(t, s, reason)
+				if posts := eventPMLogPosts(t, s, channel); len(posts) != 1 {
+					t.Fatalf("#PM_COPY posts tried = %d, want the one refused post", len(posts))
+				}
+			}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -483,8 +556,12 @@ func TestEventPMLogsCarryIDsOnly(t *testing.T) {
 			hook := mreqLogCapture(t)
 			tc.run(t, s)
 			waitEventPM(t)
-			mreqWantCleanLogs(t, hook, forbidden, tc.mustSee)
-			if tc.failure {
+			// No line may carry a Details token either.
+			mreqWantCleanLogs(t, hook, append(slices.Clone(forbidden), eventPMDetailsTokens(t)...), tc.mustSee)
+			for _, parts := range tc.lines {
+				eventPMWantLine(t, hook, parts...)
+			}
+			if tc.failure && tc.lines == nil {
 				event := eventmsg.EventBan
 				if tc.name == "capped" || tc.name == "fail closed" {
 					event = "pmtest_auto"
@@ -493,4 +570,21 @@ func TestEventPMLogsCarryIDsOnly(t *testing.T) {
 			}
 		})
 	}
+}
+
+// eventPMRefuseLogClient wraps a site's client and refuses every #PM_COPY post to channel with err, after the wrapped client
+// recorded it; every other request, the ban's own log post included, is the wrapped client's.
+type eventPMRefuseLogClient struct {
+	gotgbot.BotClient
+	channel int64
+	err     error
+}
+
+func (c eventPMRefuseLogClient) RequestWithContext(ctx context.Context, token string, method string, params map[string]any, opts *gotgbot.RequestOpts) (json.RawMessage, error) {
+	response, err := c.BotClient.RequestWithContext(ctx, token, method, params, opts)
+	if method == "sendMessage" && fmt.Sprint(params["chat_id"]) == strconv.FormatInt(c.channel, 10) &&
+		strings.Contains(fmt.Sprint(params["text"]), pmCopyLogTag) {
+		return nil, c.err
+	}
+	return response, err
 }
