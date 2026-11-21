@@ -38,21 +38,34 @@ func settingsEditIsForbidden(err error) bool {
 
 // settingsEditPreviewHeaderKey is the locale key of the line sent before a preview.
 func settingsEditPreviewHeaderKey(def settingsEditPageDef) string {
+	if def.Hooks != nil && def.Hooks.PreviewHeaderKey != "" {
+		return def.Hooks.PreviewHeaderKey
+	}
 	if def.Kind == settingsEditRules {
 		return "settings_edit_preview_header_rules"
 	}
 	return "settings_edit_preview_header"
 }
 
+// errSettingsEditNoPreview is the error of a preview of a hooked definition that has no Preview hook.
+var errSettingsEditNoPreview = errors.New("settings editor: the definition has no preview")
+
 // settingsEditPreviewSend sends the header and then the content of a preview to the presser's
 // private chat, and nothing anywhere else. part is the part code of a Preview, or "" for Full
-// preview. A failed header stops before the content; nothing is retried.
+// preview. A failed header stops before the content; nothing is retried. A hooked definition's
+// content is sent by its Preview hook; one without that hook sends nothing and fails.
 func settingsEditPreviewSend(p *settingsPress, def settingsEditPageDef, st settingsEditState, part string) error {
+	if def.Hooks != nil && def.Hooks.Preview == nil {
+		return errSettingsEditNoPreview
+	}
 	target := p.query.From.Id
 	if _, err := p.b.SendMessage(target, settingsText(p.tr, settingsEditPreviewHeaderKey(def)), &gotgbot.SendMessageOpts{
 		ParseMode: formatting.HTML,
 	}); err != nil {
 		return err
+	}
+	if def.Hooks != nil {
+		return def.Hooks.Preview(p, def, st, part)
 	}
 	if def.Kind == settingsEditRules {
 		return settingsEditPreviewRules(p, st, part)

@@ -2,6 +2,7 @@ package modules
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
@@ -29,16 +30,16 @@ type moderationCtx struct {
 	Module *moduleStruct
 }
 
-// moderationReasonSuffix renders the reason line of a punishment reply: the locale
-// template key formatted with the HTML-escaped reason, or "" for an empty reason or a
-// missing template. The template comes from the locale file only; the reason is never
-// part of a format string, so a '%' in it is printed as typed and a '<' cannot make
-// Telegram reject the reply after the punishment already happened.
-func moderationReasonSuffix(c *moderationCtx, key, reason string) string {
+// moderationReasonLine renders the reason line of a punishment reply: the locale template key
+// formatted with the HTML-escaped reason, or "" for an empty reason or a missing template. The
+// template comes from the locale file only; the reason is never part of a format string, so a '%'
+// in it is printed as typed and a '<' cannot make Telegram reject the reply after the punishment
+// already happened. The default reply builders (each an eventDefaultReply) call it.
+func moderationReasonLine(tr *i18n.Translator, key, reason string) string {
 	if reason == "" {
 		return ""
 	}
-	temp, _ := c.Tr.GetString(key)
+	temp, _ := tr.GetString(key)
 	if temp == "" {
 		return ""
 	}
@@ -49,12 +50,19 @@ func moderationReasonSuffix(c *moderationCtx, key, reason string) string {
 // it was sent, queues it for deletion under the manual punishment kind (D-13). Validation and error
 // replies, lists and question cards never go through it. The error is exactly what Msg.Reply returned.
 func (c *moderationCtx) replySuccess(text string, opts *gotgbot.SendMessageOpts) error {
+	_, err := c.sendSuccess(text, opts)
+	return err
+}
+
+// sendSuccess is replySuccess returning the message it sent: the same Msg.Reply and the same queueing
+// under the manual punishment kind. The message is nil when the send failed.
+func (c *moderationCtx) sendSuccess(text string, opts *gotgbot.SendMessageOpts) (*gotgbot.Message, error) {
 	sent, err := c.Msg.Reply(c.Bot, text, opts)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	scheduleBotMessage(sent, deletion.KindBotManual)
-	return nil
+	return sent, nil
 }
 
 // replyHint sends a usage hint (a "reply to a message" answer) as a reply to the command. Unlike
@@ -118,6 +126,16 @@ type target struct {
 	reason    string
 	timeVal   string // used by time-based commands (e.g., tban)
 	isChannel bool   // true if original target was a channel ID
+	untilDate int64  // the Telegram until_date a time-based command computed; 0 for a permanent one
+}
+
+// eventUntil is the end of a timed punishment as the event message's {until} value: the Telegram
+// until_date as a time, or the zero time for a permanent one, which renders {until} empty (D-09).
+func eventUntil(untilDate int64) time.Time {
+	if untilDate <= 0 {
+		return time.Time{}
+	}
+	return time.Unix(untilDate, 0)
 }
 
 // extractFromArgs resolves the target from command arguments using ExtractUserAndText.
@@ -457,6 +475,7 @@ func extractTemporalTarget(c *moderationCtx, t *target) int64 {
 	}
 	t.timeVal = timeVal
 	t.reason = reason
+	t.untilDate = _time
 	return _time
 }
 

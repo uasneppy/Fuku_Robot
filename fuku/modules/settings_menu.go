@@ -604,6 +604,10 @@ func (p *settingsPress) openPage(pg settingsPage, notice string) {
 	// A private-only page in a group menu is the framework's note, drawn before any page code runs
 	// (D-01, U-8): nothing of the page, not even a read, is reachable from a group.
 	if pg.PrivateOnly && !p.private {
+		if pg.PrivateNoteKey != "" {
+			p.edit(renderSettingsPrivateOnlyNoteWith(p.view(), pg.TitleKey, pg.PrivateNoteKey, getBotUsername(p.b)))
+			return
+		}
 		p.edit(renderSettingsPrivateOnlyNote(p.view(), pg.TitleKey, getBotUsername(p.b)))
 		return
 	}
@@ -621,10 +625,16 @@ func (p *settingsPress) openPage(pg settingsPage, notice string) {
 // carries no intro, count, entry or action, because a group menu is read by every member. Without a
 // bot username the URL row is left out and logged, as the editor does.
 func renderSettingsPrivateOnlyNote(v settingsView, titleKey, botUsername string) settingsScreen {
+	return renderSettingsPrivateOnlyNoteWith(v, titleKey, "settings_entries_group_note", botUsername)
+}
+
+// renderSettingsPrivateOnlyNoteWith is renderSettingsPrivateOnlyNote with the page's own note line (the
+// page's PrivateNoteKey, such as the Messages page's settings_msg_group_note). It is pure.
+func renderSettingsPrivateOnlyNoteWith(v settingsView, titleKey, noteKey, botUsername string) settingsScreen {
 	k := newSettingsKeyboard(v)
 	settingsEditOpenPrivateRow(k, settingsEditScreenOpts{BotUsername: botUsername})
 	k.navRow(false)
-	return k.screen(settingsCompose(v, titleKey, []string{settingsText(v.Tr, "settings_entries_group_note")}, "", false))
+	return k.screen(settingsCompose(v, titleKey, []string{settingsText(v.Tr, noteKey)}, "", false))
 }
 
 // closeMenu deletes the menu message and, when that fails (a private message older than 48

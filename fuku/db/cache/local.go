@@ -51,6 +51,8 @@ var (
 
 	staffForwardBlockPrefix = CacheKey("staff_forward_block") + ":"
 	chatConvPrefix          = CacheKey("chat_conv") + ":"
+
+	eventMessagesPrefix = CacheKey("event_messages") + ":"
 )
 
 // skipLocal reports whether key must never be served from process memory.
@@ -86,6 +88,9 @@ func skipLocal(key string) bool {
 	// The chat_conv key (a group's conversation setting) is read on every message addressed to
 	// the bot: an owner who switches conversations off must stop replies on every replica at the
 	// next message, not after CACHE_LOCAL_TTL seconds.
+	// The event_messages key (a group's custom event messages) is read at every manual
+	// punishment reply: a Remove or a Silent switch must act at the very next command on every
+	// replica, not after CACHE_LOCAL_TTL seconds (D-05).
 	return strings.HasPrefix(key, captchaPendingPrefix) ||
 		strings.HasPrefix(key, staffGroupPrefix) ||
 		strings.HasPrefix(key, staffLinkOfPrefix) ||
@@ -93,7 +98,8 @@ func skipLocal(key string) bool {
 		strings.HasPrefix(key, memberRequirementsPrefix) ||
 		strings.HasPrefix(key, deleteRulesPrefix) ||
 		strings.HasPrefix(key, staffForwardBlockPrefix) ||
-		strings.HasPrefix(key, chatConvPrefix)
+		strings.HasPrefix(key, chatConvPrefix) ||
+		strings.HasPrefix(key, eventMessagesPrefix)
 }
 
 func localSettings() (ttl, size int) {

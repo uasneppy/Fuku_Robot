@@ -342,13 +342,15 @@ func TestSettingsFwdBlockOpens(t *testing.T) {
 }
 
 func TestSettingsFwdBlockMainShape(t *testing.T) {
-	// A Staff Group hides Deletion and shows Blocked sources, so its Main has the same nineteen cells as any other chat's:
-	// the grid pairs Blocked sources with Staff, and Access and the navigation follow.
+	// A Staff Group hides Deletion and Messages and shows Blocked sources: the grid pairs Blocked sources with Staff, and
+	// Access and the navigation follow. Its Main has one row fewer than another chat's (settingsMainOwnerRows), because
+	// the Messages page that other chats gained in plan 21-06 does not exist in a Staff Group.
 	const (
-		groupOwner   = "s|v / l|c / f|n / k|b / i|w / g|r / e|x / m|t / u|z / o|y / p / a / close"
-		privateOwner = "s|v / l|c / f|n / k|b / i|w / g|r / e|x / m|t / u|z / o|y / p / a / groups|close"
-		groupAdmin   = "s|v / l|c / f|n / k|b / i|w / g|r / e|x / m|t / u|z / o|y / close"
-		privateAdmin = "s|v / l|c / f|n / k|b / i|w / g|r / e|x / m|t / u|z / o|y / groups|close"
+		staffOwnerRows = settingsMainOwnerRows - 1
+		groupOwner     = "s|v / l|c / f|n / k|b / i|w / g|r / e|x / m|t / u|z / o|y / p / a / close"
+		privateOwner   = "s|v / l|c / f|n / k|b / i|w / g|r / e|x / m|t / u|z / o|y / p / a / groups|close"
+		groupAdmin     = "s|v / l|c / f|n / k|b / i|w / g|r / e|x / m|t / u|z / o|y / close"
+		privateAdmin   = "s|v / l|c / f|n / k|b / i|w / g|r / e|x / m|t / u|z / o|y / groups|close"
 	)
 	e := newSettingsFwdEnv(t)
 	check := func(name string, keyboard [][]gotgbot.InlineKeyboardButton, want string, rows int) {
@@ -363,21 +365,21 @@ func TestSettingsFwdBlockMainShape(t *testing.T) {
 
 	groupMsg := e.openMenu(e.owner)
 	_, keyboard := e.lastEdit(e.chat.Id, groupMsg)
-	check("the owner's group", keyboard, groupOwner, settingsMainOwnerRows)
+	check("the owner's group", keyboard, groupOwner, staffOwnerRows)
 	privateMsg := e.updateID()
 	e.pressPrivate(e.owner, privateMsg, e.privateFields(e.chat.Id, "a", settingsActBack))
 	_, keyboard = e.lastEdit(e.owner.Id, privateMsg)
-	check("the owner's private", keyboard, privateOwner, settingsMainOwnerRows)
+	check("the owner's private", keyboard, privateOwner, staffOwnerRows)
 
 	// An administrator the owner gate admits has no Access row.
 	e.setAdminsAllowed(e.chat.Id, true)
 	adminGroupMsg := e.openMenu(e.admin)
 	_, keyboard = e.lastEdit(e.chat.Id, adminGroupMsg)
-	check("the administrator's group", keyboard, groupAdmin, settingsMainOwnerRows-settingsMainOwnerOnlyRows)
+	check("the administrator's group", keyboard, groupAdmin, staffOwnerRows-settingsMainOwnerOnlyRows)
 	adminPrivateMsg := e.updateID()
 	e.pressPrivate(e.admin, adminPrivateMsg, e.privateFields(e.chat.Id, "a", settingsActBack))
 	adminText, keyboard := e.lastEdit(e.admin.Id, adminPrivateMsg)
-	check("the administrator's private", keyboard, privateAdmin, settingsMainOwnerRows-settingsMainOwnerOnlyRows)
+	check("the administrator's private", keyboard, privateAdmin, staffOwnerRows-settingsMainOwnerOnlyRows)
 	if _, ok := settingsMainStateLine(adminText, "settings_page_fwdblock"); !ok {
 		t.Errorf("the administrator's Main has no Blocked sources line:\n%s", adminText)
 	}

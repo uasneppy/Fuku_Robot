@@ -498,16 +498,24 @@ func (r *settingsInputReply) view() settingsView {
 // renderSettingsInputRefusal draws the reply to a message the check refused: the reason, a blank
 // line, the still-waiting line and one Cancel button. It is pure, so a test can render exactly
 // what the door sends.
+// The Cancel button carries the definition's extra fields, so it ends the wait of the message it was
+// drawn for.
 func renderSettingsInputRefusal(v settingsView, def settingsEditPageDef, part, reason string) settingsScreen {
-	return renderSettingsInputRefusalCode(v, def.CancelCode, part, reason)
+	return renderSettingsInputRefusalWith(v, settingsEditFields(def, map[string]string{"a": def.CancelCode, "t": part}), reason)
 }
 
 // renderSettingsInputRefusalCode is renderSettingsInputRefusal for a page that is named by its Cancel action code
 // alone (a list page).
 func renderSettingsInputRefusalCode(v settingsView, cancelCode, part, reason string) settingsScreen {
+	return renderSettingsInputRefusalWith(v, map[string]string{"a": cancelCode, "t": part}, reason)
+}
+
+// renderSettingsInputRefusalWith draws a refusal whose Cancel button carries the callback fields cancel (the
+// owner field is added by the keyboard). It is pure.
+func renderSettingsInputRefusalWith(v settingsView, cancel map[string]string, reason string) settingsScreen {
 	k := newSettingsKeyboard(v)
-	if cancel, ok := k.button(settingsText(v.Tr, "settings_btn_edit_cancel"), map[string]string{"a": cancelCode, "t": part}); ok {
-		k.row(cancel)
+	if button, ok := k.button(settingsText(v.Tr, "settings_btn_edit_cancel"), cancel); ok {
+		k.row(button)
 	}
 	return k.screen(reason + "\n\n" + settingsText(v.Tr, "settings_edit_still_waiting"))
 }
@@ -515,14 +523,15 @@ func renderSettingsInputRefusalCode(v settingsView, cancelCode, part, reason str
 // refuse answers a reply the check refused, as a reply to the message. The wait is untouched, its
 // time not extended.
 func (r *settingsInputReply) refuse(reason string) {
-	cancelCode := r.def.CancelCode
-	if r.list != nil {
-		cancelCode = r.list.CancelCode
+	var screen settingsScreen
+	switch {
+	case r.list != nil:
+		screen = renderSettingsInputRefusalCode(r.view(), r.list.CancelCode, r.wait.Part, reason)
+	case r.typed != nil:
+		screen = renderSettingsInputRefusalCode(r.view(), r.typed.CancelCode, r.wait.Part, reason)
+	default:
+		screen = renderSettingsInputRefusal(r.view(), r.def, r.wait.Part, reason)
 	}
-	if r.typed != nil {
-		cancelCode = r.typed.CancelCode
-	}
-	screen := renderSettingsInputRefusalCode(r.view(), cancelCode, r.wait.Part, reason)
 	id := r.send(screen.Text, &screen.Keyboard, true)
 	// The refusal carries a Cancel button of its own: note it on the wait, so a press on it ends
 	// this wait while a stale prompt's button still cannot.
@@ -542,12 +551,17 @@ func (r *settingsInputReply) refuseSlash() bool {
 	return true
 }
 
-// apply writes the checked message through the apply function of the part's command and
-// reports whether it was stored.
+// apply writes the checked message through the apply function of the part's command, or through
+// a hooked definition's own Write (a hooked definition without one is a failed save), and reports
+// whether it was stored.
 func (r *settingsInputReply) apply(verdict settingsEditVerdict) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), settingsReadTimeout)
 	defer cancel()
 	groupID := r.wait.GroupID
+	if r.def.Hooks != nil {
+		write := r.def.Hooks.Write
+		return write != nil && write(ctx, groupID, r.wait.Part, verdict, r.user.Id)
+	}
 	if r.def.Kind == settingsEditRules {
 		return r.applyRules(ctx, groupID, verdict)
 	}
@@ -621,7 +635,7 @@ func (r *settingsInputReply) saved(verdict settingsEditVerdict) {
 		r.send(notice, nil, false)
 		return
 	}
-	screen := renderSettingsEditor(r.view(), r.def, state, settingsEditScreenOpts{Notice: notice})
+	screen := settingsEditDraw(r.view(), r.def, state, settingsEditScreenOpts{Notice: notice})
 	r.send(screen.Text, &screen.Keyboard, false)
 }
 

@@ -348,6 +348,12 @@ func TestSettingsStaffPrivacy(t *testing.T) {
 				for name, screen := range settingsPrivacyPhase19Screens(tr, map[string]settingsView{"group": groupView, "private admin": privateAdminView}) {
 					screens[name] = screen
 				}
+				// Phase 21: every screen of the Messages page (the hub, the family list, every event screen empty and full,
+				// the prompts, the refusals and the group note), once per language with the longest notice, in a group menu
+				// and in the private menu of an administrator who is not the creator. The page reads no Staff Group data.
+				for name, screen := range settingsPrivacyPhase21Screens(t, tr, map[string]settingsView{"group": groupView, "private admin": privateAdminView}) {
+					screens[name] = screen
+				}
 				// The Conversations page (Phase 20): every state, the card and the refusal notices,
 				// drawn for the private menu the page exists in; none may name the Staff Group.
 				for _, on := range []bool{false, true} {
@@ -1445,6 +1451,20 @@ func settingsPrivacyPhase18Run(t *testing.T, private bool) {
 			t.Errorf("a Phase 18 run of an admin who is not the creator received %q: %q", leak, everything)
 		}
 	}
+}
+
+// settingsPrivacyPhase21Screens renders every screen of the Messages page (settingsMsgScreens) for each view, with no
+// notice and with a failed save, the page's longest notice in most languages: a notice only adds its own length.
+func settingsPrivacyPhase21Screens(t *testing.T, tr *i18n.Translator, views map[string]settingsView) map[string]settingsScreen {
+	t.Helper()
+	screens := make(map[string]settingsScreen)
+	notices := []string{"", settingsNoticeWarn(settingsText(tr, "common_settings_save_failed"))}
+	for viewName, view := range views {
+		for name, named := range settingsMsgScreens(t, view, notices) {
+			screens["phase 21 "+viewName+" "+name] = named.screen
+		}
+	}
+	return screens
 }
 
 // settingsPrivacyPhase19Screens renders the screens of the three list pages through their pure renderers for one

@@ -1,38 +1,35 @@
 ---
 gsd_state_version: "1.0"
 milestone: v1.2
-status: In progress
-stopped_at: Completed 19-12-PLAN.md
-last_updated: "2026-11-17T06:59:09.171Z"
-last_activity: 2026-11-17
-last_activity_desc: Quick task 261113-tjj completed (Staff Group forward-source blocklist)
-state_head: 95d8ff420583e92b3cdf470c0a45f75e23f8b924
-milestone_name: PM Settings Hub & Member Screening
-current_phase: 19
-current_phase_name: Blacklist, Filter and Note Pages
+milestone_name: Conversations, Custom Messages and Tuning
+status: executing
+last_updated: "2026-11-21T12:00:00.000Z"
+last_activity: 2026-11-21
 progress:
-  total_phases: 10
-  completed_phases: 10
-  total_plans: 126
-  completed_plans: 126
-  percent: 100
+  total_phases: 11
+  completed_phases: 1
+  total_plans: 28
+  completed_plans: 24
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-11-13)
+See: .planning/PROJECT.md (updated 2026-11-18)
 
 **Core value:** My trusted staff can protect every one of my communities from one place. We act on a bad actor across all groups at once, and the bot never lets anyone act in a group where they aren't an admin.
-**Current focus:** Planning the next milestone (`/gsd-new-milestone`). v1.1 shipped 2026-11-13: ten phases, 126 plans, 53 of 53 requirements; every phase is code-verified and security-audited, the owner's live Telegram checks are deferred (see Deferred Items below). Next-milestone candidates are in PROJECT.md.
+**Current focus:** Phase 21 (Message Engine, Messages Page and Manual Punishments). Milestone v1.2 has ten phases (21 to 30) and 40 requirements, all mapped in `.planning/ROADMAP.md`. The next step is to discuss and plan Phase 21. v1.1 shipped 2026-11-13 and its live Telegram checks stay deferred (see Deferred Items below).
 
 ## Current Position
 
-Phase: 20 (Conversations), milestone v1.2
-Plan: 20-01 to 20-03 done (owner approved the persona and archive 2026-11-19); next 20-04 storage
-Status: In progress
-Last activity: 2026-11-17 - Completed quick task 261116-wh2: Fix raw placeholder strings, note deep links, wiki, reports in PM and disable no-ops
+Phase: 22 of 30 (PM Copies), milestone v1.2 (Phase 20 Conversations shipped in v2.26.0; this milestone's phases were renumbered 20-29 to 21-30 on 2026-11-21)
+Plan: 22-06 of 9 in progress, paused (see `.planning/phases/22-pm-copies/.continue-here.md`); Phase 21's 11 plans are done and verified with no gaps, awaiting the owner's live checks (`21-VERIFICATION.md`)
+Status: Paused
+Last activity: 2026-11-21 - Merged main (Conversations, v2.26.0) and renumbered the phases
+
+Progress: [███░░░░░░░] 3 of 11 phases done or verified
 
 ## Performance Metrics
 
@@ -301,12 +298,19 @@ Recent decisions affecting current work:
 - [Phase 19]: 19-05: ExtractTypedNoteOrFilter shares extractReplyContent with ExtractNoteAndFilter so a typed filter or note reply is stored exactly as the command stores it; the two-word-keyword reply quirk is not copied
 - [Phase 19]: 19-08: the shape outcome of checkNoteName is noteNameBadShape because noteNameInvalid is the validation function; A19-4 and the fail-closed /save lookup are provisional owner confirmations, each in its own revertable commit (2eeac8f, ed7988a)
 
+- [v1.2 Roadmap]: Ten phases (21 to 30) in the owner's order: engine, Messages page and manual punishments (21), PM copies (22), automatic events in two groups (23 warn, flood, blacklist, forward blocklist; 24 captcha, requirement notices, AI spam notice), lockdown messages (25), tuning in three phases (26 timed punishments, ladder, warn expiry; 27 manual defaults, reason shortcuts, appeal; 28 Advanced thresholds), plain tone and copy settings (29), Backup page with custom messages in backups (30).
+- [v1.2 Roadmap]: The Backup page (BKP-01 to BKP-03, added by the owner on 2026-11-18) shares Phase 30 with MSG-10, because both rest on one backup file format that has to carry the custom messages. It is last because the page's export must equal `/export` and the messages table and event keys must be stable first. 40 requirements in all.
+- [v1.2 Roadmap]: MSG-11 (goldens before send sites change) is a rule for every phase and is mapped to Phase 21, where the harness starts. EVT-10 (excluded surfaces unchanged) is mapped to Phase 25, where its guard test sees the full event list.
+- [v1.2 Roadmap]: Events are table rows validated in Go, so a later phase adds rows and strings and no migration for the event key. PM copies and tuning follow the v1.1 rules: pacing on their own Redis keys, no new shutdown drain if it can be avoided (the worst case is already 68 s against the 60 s budget).
+
 ### Pending Todos
 
 None yet.
 
 ### Blockers/Concerns
 
+- [v1.2 Roadmap]: Open owner questions: (a) does a lift from a settings menu opened in the group also post the custom lifted message, or does it keep redrawing the menu only (Phase 25, EVT-08); (b) does `{percent}` join the placeholder set for the flood trigger (Phase 25, EVT-07); (c) which automatic sources join the escalation ladder, and where offence counts live (Phase 26); (d) which commands "reason required" covers, and whether the silent and delete-first variants get the default duration (Phase 27); (e) whether an empty source entry clears the target's custom message on copy (Phase 29); (f) whether `/reset` of all modules clears custom messages once they are a backup module, and whether tuning values join the backup (Phase 30).
+- [v1.2 Roadmap]: Technical risks to settle in discussion: how an event, a destination and a part fit the editor's wait hash and the 64-byte callbacks (21); the Details button's short-lived record and deep link (22); `warns_users` has no time per warn, so warn expiry needs a migration (26); hot-path reads and Lua script windows for the Advanced thresholds (28); the command's pending import and reset live in one replica's memory, so the page's cards need another home (30). No research was run for v1.2; `research/SUMMARY.md` is stale v1.1 research.
 - [v1.1 Roadmap]: Live Telegram spikes the owner runs before the phase that needs them is planned (Gaps to Address in `research/SUMMARY.md`): caption placement with `show_caption_above_media` (Phase 12); the per-group message rate limit for notices during a raid (Phase 13); `getUserProfilePhotos` for a hidden photo and `getChatMember` on a channel whose admin the bot is not (Phase 14); a Claude Haiku name accuracy, latency and cost run with the owner's key (Phase 15); `deleteMessages` with one undeletable ID in a batch (Phase 16); how often link previews and caption touches arrive as edits (Phase 17).
 - [v1.1 Roadmap]: Open owner questions: a group with no live creator, admins allowed or everyone denied (Phase 10); whether "I fixed it" in a captcha group re-runs the challenge, which the captcha-first decision may already answer (Phase 13); the name-AI verdict bar and the AI rule's default punishment (Phase 15); the self-destruct storage failure mode the owner must accept, PostgreSQL rows or a Redis set (Phase 17).
 - [v1.1 Roadmap]: `locales/uk.yml` exists but is shorter than `en.yml` (2,437 lines against 3,095), and `AGENTS.md` still says 7 locales. Phase 10 runs `make check-translations` first to see which keys uk lacks. PLAT-05 covers new keys; whether to fill older uk gaps in the same phase is the owner's call.
@@ -413,11 +417,11 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-13T19:31:03.090Z
-Stopped at: Completed 19-12-PLAN.md
+Last session: 2026-11-18T22:50:46.000Z
+Stopped at: Roadmap for v1.2 written (10 phases, 40 requirements mapped)
 Resume file: None
 
 ## Operator Next Steps
 
 
-- Start the next milestone with /gsd-new-milestone
+- Discuss Phase 21 with /gsd-discuss-phase 21, then plan it with /gsd-plan-phase 21

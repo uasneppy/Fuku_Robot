@@ -628,6 +628,61 @@ var settingsLocaleLimits = map[string]settingsLimit{
 	"settings_tz_city_tbilisi":    {12, 12},
 	"settings_tz_city_newyork":    {12, 12},
 	"settings_tz_city_utc":        {12, 12},
+	// The Messages page (Phase 21, plan 21-06): its name, Main state, intro, family, list hint, the
+	// seven event names and descriptions, the two state words and the group note.
+	"settings_page_msgs":            {14, 18},
+	"settings_state_msg_n":          {16, 22},
+	"settings_msg_intro":            {285, 336},
+	"settings_msg_fam_manual":       {16, 18},
+	"settings_msg_fam_manual_intro": {230, 270},
+	"settings_msg_list_hint":        {45, 63},
+	"settings_msg_ev_ban":           {16, 18},
+	"settings_msg_ev_tban":          {16, 18},
+	"settings_msg_ev_kick":          {16, 18},
+	"settings_msg_ev_mute":          {16, 18},
+	"settings_msg_ev_tmute":         {16, 18},
+	"settings_msg_ev_unban":         {16, 18},
+	"settings_msg_ev_unmute":        {16, 18},
+	"settings_msg_desc_ban":         {70, 98},
+	"settings_msg_desc_tban":        {70, 98},
+	"settings_msg_desc_kick":        {70, 98},
+	"settings_msg_desc_mute":        {70, 98},
+	"settings_msg_desc_tmute":       {70, 98},
+	"settings_msg_desc_unban":       {70, 98},
+	"settings_msg_desc_unmute":      {70, 98},
+	"settings_msg_state_custom":     {12, 18},
+	"settings_msg_state_silent":     {12, 18},
+	"settings_msg_group_note":       {130, 182},
+	// The Silent switch of an event screen (Phase 21, plan 21-07): its line, its full-width toggle and its hint.
+	"settings_msg_line_silent": {20, 28},
+	"settings_btn_msg_silent":  {20, 26},
+	"settings_msg_hint_silent": {90, 126},
+	// The editor on an event screen (Phase 21, plan 21-08): the manual family's text prompt, which lists the
+	// Welcome and event placeholders, and the family's hint.
+	"settings_msg_wait_text_manual": {600, 840},
+	"settings_msg_hint_manual":      {180, 252},
+	// The previews of an event screen (Phase 21, plan 21-09): the line sent before a preview and the sample
+	// reason a preview fills in.
+	"settings_msg_preview_header": {130, 182},
+	"settings_msg_sample_reason":  {30, 42},
+	// The private copy of an event (Phase 22, plan 22-04): its screen's title and intro, the line that says
+	// whether it is on, its hint, the full-width switch and the event screen's row that opens it.
+	"settings_msg_pm_title":    {20, 28},
+	"settings_msg_pm_intro":    {200, 280},
+	"settings_msg_line_pm":     {28, 40},
+	"settings_msg_hint_pm":     {260, 364},
+	"settings_btn_msg_pm":      {20, 26},
+	"settings_btn_msg_pm_open": {24, 34},
+	// The previews of the private copy (Phase 22, plan 22-05): the line sent before a preview of the private copy.
+	"settings_msg_preview_header_pm": {140, 196},
+	// The hub's private copies block (Phase 22, plan 22-06): the Details option's line, its full-width toggle and the
+	// options hint.
+	"settings_msg_line_pm_details": {30, 42},
+	"settings_btn_msg_pm_details":  {24, 34},
+	"settings_msg_hint_pm_options": {260, 364},
+	"settings_msg_line_pm_log":     {30, 42},
+	"settings_btn_msg_pm_log":      {24, 34},
+	"settings_msg_hint_pm_log":     {200, 280},
 }
 
 // settingsAlertKeys are shown as answerCallbackQuery alerts: plain text, no tag, at most
@@ -855,6 +910,7 @@ func TestSettingsLabelLengths(t *testing.T) {
 		{"📝", "settings_page_notes"},
 		{"🚷", "settings_page_fwdblock"},
 		{"👍", "settings_page_reactions"},
+		{"📨", "settings_page_msgs"},
 		{"🕒", "settings_page_tz"},
 		{"🗨", "settings_page_chat"},
 	}
@@ -917,6 +973,12 @@ func TestSettingsLabelLengths(t *testing.T) {
 	// The full-width toggles of the Switches and Anonymous admins pages (Phase 18): each is
 	// rendered with the check or cross icon and the language's longer On or Off word.
 	phase18Toggles := []string{"settings_btn_sw_reports", "settings_btn_sw_aispam", "settings_btn_sw_approve", "settings_btn_anon_toggle"}
+	// The full-width toggles that carry the state icon alone in place of {state} (Phase 21, plan 21-07: an event
+	// screen's Silent switch).
+	iconToggles := []string{"settings_btn_msg_silent", "settings_btn_msg_pm", "settings_btn_msg_pm_details", "settings_btn_msg_pm_log"}
+	// The full-width buttons whose label is the whole button (Phase 22, plan 22-04: the event screen's row that
+	// opens the private copy), at most 40 code points.
+	fullWidthLabels := []string{"settings_btn_msg_pm_open"}
 	// The editor's two-column buttons (UI-SPEC rows 28 to 38): at most 20 code points as
 	// written, icon included.
 	editorButtons := []string{
@@ -948,6 +1010,14 @@ func TestSettingsLabelLengths(t *testing.T) {
 	}
 	mreqRuleIcons := []string{"❌", "❗", "👢", "⛔", "🔇"}
 	mreqSwitchCells := []string{"settings_btn_mreq_switch_join", "settings_btn_mreq_switch_delete"}
+	// The Messages page's cells (Phase 21, plan 21-06): the family cell and the seven event cells, each
+	// its icon, one space and its name, at most 20 code points.
+	messageCells := []struct{ icon, key string }{
+		{"🔨", "settings_msg_fam_manual"},
+		{"🚫", "settings_msg_ev_ban"}, {"⏳", "settings_msg_ev_tban"}, {"👢", "settings_msg_ev_kick"},
+		{"🔇", "settings_msg_ev_mute"}, {"🔕", "settings_msg_ev_tmute"}, {"🔓", "settings_msg_ev_unban"},
+		{"🔊", "settings_msg_ev_unmute"},
+	}
 
 	for _, lang := range staffLocales {
 		t.Run(lang, func(t *testing.T) {
@@ -1024,6 +1094,13 @@ func TestSettingsLabelLengths(t *testing.T) {
 				}
 			}
 
+			for _, cell := range messageCells {
+				label := cell.icon + " " + settingsLocaleString(t, lang, data, cell.key)
+				if runes := utf8.RuneCountInString(label); runes > gridMax {
+					t.Errorf("%s: Messages cell %q (%s) has %d characters, ceiling %d", lang, label, cell.key, runes, gridMax)
+				}
+			}
+
 			for _, key := range lockNames {
 				for _, icon := range lockIcons {
 					label := icon + " " + settingsLocaleString(t, lang, data, key)
@@ -1058,6 +1135,22 @@ func TestSettingsLabelLengths(t *testing.T) {
 					{"❌ ", "common_status_off"},
 				} {
 					rendered := strings.ReplaceAll(template, "{state}", state.icon+settingsLocaleString(t, lang, data, state.key))
+					if runes := utf8.RuneCountInString(rendered); runes > accessToggle {
+						t.Errorf("%s: toggle %q (%s) has %d characters, ceiling %d", lang, rendered, key, runes, accessToggle)
+					}
+				}
+			}
+
+			for _, key := range fullWidthLabels {
+				if runes := utf8.RuneCountInString(settingsLocaleString(t, lang, data, key)); runes > accessToggle {
+					t.Errorf("%s: full-width button %s has %d characters, ceiling %d", lang, key, runes, accessToggle)
+				}
+			}
+
+			for _, key := range iconToggles {
+				template := settingsLocaleString(t, lang, data, key)
+				for _, icon := range []string{"✅", "❌"} {
+					rendered := strings.ReplaceAll(template, "{state}", icon)
 					if runes := utf8.RuneCountInString(rendered); runes > accessToggle {
 						t.Errorf("%s: toggle %q (%s) has %d characters, ceiling %d", lang, rendered, key, runes, accessToggle)
 					}
@@ -1150,7 +1243,7 @@ func TestSettingsReusedKeyPlaceholders(t *testing.T) {
 					// The editor's text prompt lists the literal {id} placeholder of a welcome
 					// text as copyable code; it is never filled in (TestSettingsEditLocaleTokens
 					// holds it byte-identical), so it cannot name anyone.
-					if name == "id" && key == settingsEditWaitTextKey {
+					if name == "id" && (key == settingsEditWaitTextKey || key == settingsMsgWaitTextManualKey) {
 						continue
 					}
 					if name == "staff" || name == "id" {
@@ -1232,6 +1325,18 @@ func TestSettingsHelpFitsOneMessage(t *testing.T) {
 // that carries the literal {id} placeholder.
 const settingsEditWaitTextKey = "settings_edit_wait_text"
 
+// settingsMsgWaitTextManualKey is the text prompt of the manual family's event messages, which lists the
+// literal {id} placeholder too.
+const settingsMsgWaitTextManualKey = "settings_msg_wait_text_manual"
+
+// settingsMsgManualLiteralTokens are the placeholders the manual family's text prompt shows as copyable code:
+// the Welcome ones an event fills for the punished member and the group, and the event's own.
+var settingsMsgManualLiteralTokens = []string{
+	"<code>{first}</code>", "<code>{last}</code>", "<code>{fullname}</code>", "<code>{username}</code>",
+	"<code>{mention}</code>", "<code>{id}</code>", "<code>{chatname}</code>", "<code>{admin}</code>",
+	"<code>{reason}</code>", "<code>{duration}</code>", "<code>{until}</code>", "<code>{rules}</code>",
+}
+
 // settingsEditLiteralTokens are the welcome-text placeholders and the button syntax the
 // editor's prompts show as copyable code. They are never translated, in any language, and
 // the translator leaves unknown {name} tokens alone, so each must reach the owner unchanged.
@@ -1265,6 +1370,7 @@ func TestSettingsEditLocaleTokens(t *testing.T) {
 		}},
 		{"settings_edit_hint_rules", []string{"<code>/rules</code>"}},
 		{"settings_edit_refuse_buttons_syntax", []string{settingsEditSyntaxExample}},
+		{settingsMsgWaitTextManualKey, settingsMsgManualLiteralTokens},
 	}
 
 	parameters := []tokenKey{
@@ -1293,6 +1399,15 @@ func TestSettingsEditLocaleTokens(t *testing.T) {
 		{"settings_edit_line_goodbye", []string{"{state}"}},
 		{"settings_edit_line_clean_welcome", []string{"{state}"}},
 		{"settings_edit_line_clean_goodbye", []string{"{state}"}},
+		{"settings_msg_line_silent", []string{"{state}"}},
+		{"settings_btn_msg_silent", []string{"{state}"}},
+		{"settings_msg_line_pm", []string{"{state}"}},
+		{"settings_btn_msg_pm", []string{"{state}"}},
+		{"settings_msg_line_pm_details", []string{"{state}"}},
+		{"settings_btn_msg_pm_details", []string{"{state}"}},
+		{"settings_msg_line_pm_log", []string{"{state}"}},
+		{"settings_btn_msg_pm_log", []string{"{state}"}},
+		{settingsMsgWaitTextManualKey, []string{"{max}"}},
 	}
 
 	english := loadStaffLocale(t, "en")

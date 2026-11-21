@@ -3,6 +3,7 @@ package modules
 import (
 	"context"
 	"errors"
+	"maps"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	log "github.com/sirupsen/logrus"
@@ -54,6 +55,9 @@ const (
 	settingsEditWelcome settingsEditKind = iota
 	settingsEditGoodbye
 	settingsEditRules
+	// settingsEditEvent is a message a page defines through hooks (an event message of the Messages
+	// page): its text is checked as a greeting text, and it has no on/off switch and no default text.
+	settingsEditEvent
 )
 
 // settingsEditPart is one row of the parts table: the part's code (its t value), the locale key
@@ -98,6 +102,40 @@ type settingsEditPageDef struct {
 	// EditRight is the right Set and Remove need, the one the matching commands need.
 	EditRight settingsRight
 	Parts     []settingsEditPart
+	// Fields are extra callback fields every editor action button of the definition carries (Set,
+	// Remove, Preview, Full preview and the Cancel of the prompt and of a refusal), never Back, Close
+	// or the navigation row, so one set of action codes can edit many messages. Nil for the three
+	// built-in pages.
+	Fields map[string]string
+	// ReservedButtons is the number of buttons the bot itself adds to the message (an Unban row), counted
+	// by the check against Telegram's keyboard limit. Zero for the three built-in pages.
+	ReservedButtons int
+	// Hooks are the definition's own load, remove, write, draw and preview; nil for the three built-in
+	// pages, which the editor serves through their commands' apply functions.
+	Hooks *settingsEditHooks
+}
+
+// settingsEditHooks are the places where the editor serves a message a page defines through its own
+// functions instead of the Welcome, Goodbye or Rules code. Load and Draw are required
+// (registerSettingsEditDef panics without them); the others are optional.
+type settingsEditHooks struct {
+	// Load reads the stored message of a group, creating nothing; a read error is returned unchanged,
+	// so a failed read is never drawn as a default.
+	Load func(ctx context.Context, chatID int64) (settingsEditState, error)
+	// Remove takes one part out for the presser by; it returns the outcome and the state read back,
+	// nil when the caller has to reload. Nil makes every Remove a failed save.
+	Remove func(ctx context.Context, chatID int64, part string, by int64) (greetingApplyOutcome, *settingsEditState)
+	// Write stores one checked part typed by by and reports whether it was stored. Nil makes every
+	// typed reply a failed save.
+	Write func(ctx context.Context, chatID int64, part string, verdict settingsEditVerdict, by int64) bool
+	// Draw draws the definition's screen for the state. It is pure.
+	Draw func(v settingsView, def settingsEditPageDef, st settingsEditState, opts settingsEditScreenOpts) settingsScreen
+	// Preview sends the content of a preview to the presser after the header line; part is the part
+	// code of a Preview, or "" for Full preview. Nil makes every preview a failed one.
+	Preview func(p *settingsPress, def settingsEditPageDef, st settingsEditState, part string) error
+	// PreviewHeaderKey is the locale key of the line sent before a preview; empty keeps the greeting
+	// header.
+	PreviewHeaderKey string
 }
 
 var (
@@ -227,14 +265,63 @@ var (
 	settingsEditRulesRead     = rules.LoadRulesSettingsContext
 )
 
-// settingsEditPageByKey finds an editor page definition.
+// settingsEditExtraDefs are the definitions registered from other files (registerSettingsEditDef), by
+// key. They are found by the wait store and the typed-reply door exactly as the three pages are.
+var settingsEditExtraDefs = map[string]settingsEditPageDef{}
+
+// registerSettingsEditDef adds a hooked definition the editor serves outside the three built-in pages.
+// It panics at init on an empty key, a key of a built-in page, a duplicate key, nil hooks or a nil Load or
+// Draw. It never reads the settings page registry, because init order across files is not fixed.
+func registerSettingsEditDef(def settingsEditPageDef) {
+	if def.Key == "" {
+		panic("settings editor: definition registered without a key")
+	}
+	for _, page := range settingsEditPages {
+		if page.Key == def.Key {
+			panic("settings editor: definition key " + def.Key + " is a built-in page's key")
+		}
+	}
+	if _, dup := settingsEditExtraDefs[def.Key]; dup {
+		panic("settings editor: duplicate definition key " + def.Key)
+	}
+	if def.Hooks == nil || def.Hooks.Load == nil || def.Hooks.Draw == nil {
+		panic("settings editor: definition " + def.Key + " needs hooks with Load and Draw")
+	}
+	settingsEditExtraDefs[def.Key] = def
+}
+
+// settingsEditPageByKey finds an editor page definition: one of the three pages, then a registered
+// definition.
 func settingsEditPageByKey(key string) (settingsEditPageDef, bool) {
 	for _, def := range settingsEditPages {
 		if def.Key == key {
 			return def, true
 		}
 	}
+	if def, ok := settingsEditExtraDefs[key]; ok {
+		return def, true
+	}
 	return settingsEditPageDef{}, false
+}
+
+// settingsEditFields is the callback fields of an editor action button of def: a copy of base plus the
+// definition's extra Fields; base wins on a clash.
+func settingsEditFields(def settingsEditPageDef, base map[string]string) map[string]string {
+	if len(def.Fields) == 0 {
+		return base
+	}
+	all := make(map[string]string, len(base)+len(def.Fields))
+	maps.Copy(all, def.Fields)
+	maps.Copy(all, base)
+	return all
+}
+
+// settingsEditDraw draws def's screen: its own Draw hook when it has one, else renderSettingsEditor.
+func settingsEditDraw(v settingsView, def settingsEditPageDef, st settingsEditState, opts settingsEditScreenOpts) settingsScreen {
+	if def.Hooks != nil && def.Hooks.Draw != nil {
+		return def.Hooks.Draw(v, def, st, opts)
+	}
+	return renderSettingsEditor(v, def, st, opts)
 }
 
 // settingsEditState is what a page shows: the stored parts and switches of one message.
@@ -252,6 +339,11 @@ type settingsEditState struct {
 	// MediaBelow is Media under text (Welcome and Goodbye); it is kept while the stored media is of a
 	// kind that cannot take it, and then neither drawn nor sent.
 	MediaBelow bool
+	// Silent is the Silent switch of an event message, read by an event definition's Load and Draw only.
+	Silent bool
+	// PMOn is whether an event message's private copy is switched on (the pm row's Silent is false), read by
+	// an event definition's Load and Draw only, so the group message's screen can say it.
+	PMOn bool
 }
 
 // settingsEditScreenOpts are the extras of one drawing: a notice line and the bot's username
@@ -298,6 +390,9 @@ func settingsEditRulesStateOf(row *models.RulesSettings) settingsEditState {
 // settingsEditLoad reads the stored message of a page, creating nothing. The read error is
 // returned unchanged, so a failed read is never drawn as a default.
 func settingsEditLoad(ctx context.Context, def settingsEditPageDef, chatID int64) (settingsEditState, error) {
+	if def.Hooks != nil && def.Hooks.Load != nil {
+		return def.Hooks.Load(ctx, chatID)
+	}
 	if def.Kind == settingsEditRules {
 		row, err := settingsEditRulesRead(ctx, chatID)
 		if err != nil {
@@ -395,9 +490,10 @@ func settingsEditMediaBelowEligible(st settingsEditState) bool {
 	return st.FileID != "" && media.CaptionAboveEligible(st.MediaType)
 }
 
-// isGreeting reports whether the page has the on/off switch and Delete last.
+// isGreeting reports whether the page is Welcome or Goodbye: the pages with the on/off switch, Delete
+// last and a default text.
 func (def settingsEditPageDef) isGreeting() bool {
-	return def.Kind != settingsEditRules
+	return def.Kind == settingsEditWelcome || def.Kind == settingsEditGoodbye
 }
 
 // settingsEditBody is the page's text lines: one line per part, the note for a media kind that
@@ -443,11 +539,11 @@ func settingsEditPartRows(k *settingsKeyboard, def settingsEditPageDef, st setti
 	tr := k.view.Tr
 	for _, part := range def.Parts {
 		var row []gotgbot.InlineKeyboardButton
-		if set, ok := k.button(settingsText(tr, part.SetLabelKey), map[string]string{"a": def.SetCode, "t": part.Code}); ok {
+		if set, ok := k.button(settingsText(tr, part.SetLabelKey), settingsEditFields(def, map[string]string{"a": def.SetCode, "t": part.Code})); ok {
 			row = append(row, set)
 		}
 		if settingsEditPartIsSet(st, part.Code) {
-			if remove, ok := k.button(settingsText(tr, part.RemoveLabelKey), map[string]string{"a": def.RemoveCode, "t": part.Code}); ok {
+			if remove, ok := k.button(settingsText(tr, part.RemoveLabelKey), settingsEditFields(def, map[string]string{"a": def.RemoveCode, "t": part.Code})); ok {
 				row = append(row, remove)
 			}
 		}
@@ -472,11 +568,11 @@ func settingsEditPreviewRows(k *settingsKeyboard, def settingsEditPageDef, st se
 		if !settingsEditPreviewable(def, st, part.Code) {
 			continue
 		}
-		if button, ok := k.button(settingsText(tr, part.PreviewLabelKey), map[string]string{"a": def.PreviewCode, "t": part.Code}); ok {
+		if button, ok := k.button(settingsText(tr, part.PreviewLabelKey), settingsEditFields(def, map[string]string{"a": def.PreviewCode, "t": part.Code})); ok {
 			buttons = append(buttons, button)
 		}
 	}
-	if full, ok := k.button(settingsText(tr, "settings_btn_edit_full_preview"), map[string]string{"a": def.FullCode}); ok {
+	if full, ok := k.button(settingsText(tr, "settings_btn_edit_full_preview"), settingsEditFields(def, map[string]string{"a": def.FullCode})); ok {
 		buttons = append(buttons, full)
 	}
 	for i := 0; i < len(buttons); i += 2 {
@@ -576,7 +672,7 @@ func settingsEditOpen(def settingsEditPageDef) func(*settingsPress, string) (set
 		if err != nil {
 			return settingsScreen{}, err
 		}
-		return renderSettingsEditor(p.view(), def, st, settingsEditScreenOpts{
+		return settingsEditDraw(p.view(), def, st, settingsEditScreenOpts{
 			Notice: notice, BotUsername: getBotUsername(p.b),
 		}), nil
 	}
@@ -669,7 +765,7 @@ func settingsEditSetSwitch(def settingsEditPageDef, control string) func(*settin
 			}
 			st = &loaded
 		}
-		screen := renderSettingsEditor(p.view(), def, *st, settingsEditScreenOpts{
+		screen := settingsEditDraw(p.view(), def, *st, settingsEditScreenOpts{
 			Notice: notice, BotUsername: getBotUsername(p.b),
 		})
 		return &screen
@@ -692,7 +788,7 @@ func settingsEditStaleSwitch(ctx context.Context, p *settingsPress, def settings
 	if cell.Drawn(loaded) {
 		return nil, false
 	}
-	redrawn := renderSettingsEditor(p.view(), def, loaded, settingsEditScreenOpts{
+	redrawn := settingsEditDraw(p.view(), def, loaded, settingsEditScreenOpts{
 		Notice: settingsNoticeWarn(settingsText(p.tr, cell.UnavailableKey)), BotUsername: getBotUsername(p.b),
 	})
 	return &redrawn, true

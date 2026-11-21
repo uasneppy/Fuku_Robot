@@ -19,9 +19,18 @@ What v1.1 delivered:
 - **Message deletion:** a durable queue for service messages and the bot's own messages, members' commands, edited messages and self-destruct, with a Deletion page (Phases 16 and 17).
 - **Remaining pages:** warnings, switches, language, log channel, anonymous admins, locks (Phase 18), and the private-chat list pages for blacklist, filters and notes on one list engine (Phase 19).
 
-## Next Milestone Goals
+## Current Milestone: v1.2 Custom Messages and Tuning
 
-Not yet chosen. Candidates are in STATE.md (Deferred Items and the per-phase SPIKE follow-ups): the owner's live-check results and confirmations (notably the six owner-visible command changes of Phase 19), the stale `settings_help_msg`, a per-chat cap for blacklist and note words (SEC-19-01), the Phase 12 Delete-last race, and the "Future Requirements" in the archived v1.1 requirements. Start with `/gsd-new-milestone`.
+**Goal:** The owner decides, group by group in that group's settings in the bot's private chat, what the bot says when it punishes someone or locks the group, whether the person also gets it privately, and how the punishments themselves behave.
+
+**Target features:**
+- A per-group Messages engine: custom text, one media and URL buttons for each event and destination (group or PM), a Silent switch per event, default text when nothing is set, one renderer for every send site.
+- A private-only Messages page in `/settings`, built on the v1.1 message editor (Set, Remove, Preview).
+- Events: manual ban, timed ban, kick, mute, timed mute, unban, unmute, warn, warn limit; flood action, blacklist action, captcha failed, forward blocklist, a new AI spam deletion notice (off by default, rate-limited); lockdown started by hand, started automatically (join surge, flood, AI burst) and lifted; member requirement notices.
+- An optional PM copy to the punished person: best effort, its own pacing, a Details button on the group notice as fallback, never for raid-scale removals.
+- Custom messages travel in `/export` and `/import`.
+- A private-only Backup page in each group's settings: export, import and reset on the same code paths as `/export`, `/import` and `/reset`.
+- Tuning, per group: working timed punishments for warn limit, blacklist and flood; an escalation ladder; warn expiry; defaults for manual commands (duration, required reason, reason shortcuts); an appeal button; advanced thresholds with safe bounds; a plain-tone switch; copy settings from another group; a "PM not delivered" log line.
 
 ## Requirements
 
@@ -88,9 +97,15 @@ Not yet chosen. Candidates are in STATE.md (Deferred Items and the per-phase SPI
 
 <!-- Current scope. Hypotheses until shipped and validated. Order reflects priority. -->
 
-None yet; the next milestone defines them (`/gsd-new-milestone`).
+- [ ] Custom group messages for every punishment and lockdown event, set per group in the bot's private chat (v1.2).
+- [ ] An optional PM copy to the punished person, best effort and paced (v1.2).
+- [ ] A Messages page in `/settings` built on the message editor, with preview and a Silent switch (v1.2).
+- [ ] An AI spam deletion notice, off by default and rate-limited (v1.2).
+- [ ] Custom messages in backup export and import (v1.2).
+- [ ] A Backup page in the group's settings in the bot's private chat: export, import, reset (v1.2).
+- [ ] Per-group tuning: timed punishments, escalation ladder, warn expiry, manual-command defaults, appeal button, advanced thresholds, plain tone, copy settings (v1.2).
 
-v1.0 and v1.1 follow-ups and deferred live checks remain in STATE.md.
+The numbered requirements are in `.planning/REQUIREMENTS.md`. v1.0 and v1.1 follow-ups and deferred live checks remain in STATE.md.
 
 ### Out of Scope
 
@@ -103,7 +118,9 @@ v1.0 and v1.1 follow-ups and deferred live checks remain in STATE.md.
 - Targeting by replying to a forwarded message, or report buttons in the Staff Group — not chosen for v1; `@username` or ID is enough.
 - Deleting the target's messages across groups — not needed for v1.
 - Google reCAPTCHA — Turnstile was chosen as the more private, less intrusive option.
-- Auto-lifting lockdowns — an admin must decide when it's safe.
+- Auto-lifting lockdowns — an admin must decide when it's safe (confirmed again for v1.2).
+- Staff Group-level message defaults or inheritance — rejected for v1.2: every message and tuning value is set group by group in that group's own settings in the bot's private chat.
+- PM copies for raid-scale removals (lockdown joiner bans, "Ban N recent joiners") — hundreds of PMs would hit Telegram's limits and inform the attackers.
 - Sending every message to an AI model — too slow and costly; AI only assists rule-based detection. (v1.1's spam-name check sends only a name, on join or when it changes.)
 - Forum topic picker for the welcome message — not chosen for v1.1.
 - "Must add members" requirement (GroupHelp's Обов'язок додати) — not requested.
@@ -221,6 +238,9 @@ v1.0 and v1.1 follow-ups and deferred live checks remain in STATE.md.
 | v1.1: the menu's list pages (blacklist, filters, notes) are one engine and three tables, private-only; entries are numbered lines, deleted by a button that carries only the row ID behind a card, chat-scoped in the statement | A group menu is readable by every member; a forged row ID must never reach another chat | ✓ Good — Phase 19 |
 | v1.1: where a menu page and a command share a setting, each command gets a characterization golden committed alone before its extraction into an apply function; owner-visible command changes land in their own revertable commits | Parity must be provable and a provisional owner default must be revertable | ⚠️ Revisit — Phases 18 and 19 (the six Phase 19 changes await the owner; a plain revert now conflicts, see 19-SPIKE.md) |
 | v1.1: the autonomous run deferred every live Telegram check and closed the milestone with recorded verification overrides | The checks need the owner's real groups, keys and clients; code and tests were verified phase by phase | ⚠️ Revisit — close-out (10 phases `human_needed`; results to be recorded in each SPIKE file) |
+| v1.2: a custom message is one text that replaces all 8 translations for that group; no row means the default translation | The Welcome editor already works this way, and per-language custom texts would multiply every screen | — Pending |
+| v1.2: everything is configured per group in the bot's private chat, with no Staff Group defaults | Owner decision 2026-11-18 | — Pending |
+| v1.2: PM copies are best effort (Telegram only lets a bot message someone who started it), paced on their own budget and never sent for raid-scale removals | A PM must never delay or fail a punishment, and a raid must not turn into hundreds of PMs | — Pending |
 
 ## Evolution
 
@@ -240,4 +260,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-11-13 after the v1.1 milestone (PM Settings Hub & Member Screening)*
+*Last updated: 2026-11-18 at the start of milestone v1.2 (Custom Messages and Tuning)*

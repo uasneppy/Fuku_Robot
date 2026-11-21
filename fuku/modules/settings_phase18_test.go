@@ -90,8 +90,8 @@ func TestSettingsPhase18InStaffGroup(t *testing.T) {
 	}
 	// Every page but Deletion, and the Blocked sources page, which exists only in a Staff Group: the same count as any
 	// other chat's Main has.
-	if got := len(settingsMainLines(m.mainText)); got != len(settingsMainTitleKeys) {
-		t.Errorf("a Staff Group's Main has %d state lines, want %d (every page but Deletion, plus Blocked sources)", got, len(settingsMainTitleKeys))
+	if got := len(settingsMainLines(m.mainText)); got != len(settingsMainTitleKeys)-1 {
+		t.Errorf("a Staff Group's Main has %d state lines, want %d (every page but Deletion and Messages, plus Blocked sources)", got, len(settingsMainTitleKeys)-1)
 	}
 	for _, key := range []string{
 		"settings_page_warns", "settings_page_locks", "settings_page_switches",
@@ -166,8 +166,9 @@ func TestSettingsPhase18Codes(t *testing.T) {
 			}
 		}
 		// The sixteen pages of Phase 18, the Blacklist, Filters and Notes pages of Phase 19 and the Blocked sources page of a
-		// Staff Group's forward blocklist ("v"), the Reactions page ("x"), and no other.
-		want := []string{"s", "v", "l", "c", "f", "n", "k", "b", "i", "w", "g", "r", "e", "x", "m", "d", "t", "u", "z", "o", "y", "p", "a"}
+		// Staff Group's forward blocklist ("v"), the Reactions page ("x"), the Messages page ("h"), the
+		// Conversations page ("p"), and no other.
+		want := []string{"s", "v", "l", "c", "f", "n", "k", "b", "i", "w", "g", "r", "e", "x", "h", "m", "d", "t", "u", "z", "o", "y", "p", "a"}
 		if got := slices.Sorted(maps.Keys(seen)); !slices.Equal(got, slices.Sorted(slices.Values(want))) {
 			t.Errorf("registered pages = %v, want %v", got, slices.Sorted(slices.Values(want)))
 		}

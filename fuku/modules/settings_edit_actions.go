@@ -28,20 +28,6 @@ const (
 	settingsEditCaptionMax = 1024
 )
 
-// settingsEditValidatePart is the Validate hook of Set, Remove and Cancel: t must be present and
-// one of the page's part codes. It runs before any I/O, so a forged or missing t is refused as
-// an invalid request.
-func settingsEditValidatePart(pageKey string) func(map[string]string) bool {
-	return func(fields map[string]string) bool {
-		def, ok := settingsEditPageByKey(pageKey)
-		if !ok {
-			return false
-		}
-		part, present := fields["t"]
-		return present && settingsEditPartByCode(def, part) != nil
-	}
-}
-
 // settingsEditPartByCode finds a part of a page by its t value, nil when the page has none.
 func settingsEditPartByCode(def settingsEditPageDef, code string) *settingsEditPart {
 	i := slices.IndexFunc(def.Parts, func(part settingsEditPart) bool { return part.Code == code })
@@ -80,7 +66,7 @@ func renderSettingsEditPrompt(
 		body = append(body, "", settingsText(v.Tr, "settings_edit_replaced_note"))
 	}
 	k := newSettingsKeyboard(v)
-	if cancel, ok := k.button(settingsText(v.Tr, "settings_btn_edit_cancel"), map[string]string{"a": def.CancelCode, "t": part}); ok {
+	if cancel, ok := k.button(settingsText(v.Tr, "settings_btn_edit_cancel"), settingsEditFields(def, map[string]string{"a": def.CancelCode, "t": part})); ok {
 		k.row(cancel)
 	}
 	return k.screen(settingsCompose(v, def.TitleKey, body, "", false))
@@ -191,11 +177,18 @@ func settingsEditCancel(def settingsEditPageDef) func(*settingsPress) *settingsS
 }
 
 // settingsEditApplyRemove removes one part through the apply function of the command it
-// mirrors. It returns the outcome and the state read back, nil when the caller has to reload
-// (the write stored but its read-back failed, or the write failed).
+// mirrors, or through the definition's own Remove hook for the presser by (a hooked definition with no
+// Remove is a failed save). It returns the outcome and the state read back, nil when the caller has to
+// reload (the write stored but its read-back failed, or the write failed).
 func settingsEditApplyRemove(
-	ctx context.Context, def settingsEditPageDef, part string, chatID int64,
+	ctx context.Context, def settingsEditPageDef, part string, chatID int64, by int64,
 ) (greetingApplyOutcome, *settingsEditState) {
+	if def.Hooks != nil {
+		if def.Hooks.Remove == nil {
+			return greetingSaveFailed, nil
+		}
+		return def.Hooks.Remove(ctx, chatID, part, by)
+	}
 	if def.Kind == settingsEditRules {
 		return settingsEditApplyRemoveRules(ctx, part, chatID)
 	}
@@ -261,7 +254,7 @@ func settingsEditRemove(def settingsEditPageDef) func(*settingsPress) *settingsS
 			return settingsEditRedraw(p, def, settingsNoticeWarn(settingsText(p.tr, "settings_edit_nothing_to_remove")))
 		}
 		var notice string
-		outcome, stored := settingsEditApplyRemove(ctx, def, part, p.group.Id)
+		outcome, stored := settingsEditApplyRemove(ctx, def, part, p.group.Id, p.query.From.Id)
 		switch outcome {
 		case greetingSaveFailed:
 			log.Errorf("[Settings] Remove %s of chat %d failed", part, p.group.Id)
@@ -272,7 +265,7 @@ func settingsEditRemove(def settingsEditPageDef) func(*settingsPress) *settingsS
 		if stored == nil {
 			return settingsEditRedraw(p, def, notice)
 		}
-		screen := renderSettingsEditor(p.view(), def, *stored, settingsEditScreenOpts{
+		screen := settingsEditDraw(p.view(), def, *stored, settingsEditScreenOpts{
 			Notice: notice, BotUsername: getBotUsername(p.b),
 		})
 		return &screen
@@ -281,14 +274,54 @@ func settingsEditRemove(def settingsEditPageDef) func(*settingsPress) *settingsS
 
 // settingsEditActions are the page's Set, Remove, Cancel, Preview and Full preview actions. Set
 // and Remove need the right of the matching commands, Cancel and the previews only the admin
-// check every press makes; all but Full preview have t checked before any I/O.
+// check every press makes; all but Full preview have t checked before any I/O. A built-in page names
+// its one message by its action codes alone, so it is settingsEditResolvedActions with no extra
+// field and a resolve that always answers the page itself.
 func settingsEditActions(def settingsEditPageDef) map[string]settingsPageAction {
-	validate := settingsEditValidatePart(def.Key)
+	return settingsEditResolvedActions(def, nil, func(map[string]string) (settingsEditPageDef, bool) {
+		return def, true
+	})
+}
+
+// settingsEditResolvedActions are Set, Remove, Cancel, Preview and Full preview of a page that edits many
+// messages with one set of action codes and names the message by callback fields (the Messages page's k).
+// The codes and the right of Set and Remove come from codes; fields are the extra callback keys the actions
+// allow besides t (Full preview allows only fields). resolve turns a press's fields into the definition of
+// the message it names, and is where the page requires its owner field (the Messages page requires c, so a
+// group menu's press is refused in step 1). Validate refuses, before any I/O, a press that does not resolve
+// and, for the four part actions, a t that is not a part of the resolved definition; Run resolves again and
+// answers common_callback_invalid_request when the press no longer resolves.
+func settingsEditResolvedActions(
+	codes settingsEditPageDef, fields []string, resolve func(map[string]string) (settingsEditPageDef, bool),
+) map[string]settingsPageAction {
+	partFields := append([]string{"t"}, fields...)
+	validatePart := func(f map[string]string) bool {
+		def, ok := resolve(f)
+		if !ok {
+			return false
+		}
+		part, present := f["t"]
+		return present && settingsEditPartByCode(def, part) != nil
+	}
+	validateWhole := func(f map[string]string) bool {
+		_, ok := resolve(f)
+		return ok
+	}
+	run := func(serve func(settingsEditPageDef) func(*settingsPress) *settingsScreen) func(*settingsPress) *settingsScreen {
+		return func(p *settingsPress) *settingsScreen {
+			def, ok := resolve(p.fields)
+			if !ok {
+				p.answer(settingsText(p.tr, "common_callback_invalid_request"), true)
+				return nil
+			}
+			return serve(def)(p)
+		}
+	}
 	return map[string]settingsPageAction{
-		def.SetCode:     {Fields: []string{"t"}, Right: def.EditRight, Validate: validate, Run: settingsEditSet(def)},
-		def.RemoveCode:  {Fields: []string{"t"}, Right: def.EditRight, Validate: validate, Run: settingsEditRemove(def)},
-		def.CancelCode:  {Fields: []string{"t"}, Right: settingsRightAdmin, Validate: validate, Run: settingsEditCancel(def)},
-		def.PreviewCode: {Fields: []string{"t"}, Right: settingsRightAdmin, Validate: validate, Run: settingsEditPreview(def)},
-		def.FullCode:    {Right: settingsRightAdmin, Run: settingsEditFullPreview(def)},
+		codes.SetCode:     {Fields: partFields, Right: codes.EditRight, Validate: validatePart, Run: run(settingsEditSet)},
+		codes.RemoveCode:  {Fields: partFields, Right: codes.EditRight, Validate: validatePart, Run: run(settingsEditRemove)},
+		codes.CancelCode:  {Fields: partFields, Right: settingsRightAdmin, Validate: validatePart, Run: run(settingsEditCancel)},
+		codes.PreviewCode: {Fields: partFields, Right: settingsRightAdmin, Validate: validatePart, Run: run(settingsEditPreview)},
+		codes.FullCode:    {Fields: slices.Clone(fields), Right: settingsRightAdmin, Validate: validateWhole, Run: run(settingsEditFullPreview)},
 	}
 }

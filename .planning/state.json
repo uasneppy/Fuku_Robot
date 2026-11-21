@@ -1,63 +1,158 @@
 {
   "contract": "1.0.0",
   "flavor": "core",
-  "milestone": "v1.1 — PM Settings Hub & Member Screening",
+  "milestone": "v1.2",
   "phases": [
+    {
+      "number": "1",
+      "name": "Staff Group Links",
+      "status": "complete"
+    },
+    {
+      "number": "2",
+      "name": "Staff Actions Across Groups",
+      "status": "complete"
+    },
+    {
+      "number": "3",
+      "name": "Staff Audit and Undo",
+      "status": "complete"
+    },
+    {
+      "number": "4",
+      "name": "Manual Lockdown",
+      "status": "complete"
+    },
+    {
+      "number": "5",
+      "name": "Lockdown Alerts and Response",
+      "status": "complete"
+    },
+    {
+      "number": "6",
+      "name": "Automatic Raid Detection",
+      "status": "complete"
+    },
+    {
+      "number": "7",
+      "name": "AI-Assisted Raid Detection",
+      "status": "complete"
+    },
+    {
+      "number": "8",
+      "name": "Turnstile Web Captcha",
+      "status": "complete"
+    },
+    {
+      "number": "9",
+      "name": "Settings Menu",
+      "status": "complete"
+    },
     {
       "number": "10",
       "name": "PM Settings Hub and Owner Gate",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "11",
       "name": "Message Editor",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "12",
       "name": "Rules Media, Media Under Text and Greet Once",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "13",
       "name": "Member Requirements",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "14",
       "name": "Profile Photo and Channel Rules",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "15",
       "name": "AI Spam-Name Check",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "16",
       "name": "Scheduled Deletion of Service and Bot Messages",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "17",
       "name": "Command, Edit and Self-Destruct Deletion",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "18",
       "name": "Remaining Settings Pages",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "19",
       "name": "Blacklist, Filter and Note Pages",
-      "status": "in_progress"
+      "status": "complete"
+    },
+    {
+      "number": "20",
+      "name": "Message Engine, Messages Page and Manual Punishments",
+      "status": "pending"
+    },
+    {
+      "number": "21",
+      "name": "PM Copies",
+      "status": "pending"
+    },
+    {
+      "number": "22",
+      "name": "Warn, Flood, Blacklist and Forward Blocklist Messages",
+      "status": "pending"
+    },
+    {
+      "number": "23",
+      "name": "Captcha, AI Spam and Member Requirement Notices",
+      "status": "pending"
+    },
+    {
+      "number": "24",
+      "name": "Lockdown Messages",
+      "status": "pending"
+    },
+    {
+      "number": "25",
+      "name": "Timed Punishments, Escalation and Warn Expiry",
+      "status": "pending"
+    },
+    {
+      "number": "26",
+      "name": "Manual Command Defaults, Reason Shortcuts and Appeal Button",
+      "status": "pending"
+    },
+    {
+      "number": "27",
+      "name": "Advanced Thresholds",
+      "status": "pending"
+    },
+    {
+      "number": "28",
+      "name": "Plain Tone and Copy Settings",
+      "status": "pending"
+    },
+    {
+      "number": "29",
+      "name": "Backup Page and Custom Messages in Backups",
+      "status": "pending"
     }
   ],
   "next": {
-    "command": "/gsd-progress",
-    "label": "Show progress",
-    "reason": "Unsure of state — showing progress"
+    "command": "/gsd-discuss-phase",
+    "label": "Discuss Phase 21",
+    "reason": "Roadmap created for v1.2. Discuss and plan Phase 21 first."
   },
-  "updated_at": "2026-11-13T20:10:50.865Z"
+  "updated_at": "2026-11-18T22:52:00.000Z"
 }
