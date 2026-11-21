@@ -44,30 +44,40 @@ const messagesE2EBanStored = "<b>Out</b> {first} ({reason}, by {admin}){until}"
 // messagesE2EClient wraps a bot's Bot API fake. A getChat of a member the test registered answers that
 // member as a private chat (the base fake answers every getChat as a group), and a media send answers a
 // message of the chat it was sent to, dated now, with a fresh message ID (the base fake answers every
-// sendPhoto with one fixed message of another chat). Every request still reaches the fake, which records it.
+// sendPhoto with one fixed message of another chat). Every request still reaches the fake, which records it,
+// except a send to a chat the test refused (refuse), which answers the refusal and reaches nothing.
 type messagesE2EClient struct {
 	gotgbot.BotClient
 
-	mu     sync.Mutex
-	users  map[int64]gotgbot.User
-	nextID int64
-	media  map[int64][]int64
+	mu      sync.Mutex
+	users   map[int64]gotgbot.User
+	nextID  int64
+	media   map[int64][]int64
+	refused map[int64]error
 }
 
 // newMessagesE2EClient wraps inner.
 func newMessagesE2EClient(inner gotgbot.BotClient) *messagesE2EClient {
-	return &messagesE2EClient{BotClient: inner, users: map[int64]gotgbot.User{}, nextID: 7000, media: map[int64][]int64{}}
+	return &messagesE2EClient{
+		BotClient: inner, users: map[int64]gotgbot.User{}, nextID: 7000, media: map[int64][]int64{}, refused: map[int64]error{},
+	}
 }
 
 // RequestWithContext implements gotgbot.BotClient.
 func (c *messagesE2EClient) RequestWithContext(
 	ctx context.Context, token, method string, params map[string]any, opts *gotgbot.RequestOpts,
 ) (json.RawMessage, error) {
+	chatID := staffParamInt(params, "chat_id")
+	c.mu.Lock()
+	refusal := c.refused[chatID]
+	c.mu.Unlock()
+	if refusal != nil && strings.HasPrefix(method, "send") {
+		return nil, refusal
+	}
 	raw, err := c.BotClient.RequestWithContext(ctx, token, method, params, opts)
 	if err != nil {
 		return raw, err
 	}
-	chatID := staffParamInt(params, "chat_id")
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	switch method {
@@ -103,6 +113,14 @@ func (c *messagesE2EClient) lastMedia(chatID int64) int64 {
 		return 0
 	}
 	return ids[len(ids)-1]
+}
+
+// refuse makes every send to chatID answer err (a 403 for a member who blocked the bot) with no request reaching the
+// fake.
+func (c *messagesE2EClient) refuse(chatID int64, err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.refused[chatID] = err
 }
 
 // register makes getChat of user answer user as a private chat.

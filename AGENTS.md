@@ -746,7 +746,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
 - The `settings|v1` namespace is the settings menu (`settings_menu.go`, `settings_pages.go`). Fields: `a` action, `c` the
   group's chat ID (a menu opened in private), `u` the opener's user ID (a menu opened in the group), `p` page (`s` staff,
   `l` lockdown, `c` captcha, `f` antiflood, `w` welcome, `g` goodbye, `r` rules, `m` member requirements, `d` deletion, `n` warnings, `t` switches, `u` language, `o` log channel, `y` anonymous admins, `k` locks, `b` blacklist, `i` filters, `e` notes, `x` reactions, `z` timezone, `h` messages, `v` blocked sources, `a` access), `t` control, `v` the absolute target value (the Locks page's pager is its own
-  action code `kg`, with `v` the absolute page, and the Blacklist page's is `bp` (not `bg`, which is the Deletion page's Bot goodbye row code and is held apart by `TestSettingsDeletionMemberCodesUnique`; the Deletion page's bot row codes `bw bg br ba bm` also rule out `ba` for the Blacklist's Add), with `v` the absolute page of at most four digits, `bx` its delete ask with `r` the row ID of 1 to 17 digits and `v` the page, and `by` the delete Yes with `r` and `e`, exactly 64 bytes at a 14-character chat ID and a 17-digit row ID, which is why `r` is bounded at 17 digits, U-5; Add is `bn` and Cancel `bc` with `t`, the action screen `bo` and `bs`, so the Blacklist page has the seven codes `bp bx by bo bs bn bc`; the Filters page has `ig ix iy ia ic` and the Notes page `eg ex ey ea ec` with the same fields, 17 list codes in all, every one with the owner field `c`; the Messages page has `hl` (a family's list, `t`), `he` (an event's screen) and the editor codes `hs hr hc hv hf` and `hq`, each with the field `k`, the event code, and the owner field `c`, plus `hp` (a private copy's switch, `k` and `v`) and, on `he hs hr hc hv hf`, the field `d`, the destination: absent for the group message and `p` for the private copy, any other value an invalid request in step 1); `e` (confirm expiry), `r`
+  action code `kg`, with `v` the absolute page, and the Blacklist page's is `bp` (not `bg`, which is the Deletion page's Bot goodbye row code and is held apart by `TestSettingsDeletionMemberCodesUnique`; the Deletion page's bot row codes `bw bg br ba bm` also rule out `ba` for the Blacklist's Add), with `v` the absolute page of at most four digits, `bx` its delete ask with `r` the row ID of 1 to 17 digits and `v` the page, and `by` the delete Yes with `r` and `e`, exactly 64 bytes at a 14-character chat ID and a 17-digit row ID, which is why `r` is bounded at 17 digits, U-5; Add is `bn` and Cancel `bc` with `t`, the action screen `bo` and `bs`, so the Blacklist page has the seven codes `bp bx by bo bs bn bc`; the Filters page has `ig ix iy ia ic` and the Notes page `eg ex ey ea ec` with the same fields, 17 list codes in all, every one with the owner field `c`; the Messages page has `hl` (a family's list, `t`), `he` (an event's screen) and the editor codes `hs hr hc hv hf` and `hq`, each with the field `k`, the event code, and the owner field `c`, plus `hp` (a private copy's switch, `k` and `v`), `ho` (a toggle of the hub's private copies block, exactly `t`, an option code of `settingsMsgPMOptions`, and `v`, with the owner field `c` and no `k`) and, on `he hs hr hc hv hf`, the field `d`, the destination: absent for the group message and `p` for the private copy, any other value an invalid request in step 1); `e` (confirm expiry), `r`
   (the lockdown row ID of a Lift card), `l` (the link row ID of an Unlink card) and `s` (Staff Group row ID) arrive with
   the confirm cards and the Link pick. Core action codes: `oh` open here (the choice
   message becomes the Main page), `op` open page `p` (also Refresh and a stepper's value button), `bk` Back to Main, `cl`
@@ -1613,8 +1613,11 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   unmute `um` 🔊 (`unmuteDefaultReply`). A family with no events is not drawn anywhere and no renderer branches on a family's or an event's code. Screens: the hub
   (`a=op&p=h`: the intro, then for each family a blank line, its icon and bold name and one `settings_main_state_line` per event with
   its state word, followed by the code-side mark ` · 📩` (`settingsMsgPMSuffix`, an icon and no words) while the event's private copy is on
-  (`settingsMsgPMOn`: a spec and `msgs.Resolve(event, eventmsg.DestPM).Silent` false, Phase 22 plan 22-05, D-24); one cell per family, two to
-  a row, then Back to Main and Close, rows `[1 2]`), a family's list (`a=hl&t=<family>`: its intro, the event lines (with the same mark) and
+  (`settingsMsgPMOn`: a spec and `msgs.Resolve(event, eventmsg.DestPM).Silent` false, Phase 22 plan 22-05, D-24), then, while some event
+  has a private copy spec (`settingsMsgAnyPM`), the private copies block (Phase 22 plan 22-06, D-24): a blank line, `📩 <b>`
+  `settings_msg_pm_title` `</b>`, one line per option of `settingsMsgPMOptions` with its state word (`settings_msg_line_pm_details`), a blank
+  line and `settings_msg_hint_pm_options`; one cell per family, two to a row, then one full-width toggle per option, then Back to Main and
+  Close, rows `[1 1 2]`), a family's list (`a=hl&t=<family>`: its intro, the event lines (with the same mark) and
   `settings_msg_list_hint`; one cell per event, two to a row, then Back to the hub and Close, rows
   `[2 2 2 1 2]`) and an event's screen (`a=he&k=<code>`: the event's icon and bold name, its description, then the editor's part lines
   `settings_edit_line_text`, `_media` and `_buttons` with `settingsEditStateWord`, the no-caption note for a sticker or a video
@@ -1712,9 +1715,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `settings_messages_test.go`, on the toolkit `settings_messages_env_test.go` (`newSettingsMsgEnv`, `settingsMsgCleanup`, `settingsMsgSeed`,
   `settingsMsgOpenPrivate`, `settingsMsgPrivateMenu`). The page's limits are measured (plan 21-10, D-23; Phase 22 plan
   22-04 for the private copy): at a 14-character chat ID the hub's family cell and the family list's Back are 37 bytes, an event cell 38, the
-  private copy row 42, Set, Remove and Cancel 42 (46 with `d=p`), Preview 42 (46 with `d=p`) and Silent 42, the private copy switch 42, Full
-  preview 38 (42 with `d=p`), Back to Main and Close 33, Main's cell 37 private and 33 group, with no field outside `a c u p t k d v` (`TestSettingsMessagesCallbackBytes`); every
-  screen fits 3800 UTF-16 units in 8 languages with a 64-rune title, cells 20 code points, in the rows hub `[1 2]`, family list
+  private copy row 42, Set, Remove and Cancel 42 (46 with `d=p`), Preview 42 (46 with `d=p`) and Silent 42, the private copy switch 42, the
+  hub's option toggle `ho` 41, Full preview 38 (42 with `d=p`), Back to Main and Close 33, Main's cell 37 private and 33 group, with no field outside `a c u p t k d v` (`TestSettingsMessagesCallbackBytes`); every
+  screen fits 3800 UTF-16 units in 8 languages with a 64-rune title, cells 20 code points, in the rows hub `[1 1 2]`, family list
   `[2 2 2 1 2]`, event screen `[1 1 1 1 1 1 2]` empty and `[2 2 2 2 2 1 1 2]` full, private copy screen `[1 1 1 1 1 2]` empty and
   `[2 2 2 2 2 1 2]` full, group note `[1 2]` (`[2]` without a bot username)
   (`TestSettingsMessagesPageFitsEveryLocale`, over `settingsMsgScreens` in `settings_messages_screens_test.go`); every forged press of the
@@ -1773,6 +1776,29 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `TestSettingsAuthorityMessagesPM` (without `can_change_info` both screens open but Set, Remove and `hp` are the `settings_no_change_info`
   alert with nothing written, a wait whose sender is demoted before the typed message stores nothing, the owner gate, the live creator, a group
   menu's presses refused in step 1) stand in for a parity test.
+  The group's private copy options on the hub (Phase 22, plan 22-06, PMSG-04, D-24, D-25): the block is drawn from one table,
+  `settingsMsgPMOptions` (`settingsMsgPMOption{Code, LineKey, LabelKey, Value, Apply}`: the `t` value of the toggle, the line's and the
+  toggle's keys, both taking `{state}`, how it reads from `eventmsg.Options` and its one write path; `settingsMsgPMOptionByCode` finds a row),
+  so a later option (plan 22-07's log line) is one more row and no renderer change. Its one row today is the Details button, `t` = `d`, read
+  from `Options.PMDetails`. Each option is a full-width toggle `settings_btn_msg_pm_details` (`settingsStateIcon`), the page action `ho`
+  (`settingsActMsgPMOption`), fields exactly `t` and `v`, its `Validate` (`settingsMsgPMOptionFields`) the private owner field `c`, a known
+  option code and `v` exactly `0` or `1` (`settingsEditSwitchValue`), so a group menu's press (`u` in place of `c`), `t=x`, `v=2` or a missing
+  field is an invalid request in step 1 before any `getChatMember`; right `settingsRightChangeInfo`. The toggle sends the absolute target (the
+  opposite of the stored value, `a=ho&c=<chat>&t=d&v=<target>`, 41 bytes at a 14-character chat ID). `settingsMsgRunPMOption` writes through the
+  option's `Apply` with the presser as `updated_by` (no same-value shortcut: a stale hub's press stores the same value again) and redraws the
+  hub with no notice from the messages the write read back, reloads the hub when the read-back failed and redraws a fresh read with
+  `common_settings_save_failed` after a failed write. The Details option's one write path is `applyEventPMDetails(ctx, chatID, on, by)`
+  (`event_message_apply.go`, no command, judges no rights): `eventMsgWrites.PMDetails` (default `eventmsg.SetPMDetails`), then
+  `eventMsgOptionsReadBack`, returning `eventMsgOptionsResult{Outcome greetingApplyOutcome; Messages *eventmsg.Messages; Err error}` (the
+  chat's messages read back fresh, whose `Options` hold the stored options); it logs the chat ID and the option only. The repository drops
+  `event_messages:<chat>`, which is in `skipLocal`, so the send path reads the new option at the very next command on every replica.
+  `TestSettingsMessagesPMOptions` (the block, the toggle and its bytes, a press and a second press with what the send path's cached
+  `eventMessagesLookup` reads at once, a failed write, the `[1 1 2]` rows), `TestSettingsDriftMessagesPMOptions` (an option stored through the
+  repository is drawn by the hub; with the option off a blocked copy of `/ban` leaves the group message alone, and after the hub's drawn toggle
+  is pressed the next `/ban`'s blocked copy adds the Details button) and `TestSettingsAuthorityMessagesPMOptions` (an administrator without
+  `can_change_info` sees the hub and the toggle but the press is the `settings_no_change_info` alert with nothing written, an administrator the
+  owner gate refuses, forged fields and a group menu's `ho` refused in step 1 with no member lookup) stand in for a parity test
+  (`settings_messages_pm_options_test.go`; the drift test's member refuses the private send with a 403 through `messagesE2EClient.refuse`).
 - The message editor's pages (`settings_edit.go`, pages `w` Welcome, `g` Goodbye and `r` Rules, orders 50, 60 and 70, each
   registered from that file's `init` through `registerSettingsPage` so `settings_pages.go` is never edited) show which
   parts of a message are set, one line per part from one parts table (`settingsEditPageDef.Parts`): Welcome and Goodbye
@@ -1966,7 +1992,7 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   never runs.
   `settingsRightChangeInfo` needs the creator or an administrator with `can_change_info` from the same member record (no
   extra call) and refuses with the alert `settings_no_change_info` (the editor's Delete last, as `/cleanwelcome` and
-  `/cleangoodbye` refuse through `CanUserChangeInfo`); it also gates every choice of the Deletion page (`/cleanservice` asks for it too), the three Member messages rows (`mc`, `me`, `ms`, Off included) and the Self-destruct card's Yes (`dy`), each judged on the press's fresh member record, so a Yes after the presser lost the right is refused with nothing written, while opening the section, a list and a row screen needs only the admin check every press makes (`TestSettingsAuthorityDeletionMember`; the owner gate's carve-out applies: a non-owner administrator with the switch off is refused at step 4b). It also gates the Messages page's Silent switch (`hq`, Phase 21 plan 21-07), judged on the press's own live member record with nothing written on a refusal, while opening the hub, a family and an event screen needs only `settingsRightAdmin`; Set (`hs`) and Remove (`hr`) of an event message's text, media and buttons (Phase 21 plan 21-08) need it too, the event definitions' `EditRight`, judged on every press and, through the typed-reply door's `authorize`, on every typed message, so a demotion between Set and the message ends the wait and stores nothing; the prompt's Cancel (`hc`), Preview (`hv`) and Full preview (`hf`, Phase 21 plan 21-09) need only `settingsRightAdmin`, so an administrator without `can_change_info` can open, view and preview every event message (`TestMessagesEndToEnd`'s `rights` subtest). The same holds for an event's private copy (Phase 22 plan 22-04): its screen (`he` with `d=p`) needs only `settingsRightAdmin`, while its Set (`hs`), Remove (`hr`) and switch (`hp`) need `settingsRightChangeInfo`, judged on every press and, through the typed-reply door's `authorize`, on every typed message. `settingsRightRefusalFor` is the one pure judgement of a right's
+  `/cleangoodbye` refuse through `CanUserChangeInfo`); it also gates every choice of the Deletion page (`/cleanservice` asks for it too), the three Member messages rows (`mc`, `me`, `ms`, Off included) and the Self-destruct card's Yes (`dy`), each judged on the press's fresh member record, so a Yes after the presser lost the right is refused with nothing written, while opening the section, a list and a row screen needs only the admin check every press makes (`TestSettingsAuthorityDeletionMember`; the owner gate's carve-out applies: a non-owner administrator with the switch off is refused at step 4b). It also gates the Messages page's Silent switch (`hq`, Phase 21 plan 21-07), judged on the press's own live member record with nothing written on a refusal, while opening the hub, a family and an event screen needs only `settingsRightAdmin`; Set (`hs`) and Remove (`hr`) of an event message's text, media and buttons (Phase 21 plan 21-08) need it too, the event definitions' `EditRight`, judged on every press and, through the typed-reply door's `authorize`, on every typed message, so a demotion between Set and the message ends the wait and stores nothing; the prompt's Cancel (`hc`), Preview (`hv`) and Full preview (`hf`, Phase 21 plan 21-09) need only `settingsRightAdmin`, so an administrator without `can_change_info` can open, view and preview every event message (`TestMessagesEndToEnd`'s `rights` subtest). The same holds for an event's private copy (Phase 22 plan 22-04): its screen (`he` with `d=p`) needs only `settingsRightAdmin`, while its Set (`hs`), Remove (`hr`) and switch (`hp`) need `settingsRightChangeInfo`, judged on every press and, through the typed-reply door's `authorize`, on every typed message. The hub's private copy option toggle (`ho`, Phase 22 plan 22-06, the Details button) needs `settingsRightChangeInfo` too, judged on the press's own live member record with nothing written on a refusal, while the hub that draws it needs only `settingsRightAdmin` (`TestSettingsAuthorityMessagesPMOptions`). `settingsRightRefusalFor` is the one pure judgement of a right's
   member-record part, shared by a button press and a typed reply, so the two can never judge a right differently.
   Two composite rights (Phase 18, the only framework edit of that phase, appended after `settingsRightChangeInfo` so the zero value
   stays `settingsRightAdmin`, which made eight rights at the end of Phase 18; Phase 19 adds a ninth, below) judge the bot part first, as the commands they mirror do, then the member part:
@@ -5552,7 +5578,8 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   `/start settings_<chat>` deep link), `openEvent` (Main, Messages, Admin actions and the event's cell, each a press of the drawn button),
   `setPart`, `setText`, `setBanMessage`, `command` (a reply to the member's message, on the base dispatcher or a replica's), `groupSends`,
   `queued`, `wantQueued`, `wantGolden`), whose wrapper `messagesE2EClient` answers a registered member's `getChat` as a private chat and a
-  media send as a message of the chat it went to, so the placeholders have a name and the queue row its chat. Every page step is a press of
+  media send as a message of the chat it went to, so the placeholders have a name and the queue row its chat, and answers every send to a
+  chat the test refused (`refuse`, plan 22-06) with that refusal and no request reaching the fake. Every page step is a press of
   a button the bot drew and every part a typed private message. Subtests: `owner sets a ban message` (text, photo and buttons from the page;
   the hub reads Custom; `/ban spam & co` bans, then posts one `sendPhoto` replying to the command with the filled, escaped caption and
   `{until}` empty, the Unban row then the Rules button, queued at its date plus 600 s), `previews` (Full preview reaches the owner alone,
@@ -5583,7 +5610,9 @@ CGO_ENABLED=0 go build ./...   # compile check; `make build` needs goreleaser v2
   and `TestEventMsgLocaleKeys` (`fuku/i18n`), and the page's `TestSettingsMessagesPMScreen`, `TestSettingsMessagesPMSwitch`,
   `TestSettingsMessagesPMTyped`, `TestSettingsDriftMessagesPM` and `TestSettingsAuthorityMessagesPM` (`settings_messages_pm_test.go`) and
   `TestSettingsMessagesPMPreview` and `TestSettingsMessagesPMStates` (`settings_messages_pm_preview_test.go`, with `settingsMsgSeedPM`, `settingsMsgPMPreviewSeen` and
-  `settingsMsgPMPreviewContent`) (on the
+  `settingsMsgPMPreviewContent`) and the hub's option toggle `TestSettingsMessagesPMOptions`, `TestSettingsDriftMessagesPMOptions` and
+  `TestSettingsAuthorityMessagesPMOptions` (`settings_messages_pm_options_test.go`, with `settingsMsgDetailsLine`, `settingsMsgDetailsToggle`,
+  `settingsMsgStoredOptions` and `settingsMsgSendPathOptions`; a member's private sends answer a refusal through `messagesE2EClient.refuse`) (on the
   Messages page toolkit plus `settingsMsgStoredPM` and `settingsMsgOpenPM`; the `/ban` drift subtest runs on `newMessagesE2E` with
   `withFastPMCopyPacer` and waits with `waitEventPM`), on the toolkit `event_message_pm_env_test.go` (the PM copies bullet under Subsystem traps
   lists it). Hygiene: `newEventPMSite` registers `pmCopyJobs.wait` as its last cleanup, so a test that swaps a variable a job reads
