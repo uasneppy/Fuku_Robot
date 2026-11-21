@@ -17,12 +17,14 @@ var eventMsgWrites = struct {
 	Media     func(ctx context.Context, chatID int64, event, dest, fileID string, mediaType int, by int64) error
 	Buttons   func(ctx context.Context, chatID int64, event, dest string, buttons []db.Button, by int64) error
 	PMDetails func(ctx context.Context, chatID int64, on bool, by int64) error
+	PMLog     func(ctx context.Context, chatID int64, on bool, by int64) error
 }{
 	Silent:    eventmsg.SetSilent,
 	Text:      eventmsg.SetText,
 	Media:     eventmsg.SetMedia,
 	Buttons:   eventmsg.SetButtons,
 	PMDetails: eventmsg.SetPMDetails,
+	PMLog:     eventmsg.SetPMLog,
 }
 
 // eventMsgApplyResult is what an event message apply function returns: the outcome, the stored
@@ -154,4 +156,14 @@ func eventMsgOptionsReadBack(ctx context.Context, chatID int64, what string, wri
 func applyEventPMDetails(ctx context.Context, chatID int64, on bool, by int64) eventMsgOptionsResult {
 	writeErr := eventMsgWrites.PMDetails(ctx, chatID, on, by)
 	return eventMsgOptionsReadBack(ctx, chatID, "Details", writeErr)
+}
+
+// applyEventPMLog stores the group's log option of the private copies (D-24): with it on, a private copy that was not
+// delivered leaves one line in the group's log channel (pmCopyPostLog). It is the option's one write path, which has no
+// command, and it judges no person's rights (the press pipeline judged them). The value is absolute, so a repeated call
+// stores the same row. The repository drops event_messages:<chat>, which is in skipLocal, so the send path reads the new
+// option at the very next command on every replica. The messages are read back fresh.
+func applyEventPMLog(ctx context.Context, chatID int64, on bool, by int64) eventMsgOptionsResult {
+	writeErr := eventMsgWrites.PMLog(ctx, chatID, on, by)
+	return eventMsgOptionsReadBack(ctx, chatID, "log", writeErr)
 }

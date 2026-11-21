@@ -389,11 +389,16 @@ type settingsMsgPMOption struct {
 	Apply    func(ctx context.Context, chatID int64, on bool, by int64) eventMsgOptionsResult
 }
 
-// settingsMsgPMOptions are the options of the hub's private copies block, in their order: the Details button.
+// settingsMsgPMOptions are the options of the hub's private copies block, in their order: the Details button, then the
+// log line.
 var settingsMsgPMOptions = []settingsMsgPMOption{
 	{
 		Code: "d", LineKey: "settings_msg_line_pm_details", LabelKey: "settings_btn_msg_pm_details",
 		Value: func(o eventmsg.Options) bool { return o.PMDetails }, Apply: applyEventPMDetails,
+	},
+	{
+		Code: "l", LineKey: "settings_msg_line_pm_log", LabelKey: "settings_btn_msg_pm_log",
+		Value: func(o eventmsg.Options) bool { return o.PMLog }, Apply: applyEventPMLog,
 	},
 }
 
@@ -864,9 +869,10 @@ func settingsMsgEventLines(tr *i18n.Translator, fam settingsMsgFamily, msgs *eve
 // renderSettingsMsgHub draws the hub: the intro, then for each family with events a blank line, its icon
 // and bold name and one state line per event, then, while some event has a private copy, the private copies block
 // (D-24): a blank line, the bold private copy title with its icon, one line per option of settingsMsgPMOptions with
-// its state word, a blank line and the options hint. The keyboard is one cell per family with events, two to a row,
-// then one full-width toggle per option (the state icon, sending the opposite of the stored value as an absolute
-// target, a=ho), then Back (Main) and Close: [1 1 2] with the one family and the Details option. It is pure.
+// its state word, a blank line and the options hints (the Details button's, then the log line's). The keyboard is one
+// cell per family with events, two to a row, then one full-width toggle per option (the state icon, sending the
+// opposite of the stored value as an absolute target, a=ho), then Back (Main) and Close: [1 1 1 2] with the one family
+// and the two options. It is pure.
 func renderSettingsMsgHub(v settingsView, msgs *eventmsg.Messages, notice string) settingsScreen {
 	tr := v.Tr
 	body := []string{settingsText(tr, "settings_msg_intro")}
@@ -898,7 +904,7 @@ func renderSettingsMsgHub(v settingsView, msgs *eventmsg.Messages, notice string
 				k.row(button)
 			}
 		}
-		body = append(body, "", settingsText(tr, "settings_msg_hint_pm_options"))
+		body = append(body, "", settingsText(tr, "settings_msg_hint_pm_options"), settingsText(tr, "settings_msg_hint_pm_log"))
 	}
 	k.navRow(false)
 	return k.screen(settingsCompose(v, "settings_page_msgs", body, notice, false))

@@ -91,7 +91,7 @@ func settingsMsgScreens(t *testing.T, view settingsView, notices []string) map[s
 	stored["all custom"].Options = eventmsg.Options{PMDetails: true, PMLog: true}
 	for i, notice := range notices {
 		for name, msgs := range stored {
-			add(fmt.Sprintf("hub %s notice %d", name, i), renderSettingsMsgHub(view, msgs, notice), "[1 1 2]")
+			add(fmt.Sprintf("hub %s notice %d", name, i), renderSettingsMsgHub(view, msgs, notice), "[1 1 1 2]")
 			for _, fam := range settingsMsgFamilies {
 				if len(fam.Events) == 0 {
 					continue

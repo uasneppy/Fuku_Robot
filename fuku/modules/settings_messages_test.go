@@ -79,7 +79,7 @@ func TestSettingsMessagesOpens(t *testing.T) {
 		t.Fatalf("Main has no 📨 Messages cell: %+v", mainKeyboard)
 	}
 
-	// The hub: intro, the family heading, seven event lines with their states, the private copies block, [1] [1] [2].
+	// The hub: intro, the family heading, seven event lines with their states, the private copies block, [1] [1] [1] [2].
 	text, keyboard := m.pressButton(cell)
 	for _, key := range []string{"settings_msg_intro", "settings_msg_fam_manual"} {
 		if !containsMarker(text, key) {
@@ -89,8 +89,8 @@ func TestSettingsMessagesOpens(t *testing.T) {
 	settingsMsgWantStates(t, text, map[string]string{
 		eventmsg.EventBan: "settings_msg_state_custom", eventmsg.EventKick: "settings_msg_state_silent",
 	})
-	settingsMsgWantWidths(t, "the hub", keyboard, 1, 1, 2)
-	if back := settingsButtonFields(t, keyboard[2][0]); back["a"] != settingsActBack {
+	settingsMsgWantWidths(t, "the hub", keyboard, 1, 1, 1, 2)
+	if back := settingsButtonFields(t, keyboard[3][0]); back["a"] != settingsActBack {
 		t.Errorf("the hub's Back carries %v, want Back to Main", back)
 	}
 
